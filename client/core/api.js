@@ -15,7 +15,15 @@ function isValidTokenFormat(t) {
 }
 
 export const API = {
-    base: window.location.origin + '/api',
+    base: (() => {
+        // Detect reverse-proxy prefix (e.g. /trustchecker/) from current path
+        const path = window.location.pathname;
+        const segments = path.split('/').filter(Boolean);
+        // If the app is served from a sub-path (e.g. /trustchecker/), use it as prefix
+        // Static assets like .js, .css, .html are leaf paths — strip them
+        const prefix = segments.length > 0 && !segments[0].includes('.') ? '/' + segments[0] : '';
+        return window.location.origin + prefix + '/api';
+    })(),
     token: (() => {
         const t = sessionStorage.getItem('tc_token');
         return isValidTokenFormat(t) ? t : null;

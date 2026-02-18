@@ -54,7 +54,7 @@ app.use(helmet({
         directives: {
             defaultSrc: ["'self'"],
             scriptSrc: ["'self'", "https://cdn.jsdelivr.net"],
-            scriptSrcAttr: [],  // SEC-06: Removed 'unsafe-inline' — use external scripts
+            scriptSrcAttr: ["'unsafe-inline'"],  // Required: 100+ inline onclick handlers across app.js
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
             imgSrc: ["'self'", "data:", "https:"],

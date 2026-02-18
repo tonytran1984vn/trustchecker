@@ -7,7 +7,9 @@ import { showToast } from '../components/toast.js';
 
 export function connectWS() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    State.ws = new WebSocket(`${proto}//${location.host}/ws`);
+    const segments = location.pathname.split('/').filter(Boolean);
+    const prefix = segments.length > 0 && !segments[0].includes('.') ? '/' + segments[0] : '';
+    State.ws = new WebSocket(`${proto}//${location.host}${prefix}/ws`);
     State.ws.onmessage = (e) => {
         try {
             const msg = JSON.parse(e.data);
