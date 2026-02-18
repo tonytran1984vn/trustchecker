@@ -1,0 +1,146 @@
+# TrustChecker Alert Rules for Prometheus
+# Alerts route through Alertmanager → webhook/Slack/email
+
+groups:
+  # ─── Service Health ────────────────────────────────────────────
+  - name: service_health
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.instance }} has been unreachable for 30 seconds."
+
+      - alert: HighRestartRate
+        expr: changes(process_start_time_seconds[15m]) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Service {{ $labels.job }} restarting frequently"
+          description: "{{ $labels.instance }} has restarted {{ $value }} times in 15 minutes."
+
+  # ─── Latency ───────────────────────────────────────────────────
+  - name: latency
+    rules:
+      - alert: HighP95Latency
+        expr: histogram_quantile(0.95, sum(rate(trustchecker_http_request_duration_seconds_bucket[5m])) by (le, route)) > 2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High P95 latency on {{ $labels.route }}"
+          description: "P95 latency is {{ $value }}s (threshold: 2s) for route {{ $labels.route }}."
+
+      - alert: CriticalP99Latency
+        expr: histogram_quantile(0.99, sum(rate(trustchecker_http_request_duration_seconds_bucket[5m])) by (le, route)) > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical P99 latency on {{ $labels.route }}"
+          description: "P99 latency is {{ $value }}s (threshold: 5s)."
+
+  # ─── Error Rate ────────────────────────────────────────────────
+  - name: error_rate
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(trustchecker_http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(trustchecker_http_requests_total[5m]))
+          > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Error rate exceeds 5%"
+          description: "Current error rate: {{ $value | humanizePercentage }}."
+
+      - alert: High4xxRate
+        expr: |
+          sum(rate(trustchecker_http_requests_total{status_code=~"4.."}[5m]))
+          /
+          sum(rate(trustchecker_http_requests_total[5m]))
+          > 0.20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Client error rate exceeds 20%"
+          description: "4xx rate: {{ $value | humanizePercentage }}."
+
+  # ─── AI Engine Health ──────────────────────────────────────────
+  - name: engine_health
+    rules:
+      - alert: EngineFallbackActive
+        expr: sum(rate(trustchecker_engine_calls_total{target="js_fallback"}[5m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI engine falling back to JavaScript"
+          description: "Engine {{ $labels.engine }} is using JS fallback — Python service may be down."
+
+      - alert: EngineHighLatency
+        expr: histogram_quantile(0.95, sum(rate(trustchecker_engine_call_duration_seconds_bucket[5m])) by (le, engine)) > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Engine {{ $labels.engine }} P95 latency > 5s"
+          description: "Current P95: {{ $value }}s."
+
+  # ─── Redis Queue ───────────────────────────────────────────────
+  - name: queue_health
+    rules:
+      - alert: QueueBacklog
+        expr: trustchecker_redis_queue_depth > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis queue {{ $labels.queue }} has {{ $value }} pending jobs"
+          description: "Queue backlog may indicate worker slowness or failure."
+
+      - alert: QueueCriticalBacklog
+        expr: trustchecker_redis_queue_depth > 500
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical queue backlog: {{ $value }} jobs"
+          description: "Workers likely down or severely overloaded."
+
+  # ─── Resource Utilization ──────────────────────────────────────
+  - name: resources
+    rules:
+      - alert: HighCPU
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU usage above 80%"
+          description: "Instance {{ $labels.instance }} CPU: {{ $value }}%."
+
+      - alert: HighMemory
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memory usage above 85%"
+          description: "Instance {{ $labels.instance }} memory: {{ $value }}%."
+
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory usage above 80%"
+          description: "Redis is using {{ $value }}% of max memory."

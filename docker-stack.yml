@@ -1,0 +1,365 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# TrustChecker Docker Swarm Stack — Production Deployment
+#
+# Deploy:
+#   docker swarm init
+#   docker stack deploy -c docker-stack.yml trustchecker
+#
+# Scale:
+#   docker service scale trustchecker_app=4
+#   docker service scale trustchecker_ai-simulation=3
+#
+# Monitor:
+#   docker service ls
+#   docker service ps trustchecker_app
+# ═══════════════════════════════════════════════════════════════════════════════
+
+version: '3.9'
+
+services:
+  # ─── PostgreSQL ────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-trustchecker}
+      POSTGRES_USER: ${POSTGRES_USER:-trustchecker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trustchecker_dev_2026}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trustchecker}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis ─────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── TrustChecker Application (Scalable) ───────────────────────────
+  app:
+    image: trustchecker-app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-trustchecker}:${POSTGRES_PASSWORD:-trustchecker_dev_2026}@postgres:5432/${POSTGRES_DB:-trustchecker}?schema=public
+      REDIS_URL: redis://redis:6379
+      AI_SIMULATION_URL: http://ai-simulation:5001
+      AI_DETECTION_URL: http://ai-detection:5002
+      AI_ANALYTICS_URL: http://ai-analytics:5003
+    ports:
+      - "4000:4000"
+    volumes:
+      - upload_data:/app/uploads
+
+  # ─── AI Simulation (Scalable) ──────────────────────────────────────
+  ai-simulation:
+    image: trustchecker-ai-simulation:latest
+    build: ./services/ai-simulation
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "5001:5001"
+
+  ai-simulation-worker:
+    image: trustchecker-ai-simulation:latest
+    build: ./services/ai-simulation
+    command: python worker.py
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 384M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    environment:
+      REDIS_URL: redis://redis:6379
+
+  # ─── AI Detection (Scalable) ───────────────────────────────────────
+  ai-detection:
+    image: trustchecker-ai-detection:latest
+    build: ./services/ai-detection
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "5002:5002"
+
+  ai-detection-worker:
+    image: trustchecker-ai-detection:latest
+    build: ./services/ai-detection
+    command: python worker.py
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 384M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    environment:
+      REDIS_URL: redis://redis:6379
+
+  # ─── AI Analytics (Scalable) ───────────────────────────────────────
+  ai-analytics:
+    image: trustchecker-ai-analytics:latest
+    build: ./services/ai-analytics
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "5003:5003"
+
+  ai-analytics-worker:
+    image: trustchecker-ai-analytics:latest
+    build: ./services/ai-analytics
+    command: python worker.py
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 384M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    environment:
+      REDIS_URL: redis://redis:6379
+
+  # ═══ MONITORING STACK ═══════════════════════════════════════════════
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-trustchecker}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager:/etc/alertmanager:ro
+      - alertmanager_data:/alertmanager
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 64M
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    ports:
+      - "9121:9121"
+
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    deploy:
+      mode: global
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 64M
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.rootfs=/rootfs"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  upload_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  alertmanager_data:
+    driver: local

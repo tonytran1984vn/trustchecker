@@ -1,0 +1,831 @@
+// TrustChecker v9.0 — Prisma Schema
+// Migrated from SQLite (39 tables) to PostgreSQL with proper types, relations, and indexes
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// MULTI-TENANCY
+// ═══════════════════════════════════════════════════════════════════
+
+model Organization {
+  id         String   @id @default(uuid())
+  name       String
+  slug       String   @unique
+  plan       String   @default("free")
+  schemaName String?  @map("schema_name")    // Enterprise: dedicated PG schema
+  settings   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  users      User[]
+
+  @@map("organizations")
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// AUTH MODELS
+// ═══════════════════════════════════════════════════════════════════
+
+model User {
+  id             String    @id @default(uuid())
+  username       String    @unique
+  email          String    @unique
+  passwordHash   String    @map("password_hash")
+  role           String    @default("operator")
+  company        String    @default("")
+  orgId          String?   @map("org_id")
+  mfaSecret      String?   @map("mfa_secret")
+  mfaEnabled     Boolean   @default(false) @map("mfa_enabled")
+  failedAttempts Int       @default(0) @map("failed_attempts")
+  lockedUntil    DateTime? @map("locked_until")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  lastLogin      DateTime? @map("last_login")
+
+  // Relations
+  org              Organization? @relation(fields: [orgId], references: [id])
+  sessions         Session[]
+  refreshTokens    RefreshToken[]
+  passkeyCredentials PasskeyCredential[]
+  products         Product[]         @relation("RegisteredBy")
+  billingPlan      BillingPlan?
+  usageMetrics     UsageMetric[]
+  usageRecords     UsageRecord[]
+  invoices         Invoice[]
+  supportTickets   SupportTicket[]
+  ratings          Rating[]
+  evidenceItems    EvidenceItem[]    @relation("UploadedBy")
+
+  @@index([orgId])
+  @@map("users")
+}
+
+model Session {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastActive DateTime @default(now()) @map("last_active")
+  revoked    Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  tokenHash String   @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  revoked   Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model PasskeyCredential {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  credentialId String   @unique @map("credential_id")
+  publicKey    String   @map("public_key")
+  nickname     String   @default("My Passkey")
+  signCount    Int      @default(0) @map("sign_count")
+  createdAt    DateTime @default(now()) @map("created_at")
+  lastUsed     DateTime? @map("last_used")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("passkey_credentials")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PRODUCT & QR MODELS
+// ═══════════════════════════════════════════════════════════════════
+
+model Product {
+  id             String   @id @default(uuid())
+  name           String
+  sku            String   @unique
+  description    String   @default("")
+  category       String   @default("")
+  manufacturer   String   @default("")
+  batchNumber    String   @default("") @map("batch_number")
+  originCountry  String   @default("") @map("origin_country")
+  registeredBy   String?  @map("registered_by")
+  trustScore     Float    @default(100.0) @map("trust_score")
+  status         String   @default("active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  registeredByUser  User?               @relation("RegisteredBy", fields: [registeredBy], references: [id])
+  qrCodes           QrCode[]
+  scanEvents        ScanEvent[]
+  fraudAlerts       FraudAlert[]
+  trustScores       TrustScore[]
+  batches           Batch[]
+  supplyChainEvents SupplyChainEvent[]
+  inventory         Inventory[]
+  leakAlerts        LeakAlert[]
+  nftCertificates   NftCertificate[]
+  sustainabilityScores SustainabilityScore[]
+
+  @@map("products")
+}
+
+model QrCode {
+  id            String    @id @default(uuid())
+  productId     String    @map("product_id")
+  qrData        String    @unique @map("qr_data")
+  qrImageBase64 String?   @map("qr_image_base64") @db.Text
+  status        String    @default("active")
+  generatedAt   DateTime  @default(now()) @map("generated_at")
+  expiresAt     DateTime? @map("expires_at")
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  scanEvents ScanEvent[]
+
+  @@index([productId])
+  @@map("qr_codes")
+}
+
+model ScanEvent {
+  id               String   @id @default(uuid())
+  qrCodeId         String?  @map("qr_code_id")
+  productId        String?  @map("product_id")
+  scanType         String   @default("validation") @map("scan_type")
+  deviceFingerprint String  @default("") @map("device_fingerprint")
+  ipAddress        String   @default("") @map("ip_address")
+  latitude         Float?
+  longitude        Float?
+  geoCity          String   @default("") @map("geo_city")
+  geoCountry       String   @default("") @map("geo_country")
+  userAgent        String   @default("") @map("user_agent")
+  result           String   @default("pending")
+  fraudScore       Float    @default(0.0) @map("fraud_score")
+  trustScore       Float    @default(0.0) @map("trust_score")
+  responseTimeMs   Int      @default(0) @map("response_time_ms")
+  scannedAt        DateTime @default(now()) @map("scanned_at")
+
+  qrCode      QrCode?      @relation(fields: [qrCodeId], references: [id])
+  product     Product?     @relation(fields: [productId], references: [id])
+  fraudAlerts FraudAlert[]
+
+  @@index([productId])
+  @@index([scannedAt])
+  @@map("scan_events")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECURITY & TRUST MODELS
+// ═══════════════════════════════════════════════════════════════════
+
+model FraudAlert {
+  id          String    @id @default(uuid())
+  scanEventId String?   @map("scan_event_id")
+  productId   String?   @map("product_id")
+  alertType   String    @map("alert_type")
+  severity    String    @default("medium")
+  description String    @default("")
+  details     Json      @default("{}")
+  status      String    @default("open")
+  resolvedBy  String?   @map("resolved_by")
+  resolvedAt  DateTime? @map("resolved_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  scanEvent ScanEvent? @relation(fields: [scanEventId], references: [id])
+  product   Product?   @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@map("fraud_alerts")
+}
+
+model TrustScore {
+  id               String   @id @default(uuid())
+  productId        String   @map("product_id")
+  score            Float
+  fraudFactor      Float    @default(0.0) @map("fraud_factor")
+  consistencyFactor Float   @default(0.0) @map("consistency_factor")
+  complianceFactor Float    @default(0.0) @map("compliance_factor")
+  historyFactor    Float    @default(0.0) @map("history_factor")
+  explanation      Json     @default("{}")
+  calculatedAt     DateTime @default(now()) @map("calculated_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("trust_scores")
+}
+
+model BlockchainSeal {
+  id         String   @id @default(uuid())
+  eventType  String   @map("event_type")
+  eventId    String   @map("event_id")
+  dataHash   String   @map("data_hash")
+  prevHash   String   @default("0") @map("prev_hash")
+  merkleRoot String?  @map("merkle_root")
+  blockIndex Int?     @map("block_index")
+  nonce      Int      @default(0)
+  sealedAt   DateTime @default(now()) @map("sealed_at")
+
+  @@map("blockchain_seals")
+}
+
+model AnomalyDetection {
+  id          String    @id @default(uuid())
+  sourceType  String    @map("source_type")
+  sourceId    String?   @map("source_id")
+  anomalyType String    @map("anomaly_type")
+  severity    String    @default("medium")
+  score       Float     @default(0)
+  description String    @default("")
+  details     Json      @default("{}")
+  status      String    @default("open")
+  detectedAt  DateTime  @default(now()) @map("detected_at")
+  resolvedAt  DateTime? @map("resolved_at")
+
+  @@index([sourceType, sourceId])
+  @@map("anomaly_detections")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// AUDIT & SYSTEM MODELS
+// ═══════════════════════════════════════════════════════════════════
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?  @map("actor_id")
+  action     String
+  entityType String   @default("") @map("entity_type")
+  entityId   String   @default("") @map("entity_id")
+  details    Json     @default("{}")
+  ipAddress  String   @default("") @map("ip_address")
+  timestamp  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@map("audit_log")
+}
+
+model SystemSetting {
+  id           String   @id @default(uuid())
+  category     String
+  settingKey   String   @map("setting_key")
+  settingValue String   @default("") @map("setting_value")
+  isSecret     Boolean  @default(false) @map("is_secret")
+  description  String   @default("")
+  updatedBy    String?  @map("updated_by")
+  updatedAt    DateTime @default(now()) @map("updated_at")
+
+  @@unique([category, settingKey])
+  @@map("system_settings")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SUPPLY CHAIN MODELS
+// ═══════════════════════════════════════════════════════════════════
+
+model Batch {
+  id               String    @id @default(uuid())
+  batchNumber      String    @unique @map("batch_number")
+  productId        String    @map("product_id")
+  quantity         Int       @default(0)
+  manufacturedDate DateTime? @map("manufactured_date")
+  expiryDate       DateTime? @map("expiry_date")
+  originFacility   String    @default("") @map("origin_facility")
+  status           String    @default("created")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  product           Product            @relation(fields: [productId], references: [id])
+  supplyChainEvents SupplyChainEvent[]
+  inventory         Inventory[]
+  shipments         Shipment[]
+
+  @@index([productId])
+  @@map("batches")
+}
+
+model SupplyChainEvent {
+  id               String   @id @default(uuid())
+  eventType        String   @map("event_type")
+  productId        String?  @map("product_id")
+  batchId          String?  @map("batch_id")
+  uid              String   @default("")
+  location         String   @default("")
+  actor            String   @default("")
+  partnerId        String?  @map("partner_id")
+  details          Json     @default("{}")
+  blockchainSealId String?  @map("blockchain_seal_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  product Product? @relation(fields: [productId], references: [id])
+  batch   Batch?   @relation(fields: [batchId], references: [id])
+  partner Partner? @relation(fields: [partnerId], references: [id])
+
+  @@index([productId])
+  @@index([batchId])
+  @@map("supply_chain_events")
+}
+
+model Inventory {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  batchId   String?  @map("batch_id")
+  partnerId String?  @map("partner_id")
+  location  String   @default("")
+  quantity  Int      @default(0)
+  minStock  Int      @default(10) @map("min_stock")
+  maxStock  Int      @default(1000) @map("max_stock")
+  lastSync  DateTime? @map("last_sync")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  product Product  @relation(fields: [productId], references: [id])
+  batch   Batch?   @relation(fields: [batchId], references: [id])
+  partner Partner? @relation(fields: [partnerId], references: [id])
+
+  @@index([productId])
+  @@map("inventory")
+}
+
+model Partner {
+  id            String    @id @default(uuid())
+  name          String
+  type          String    @default("distributor")
+  country       String    @default("")
+  region        String    @default("")
+  contactEmail  String    @default("") @map("contact_email")
+  kycStatus     String    @default("pending") @map("kyc_status")
+  kycVerifiedAt DateTime? @map("kyc_verified_at")
+  trustScore    Float     @default(50.0) @map("trust_score")
+  riskLevel     String    @default("medium") @map("risk_level")
+  apiKey        String?   @map("api_key")
+  status        String    @default("active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  supplyChainEvents  SupplyChainEvent[]
+  inventory          Inventory[]
+  shipmentsFrom      Shipment[]         @relation("ShipmentFrom")
+  shipmentsTo        Shipment[]         @relation("ShipmentTo")
+  slaDefinitions     SlaDefinition[]
+  slaViolations      SlaViolation[]
+
+  @@index([status])
+  @@map("partners")
+}
+
+model Shipment {
+  id                String    @id @default(uuid())
+  batchId           String?   @map("batch_id")
+  fromPartnerId     String?   @map("from_partner_id")
+  toPartnerId       String?   @map("to_partner_id")
+  carrier           String    @default("")
+  trackingNumber    String    @default("") @map("tracking_number")
+  status            String    @default("pending")
+  estimatedDelivery DateTime? @map("estimated_delivery")
+  actualDelivery    DateTime? @map("actual_delivery")
+  currentLat        Float?    @map("current_lat")
+  currentLng        Float?    @map("current_lng")
+  gpsTrail          Json      @default("[]") @map("gps_trail")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  batch       Batch?       @relation(fields: [batchId], references: [id])
+  fromPartner Partner?     @relation("ShipmentFrom", fields: [fromPartnerId], references: [id])
+  toPartner   Partner?     @relation("ShipmentTo", fields: [toPartnerId], references: [id])
+  iotReadings IotReading[]
+  slaViolations SlaViolation[]
+
+  @@index([batchId])
+  @@map("shipments")
+}
+
+model IotReading {
+  id             String   @id @default(uuid())
+  shipmentId     String   @map("shipment_id")
+  sensorType     String   @default("temperature") @map("sensor_type")
+  value          Float
+  unit           String   @default("C")
+  thresholdMin   Float?   @map("threshold_min")
+  thresholdMax   Float?   @map("threshold_max")
+  alertTriggered Boolean  @default(false) @map("alert_triggered")
+  recordedAt     DateTime @default(now()) @map("recorded_at")
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+  @@map("iot_readings")
+}
+
+model SlaDefinition {
+  id              String   @id @default(uuid())
+  partnerId       String   @map("partner_id")
+  slaType         String   @default("delivery") @map("sla_type")
+  metric          String   @default("")
+  thresholdValue  Float    @default(0) @map("threshold_value")
+  thresholdUnit   String   @default("hours") @map("threshold_unit")
+  penaltyAmount   Float    @default(0) @map("penalty_amount")
+  penaltyCurrency String   @default("USD") @map("penalty_currency")
+  status          String   @default("active")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  partner    Partner        @relation(fields: [partnerId], references: [id])
+  violations SlaViolation[]
+
+  @@index([partnerId])
+  @@map("sla_definitions")
+}
+
+model SlaViolation {
+  id             String    @id @default(uuid())
+  slaId          String    @map("sla_id")
+  partnerId      String?   @map("partner_id")
+  shipmentId     String?   @map("shipment_id")
+  violationType  String    @default("") @map("violation_type")
+  actualValue    Float     @default(0) @map("actual_value")
+  thresholdValue Float     @default(0) @map("threshold_value")
+  penaltyAmount  Float     @default(0) @map("penalty_amount")
+  status         String    @default("open")
+  resolvedAt     DateTime? @map("resolved_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  sla      SlaDefinition @relation(fields: [slaId], references: [id])
+  partner  Partner?      @relation(fields: [partnerId], references: [id])
+  shipment Shipment?     @relation(fields: [shipmentId], references: [id])
+
+  @@map("sla_violations")
+}
+
+model LeakAlert {
+  id                String   @id @default(uuid())
+  productId         String?  @map("product_id")
+  platform          String   @default("")
+  url               String   @default("")
+  listingTitle      String   @default("") @map("listing_title")
+  listingPrice      Float    @default(0) @map("listing_price")
+  authorizedPrice   Float    @default(0) @map("authorized_price")
+  regionDetected    String   @default("") @map("region_detected")
+  authorizedRegions Json     @default("[]") @map("authorized_regions")
+  leakType          String   @default("unauthorized_region") @map("leak_type")
+  riskScore         Float    @default(0.5) @map("risk_score")
+  status            String   @default("open")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@map("leak_alerts")
+}
+
+model SupplyChainGraph {
+  id           String   @id @default(uuid())
+  fromNodeId   String   @map("from_node_id")
+  fromNodeType String   @default("partner") @map("from_node_type")
+  toNodeId     String   @map("to_node_id")
+  toNodeType   String   @default("partner") @map("to_node_type")
+  relationship String   @default("supplies")
+  weight       Float    @default(1.0)
+  riskScore    Float    @default(0.0) @map("risk_score")
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([fromNodeId])
+  @@index([toNodeId])
+  @@map("supply_chain_graph")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// KYC & COMPLIANCE MODELS
+// ═══════════════════════════════════════════════════════════════════
+
+model KycBusiness {
+  id                 String    @id @default(uuid())
+  name               String
+  registrationNumber String?   @unique @map("registration_number")
+  country            String    @default("")
+  address            String    @default("")
+  industry           String    @default("")
+  contactEmail       String    @default("") @map("contact_email")
+  contactPhone       String    @default("") @map("contact_phone")
+  riskLevel          String    @default("medium") @map("risk_level")
+  verificationStatus String    @default("pending") @map("verification_status")
+  verifiedAt         DateTime? @map("verified_at")
+  verifiedBy         String?   @map("verified_by")
+  notes              String    @default("")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  kycChecks    KycCheck[]
+  sanctionHits SanctionHit[]
+
+  @@map("kyc_businesses")
+}
+
+model KycCheck {
+  id         String   @id @default(uuid())
+  businessId String   @map("business_id")
+  checkType  String   @map("check_type")
+  provider   String   @default("internal")
+  status     String   @default("pending")
+  result     Json     @default("{}")
+  score      Float    @default(0.0)
+  checkedBy  String?  @map("checked_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  business KycBusiness @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@map("kyc_checks")
+}
+
+model SanctionHit {
+  id            String    @id @default(uuid())
+  businessId    String    @map("business_id")
+  listName      String    @map("list_name")
+  matchScore    Float     @default(0.0) @map("match_score")
+  matchedEntity String    @default("") @map("matched_entity")
+  details       Json      @default("{}")
+  status        String    @default("pending_review")
+  reviewedBy    String?   @map("reviewed_by")
+  reviewedAt    DateTime? @map("reviewed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  business KycBusiness @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@map("sanction_hits")
+}
+
+model Certification {
+  id           String    @id @default(uuid())
+  entityType   String    @default("product") @map("entity_type")
+  entityId     String    @map("entity_id")
+  certName     String    @map("cert_name")
+  certBody     String    @default("") @map("cert_body")
+  certNumber   String    @default("") @map("cert_number")
+  issuedDate   DateTime? @map("issued_date")
+  expiryDate   DateTime? @map("expiry_date")
+  status       String    @default("active")
+  documentHash String    @default("") @map("document_hash")
+  addedBy      String?   @map("added_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@map("certifications")
+}
+
+model ComplianceRecord {
+  id         String    @id @default(uuid())
+  entityType String    @default("product") @map("entity_type")
+  entityId   String    @map("entity_id")
+  framework  String
+  requirement String   @default("")
+  status     String    @default("compliant")
+  evidence   String    @default("")
+  checkedBy  String?   @map("checked_by")
+  nextReview DateTime? @map("next_review")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@map("compliance_records")
+}
+
+model DataRetentionPolicy {
+  id              String    @id @default(uuid())
+  tableName       String    @map("table_name")
+  retentionDays   Int       @default(365) @map("retention_days")
+  action          String    @default("archive")
+  isActive        Boolean   @default(true) @map("is_active")
+  lastRun         DateTime? @map("last_run")
+  recordsAffected Int       @default(0) @map("records_affected")
+  createdBy       String?   @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@map("data_retention_policies")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EVIDENCE & NFT MODELS
+// ═══════════════════════════════════════════════════════════════════
+
+model EvidenceItem {
+  id                 String    @id @default(uuid())
+  title              String
+  description        String    @default("")
+  fileName           String    @default("") @map("file_name")
+  fileType           String    @default("") @map("file_type")
+  fileSize           Int       @default(0) @map("file_size")
+  fileData           String?   @map("file_data") @db.Text
+  sha256Hash         String    @map("sha256_hash")
+  blockchainSealId   String?   @map("blockchain_seal_id")
+  entityType         String    @default("") @map("entity_type")
+  entityId           String    @default("") @map("entity_id")
+  uploadedBy         String?   @map("uploaded_by")
+  verificationStatus String    @default("anchored") @map("verification_status")
+  verifiedAt         DateTime? @map("verified_at")
+  filePath           String    @default("") @map("file_path")
+  tags               Json      @default("[]")
+  status             String    @default("active")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  uploader User? @relation("UploadedBy", fields: [uploadedBy], references: [id])
+
+  @@index([entityType, entityId])
+  @@map("evidence_items")
+}
+
+model NftCertificate {
+  id               String    @id @default(uuid())
+  tokenId          Int?      @map("token_id")
+  productId        String?   @map("product_id")
+  entityType       String    @default("product") @map("entity_type")
+  entityId         String?   @map("entity_id")
+  certificateType  String    @default("authenticity") @map("certificate_type")
+  issuer           String    @default("TrustChecker")
+  owner            String
+  metadataHash     String    @map("metadata_hash")
+  blockchainSealId String?   @map("blockchain_seal_id")
+  status           String    @default("active")
+  transferHistory  Json      @default("[]") @map("transfer_history")
+  mintedAt         DateTime  @default(now()) @map("minted_at")
+  expiresAt        DateTime? @map("expires_at")
+
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([owner])
+  @@map("nft_certificates")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BUSINESS MODELS
+// ═══════════════════════════════════════════════════════════════════
+
+model BillingPlan {
+  id             String    @id @default(uuid())
+  userId         String    @unique @map("user_id")
+  planName       String    @default("free") @map("plan_name")
+  scanLimit      Int       @default(500) @map("scan_limit")
+  apiLimit       Int       @default(1000) @map("api_limit")
+  storageMb      Int       @default(100) @map("storage_mb")
+  priceMonthly   Float     @default(0.0) @map("price_monthly")
+  billingCycle   String    @default("monthly") @map("billing_cycle")
+  overageEnabled Boolean   @default(false) @map("overage_enabled")
+  slaLevel       String?   @map("sla_level")
+  status         String    @default("active")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  expiresAt      DateTime? @map("expires_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("billing_plans")
+}
+
+model UsageMetric {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  metricType String   @map("metric_type")
+  value      Int      @default(0)
+  period     String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("usage_metrics")
+}
+
+model Invoice {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  planName    String    @default("") @map("plan_name")
+  amount      Float     @default(0.0)
+  currency    String    @default("USD")
+  status      String    @default("paid")
+  periodStart DateTime? @map("period_start")
+  periodEnd   DateTime? @map("period_end")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("invoices")
+}
+
+model UsageRecord {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  type         String   // scans, nft_mints, carbon_calcs, api_calls
+  count        Int      @default(1)
+  unitCost     Float    @default(0.0) @map("unit_cost")
+  period       String   // YYYY-MM
+  billedAmount Float    @default(0.0) @map("billed_amount")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, type, period])
+  @@map("usage_records")
+}
+
+model WebhookEvent {
+  id          String    @id @default(uuid())
+  eventType   String    @map("event_type")
+  source      String    @default("stripe")
+  payload     Json      @default("{}")
+  status      String    @default("received")
+  processedAt DateTime? @map("processed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("webhook_events")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SUPPORT & ENGAGEMENT MODELS
+// ═══════════════════════════════════════════════════════════════════
+
+model SupportTicket {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  subject     String
+  description String    @default("")
+  category    String    @default("general")
+  priority    String    @default("medium")
+  status      String    @default("open")
+  assignedTo  String?   @map("assigned_to")
+  resolution  String    @default("")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  resolvedAt  DateTime? @map("resolved_at")
+
+  user     User            @relation(fields: [userId], references: [id])
+  messages TicketMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id         String   @id @default(uuid())
+  ticketId   String   @map("ticket_id")
+  senderId   String   @map("sender_id")
+  senderRole String   @default("user") @map("sender_role")
+  message    String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("ticket_messages")
+}
+
+model Rating {
+  id         String   @id @default(uuid())
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  userId     String   @map("user_id")
+  score      Int
+  comment    String   @default("")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@map("ratings")
+}
+
+model SustainabilityScore {
+  id              String   @id @default(uuid())
+  productId       String   @map("product_id")
+  carbonFootprint Float    @default(0) @map("carbon_footprint")
+  waterUsage      Float    @default(0) @map("water_usage")
+  recyclability   Float    @default(0)
+  ethicalSourcing Float    @default(0) @map("ethical_sourcing")
+  packagingScore  Float    @default(0) @map("packaging_score")
+  transportScore  Float    @default(0) @map("transport_score")
+  overallScore    Float    @default(0) @map("overall_score")
+  grade           String   @default("C")
+  certifications  Json     @default("[]")
+  assessedBy      String?  @map("assessed_by")
+  assessedAt      DateTime @default(now()) @map("assessed_at")
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@map("sustainability_scores")
+}

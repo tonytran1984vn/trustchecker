@@ -1,0 +1,212 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# TrustChecker On-Premise Docker Compose — Air-Gapped Deployment
+#
+# Self-contained deployment for Enterprise customers.
+# All images are prebuilt and loaded from local registry or tar files.
+# No external network access required after initial setup.
+#
+# Quick Start:
+#   1. Load images:  docker load < trustchecker-images.tar
+#   2. Copy .env:    cp .env.onprem.example .env
+#   3. Generate certs: ./scripts/generate-certs.sh
+#   4. Start:        docker-compose -f docker-compose.onprem.yml up -d
+#   5. Activate:     curl -X POST localhost:4000/api/license/activate -d '{"license_key": "..."}'
+#
+# Scale:
+#   docker-compose -f docker-compose.onprem.yml up -d --scale app=4
+# ═══════════════════════════════════════════════════════════════════════════════
+
+version: '3.9'
+
+services:
+  # ─── PostgreSQL (Data stays on customer's hardware) ───────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: tc-onprem-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-trustchecker}
+      POSTGRES_USER: ${POSTGRES_USER:-trustchecker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trustchecker}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+
+  # ─── Redis ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: tc-onprem-redis
+    restart: always
+    command: >
+      redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:-trustchecker_redis}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-trustchecker_redis}", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── TrustChecker Application ─────────────────────────────────────────────
+  app:
+    image: trustchecker-app:${VERSION:-latest}
+    container_name: tc-onprem-app
+    restart: always
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-trustchecker}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-trustchecker}?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD:-trustchecker_redis}@redis:6379
+      AI_SIMULATION_URL: http://ai-simulation:5001
+      AI_DETECTION_URL: http://ai-detection:5002
+      AI_ANALYTICS_URL: http://ai-analytics:5003
+      # On-prem specific
+      ONPREM_MODE: "true"
+      TELEMETRY_DISABLED: "true"
+      EXTERNAL_REQUESTS_DISABLED: "true"
+    ports:
+      - "${APP_PORT:-4000}:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data/uploads:/app/uploads
+      - ./data/backups:/app/backups
+      - ./certs:/app/certs:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  # ─── AI Simulation (Monte Carlo, Digital Twin) ────────────────────────────
+  ai-simulation:
+    image: trustchecker-ai-simulation:${VERSION:-latest}
+    container_name: tc-onprem-ai-sim
+    restart: always
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:-trustchecker_redis}@redis:6379
+    ports:
+      - "5001:5001"
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+
+  ai-simulation-worker:
+    image: trustchecker-ai-simulation:${VERSION:-latest}
+    container_name: tc-onprem-ai-sim-worker
+    command: python worker.py
+    restart: always
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:-trustchecker_redis}@redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ─── AI Detection (Fraud, Anomaly, Risk) ──────────────────────────────────
+  ai-detection:
+    image: trustchecker-ai-detection:${VERSION:-latest}
+    container_name: tc-onprem-ai-det
+    restart: always
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:-trustchecker_redis}@redis:6379
+    ports:
+      - "5002:5002"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  ai-detection-worker:
+    image: trustchecker-ai-detection:${VERSION:-latest}
+    container_name: tc-onprem-ai-det-worker
+    command: python worker.py
+    restart: always
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:-trustchecker_redis}@redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ─── AI Analytics (Carbon, SCM, Demand) ───────────────────────────────────
+  ai-analytics:
+    image: trustchecker-ai-analytics:${VERSION:-latest}
+    container_name: tc-onprem-ai-ana
+    restart: always
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:-trustchecker_redis}@redis:6379
+    ports:
+      - "5003:5003"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  ai-analytics-worker:
+    image: trustchecker-ai-analytics:${VERSION:-latest}
+    container_name: tc-onprem-ai-ana-worker
+    command: python worker.py
+    restart: always
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:-trustchecker_redis}@redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ─── Monitoring (Optional — remove if customer has own monitoring) ────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: tc-onprem-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=90d"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - ./data/prometheus:/prometheus
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: tc-onprem-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD required}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./data/grafana:/var/lib/grafana
+    profiles:
+      - monitoring
+
+volumes:
+  # All data on local filesystem (no Docker volumes — full customer control)
+  # Configured via bind mounts in ./data/

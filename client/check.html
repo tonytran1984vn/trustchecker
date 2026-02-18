@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiểm Tra Hàng Chính Hãng — TrustChecker</title>
+    <meta name="description"
+        content="Kiểm tra sản phẩm chính hãng bằng mã code. Nhập mã trên bao bì sản phẩm để xác minh tính xác thực.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #06080f;
+            --surface: #0d1117;
+            --card: #161b22;
+            --border: rgba(255, 255, 255, 0.06);
+            --text: #e6edf3;
+            --text2: #8b949e;
+            --emerald: #00d68f;
+            --emerald-glow: rgba(0, 214, 143, 0.15);
+            --amber: #ffa657;
+            --amber-glow: rgba(255, 166, 87, 0.15);
+            --rose: #f85149;
+            --rose-glow: rgba(248, 81, 73, 0.15);
+            --cyan: #00d2ff;
+            --cyan-glow: rgba(0, 210, 255, 0.12);
+            --indigo: #6366f1;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+        }
+
+        /* ─── Background Effects ─── */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 20%, rgba(99, 102, 241, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 70% 80%, rgba(0, 210, 255, 0.04) 0%, transparent 50%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .container {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 580px;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* ─── Logo & Header ─── */
+        .logo {
+            font-size: 3.5rem;
+            margin-bottom: 12px;
+            filter: drop-shadow(0 0 20px rgba(0, 210, 255, 0.3));
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(0)
+            }
+
+            50% {
+                transform: translateY(-6px)
+            }
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #00d2ff, #6366f1);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: transparent;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            color: var(--text2);
+            text-align: center;
+            margin-bottom: 40px;
+            line-height: 1.5;
+        }
+
+        /* ─── Check Card ─── */
+        .check-card {
+            width: 100%;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px 28px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .input-group {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text2);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 16px 20px;
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            color: var(--text);
+            font-family: 'Inter', monospace;
+            font-size: 1.2rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            transition: all 0.3s;
+            outline: none;
+            text-align: center;
+        }
+
+        .input-group input::placeholder {
+            color: rgba(255, 255, 255, 0.15);
+            letter-spacing: 1px;
+            font-weight: 400;
+            text-transform: none;
+            font-size: 0.95rem;
+        }
+
+        .input-group input:focus {
+            border-color: var(--cyan);
+            box-shadow: 0 0 0 4px var(--cyan-glow);
+        }
+
+        .check-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #6366f1, #00d2ff);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .check-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+        }
+
+        .check-btn:active {
+            transform: translateY(0);
+        }
+
+        .check-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .check-btn .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        /* ─── Result Card ─── */
+        .result-card {
+            width: 100%;
+            margin-top: 24px;
+            border-radius: 16px;
+            padding: 28px 24px;
+            animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            border: 1px solid;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+
+        .result-card.valid {
+            background: linear-gradient(135deg, rgba(0, 214, 143, 0.08), rgba(0, 214, 143, 0.02));
+            border-color: rgba(0, 214, 143, 0.3);
+        }
+
+        .result-card.warning {
+            background: linear-gradient(135deg, rgba(255, 166, 87, 0.08), rgba(255, 166, 87, 0.02));
+            border-color: rgba(255, 166, 87, 0.3);
+        }
+
+        .result-card.suspicious,
+        .result-card.not_found,
+        .result-card.revoked {
+            background: linear-gradient(135deg, rgba(248, 81, 73, 0.08), rgba(248, 81, 73, 0.02));
+            border-color: rgba(248, 81, 73, 0.3);
+        }
+
+        .result-icon {
+            font-size: 3rem;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        .result-message {
+            font-size: 1rem;
+            line-height: 1.6;
+            text-align: center;
+            font-weight: 500;
+            margin-bottom: 20px;
+        }
+
+        .result-card.valid .result-message {
+            color: var(--emerald);
+        }
+
+        .result-card.warning .result-message {
+            color: var(--amber);
+        }
+
+        .result-card.suspicious .result-message,
+        .result-card.not_found .result-message,
+        .result-card.revoked .result-message {
+            color: var(--rose);
+        }
+
+        .result-details {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 16px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-size: 0.85rem;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: var(--text2);
+        }
+
+        .detail-value {
+            color: var(--text);
+            font-weight: 600;
+            text-align: right;
+            max-width: 60%;
+        }
+
+        .risk-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .risk-none {
+            background: var(--emerald-glow);
+            color: var(--emerald);
+        }
+
+        .risk-medium {
+            background: var(--amber-glow);
+            color: var(--amber);
+        }
+
+        .risk-high {
+            background: var(--rose-glow);
+            color: var(--rose);
+        }
+
+        /* ─── Footer ─── */
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            color: var(--text2);
+            font-size: 0.75rem;
+            padding: 20px;
+            opacity: 0.6;
+        }
+
+        .footer a {
+            color: var(--cyan);
+            text-decoration: none;
+        }
+
+        /* ─── How it Works ─── */
+        .how-it-works {
+            width: 100%;
+            margin-top: 32px;
+        }
+
+        .how-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text2);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .step {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px 12px;
+            text-align: center;
+            transition: transform 0.2s;
+        }
+
+        .step:hover {
+            transform: translateY(-2px);
+        }
+
+        .step-icon {
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+        }
+
+        .step-text {
+            font-size: 0.72rem;
+            color: var(--text2);
+            line-height: 1.4;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 24px 16px;
+            }
+
+            .check-card {
+                padding: 24px 20px;
+            }
+
+            h1 {
+                font-size: 1.3rem;
+            }
+
+            .input-group input {
+                font-size: 16px;
+                /* Prevents iOS zoom on focus */
+                padding: 14px 16px;
+            }
+
+            .steps {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+
+            .step {
+                padding: 12px;
+            }
+        }
+
+        /* UX Pro Max: Prefers Reduced Motion */
+        @media (prefers-reduced-motion: reduce) {
+
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* UX Pro Max: Focus Visible */
+        :focus-visible {
+            outline: 2px solid var(--cyan);
+            outline-offset: 2px;
+        }
+
+        :focus:not(:focus-visible) {
+            outline: none;
+        }
+
+        .check-btn:focus-visible {
+            box-shadow: 0 0 0 4px var(--cyan-glow);
+        }
+
+        /* UX Pro Max: High Contrast Mode */
+        @media (prefers-contrast: high) {
+            .check-card {
+                border-width: 2px;
+            }
+
+            .result-card {
+                border-width: 2px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="logo">🛡️</div>
+        <h1>Kiểm Tra Hàng Chính Hãng</h1>
+        <p class="subtitle">Nhập mã sản phẩm in trên bao bì để xác minh tính xác thực.<br>Hệ thống sẽ kiểm tra mã trong
+            cơ sở dữ liệu và phản hồi ngay lập tức.</p>
+
+        <div class="check-card">
+            <div class="input-group">
+                <label for="codeInput">Nhập mã sản phẩm</label>
+                <input type="text" id="codeInput" placeholder="VD: ABCDEFGH1234" autocomplete="off" autofocus
+                    aria-describedby="checkHelp" onkeydown="if(event.key==='Enter')checkCode()">
+                <span id="checkHelp" style="display:none">Nhập mã sản phẩm để kiểm tra tính xác thực</span>
+            </div>
+            <button class="check-btn" id="checkBtn" onclick="checkCode()" aria-label="Kiểm tra mã sản phẩm">
+                🔍 Kiểm Tra Ngay
+            </button>
+        </div>
+
+        <div id="resultArea" role="alert" aria-live="polite"></div>
+
+        <div class="how-it-works">
+            <div class="how-title">Cách hoạt động</div>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-icon">📝</div>
+                    <div class="step-text">Tìm mã code trên bao bì sản phẩm</div>
+                </div>
+                <div class="step">
+                    <div class="step-icon">🔍</div>
+                    <div class="step-text">Nhập mã vào ô kiểm tra phía trên</div>
+                </div>
+                <div class="step">
+                    <div class="step-icon">✅</div>
+                    <div class="step-text">Nhận kết quả xác thực tức thì</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            Được bảo mật bởi <a href="/">TrustChecker</a> — Hệ thống xác thực sản phẩm<br>
+            © 2026 TrustChecker. Tất cả các quyền được bảo lưu.
+        </div>
+    </div>
+
+    <script>
+        // Security: HTML entity encoder to prevent XSS
+        function escapeHTML(str) {
+            if (str == null) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        async function checkCode() {
+            const input = document.getElementById('codeInput');
+            const btn = document.getElementById('checkBtn');
+            const resultArea = document.getElementById('resultArea');
+            const code = input.value.trim();
+
+            if (!code || code.length < 3) {
+                input.focus();
+                input.style.borderColor = 'var(--rose)';
+                setTimeout(() => input.style.borderColor = '', 1500);
+                return;
+            }
+
+            // Loading state
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Đang kiểm tra...';
+
+            try {
+                const res = await fetch('/api/public/check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                });
+
+                const data = await res.json();
+
+                let iconMap = {
+                    'valid': '✅',
+                    'warning': '⚠️',
+                    'suspicious': '🚨',
+                    'not_found': '❌',
+                    'revoked': '🚫'
+                };
+
+                let riskClass = 'risk-none';
+                if (data.scan_verification) {
+                    const rl = data.scan_verification.risk_level || '';
+                    if (rl.includes('Rất cao') || rl.includes('Cao')) riskClass = 'risk-high';
+                    else if (rl.includes('Trung bình')) riskClass = 'risk-medium';
+                }
+
+                let productHTML = '';
+                if (data.product) {
+                    productHTML = `
+            <div class="detail-row">
+              <span class="detail-label">Sản phẩm</span>
+              <span class="detail-value">${escapeHTML(data.product.name || '—')}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Nhà sản xuất</span>
+              <span class="detail-value">${escapeHTML(data.product.manufacturer || '—')}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Danh mục</span>
+              <span class="detail-value">${escapeHTML(data.product.category || '—')}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Xuất xứ</span>
+              <span class="detail-value">${escapeHTML(data.product.origin_country || '—')}</span>
+            </div>
+          `;
+                }
+
+                let verifyHTML = '';
+                if (data.scan_verification) {
+                    const sv = data.scan_verification;
+                    verifyHTML = `
+            <div class="detail-row">
+              <span class="detail-label">Lần kiểm tra thứ</span>
+              <span class="detail-value">${escapeHTML(String(sv.total_scans))}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Mức rủi ro</span>
+              <span class="detail-value"><span class="risk-badge ${riskClass}">${escapeHTML(sv.risk_level)}</span></span>
+            </div>
+          `;
+                }
+
+                resultArea.innerHTML = `
+          <div class="result-card ${escapeHTML(data.result)}">
+            <div class="result-icon">${iconMap[data.result] || '❓'}</div>
+            <div class="result-message">${escapeHTML(data.message)}</div>
+            <div class="result-details">
+              <div class="detail-row">
+                <span class="detail-label">Mã kiểm tra</span>
+                <span class="detail-value">${escapeHTML(data.code)}</span>
+              </div>
+              ${productHTML}
+              ${verifyHTML}
+              <div class="detail-row">
+                <span class="detail-label">Thời gian xử lý</span>
+                <span class="detail-value">${data.response_time_ms || 0}ms</span>
+              </div>
+            </div>
+          </div>
+        `;
+            } catch (err) {
+                resultArea.innerHTML = `
+          <div class="result-card not_found">
+            <div class="result-icon">⚡</div>
+            <div class="result-message">Lỗi kết nối. Vui lòng thử lại.</div>
+          </div>
+        `;
+            }
+
+            // Reset button
+            btn.disabled = false;
+            btn.innerHTML = '🔍 Kiểm Tra Ngay';
+        }
+
+        // Auto-focus & check URL params
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+            if (code) {
+                document.getElementById('codeInput').value = code;
+                checkCode();
+            }
+        });
+    </script>
+</body>
+
+</html>

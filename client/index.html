@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TrustChecker – Digital Trust Infrastructure</title>
+  <meta name="description"
+    content="Real-time QR validation, fraud detection, and trust scoring platform for supply chain integrity">
+  <meta name="theme-color" content="#f0f2f5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TrustChecker">
+  <link rel="manifest" href="manifest.json">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300f0ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z'/%3E%3Cpath d='m9 12 2 2 4-4'/%3E%3C/svg%3E">
+  <!-- Theme init (prevents FOUC — must run before CSS) -->
+  <script>
+    (function () {
+      var t = localStorage.getItem('tc_theme');
+      // Default to light mode when no preference saved
+      if (t !== 'dark') {
+        document.documentElement.setAttribute('data-theme', 'light');
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#f0f2f5');
+      }
+      window.__toggleTheme = function () {
+        var isLight = document.documentElement.getAttribute('data-theme') === 'light';
+        var next = isLight ? 'dark' : 'light';
+        if (next === 'dark') {
+          document.documentElement.removeAttribute('data-theme');
+          document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#06080f');
+        } else {
+          document.documentElement.setAttribute('data-theme', 'light');
+          document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#f0f2f5');
+        }
+        localStorage.setItem('tc_theme', next);
+        // Update toggle icon in header
+        var btn = document.getElementById('theme-toggle-btn');
+        if (btn) btn.innerHTML = next === 'dark' ? '🌙' : '☀️';
+      };
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; connect-src 'self' wss: ws:; img-src 'self' data: blob:;">
+</head>
+
+<body>
+  <a href="#app" class="skip-link"
+    style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:9999;padding:12px;background:var(--bg-card);color:var(--cyan);border-radius:8px;">Bỏ
+    qua đến nội dung chính</a>
+  <div id="app" role="main"></div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
+    integrity="sha384-J45z9MYlLNwaFhBkPX1mNLAoGe4gQMp+0oQTnMy6bz0tGnysTOLdlznJEMp3xDF" crossorigin="anonymous"></script>
+  <!-- v9.6: Modular architecture via ES6 modules -->
+  <script type="module" src="main.js"></script>
+  <!-- Legacy fallback (kept for reference, not loaded): <script src="app.js"></script> -->
+  <script>
+    // Service Worker: force update old SWs, then re-register fresh
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', async () => {
+        // Force-unregister stale SWs, then register the latest version
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) {
+          await reg.unregister();
+          console.log('🧹 Old SW unregistered');
+        }
+        // Clear old caches
+        const keys = await caches.keys();
+        for (const key of keys) {
+          await caches.delete(key);
+          console.log('🧹 Cleared cache:', key);
+        }
+        // Re-register with fresh SW
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+          .then(reg => console.log('✅ Service Worker registered:', reg.scope))
+          .catch(err => console.warn('⚠️ SW registration failed:', err));
+
+        // Listen for offline sync messages
+        navigator.serviceWorker.addEventListener('message', (event) => {
+          if (event.data.type === 'OFFLINE_QUEUE') {
+            const queue = JSON.parse(localStorage.getItem('tc_sync_queue') || '[]');
+            queue.push(event.data.data);
+            localStorage.setItem('tc_sync_queue', JSON.stringify(queue));
+            console.log('📥 Request queued for sync:', event.data.data.url);
+          }
+          if (event.data.type === 'FLUSH_QUEUE') {
+            const queue = JSON.parse(localStorage.getItem('tc_sync_queue') || '[]');
+            const origin = window.location.origin;
+            queue.forEach(item => {
+              try {
+                const url = new URL(item.url, origin);
+                if (url.origin !== origin) {
+                  console.warn('🚫 Blocked cross-origin sync:', item.url);
+                  return;
+                }
+              } catch {
+                console.warn('🚫 Invalid sync URL:', item.url);
+                return;
+              }
+              fetch(item.url, { method: item.method, headers: item.headers, body: item.body })
+                .then(() => console.log('✅ Synced:', item.url))
+                .catch(err => console.warn('❌ Sync failed:', item.url, err));
+            });
+            localStorage.setItem('tc_sync_queue', '[]');
+          }
+        });
+      });
+    }
+  </script>
+</body>
+
+</html>

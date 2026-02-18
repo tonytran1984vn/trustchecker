@@ -1,0 +1,238 @@
+version: '3.9'
+
+services:
+  # ─── PostgreSQL Primary Database ──────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: trustchecker-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-trustchecker}
+      POSTGRES_USER: ${POSTGRES_USER:-trustchecker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trustchecker_dev_2026}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trustchecker}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis (Cache + Sessions + Rate Limiting) ────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: trustchecker-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── TrustChecker Application ─────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trustchecker-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-trustchecker}:${POSTGRES_PASSWORD:-trustchecker_dev_2026}@postgres:5432/${POSTGRES_DB:-trustchecker}?schema=public
+      REDIS_URL: redis://redis:6379
+      AI_SIMULATION_URL: http://ai-simulation:5001
+      AI_DETECTION_URL: http://ai-detection:5002
+      AI_ANALYTICS_URL: http://ai-analytics:5003
+    ports:
+      - "${PORT:-4000}:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - upload_data:/app/uploads
+
+  # ─── AI Simulation Service (Monte Carlo, Digital Twin, Holt-Winters, What-If) ─
+  ai-simulation:
+    build: ./services/ai-simulation
+    container_name: trustchecker-ai-simulation
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "5001:5001"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  ai-simulation-worker:
+    build: ./services/ai-simulation
+    container_name: trustchecker-ai-simulation-worker
+    command: python worker.py
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ─── AI Detection Service (Fraud, Anomaly, Risk Radar) ──────────────
+  ai-detection:
+    build: ./services/ai-detection
+    container_name: trustchecker-ai-detection
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "5002:5002"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  ai-detection-worker:
+    build: ./services/ai-detection
+    container_name: trustchecker-ai-detection-worker
+    command: python worker.py
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ─── AI Analytics Service (Carbon/ESG, SCM AI, Demand Sensing) ──────
+  ai-analytics:
+    build: ./services/ai-analytics
+    container_name: trustchecker-ai-analytics
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "5003:5003"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  ai-analytics-worker:
+    build: ./services/ai-analytics
+    container_name: trustchecker-ai-analytics-worker
+    command: python worker.py
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ═══════════════════════════════════════════════════════════════════
+  # MONITORING STACK
+  # ═══════════════════════════════════════════════════════════════════
+
+  # ─── Prometheus (Metrics Collection) ──────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: trustchecker-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - app
+      - ai-simulation
+      - ai-detection
+      - ai-analytics
+
+  # ─── Grafana (Dashboard & Visualization) ──────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: trustchecker-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-trustchecker}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s:%(http_port)s/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  # ─── Alertmanager (Alert Routing) ─────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: trustchecker-alertmanager
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager:/etc/alertmanager:ro
+      - alertmanager_data:/alertmanager
+
+  # ─── Redis Exporter ───────────────────────────────────────────────
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    container_name: trustchecker-redis-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ─── Node Exporter (Host Metrics) ─────────────────────────────────
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: trustchecker-node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.rootfs=/rootfs"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  upload_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  alertmanager_data:
+    driver: local

@@ -1,0 +1,450 @@
+{
+    "annotations": {
+        "list": []
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "id": null,
+    "links": [],
+    "liveNow": false,
+    "panels": [
+        {
+            "title": "🟢 Service Health Matrix",
+            "type": "stat",
+            "gridPos": {
+                "h": 4,
+                "w": 24,
+                "x": 0,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "up",
+                    "legendFormat": "{{ job }}",
+                    "refId": "A"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "mappings": [
+                        {
+                            "type": "value",
+                            "options": {
+                                "0": {
+                                    "text": "DOWN",
+                                    "color": "red"
+                                },
+                                "1": {
+                                    "text": "UP",
+                                    "color": "green"
+                                }
+                            }
+                        }
+                    ],
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "title": "📊 Request Rate (req/s)",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 4
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(trustchecker_http_requests_total[1m]))",
+                    "legendFormat": "Total",
+                    "refId": "A"
+                },
+                {
+                    "expr": "sum(rate(trustchecker_http_requests_total{status_code=~\"2..\"}[1m]))",
+                    "legendFormat": "2xx",
+                    "refId": "B"
+                },
+                {
+                    "expr": "sum(rate(trustchecker_http_requests_total{status_code=~\"4..\"}[1m]))",
+                    "legendFormat": "4xx",
+                    "refId": "C"
+                },
+                {
+                    "expr": "sum(rate(trustchecker_http_requests_total{status_code=~\"5..\"}[1m]))",
+                    "legendFormat": "5xx",
+                    "refId": "D"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "lineWidth": 2
+                    },
+                    "unit": "reqps"
+                }
+            }
+        },
+        {
+            "title": "⏱️ Latency P50 / P95 / P99",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 4
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.50, sum(rate(trustchecker_http_request_duration_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "P50",
+                    "refId": "A"
+                },
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(trustchecker_http_request_duration_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "P95",
+                    "refId": "B"
+                },
+                {
+                    "expr": "histogram_quantile(0.99, sum(rate(trustchecker_http_request_duration_seconds_bucket[5m])) by (le))",
+                    "legendFormat": "P99",
+                    "refId": "C"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 5,
+                        "lineWidth": 2
+                    },
+                    "unit": "s"
+                }
+            }
+        },
+        {
+            "title": "❌ Error Rate (%)",
+            "type": "gauge",
+            "gridPos": {
+                "h": 6,
+                "w": 6,
+                "x": 0,
+                "y": 12
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(trustchecker_http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(trustchecker_http_requests_total[5m])) * 100",
+                    "legendFormat": "5xx Rate",
+                    "refId": "A"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "percent",
+                    "max": 100,
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 1
+                            },
+                            {
+                                "color": "red",
+                                "value": 5
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "title": "🤖 Engine Performance (P95)",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 6,
+                "w": 10,
+                "x": 6,
+                "y": 12
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(trustchecker_engine_call_duration_seconds_bucket[5m])) by (le, engine))",
+                    "legendFormat": "{{ engine }}",
+                    "refId": "A"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "bars",
+                        "fillOpacity": 50,
+                        "lineWidth": 1
+                    },
+                    "unit": "s"
+                }
+            }
+        },
+        {
+            "title": "🔄 Python vs JS Fallback",
+            "type": "piechart",
+            "gridPos": {
+                "h": 6,
+                "w": 8,
+                "x": 16,
+                "y": 12
+            },
+            "targets": [
+                {
+                    "expr": "sum(increase(trustchecker_engine_calls_total{target=\"python\"}[1h]))",
+                    "legendFormat": "Python",
+                    "refId": "A"
+                },
+                {
+                    "expr": "sum(increase(trustchecker_engine_calls_total{target=\"js_fallback\"}[1h]))",
+                    "legendFormat": "JS Fallback",
+                    "refId": "B"
+                }
+            ]
+        },
+        {
+            "title": "📦 Redis Queue Depth",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 6,
+                "w": 8,
+                "x": 0,
+                "y": 18
+            },
+            "targets": [
+                {
+                    "expr": "trustchecker_redis_queue_depth",
+                    "legendFormat": "{{ queue }}",
+                    "refId": "A"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 20,
+                        "lineWidth": 2
+                    },
+                    "unit": "short"
+                }
+            }
+        },
+        {
+            "title": "📱 QR Scans / minute",
+            "type": "stat",
+            "gridPos": {
+                "h": 6,
+                "w": 8,
+                "x": 8,
+                "y": 18
+            },
+            "targets": [
+                {
+                    "expr": "sum(rate(trustchecker_qr_scans_total[1m])) * 60",
+                    "legendFormat": "Scans/min",
+                    "refId": "A"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 10
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 100
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "title": "🚨 Fraud Alerts / hour",
+            "type": "stat",
+            "gridPos": {
+                "h": 6,
+                "w": 8,
+                "x": 16,
+                "y": 18
+            },
+            "targets": [
+                {
+                    "expr": "sum(increase(trustchecker_fraud_alerts_total[1h]))",
+                    "legendFormat": "Alerts/hr",
+                    "refId": "A"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "unit": "short",
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 10
+                            },
+                            {
+                                "color": "red",
+                                "value": 50
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "title": "💻 Node.js Memory Usage",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 7,
+                "w": 8,
+                "x": 0,
+                "y": 24
+            },
+            "targets": [
+                {
+                    "expr": "trustchecker_process_resident_memory_bytes / 1024 / 1024",
+                    "legendFormat": "RSS (MB)",
+                    "refId": "A"
+                },
+                {
+                    "expr": "trustchecker_nodejs_heap_size_used_bytes / 1024 / 1024",
+                    "legendFormat": "Heap Used (MB)",
+                    "refId": "B"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 15,
+                        "lineWidth": 2
+                    },
+                    "unit": "decmbytes"
+                }
+            }
+        },
+        {
+            "title": "🔌 WebSocket Connections",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 7,
+                "w": 8,
+                "x": 8,
+                "y": 24
+            },
+            "targets": [
+                {
+                    "expr": "trustchecker_websocket_connections",
+                    "legendFormat": "Active WS",
+                    "refId": "A"
+                },
+                {
+                    "expr": "trustchecker_active_connections",
+                    "legendFormat": "Active HTTP",
+                    "refId": "B"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "lineWidth": 2
+                    },
+                    "unit": "short"
+                }
+            }
+        },
+        {
+            "title": "🐍 Python Service Latency",
+            "type": "timeseries",
+            "gridPos": {
+                "h": 7,
+                "w": 8,
+                "x": 16,
+                "y": 24
+            },
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"ai-simulation\"}[5m])) by (le))",
+                    "legendFormat": "ai-simulation P95",
+                    "refId": "A"
+                },
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"ai-detection\"}[5m])) by (le))",
+                    "legendFormat": "ai-detection P95",
+                    "refId": "B"
+                },
+                {
+                    "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"ai-analytics\"}[5m])) by (le))",
+                    "legendFormat": "ai-analytics P95",
+                    "refId": "C"
+                }
+            ],
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "lineWidth": 2
+                    },
+                    "unit": "s"
+                }
+            }
+        }
+    ],
+    "schemaVersion": 39,
+    "style": "dark",
+    "tags": [
+        "trustchecker",
+        "monitoring"
+    ],
+    "templating": {
+        "list": []
+    },
+    "time": {
+        "from": "now-1h",
+        "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "TrustChecker Platform Overview",
+    "uid": "trustchecker-overview",
+    "version": 1
+}

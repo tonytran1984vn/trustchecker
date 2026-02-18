@@ -1,0 +1,15 @@
+# Grafana auto-provision: dashboard directory
+apiVersion: 1
+
+providers:
+  - name: "TrustChecker"
+    orgId: 1
+    folder: "TrustChecker"
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
