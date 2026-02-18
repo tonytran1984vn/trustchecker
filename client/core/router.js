@@ -7,6 +7,18 @@ import { State, render } from './state.js';
 import { API } from './api.js';
 import { PAGE_FEATURE_MAP, hasFeature, showUpgradeModal } from './features.js';
 
+// ─── Base path detection (for reverse-proxy sub-path like /trustchecker/) ─
+const _basePath = (() => {
+    const p = window.location.pathname;
+    // Check if we're served under a sub-path (e.g. /trustchecker/)
+    // If pathname starts with a known prefix before a page name, extract it
+    const match = p.match(/^(\/[^/]+\/)/);
+    if (match && match[1] !== '/api/' && match[1] !== '/ws/') {
+        return match[1].replace(/\/$/, ''); // e.g. "/trustchecker"
+    }
+    return '';
+})();
+
 // ─── Lazy-loaded page module cache ──────────────────────────
 const _pageCache = {};
 
@@ -53,7 +65,7 @@ const PAGE_LOADERS = {
 };
 
 // ─── Navigate ───────────────────────────────────────────────
-export function navigate(page) {
+export function navigate(page, { skipPush = false } = {}) {
     // v9.1: Block navigation to locked features
     const featureKey = PAGE_FEATURE_MAP[page];
     if (featureKey && !hasFeature(featureKey)) {
@@ -61,6 +73,13 @@ export function navigate(page) {
         return;
     }
     State.page = page;
+
+    // Update browser URL via History API
+    if (!skipPush) {
+        const url = _basePath + '/' + page;
+        history.pushState({ page }, '', url);
+    }
+
     render();
     loadPageData(page);
 }
@@ -253,5 +272,28 @@ export async function loadPageData(page) {
         console.error('Load data error:', e);
     }
 }
+
+// ─── Parse page from current URL ────────────────────────────
+export function getPageFromURL() {
+    let p = window.location.pathname;
+    // Strip base path prefix (e.g. /trustchecker)
+    if (_basePath && p.startsWith(_basePath)) {
+        p = p.slice(_basePath.length);
+    }
+    // Remove leading slash and trailing slash
+    p = p.replace(/^\/+|\/+$/g, '');
+    // If empty or index.html, default to dashboard
+    if (!p || p === 'index.html') return 'dashboard';
+    // Check if it's a valid page in PAGE_LOADERS
+    if (PAGE_LOADERS[p]) return p;
+    // Default to dashboard for unknown paths
+    return 'dashboard';
+}
+
+// ─── Browser back/forward button handler ────────────────────
+window.addEventListener('popstate', (e) => {
+    const page = e.state?.page || getPageFromURL();
+    navigate(page, { skipPush: true });
+});
 
 window.navigate = navigate;

@@ -10,7 +10,7 @@ import { State, render, setRenderFn } from './core/state.js';
 import { API } from './core/api.js';
 import { loadFeatureFlags, showUpgradeModal } from './core/features.js';
 import { connectWS } from './core/websocket.js';
-import { navigate, renderPage } from './core/router.js';
+import { navigate, renderPage, getPageFromURL } from './core/router.js';
 
 // ─── Phase 5 imports ─────────────────────────────────────────
 import { withPageBoundary, installGlobalErrorHandlers } from './core/error-boundary.js';
@@ -127,7 +127,7 @@ async function boot() {
     try {
       await Promise.all([loadFeatureFlags(), loadBranding()]);
       connectWS();
-      navigate(State.page || 'dashboard');
+      navigate(getPageFromURL());
       announce('Dashboard loaded');
     } catch (e) {
       console.warn('[boot] Post-login init error:', e);

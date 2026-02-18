@@ -500,6 +500,13 @@ function exportFraudCSV() {
 }
 
 // ─── Router ──────────────────────────────────────────────────
+const _appBasePath = (() => {
+  const p = window.location.pathname;
+  const match = p.match(/^(\/[^/]+\/)/);
+  if (match && match[1] !== '/api/' && match[1] !== '/ws/') return match[1].replace(/\/$/, '');
+  return '';
+})();
+
 function navigate(page) {
   // v9.1: Block navigation to locked features
   const featureKey = PAGE_FEATURE_MAP[page];
@@ -508,6 +515,9 @@ function navigate(page) {
     return;
   }
   State.page = page;
+  // Update browser URL
+  const url = _appBasePath + '/' + page;
+  history.pushState({ page }, '', url);
   render();
   loadPageData(page);
 }
