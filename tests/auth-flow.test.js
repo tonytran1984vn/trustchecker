@@ -24,13 +24,11 @@ beforeAll(async () => {
     server = serverModule.server;
 
     // Wait for async boot
-    await new Promise(r => setTimeout(r, 4000));
+    await serverModule.ready;
 });
 
 afterAll(async () => {
     if (server?.close) server.close();
-    const highestId = setTimeout(() => { }, 0);
-    for (let i = 0; i < highestId; i++) { clearTimeout(i); clearInterval(i); }
     jest.restoreAllMocks();
 }, 10000);
 

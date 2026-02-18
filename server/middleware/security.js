@@ -61,12 +61,15 @@ function requestLogger(req, res, next) {
             console.warn(`⚠️ Slow request (${duration}ms): ${req.method} ${req.path}`);
         }
 
-        // Store for metrics (in-memory, last 1000)
-        if (!requestLogger._entries) requestLogger._entries = [];
-        requestLogger._entries.push(logEntry);
-        if (requestLogger._entries.length > 1000) {
-            requestLogger._entries = requestLogger._entries.slice(-500);
+        // Circular buffer — O(1) insertion, no GC spikes
+        if (!requestLogger._entries) {
+            requestLogger._entries = new Array(1000);
+            requestLogger._writeIndex = 0;
+            requestLogger._count = 0;
         }
+        requestLogger._entries[requestLogger._writeIndex] = logEntry;
+        requestLogger._writeIndex = (requestLogger._writeIndex + 1) % 1000;
+        if (requestLogger._count < 1000) requestLogger._count++;
 
         originalEnd.apply(res, args);
     };
@@ -74,12 +77,25 @@ function requestLogger(req, res, next) {
     next();
 }
 
+// Helper: get ordered entries from circular buffer
+function _getOrderedEntries() {
+    if (!requestLogger._entries || !requestLogger._count) return [];
+    const buf = requestLogger._entries;
+    const count = requestLogger._count;
+    const wi = requestLogger._writeIndex;
+    const result = [];
+    for (let i = 0; i < count; i++) {
+        result.push(buf[(wi - count + i + 1000) % 1000]);
+    }
+    return result;
+}
+
 requestLogger.getEntries = (limit = 50) => {
-    return (requestLogger._entries || []).slice(-limit).reverse();
+    return _getOrderedEntries().slice(-limit).reverse();
 };
 
 requestLogger.getMetrics = () => {
-    const entries = requestLogger._entries || [];
+    const entries = _getOrderedEntries();
     const last100 = entries.slice(-100);
     const avgDuration = last100.length > 0
         ? Math.round(last100.reduce((s, e) => s + e.duration_ms, 0) / last100.length)

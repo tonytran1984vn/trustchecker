@@ -94,6 +94,7 @@ async function isTokenBlacklisted(jti) {
 
 // ─── Rate Limiter (Sliding Window) ───────────────────────────────
 const RATE_PREFIX = 'rate:';
+let _rateCounter = 0;
 
 async function checkRateLimit(key, maxRequests, windowSeconds) {
     const client = getRedisClient();
@@ -119,7 +120,6 @@ async function checkRateLimit(key, maxRequests, windowSeconds) {
 }
 
 // ─── Pub/Sub for Cross-Service Events ────────────────────────────
-let _rateCounter = 0;
 
 function createSubscriber() {
     const url = process.env.REDIS_URL || 'redis://localhost:6379';

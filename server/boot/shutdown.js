@@ -2,6 +2,7 @@
  * Boot: Shutdown & Process Error Handlers
  * Graceful shutdown, SIGTERM/SIGINT, unhandled rejections, uncaught exceptions.
  */
+const { cache: cacheModule } = require('../cache');
 
 function setupShutdown(server, { db, redis, eventBus, partitionManager, waf, replicaManager }) {
     const shutdown = async (signal) => {
@@ -20,8 +21,7 @@ function setupShutdown(server, { db, redis, eventBus, partitionManager, waf, rep
         }
         if (db.disconnect) await db.disconnect();
         if (redis && redis.disconnect) await redis.disconnect();
-        const { cache: c } = require('../cache');
-        console.log(`📊 Final cache stats:`, await c.stats());
+        console.log(`📊 Final cache stats:`, await cacheModule.stats());
         console.log('✅ Shutdown complete');
         process.exit(0);
     };

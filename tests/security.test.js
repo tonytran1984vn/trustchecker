@@ -26,18 +26,12 @@ beforeAll(async () => {
     server = serverModule.server;
 
     // Wait for the async boot() to complete (DB init, routes mounted)
-    await new Promise(resolve => setTimeout(resolve, 4000));
-}, 15000);
+    await serverModule.ready;
+}, 30000);
 
 afterAll(async () => {
     if (server && server.close) {
         server.close();
-    }
-    // Clear all intervals/timeouts to prevent open handles (rateLimiter setInterval)
-    const highestId = setTimeout(() => { }, 0);
-    for (let i = 0; i < highestId; i++) {
-        clearTimeout(i);
-        clearInterval(i);
     }
     jest.restoreAllMocks();
 }, 10000);

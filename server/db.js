@@ -83,8 +83,11 @@ class PrismaBackend {
     // IFNULL(a, b) → COALESCE(a, b)
     t = t.replace(/IFNULL\(/gi, 'COALESCE(');
 
-    // Skip DDL
-    if (/^\s*CREATE\s+(TABLE|INDEX)/i.test(t)) return null;
+    // Skip DDL — Prisma handles schema via migrations
+    if (/^\s*CREATE\s+(TABLE|INDEX)/i.test(t)) {
+      console.warn('[DB] ⚠️ DDL statement skipped in Prisma mode (use migrations):', t.slice(0, 80));
+      return null;
+    }
 
     // Convert ? → $1, $2, ...
     let idx = 0;

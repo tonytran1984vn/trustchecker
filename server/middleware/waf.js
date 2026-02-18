@@ -12,7 +12,7 @@
 
 const SQL_INJECTION_PATTERNS = [
     /(\b(union\s+select|select\s+.*\s+from|insert\s+into|update\s+.*\s+set|delete\s+from|drop\s+table|alter\s+table)\b)/i,
-    /(--|;|\/\*|\*\/|xp_|sp_|0x[0-9a-f]+)/i,
+    /(\s--\s|\/\*|\*\/|\bxp_\w+|\bsp_\w+|;\s*(select|drop|insert|update|delete|alter|create))/i,
     /(\b(or|and)\b\s+\d+\s*=\s*\d+)/i,
     /('\s*(or|and)\s+')/i,
     /(benchmark\s*\(|sleep\s*\(|waitfor\s+delay)/i,
@@ -225,9 +225,10 @@ class WAF {
             }
         }
 
-        // Body params
+        // Body params (depth 5 covers most nested JSON payloads;
+        // deeper nesting is atypical and likely adversarial)
         if (req.body && typeof req.body === 'object') {
-            this._flattenValues(req.body, values, 3);
+            this._flattenValues(req.body, values, 5);
         }
 
         // Route params

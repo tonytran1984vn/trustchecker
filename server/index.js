@@ -121,7 +121,7 @@ async function boot() {
     const wss = new WebSocketServer({ server, path: '/ws' });
     const { eventBus } = require('./events');
     const jwt = require('jsonwebtoken');
-    const JWT_SECRET = process.env.JWT_SECRET || 'trustchecker-secret-change-me';
+    const { JWT_SECRET } = require('./auth');
 
     wss.on('connection', (ws, req) => {
         try {
@@ -202,9 +202,9 @@ async function boot() {
     setupShutdown(server, { db, redis, eventBus, partitionManager, waf, replicaManager });
 }
 
-boot().catch(err => {
+const ready = boot().catch(err => {
     console.error('❌ Failed to boot TrustChecker:', err);
     process.exit(1);
 });
 
-module.exports = { app, server };
+module.exports = { app, server, ready };

@@ -1,6 +1,6 @@
 {
   "name": "trustchecker",
-  "version": "9.0.0",
+  "version": "9.4.1",
   "description": "Enterprise Digital Trust Infrastructure – Real-time QR Validation & Fraud Detection",
   "main": "server/index.js",
   "scripts": {

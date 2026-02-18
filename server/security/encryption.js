@@ -109,7 +109,15 @@ function encrypt(plaintext, tenantId = 'default') {
         return `${ENCRYPTED_PREFIX}${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted}`;
     } catch (err) {
         _stats.errors++;
-        console.error('[Encryption] Encrypt failed:', err.message);
+        console.error('[Encryption] ⚠️ ENCRYPT FAILED — PII stored as plaintext:', {
+            error: err.message,
+            tenantId,
+            errorCount: _stats.errors,
+            totalEncryptions: _stats.encryptions,
+        });
+        if (_stats.errors > 10) {
+            console.error('[Encryption] 🚨 ALERT: >10 encryption failures — check ENCRYPTION_KEY and key derivation');
+        }
         return plaintext; // Fail open — don't lose data
     }
 }
