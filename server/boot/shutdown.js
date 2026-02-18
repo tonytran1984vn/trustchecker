@@ -16,7 +16,7 @@ function setupShutdown(server, { db, redis, eventBus, partitionManager, waf, rep
         if (replicaManager?.stop) replicaManager.stop();
         // Save database before disconnecting
         if (db.save) {
-            try { db.save(); console.log('💾 Database saved'); }
+            try { await db.save(); console.log('💾 Database saved'); }
             catch (e) { console.error('DB save failed:', e.message); }
         }
         if (db.disconnect) await db.disconnect();
@@ -38,7 +38,7 @@ function setupShutdown(server, { db, redis, eventBus, partitionManager, waf, rep
         console.error('💥 Uncaught Exception:', err);
         // Save DB before crash
         if (db.save) {
-            try { db.save(); } catch (e) { /* noop */ }
+            try { const data = db.db?.export(); if (data) { require('fs').writeFileSync(db._dbPath, Buffer.from(data)); } } catch (e) { /* noop */ }
         }
         // Always exit — a corrupted process is worse than a restart
         process.exit(1);
