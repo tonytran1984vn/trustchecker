@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * Outbound Webhook Management Routes
  * Subscribe, manage, test, and monitor outbound webhook deliveries
@@ -17,7 +18,7 @@ router.get('/', async (req, res) => {
         const stats = webhookEngine.getStats();
         res.json({ subscriptions, stats });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -47,7 +48,7 @@ router.post('/', async (req, res) => {
         const id = webhookEngine.subscribe(event_type, url, secret);
         res.status(201).json({ id, event_type, url, message: 'Webhook subscription created' });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -58,7 +59,7 @@ router.delete('/:id', async (req, res) => {
         if (!removed) return res.status(404).json({ error: 'Subscription not found' });
         res.json({ message: 'Webhook subscription removed' });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -81,7 +82,7 @@ router.post('/test', async (req, res) => {
 
         res.json({ test: true, delivery: results[0] || { status: 'no_delivery' } });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -93,7 +94,7 @@ router.get('/deliveries', async (req, res) => {
         const stats = webhookEngine.getStats();
         res.json({ deliveries, stats });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

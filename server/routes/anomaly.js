@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * Anomaly Detection Routes
  * Time-series analysis, scan velocity, fraud spikes, trust drops, geo dispersion
@@ -45,7 +46,7 @@ router.post('/scan', requireRole('manager'), async (req, res) => {
             ...result
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -81,7 +82,7 @@ router.get('/', async (req, res) => {
         const result = await fetchAnomalyList(req.query);
         res.json(result);
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -103,7 +104,7 @@ router.get('/detections', async (req, res) => {
 
         res.json(result);
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -121,7 +122,7 @@ router.put('/:id/resolve', requireRole('manager'), async (req, res) => {
 
         res.json({ id: req.params.id, status: 'resolved', resolution });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -141,7 +142,7 @@ router.get('/stats', requireRole('manager'), async (req, res) => {
 
         res.json({ total, by_type: byType, by_severity: bySeverity, by_status: byStatus, trend_30d: trend });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

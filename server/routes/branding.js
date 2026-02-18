@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * White-label Branding Routes
  * Theme configuration, logo, colors, custom domain per organization
@@ -46,7 +47,7 @@ router.get('/', async (req, res) => {
             is_default: !brandConfig
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -97,7 +98,7 @@ router.put('/', requireRole('admin'), async (req, res) => {
             message: 'Branding configuration updated'
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -109,7 +110,7 @@ router.post('/reset', requireRole('admin'), async (req, res) => {
 
         res.json({ theme: DEFAULT_THEME, message: 'Branding reset to defaults' });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -130,7 +131,7 @@ ${theme.custom_css || ''}
         res.setHeader('Content-Type', 'text/css');
         res.send(css);
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

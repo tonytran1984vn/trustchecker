@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * NFT Certificate Routes
  * Simulated NFT minting, verification, transfer for product authenticity
@@ -63,7 +64,7 @@ router.post('/mint', requireRole('operator'), async (req, res) => {
             expires_at: expiresAt
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -83,7 +84,7 @@ router.get('/', async (req, res) => {
 
         res.json({ certificates: await db.all(sql, params) });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -102,7 +103,7 @@ router.get('/:id', async (req, res) => {
             is_valid: cert.status === 'active' && (!cert.expires_at || new Date(cert.expires_at) > new Date())
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -133,7 +134,7 @@ router.get('/:id/verify', async (req, res) => {
             verified_at: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -173,7 +174,7 @@ router.post('/:id/transfer', requireRole('operator'), async (req, res) => {
 
         res.json({ id: req.params.id, new_owner: to_user_id, transfer_seal: seal, history });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -193,7 +194,7 @@ router.post('/:id/revoke', requireRole('admin'), async (req, res) => {
 
         res.json({ id: req.params.id, status: 'revoked', reason, revoke_seal: seal });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

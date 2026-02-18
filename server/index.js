@@ -53,8 +53,8 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
-            scriptSrcAttr: ["'unsafe-inline'"],  // Allow inline event handlers (onclick, onkeydown)
+            scriptSrc: ["'self'", "https://cdn.jsdelivr.net"],
+            scriptSrcAttr: [],  // SEC-06: Removed 'unsafe-inline' — use external scripts
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
             imgSrc: ["'self'", "data:", "https:"],
@@ -72,8 +72,10 @@ app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
 // Prometheus Metrics
 const { metricsMiddleware, metricsHandler } = require('./metrics');
+const { authMiddleware: metricsAuth, requireRole: metricsRole } = require('./auth/core');
 app.use(metricsMiddleware);
-app.get('/metrics', metricsHandler);
+// SEC-02: Protect metrics endpoint — requires admin auth
+app.get('/metrics', metricsAuth, metricsRole('admin'), metricsHandler);
 
 const isTest = process.env.NODE_ENV === 'test';
 

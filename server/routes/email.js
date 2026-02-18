@@ -46,7 +46,8 @@ router.post('/send', requireRole('admin'), async (req, res) => {
             default: return res.status(400).json({ error: 'Unknown template' });
         }
     } catch (e) {
-        return res.status(400).json({ error: `Template error: ${e.message}` });
+        console.error('Email template error:', e.message);
+        return res.status(400).json({ error: 'Template rendering failed' });
     }
 
     // Simulated send (in production, integrate with SMTP from integrations)

@@ -229,11 +229,11 @@ class SQLiteBackend {
     return this;
   }
 
-  save() {
-    const fs = require('fs');
+  async save() {
+    const fs = require('fs').promises;
     const data = this.db.export();
     const buffer = Buffer.from(data);
-    fs.writeFileSync(this._dbPath, buffer);
+    await fs.writeFile(this._dbPath, buffer);
   }
 
   // Async wrappers over sync operations (for unified API)
@@ -433,6 +433,7 @@ class SQLiteBackend {
     // users migrations
     safeAddColumn('users', 'mfa_secret', 'TEXT');
     safeAddColumn('users', 'mfa_enabled', 'INTEGER DEFAULT 0');
+    safeAddColumn('users', 'mfa_backup_codes', 'TEXT');
     safeAddColumn('users', 'failed_attempts', 'INTEGER DEFAULT 0');
     safeAddColumn('users', 'locked_until', 'TEXT');
   }

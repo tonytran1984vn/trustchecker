@@ -240,7 +240,9 @@ describe('Fix #6: Password Strength Requirements', () => {
             });
 
         expect(res.status).toBe(400);
-        expect(res.body.error).toContain('12 characters');
+        // Validation middleware or handler should mention '12 characters'
+        const bodyStr = JSON.stringify(res.body);
+        expect(bodyStr).toContain('12 characters');
     });
 
     test('rejects password without special character', async () => {

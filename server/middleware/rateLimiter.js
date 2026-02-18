@@ -9,7 +9,8 @@ class RateLimiter {
         this.blocked = new Map(); // key → unblock_time
 
         // Cleanup every 5 minutes
-        setInterval(() => this.cleanup(), 300000);
+        this._cleanupTimer = setInterval(() => this.cleanup(), 300000);
+        if (this._cleanupTimer.unref) this._cleanupTimer.unref();
     }
 
     /**

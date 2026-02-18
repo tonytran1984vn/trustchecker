@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * KYC-Business Routes
  * Business verification, sanction screening, GDPR compliance
@@ -35,7 +36,7 @@ router.get('/stats', async (req, res) => {
             verification_rate: total.count > 0 ? Math.round((verified.count / total.count) * 100) : 0
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -51,7 +52,7 @@ router.get('/businesses', async (req, res) => {
     `);
         res.json({ businesses });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -66,7 +67,7 @@ router.get('/businesses/:id', async (req, res) => {
 
         res.json({ business: biz, checks, sanctions });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -118,7 +119,7 @@ router.post('/verify', requireRole('operator'), async (req, res) => {
             avg_score: Math.round(avgScore)
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -164,7 +165,7 @@ router.post('/sanction-check', requireRole('manager'), async (req, res) => {
 
         res.json({ business_id, lists_checked: lists.length, hits, clean: hits.length === 0 });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -180,7 +181,7 @@ router.post('/businesses/:id/approve', requireRole('manager'), async (req, res) 
 
         res.json({ status: 'verified', business_id: req.params.id });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -192,7 +193,7 @@ router.post('/businesses/:id/reject', requireRole('manager'), async (req, res) =
     `).run(req.user.id, req.params.id);
         res.json({ status: 'rejected', business_id: req.params.id });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -208,7 +209,7 @@ router.get('/gdpr/export/:userId', requireRole('operator'), async (req, res) => 
         };
         res.json({ exported_at: new Date().toISOString(), data: userData });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -225,7 +226,7 @@ router.delete('/gdpr/delete/:userId', requireRole('admin'), async (req, res) => 
 
         res.json({ deleted: true, user_id: userId });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -273,7 +274,7 @@ router.post('/verify-document', requireRole('operator'), async (req, res) => {
             status: 'completed'
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -313,7 +314,7 @@ router.get('/businesses/:id/risk-report', async (req, res) => {
             generated_at: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -345,7 +346,7 @@ router.get('/businesses/:id/audit', async (req, res) => {
 
         res.json({ business_id: req.params.id, business_name: biz.name, audit_trail: timeline });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

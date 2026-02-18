@@ -53,9 +53,19 @@ export function renderLogin() {
 }
 
 export async function doLogin() {
-  const username = document.getElementById('login-user').value;
+  const username = document.getElementById('login-user').value.trim();
   const password = document.getElementById('login-pass').value;
   const errEl = document.getElementById('login-error');
+  if (!username || !password) {
+    errEl.style.display = 'block';
+    errEl.textContent = 'Please enter username and password';
+    return;
+  }
+
+  // Show loading state on button
+  const btn = document.querySelector('.login-card .btn-primary');
+  if (btn) { btn.classList.add('btn-loading'); btn.disabled = true; }
+
   try {
     const res = await API.post('/auth/login', { username, password });
 
@@ -80,6 +90,7 @@ export async function doLogin() {
   } catch (e) {
     errEl.style.display = 'block';
     errEl.textContent = e.message;
+    if (btn) { btn.classList.remove('btn-loading'); btn.disabled = false; }
   }
 }
 

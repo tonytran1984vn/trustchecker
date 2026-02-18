@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * Admin Dashboard & User Management Routes
  * Admin-only. System overview, user management, audit, system settings
@@ -47,7 +48,7 @@ router.get('/overview', async (req, res) => {
             system_health: { status: 'healthy', uptime: '99.97%', db_size_mb: getDBSize() }
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -69,7 +70,7 @@ router.get('/users', async (req, res) => {
 
         res.json({ users, total, page: Math.floor(offset / limit) + 1, pages: Math.ceil(total / limit) });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -94,7 +95,7 @@ router.put('/users/:id/role', async (req, res) => {
 
         res.json({ user_id: req.params.id, username: user.username, new_role: role });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -115,7 +116,7 @@ router.put('/users/:id/status', async (req, res) => {
 
         res.json({ user_id: req.params.id, username: user.username, new_status: status });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -136,7 +137,7 @@ router.post('/users/:id/reset-password', async (req, res) => {
 
         res.json({ user_id: req.params.id, message: 'Password reset successfully' });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -164,7 +165,7 @@ router.get('/audit', async (req, res) => {
 
         res.json({ logs, total, action_breakdown: actionBreakdown });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -192,7 +193,7 @@ router.get('/settings', async (req, res) => {
 
         res.json(settings ? { ...defaults, ...JSON.parse(settings.details) } : defaults);
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -261,7 +262,7 @@ router.get('/metrics', async (req, res) => {
             timestamp: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -273,7 +274,7 @@ function getDBSize() {
         if (fs.existsSync(dbPath)) {
             return Math.round(fs.statSync(dbPath).size / 1024 / 1024 * 100) / 100;
         }
-    } catch { }
+    } catch (e) { console.warn('[admin] getDBSize failed:', e.message); }
     return 0;
 }
 

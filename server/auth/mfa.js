@@ -26,11 +26,17 @@ router.post('/mfa/setup', authMiddleware, async (req, res) => {
         const secret = generateSecret();
         const otpauth = generateURI({ issuer: 'TrustChecker', accountName: user.username, secret });
 
-        await db.prepare('UPDATE users SET mfa_secret = ? WHERE id = ?').run(secret, user.id);
 
         const backupCodes = Array.from({ length: 6 }, () =>
             crypto.randomBytes(4).toString('hex').toUpperCase()
         );
+
+        // SEC-07: Hash and store backup codes for account recovery
+        const hashedCodes = await Promise.all(
+            backupCodes.map(code => bcrypt.hash(code, 10))
+        );
+        await db.prepare('UPDATE users SET mfa_secret = ?, mfa_backup_codes = ? WHERE id = ?')
+            .run(secret, JSON.stringify(hashedCodes), user.id);
 
         res.json({
             secret,
@@ -87,7 +93,7 @@ router.post('/mfa/disable', authMiddleware, async (req, res) => {
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) return res.status(401).json({ error: 'Invalid password' });
 
-        await db.prepare('UPDATE users SET mfa_enabled = 0, mfa_secret = NULL WHERE id = ?').run(user.id);
+        await db.prepare('UPDATE users SET mfa_enabled = 0, mfa_secret = NULL, mfa_backup_codes = NULL WHERE id = ?').run(user.id);
 
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?, ?)')
             .run(uuidv4(), user.id, 'MFA_DISABLED', 'user', user.id);

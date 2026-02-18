@@ -31,8 +31,15 @@ router.post('/password', authMiddleware, async (req, res) => {
         const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
+        // Verify current password first
         const valid = await bcrypt.compare(current_password, user.password_hash);
         if (!valid) return res.status(401).json({ error: 'Current password is incorrect' });
+
+        // SEC-13: Prevent password reuse (check AFTER verifying current password)
+        const isSameAsOld = await bcrypt.compare(new_password, user.password_hash);
+        if (isSameAsOld) {
+            return res.status(400).json({ error: 'New password must be different from current password' });
+        }
 
         const newHash = await bcrypt.hash(new_password, 12);
         await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);
@@ -190,9 +197,10 @@ router.post('/reset-password', async (req, res) => {
         }
 
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        // SEC-04: Use json_extract instead of LIKE to prevent wildcard injection
         const resetLog = await db.get(
-            `SELECT * FROM audit_log WHERE action = 'PASSWORD_RESET_REQUESTED' AND details LIKE ? ORDER BY created_at DESC LIMIT 1`,
-            [`%"token_hash":"${tokenHash}"%`]
+            `SELECT * FROM audit_log WHERE action = 'PASSWORD_RESET_REQUESTED' AND json_extract(details, '$.token_hash') = ? ORDER BY created_at DESC LIMIT 1`,
+            [tokenHash]
         );
 
         if (!resetLog) return res.status(400).json({ error: 'Invalid or expired reset token' });
@@ -226,6 +234,9 @@ router.put('/profile', authMiddleware, async (req, res) => {
         const updates = [];
         const params = [];
 
+        // SEC-08: Explicit allowlist for profile update fields
+        const ALLOWED_PROFILE_FIELDS = ['email', 'company', 'username'];
+
         if (email && email !== user.email) {
             const existing = await db.get('SELECT id FROM users WHERE email = ? AND id != ?', [email, user.id]);
             if (existing) return res.status(409).json({ error: 'Email already in use' });
@@ -236,6 +247,12 @@ router.put('/profile', authMiddleware, async (req, res) => {
         if (display_name !== undefined) { updates.push('username = ?'); params.push(display_name); }
 
         if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+        // Validate all field names against allowlist
+        const fieldNames = updates.map(u => u.split(' = ')[0]);
+        if (fieldNames.some(f => !ALLOWED_PROFILE_FIELDS.includes(f))) {
+            return res.status(400).json({ error: 'Invalid field update' });
+        }
 
         params.push(req.user.id);
         await db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);

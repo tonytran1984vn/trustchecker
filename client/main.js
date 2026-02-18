@@ -82,12 +82,12 @@ function mainRender() {
       ${renderSidebar()}
       <div class="main-content" id="main-content">
         ${renderPageHeader(_pendingScans > 0 ? renderSyncBadge(_pendingScans) : '')}
-        <div class="page-body" role="main" aria-label="${State.page || 'dashboard'} page">
+        <div class="page-body page-enter" role="main" aria-label="${State.page || 'dashboard'} page">
           ${withPageBoundary(() => renderPage(), State.page || 'dashboard')}
         </div>
       </div>
     </div>
-    ${State.modal ? `<div class="modal-overlay" role="dialog" aria-modal="true" onclick="if(event.target===this){State.modal=null;render()}">${State.modal}</div>` : ''}
+    ${State.modal ? `<div class="modal-overlay glass-overlay" role="dialog" aria-modal="true" onclick="if(event.target===this){State.modal=null;render()}">${State.modal}</div>` : ''}
   `;
 }
 

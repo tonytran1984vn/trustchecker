@@ -62,6 +62,7 @@ class ScheduledTasks {
                 }
             }
         }, 30000);
+        if (this._timer.unref) this._timer.unref();
 
         console.log('⏰ Scheduler started');
     }
@@ -110,7 +111,7 @@ class ScheduledTasks {
                     console.log(`⚠️ User ${plan.user_id} at ${Math.round(scans / limit * 100)}% of scan limit`);
                 }
             }
-        } catch { }
+        } catch (e) { console.warn('[scheduler] usageCheck skip:', e.message); }
     }
 
     async retentionSweep() {
@@ -137,11 +138,11 @@ class ScheduledTasks {
                     } else if (policy.action === 'archive') {
                         try {
                             await this.db.run(`UPDATE ${policy.table_name} SET status = 'archived' WHERE ${dateCol} < ? AND status != 'archived'`, [cutoff]);
-                        } catch { /* table may not have status column — skip */ }
+                        } catch (e) { /* table may not have status column */ console.debug('[scheduler] archive skip:', e.message); }
                     }
-                } catch { /* table might not exist or have these columns */ }
+                } catch (e) { console.debug('[scheduler] retention skip:', e.message); }
             }
-        } catch { }
+        } catch (e) { console.debug('[scheduler] retentionSweep skip:', e.message); }
     }
 
     async anomalyAutoScan() {
@@ -151,7 +152,7 @@ class ScheduledTasks {
             if (recentAlerts > 10) {
                 console.log(`🔍 Auto-anomaly: ${recentAlerts} fraud alerts in last 6h — scan recommended`);
             }
-        } catch { }
+        } catch (e) { console.debug('[scheduler] anomalyAutoScan skip:', e.message); }
     }
 
     async certExpiryCheck() {
@@ -162,13 +163,13 @@ class ScheduledTasks {
             }
 
             await this.db.run("UPDATE certifications SET status = 'expired' WHERE expiry_date < datetime('now') AND status = 'active'");
-        } catch { }
+        } catch (e) { console.debug('[scheduler] certExpiryCheck skip:', e.message); }
     }
 
     async sessionCleanup() {
         try {
             await this.db.run("DELETE FROM sessions WHERE expires_at < datetime('now')");
-        } catch { }
+        } catch (e) { console.debug('[scheduler] sessionCleanup skip:', e.message); }
     }
 }
 

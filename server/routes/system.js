@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * System Routes — Backup, Restore, Seed, and System Info
  * Admin-only endpoints for system maintenance
@@ -47,7 +48,7 @@ router.get('/info', async (req, res) => {
             timestamp: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -71,7 +72,7 @@ router.post('/seed', async (req, res) => {
             if (!existing) {
                 const id = uuidv4();
                 await db.prepare('INSERT INTO products (id, name, sku, category, manufacturer, origin_country, trust_score) VALUES (?, ?, ?, ?, ?, ?, ?)')
-                    .run(id, p.name, p.sku, p.category, p.manufacturer, p.origin_country, 85 + Math.random() * 15);
+                    .run(id, p.name, p.sku, p.category, p.manufacturer, p.origin_country, 85 + Math.random() * 15); // Math.random OK for demo seed
 
                 // Auto-generate QR
                 const qrId = uuidv4();
@@ -125,7 +126,7 @@ router.post('/seed', async (req, res) => {
 
         res.json({ message: 'Demo data seeded', results });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -141,7 +142,7 @@ router.post('/backup', async (req, res) => {
                 const rows = await db.all(`SELECT * FROM ${t.name}`);
                 backup[t.name] = rows;
                 totalRows += rows.length;
-            } catch { }
+            } catch (e) { console.warn(`[system] Backup skip table '${t.name}':`, e.message); }
         }
 
         res.json({
@@ -153,7 +154,7 @@ router.post('/backup', async (req, res) => {
             note: 'Store this JSON securely. Use POST /api/system/restore to restore.'
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -199,7 +200,7 @@ router.post('/restore', async (req, res) => {
 
         res.json({ message: `Restored ${restored} rows`, tables: Object.keys(data).length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -215,17 +216,17 @@ router.delete('/purge', async (req, res) => {
         const results = {};
 
         for (const t of tables) {
-            if (t.name === 'users') return; // Never delete users
+            if (t.name === 'users') continue; // Never delete users
             try {
                 const before = (await db.get(`SELECT COUNT(*) as c FROM ${t.name}`))?.c || 0;
                 await db.run(`DELETE FROM ${t.name}`);
                 results[t.name] = before;
-            } catch { }
+            } catch (e) { console.warn(`[system] Purge skip table '${t.name}':`, e.message); }
         }
 
         res.json({ message: 'Data purged (users preserved)', tables_cleared: results });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -239,7 +240,7 @@ router.get('/logs', async (req, res) => {
             metrics: requestLogger.getMetrics()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * Support Ticket System Routes
  * CRUD tickets, messaging, assignment, priority management
@@ -36,7 +37,7 @@ router.post('/', async (req, res) => {
 
         res.status(201).json({ id, subject, category, priority: priority || 'medium', status: 'open' });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -69,7 +70,7 @@ router.get('/', async (req, res) => {
 
         res.json({ tickets, stats, total: tickets.length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -91,7 +92,7 @@ router.get('/stats/summary', requireRole('manager'), async (req, res) => {
             avg_resolution_hours: avgResolution?.avg_hours ? Math.round(avgResolution.avg_hours * 10) / 10 : null
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -113,7 +114,7 @@ router.get('/:id', async (req, res) => {
 
         res.json({ ticket, messages });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -139,7 +140,7 @@ router.post('/:id/message', async (req, res) => {
 
         res.status(201).json({ id, ticket_id: req.params.id, message });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -163,7 +164,7 @@ router.put('/:id/assign', requireRole('manager'), async (req, res) => {
 
         res.json({ id: req.params.id, assigned_to, assignee_name: assignee.username, status: 'in_progress' });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -187,7 +188,7 @@ router.put('/:id/resolve', async (req, res) => {
 
         res.json({ id: req.params.id, status: 'resolved', resolution });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -201,7 +202,7 @@ router.put('/:id/close', async (req, res) => {
 
         res.json({ id: req.params.id, status: 'closed' });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

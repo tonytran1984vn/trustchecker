@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * TrustChecker – Integration Settings Routes (Admin Only)
  * Manages API keys and configuration for external services
@@ -175,7 +176,7 @@ module.exports = function (db) {
             }
             res.json(result);
         } catch (e) {
-            res.status(500).json({ error: e.message });
+            safeError(res, 'Operation failed', e);
         }
     });
 
@@ -215,7 +216,7 @@ module.exports = function (db) {
 
             res.json({ message: `Updated ${updated.length} settings for ${schema.label}`, updated });
         } catch (e) {
-            res.status(500).json({ error: e.message });
+            safeError(res, 'Operation failed', e);
         }
     });
 
@@ -226,7 +227,7 @@ module.exports = function (db) {
             await db.prepare('DELETE FROM system_settings WHERE category = ?').run(category);
             res.json({ message: `All settings cleared for ${category}` });
         } catch (e) {
-            res.status(500).json({ error: e.message });
+            safeError(res, 'Operation failed', e);
         }
     });
 

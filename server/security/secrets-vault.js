@@ -387,6 +387,7 @@ class SecretsVault {
                 console.error('[SecretsVault] Rotation watcher error:', err.message);
             }
         }, ROTATION_CHECK_INTERVAL);
+        if (this._rotationTimer.unref) this._rotationTimer.unref();
     }
 
     /**

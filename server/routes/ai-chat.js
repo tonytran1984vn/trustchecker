@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * AI Assistant & Live Chat Routes
  * AI chatbot (rule-based), live chat with WebSocket bridge, conversation history
@@ -36,7 +37,7 @@ router.post('/ask', async (req, res) => {
             timestamp: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -50,7 +51,7 @@ router.get('/suggestions', async (req, res) => {
         });
         res.json({ suggestions });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -78,7 +79,7 @@ router.post('/chat/start', async (req, res) => {
             auto_response: aiAssistant.respond(topic || 'help', { role: req.user.role })
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -116,7 +117,7 @@ router.post('/chat/:sessionId/message', async (req, res) => {
 
         res.json(response);
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -139,7 +140,7 @@ router.get('/chat/history', async (req, res) => {
 
         res.json({ sessions, total: sessions.length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

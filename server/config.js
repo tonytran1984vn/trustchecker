@@ -80,11 +80,17 @@ function validateConfig() {
 // Warn if JWT secret is the insecure default (any environment)
 function warnDefaultSecrets() {
     const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret || jwtSecret === 'trustchecker-secret-change-me') {
-        console.warn('⚠️  WARNING: Using default JWT_SECRET — this is INSECURE. Set JWT_SECRET env var (openssl rand -hex 64)');
+    const INSECURE_DEFAULTS = [
+        'trustchecker-secret-key-DEV-ONLY',
+        'trustchecker-secret-change-me',
+    ];
+    if (!jwtSecret || INSECURE_DEFAULTS.includes(jwtSecret) || jwtSecret.length < 32) {
+        console.warn('⚠️  WARNING: Using default/weak JWT_SECRET — this is INSECURE. Set JWT_SECRET env var (openssl rand -hex 64)');
     }
-    if (!process.env.ENCRYPTION_KEY) {
-        console.warn('⚠️  WARNING: ENCRYPTION_KEY not set — PII encryption disabled');
+    const encKey = process.env.ENCRYPTION_KEY;
+    const INSECURE_ENC_DEFAULTS = ['trustchecker-encryption-key-DEV-ONLY'];
+    if (!encKey || INSECURE_ENC_DEFAULTS.includes(encKey) || encKey.length < 32) {
+        console.warn('⚠️  WARNING: ENCRYPTION_KEY not set or insecure — PII encryption disabled/weak');
     }
 }
 

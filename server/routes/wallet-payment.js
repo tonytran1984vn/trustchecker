@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * SSI Wallet & Payment Gateway (Simulated) Routes
  * Self-Sovereign Identity, DID management, payment checkout simulation
@@ -45,7 +46,7 @@ router.post('/ssi/did/create', async (req, res) => {
             note: 'This is a simulated DID for demonstration. In production, this would be anchored to a public blockchain (e.g. Ethereum, Polygon).'
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -65,7 +66,7 @@ router.get('/ssi/did', async (req, res) => {
             total: dids.length
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -101,7 +102,7 @@ router.post('/ssi/credential/issue', requireRole('operator'), async (req, res) =
             status: 'active'
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -129,7 +130,7 @@ router.post('/ssi/credential/verify', async (req, res) => {
             verified_at: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -166,7 +167,7 @@ router.post('/payment/checkout', async (req, res) => {
             note: 'Simulated payment gateway. In production, this would redirect to Stripe/PayPal.'
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -176,7 +177,7 @@ router.post('/payment/confirm', async (req, res) => {
         const { session_id } = req.body;
         if (!session_id) return res.status(400).json({ error: 'session_id required' });
 
-        const session = await db.get("SELECT * FROM audit_log WHERE action = 'CHECKOUT_CREATED' AND entity_id = ?", [session_id]);
+        const session = await db.get("SELECT * FROM audit_log WHERE action = 'CHECKOUT_CREATED' AND entity_id = ? AND actor_id = ?", [session_id, req.user.id]);
         if (!session) return res.status(404).json({ error: 'Checkout session not found' });
 
         const details = JSON.parse(session.details || '{}');
@@ -211,7 +212,7 @@ router.post('/payment/confirm', async (req, res) => {
             confirmed_at: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -232,7 +233,7 @@ router.get('/payment/history', async (req, res) => {
             total: payments.length
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -242,7 +243,7 @@ router.post('/payment/refund', async (req, res) => {
         const { payment_id, reason } = req.body;
         if (!payment_id) return res.status(400).json({ error: 'payment_id required' });
 
-        const payment = await db.get("SELECT * FROM audit_log WHERE action = 'PAYMENT_CONFIRMED' AND entity_id = ?", [payment_id]);
+        const payment = await db.get("SELECT * FROM audit_log WHERE action = 'PAYMENT_CONFIRMED' AND entity_id = ? AND actor_id = ?", [payment_id, req.user.id]);
         if (!payment) return res.status(404).json({ error: 'Payment not found' });
 
         const details = JSON.parse(payment.details || '{}');
@@ -261,7 +262,7 @@ router.post('/payment/refund', async (req, res) => {
             processed_at: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -317,7 +318,7 @@ router.get('/ipfs/stats', requireRole('admin'), async (req, res) => {
             ]
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -334,7 +335,7 @@ router.get('/ipfs/pins', requireRole('admin'), async (req, res) => {
 
         res.json({ pins: pins.slice(0, 30), total: pins.length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

@@ -85,7 +85,9 @@ describe('Auth: Registration', () => {
             .send({ username: 'weakuser', email: 'weak@test.com', password: '123' });
 
         expect(res.status).toBe(400);
-        expect(res.body.error).toContain('12 characters');
+        // Validation middleware or handler should mention '12 characters'
+        const bodyStr = JSON.stringify(res.body);
+        expect(bodyStr).toContain('12 characters');
     });
 });
 
@@ -136,13 +138,14 @@ describe('Auth: Login', () => {
         expect(res.status).toBe(400);
     });
 
-    test('tracks remaining attempts on failure', async () => {
+    test('does NOT leak remaining attempts on failure (SEC-03)', async () => {
         const res = await request(app)
             .post('/api/auth/login')
             .send({ username: testUser.username, password: 'WrongP@ss!2026' });
 
         expect(res.status).toBe(401);
-        expect(res.body.remaining_attempts).toBeDefined();
+        // SEC-03: remaining_attempts should NOT be in the response
+        expect(res.body.remaining_attempts).toBeUndefined();
     });
 });
 

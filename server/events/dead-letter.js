@@ -41,7 +41,7 @@ const memoryDLQ = new Map();
  */
 async function push(consumerGroup, event, error, opts = {}) {
     const entry = {
-        id: `dlq-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: `dlq-${Date.now()}-${require('crypto').randomBytes(4).toString('hex')}`,
         consumerGroup,
         event,
         error: typeof error === 'string' ? error : error?.message || 'Unknown error',

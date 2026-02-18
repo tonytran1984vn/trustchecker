@@ -177,6 +177,7 @@ function startScheduler(intervalMs = 24 * 60 * 60 * 1000) { // default: daily
             console.error('[partition-manager] Scheduled maintenance failed:', err.message);
         });
     }, intervalMs);
+    if (_schedulerInterval.unref) _schedulerInterval.unref();
 
     console.info(`[partition-manager] Scheduler started (interval: ${Math.round(intervalMs / 3600000)}h)`);
 }

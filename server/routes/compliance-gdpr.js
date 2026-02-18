@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * GDPR Compliance & Data Retention Routes
  * Data retention policies, GDPR rights (export, delete), compliance reporting
@@ -30,7 +31,7 @@ router.get('/policies', requireRole('admin'), async (req, res) => {
 
         res.json({ policies });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -60,7 +61,7 @@ router.post('/policies', requireRole('admin'), async (req, res) => {
 
         res.status(201).json({ id, table_name, retention_days, action: action || 'archive' });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -134,7 +135,7 @@ router.post('/policies/execute', requireRole('admin'), async (req, res) => {
 
         res.json({ executed: results.length, results });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -169,7 +170,7 @@ router.get('/gdpr/export', async (req, res) => {
 
         res.json(exportData);
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -220,7 +221,7 @@ router.delete('/gdpr/delete', async (req, res) => {
             note: 'Blockchain seals are retained for integrity but are not linked to your identity'
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -240,7 +241,7 @@ router.get('/gdpr/consent', async (req, res) => {
             ]
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -259,7 +260,7 @@ router.post('/gdpr/consent', async (req, res) => {
             recorded_at: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -291,7 +292,7 @@ router.get('/report', requireRole('admin'), async (req, res) => {
             }
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -313,7 +314,7 @@ router.get('/stats', async (req, res) => {
         try {
             gdprExports = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE action = 'GDPR_EXPORT' OR action = 'GDPR_DATA_EXPORT'"))?.c || 0;
             gdprDeletions = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE action = 'GDPR_DELETION' OR action = 'GDPR_DATA_DELETION'"))?.c || 0;
-        } catch (e) { }
+        } catch (e) { console.warn('[compliance] GDPR stats query skipped:', e.message); }
 
         res.json({
             total_policies: totalPolicies,
@@ -326,7 +327,7 @@ router.get('/stats', async (req, res) => {
             status: activePolicies > 0 ? 'compliant' : 'needs_attention'
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -347,7 +348,7 @@ router.get('/records', async (req, res) => {
         }
         res.json({ records, total: records.length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -367,7 +368,7 @@ router.get('/retention', async (req, res) => {
         }
         res.json({ policies, total: policies.length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -566,7 +567,7 @@ router.get('/certifications/readiness', async (req, res) => {
                 : 'Full compliance coverage on your current plan',
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

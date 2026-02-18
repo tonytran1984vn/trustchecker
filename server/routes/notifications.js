@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * Notification System Routes
  * In-app notifications, preferences, activity feed, and push management
@@ -42,7 +43,7 @@ router.get('/', async (req, res) => {
 
         res.json({ notifications, unread_count: unreadCount, total: rows.length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -59,7 +60,7 @@ router.post('/', requireRole('admin'), async (req, res) => {
 
         res.status(201).json({ id, title, message, sent_to: user_id });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -81,7 +82,7 @@ router.post('/broadcast', requireRole('admin'), async (req, res) => {
 
         res.json({ sent_to: users.length, notification_ids: ids.length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -98,7 +99,7 @@ router.put('/:id/read', async (req, res) => {
         await db.prepare("UPDATE audit_log SET details = ? WHERE id = ?").run(JSON.stringify(details), req.params.id);
         res.json({ id: req.params.id, read: true });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -115,7 +116,7 @@ router.put('/read-all', async (req, res) => {
 
         res.json({ marked_read: unread.length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -131,7 +132,7 @@ router.get('/preferences', async (req, res) => {
 
         res.json(pref ? { ...defaults, ...JSON.parse(pref.details) } : defaults);
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -146,7 +147,7 @@ router.put('/preferences', async (req, res) => {
 
         res.json({ message: 'Notification preferences updated', email, push, in_app });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -174,7 +175,7 @@ router.get('/activity', async (req, res) => {
 
         res.json({ activities: feed, total: feed.length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

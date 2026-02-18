@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * Multi-Stakeholder Trust Routes
  * Community ratings, certifications, and regulatory compliance
@@ -51,7 +52,7 @@ router.get('/dashboard', async (req, res) => {
             top_rated: topRated
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -82,7 +83,7 @@ router.post('/ratings', async (req, res) => {
 
         res.json({ rating_id: id });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -106,7 +107,7 @@ router.get('/ratings/:entity_type/:entity_id', async (req, res) => {
             total: avg?.count || 0
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -129,7 +130,7 @@ router.post('/certifications', requireRole('manager'), async (req, res) => {
 
         res.json({ certification_id: id, document_hash: docHash });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -147,7 +148,7 @@ router.get('/certifications', async (req, res) => {
 
         res.json({ certifications: await db.all(sql, params) });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -166,7 +167,7 @@ router.post('/compliance', requireRole('manager'), async (req, res) => {
 
         res.json({ record_id: id });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -184,7 +185,7 @@ router.get('/compliance', async (req, res) => {
 
         res.json({ records: await db.all(sql, params) });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -202,7 +203,7 @@ router.post('/disputes', async (req, res) => {
 
         res.json({ dispute_id: id, status: 'open', message: 'Dispute filed successfully' });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -223,7 +224,7 @@ router.get('/disputes', async (req, res) => {
 
         res.json({ disputes: parsed, total: parsed.length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -248,7 +249,7 @@ router.put('/disputes/:id/resolve', requireRole('manager'), async (req, res) => 
 
         res.json({ dispute_id: req.params.id, status: 'resolved', outcome: outcome || 'upheld' });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -294,7 +295,7 @@ router.get('/reputation/:entity_type/:entity_id', async (req, res) => {
             compliance_records: compliance
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -325,7 +326,7 @@ router.post('/certifications/:id/verify', async (req, res) => {
             verification_timestamp: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -373,7 +374,7 @@ router.get('/compliance/alerts', async (req, res) => {
             total_alerts: expiringSoon.length + overdue.length + nonCompliant.length + expiredCerts.length
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

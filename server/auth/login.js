@@ -14,12 +14,14 @@ const {
     JWT_SECRET, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES,
     generateTokenPair, enrichUserWithOrg, createSession
 } = require('./core');
+const { validate, schemas } = require('../middleware/validate');
 
 const router = express.Router();
 
 // ─── POST /register ──────────────────────────────────────────────────────────
 
-router.post('/register', async (req, res) => {
+// SEC-11: Apply schema validation middleware
+router.post('/register', validate(schemas.register), async (req, res) => {
     try {
         const { username, password, email, company } = req.body;
 
@@ -68,8 +70,8 @@ router.post('/register', async (req, res) => {
 });
 
 // ─── POST /login ─────────────────────────────────────────────────────────────
-
-router.post('/login', async (req, res) => {
+// SEC-12: Apply schema validation middleware
+router.post('/login', validate(schemas.login), async (req, res) => {
     try {
         const { username, password, mfa_code, mfa_token } = req.body;
 
@@ -148,10 +150,7 @@ router.post('/login', async (req, res) => {
             }
 
             await db.prepare('UPDATE users SET failed_attempts = ? WHERE id = ?').run(attempts, user.id);
-            return res.status(401).json({
-                error: 'Invalid credentials',
-                remaining_attempts: MAX_FAILED_ATTEMPTS - attempts
-            });
+            return res.status(401).json({ error: 'Invalid credentials' });
         }
 
         // Password valid — check if MFA is required

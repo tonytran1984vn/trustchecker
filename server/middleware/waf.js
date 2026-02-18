@@ -17,6 +17,7 @@ const SQL_INJECTION_PATTERNS = [
     /('\s*(or|and)\s+')/i,
     /(benchmark\s*\(|sleep\s*\(|waitfor\s+delay)/i,
     /(char\s*\(|concat\s*\(|concat_ws\s*\()/i,
+    /('--\s*$|'\s*#\s*$|'\s*;)/i,  // Auth bypass: quote + comment (admin'--)
 ];
 
 const XSS_PATTERNS = [
@@ -147,7 +148,7 @@ class WAF {
                 return res.status(403).json({
                     error: 'Request blocked by security policy',
                     code: 'WAF_BLOCKED',
-                    requestId: req.headers['x-request-id'] || undefined,
+                    requestId: req.requestId || undefined,
                 });
             }
 

@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * Evidence Vault Routes
  * Tamper-proof digital evidence with hash anchoring & forensic export
@@ -71,7 +72,7 @@ router.get('/stats', async (req, res) => {
             integrity_rate: total.count > 0 ? Math.round(((anchored.count + verified.count) / total.count) * 100) : 100
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -86,7 +87,7 @@ router.get('/', async (req, res) => {
     `);
         res.json({ items });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -103,7 +104,7 @@ router.get('/audit/trail', async (req, res) => {
     `);
         res.json({ audit_trail: logs });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -122,7 +123,7 @@ router.get('/search/tags', async (req, res) => {
 
         res.json({ items: matched, total: matched.length, searched_tags: searchTags });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -142,7 +143,7 @@ router.get('/:id', async (req, res) => {
         const { file_data, ...metadata } = item;
         res.json({ item: metadata, seal, has_file: !!file_data });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -187,7 +188,7 @@ router.post('/upload', requireRole('operator'), async (req, res) => {
 
         res.json({ id, sha256, seal_id: sealId, block_index: blockIndex });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -225,7 +226,7 @@ router.get('/:id/verify', async (req, res) => {
             verified_at: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -279,7 +280,7 @@ router.get('/:id/export', async (req, res) => {
 
         res.json(report);
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -294,7 +295,7 @@ router.post('/upload-file', requireRole('operator'), upload.single('file'), asyn
         if (!title) return res.status(400).json({ error: 'Title required' });
 
         // Compute SHA-256 hash from actual file bytes
-        const fileBuffer = fs.readFileSync(req.file.path);
+        const fileBuffer = await fs.promises.readFile(req.file.path);
         const sha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex');
 
         // Create blockchain seal
@@ -334,7 +335,7 @@ router.post('/upload-file', requireRole('operator'), upload.single('file'), asyn
             file_name: req.file.originalname, file_size: req.file.size
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -347,11 +348,12 @@ router.get('/:id/download', async (req, res) => {
         // Try disk-stored file path first
         if (item.file_path) {
             const filePath = path.join(EVIDENCE_DIR, item.file_path);
-            if (fs.existsSync(filePath)) {
+            try {
+                await fs.promises.access(filePath);
                 res.setHeader('Content-Disposition', `attachment; filename="${item.file_name || 'evidence'}"`);
                 res.setHeader('Content-Type', item.file_type || 'application/octet-stream');
                 return res.sendFile(filePath);
-            }
+            } catch { /* file not found on disk — fall through */ }
         }
 
         // Fallback to file_data in DB (base64)
@@ -364,7 +366,7 @@ router.get('/:id/download', async (req, res) => {
 
         res.status(404).json({ error: 'File data not available' });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -461,7 +463,7 @@ th{background:#f8fafc;font-weight:600;width:35%}
         res.setHeader('Content-Type', 'text/html');
         res.send(html);
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -484,7 +486,7 @@ router.post('/:id/tag', requireRole('operator'), async (req, res) => {
 
         res.json({ id: req.params.id, tags: newTags });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -504,7 +506,7 @@ router.delete('/:id/tag', requireRole('operator'), async (req, res) => {
 
         res.json({ id: req.params.id, tags: newTags, removed: tag });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -548,7 +550,7 @@ router.post('/batch-verify', requireRole('operator'), async (req, res) => {
             verified_at: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -590,7 +592,7 @@ router.get('/activity/timeline', async (req, res) => {
             by_status: byStatus
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

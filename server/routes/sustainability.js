@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * Sustainability & Green Certification Routes
  * Product sustainability scoring, green certifications, carbon tracking
@@ -50,7 +51,7 @@ router.post('/assess', requireRole('operator'), async (req, res) => {
             recommendations: getRecommendations(scores)
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -69,7 +70,7 @@ router.get('/products/:id', async (req, res) => {
 
         res.json({ current: latest, history, trend: scores.length > 1 ? (scores[0].overall_score - scores[scores.length - 1].overall_score > 0 ? 'improving' : 'declining') : 'stable' });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -90,7 +91,7 @@ router.get('/leaderboard', async (req, res) => {
 
         res.json({ leaderboard: leaders.map((l, i) => ({ rank: i + 1, ...l })), total: leaders.length });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -137,7 +138,7 @@ router.post('/green-cert', requireRole('manager'), async (req, res) => {
             verification_hash: certHash
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -163,7 +164,7 @@ router.get('/stats', async (req, res) => {
             platform_grade: avgScore >= 80 ? 'A' : avgScore >= 60 ? 'B' : 'C'
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

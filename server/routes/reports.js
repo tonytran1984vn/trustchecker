@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * Reporting & Data Export Routes
  * Custom reports, CSV/JSON export, scheduled reports, analytics
@@ -70,7 +71,7 @@ router.get('/scan-report', requireRole('manager'), async (req, res) => {
 
         res.json({ report_type: 'scan_activity', summary, data: scans, generated_at: new Date().toISOString() });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -121,7 +122,7 @@ router.get('/fraud-report', requireRole('manager'), async (req, res) => {
 
         res.json({ report_type: 'fraud_detection', summary, data: alerts, generated_at: new Date().toISOString() });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -162,7 +163,7 @@ router.get('/product-report', requireRole('manager'), async (req, res) => {
 
         res.json({ report_type: 'product_trust', summary, data: products, generated_at: new Date().toISOString() });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -199,7 +200,7 @@ router.get('/compliance-report', requireRole('admin'), async (req, res) => {
             generated_at: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -234,7 +235,7 @@ router.get('/supply-chain-report', requireRole('manager'), async (req, res) => {
 
         res.json({ report_type: 'supply_chain', summary, partners, generated_at: new Date().toISOString() });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -261,7 +262,7 @@ router.get('/financial-report', requireRole('admin'), async (req, res) => {
             generated_at: new Date().toISOString()
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -299,7 +300,7 @@ router.get('/export/:entity', requireRole('manager'), async (req, res) => {
 
         res.json({ entity, total: data.length, data, exported_at: new Date().toISOString() });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 

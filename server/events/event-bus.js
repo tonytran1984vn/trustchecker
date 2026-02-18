@@ -21,6 +21,8 @@ const EventEmitter = require('events');
 const { validateEvent, getSchemaVersion } = require('./schema-registry');
 const dlq = require('./dead-letter');
 
+const crypto = require('crypto');
+
 // ─── Configuration ───────────────────────────────────────────
 const CONFIG = {
     streamPrefix: 'events:',
@@ -36,7 +38,7 @@ const CONFIG = {
 // ─── Event Envelope ──────────────────────────────────────────
 function createEnvelope(type, data, context = {}) {
     return {
-        id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: `evt-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
         type,
         version: getSchemaVersion(type),
         data,

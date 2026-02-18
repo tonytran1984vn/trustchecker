@@ -1,3 +1,4 @@
+const { safeError } = require('../utils/safe-error');
 /**
  * Billing & Pricing Routes v2.0
  * Hybrid pricing: Core Subscription + Usage-Based Add-ons + Freemium
@@ -89,7 +90,7 @@ router.get('/plan', async (req, res) => {
             available_plans: pricing.getPublicPricing().plans,
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -141,7 +142,7 @@ router.post('/upgrade', requireRole('admin'), async (req, res) => {
             sla: p.sla,
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -186,7 +187,7 @@ router.get('/usage', async (req, res) => {
 
         res.json({ period, plan_name: plan?.plan_name || 'free', usage });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -196,7 +197,7 @@ router.get('/usage/detailed', async (req, res) => {
         const detailed = await getDetailedUsage(req.user.id);
         res.json(detailed);
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -227,7 +228,7 @@ router.get('/estimate', async (req, res) => {
             usage_snapshot: detailed.usage,
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -237,7 +238,7 @@ router.get('/overage', async (req, res) => {
         const charges = await getOverageCharges(req.user.id);
         res.json(charges);
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -269,7 +270,7 @@ router.post('/enterprise/request', async (req, res) => {
             message: 'Our enterprise team will reach out within 48 hours.',
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -298,7 +299,7 @@ router.get('/compare', async (req, res) => {
         }
         res.json({ current_plan: currentPlan, comparisons });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -308,7 +309,7 @@ router.get('/invoices', async (req, res) => {
         const invoices = await db.all('SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC', [req.user.id]);
         res.json({ invoices });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -324,7 +325,7 @@ router.get('/limits', async (req, res) => {
             all_plans: PLANS
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -334,7 +335,7 @@ router.get('/webhook/events', requireRole('admin'), async (req, res) => {
         const events = await db.all('SELECT * FROM webhook_events ORDER BY created_at DESC LIMIT 50');
         res.json({ events });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -369,7 +370,7 @@ router.post('/downgrade', requireRole('admin'), async (req, res) => {
             note: 'Prorated refund will be applied to your next billing cycle'
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -407,7 +408,7 @@ router.get('/usage/alerts', async (req, res) => {
             usage_summary: { scans: scanPct.toFixed(1) + '%', api: apiPct.toFixed(1) + '%', storage: storagePct.toFixed(1) + '%' }
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -432,7 +433,7 @@ router.post('/sdk/api-key', requireRole('admin'), async (req, res) => {
             note: 'Store this key securely. It will not be shown again.'
         });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -446,7 +447,7 @@ router.get('/sdk/api-keys', requireRole('admin'), async (req, res) => {
         });
         res.json({ api_keys: parsed.filter(k => !k.revoked) });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -463,7 +464,7 @@ router.delete('/sdk/api-key/:id', requireRole('admin'), async (req, res) => {
 
         res.json({ revoked: true, key_id: req.params.id });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
@@ -523,7 +524,7 @@ curl -s -X POST '${baseUrl}/api/qr/verify' \\
 
         res.json({ language, snippet: snippets[language] || snippets.javascript, available_languages: Object.keys(snippets) });
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        safeError(res, 'Operation failed', e);
     }
 });
 
