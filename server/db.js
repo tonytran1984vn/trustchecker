@@ -436,6 +436,23 @@ class SQLiteBackend {
     safeAddColumn('users', 'mfa_backup_codes', 'TEXT');
     safeAddColumn('users', 'failed_attempts', 'INTEGER DEFAULT 0');
     safeAddColumn('users', 'locked_until', 'TEXT');
+
+    // ─── Seed default admin user if users table is empty ─────────
+    try {
+      const userCount = this.db.exec('SELECT COUNT(*) as cnt FROM users');
+      const count = userCount[0]?.values?.[0]?.[0] || 0;
+      if (count === 0) {
+        const bcrypt = require('bcryptjs');
+        const { v4: uuidv4 } = require('uuid');
+        const hash = bcrypt.hashSync('Admin@123456!', 12);
+        const id = uuidv4();
+        this.db.run(
+          `INSERT INTO users (id, username, email, password_hash, role, company) VALUES (?, ?, ?, ?, ?, ?)`,
+          [id, 'admin', 'admin@trustchecker.io', hash, 'admin', 'TrustChecker']
+        );
+        console.log('  🌱 Seeded default admin user (admin / Admin@123456!)');
+      }
+    } catch (e) { console.error('Seed error:', e.message); }
   }
 }
 
