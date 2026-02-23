@@ -214,6 +214,78 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
     }
 });
 
+// ─── POST /api/qr/generate — Bulk QR Code Generation ────────────────────────
+router.post('/generate', authMiddleware, async (req, res) => {
+    try {
+        const { product_id, quantity = 1, batch_id, prefix } = req.body;
+
+        if (!product_id) {
+            return res.status(400).json({ error: 'product_id is required' });
+        }
+
+        const qty = Math.min(Math.max(1, parseInt(quantity) || 1), 10000);
+
+        // Verify product exists
+        const product = await db.prepare('SELECT id, name, sku FROM products WHERE id = ?').get(product_id);
+        if (!product) {
+            return res.status(404).json({ error: 'Product not found' });
+        }
+
+        // Determine org_id from the product or the logged-in user
+        const orgId = req.tenantId || req.user?.org_id || null;
+
+        // Generate unique codes
+        const codePrefix = prefix || product.sku || 'TC';
+        const year = new Date().getFullYear();
+        const generated = [];
+
+        for (let i = 0; i < qty; i++) {
+            const seq = String(Date.now()).slice(-6) + String(i).padStart(4, '0');
+            const checksum = seq.split('').reduce((a, c) => a + parseInt(c), 0) % 36;
+            const checkChar = checksum < 10 ? checksum : String.fromCharCode(55 + checksum);
+            const qrData = `${codePrefix}-${year}-${seq}-${checkChar}`;
+
+            const id = uuidv4();
+            try {
+                await db.prepare(`
+                    INSERT INTO qr_codes (id, product_id, qr_data, org_id, status, generated_by, generated_at)
+                    VALUES (?, ?, ?, ?, 'active', ?, datetime('now'))
+                `).run(id, product_id, qrData, orgId, req.user?.id || 'system');
+
+                generated.push({
+                    id,
+                    code: qrData,
+                    product_id,
+                    product_name: product.name,
+                    status: 'active',
+                    created_at: new Date().toISOString()
+                });
+            } catch (dupErr) {
+                // Skip duplicates and continue
+                continue;
+            }
+        }
+
+        eventBus.emitEvent(EVENT_TYPES.QR_VALIDATED || 'qr.generate', {
+            count: generated.length,
+            product_id,
+            product_name: product.name,
+            generated_by: req.user?.email || 'system'
+        });
+
+        res.json({
+            success: true,
+            message: `Generated ${generated.length} QR codes for ${product.name}`,
+            count: generated.length,
+            codes: generated.slice(0, 100), // Return max 100 in response
+            product: { id: product.id, name: product.name, sku: product.sku }
+        });
+    } catch (err) {
+        console.error('QR Generate error:', err);
+        res.status(500).json({ error: 'Failed to generate codes' });
+    }
+});
+
 // ─── GET /api/qr/scan-history ────────────────────────────────────────────────
 router.get('/scan-history', authMiddleware, async (req, res) => {
     try {
