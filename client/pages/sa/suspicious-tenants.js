@@ -65,9 +65,18 @@ export function renderPage() {
       </style>
 
       <div class="sa-card" style="overflow-x:auto">
-        <table class="st-table">
-          <thead><tr>
-            <th style="text-align:left!important;min-width:240px">Organization</th>
+        <table class="st-table" style="table-layout:fixed;width:100%">
+          <colgroup>
+            <col style="width:180px">
+            <col style="width:80px">
+            <col style="width:80px">
+            <col style="width:75px">
+            <col style="width:65px">
+            <col>
+            <col style="width:110px">
+            <col style="width:90px">
+          </colgroup>          <thead><tr>
+            <th style="text-align:left!important">Organization</th>
             <th style="text-align:right!important">Risk Score</th>
             <th style="text-align:right!important">Fraud Alerts</th>
             <th style="text-align:right!important">Open Cases</th>
@@ -92,7 +101,7 @@ export function renderPage() {
       : '<span class="st-chip">' + t.pattern_types + ' types</span>';
     const rowClass = t.risk_score >= 90 ? 'st-row-danger' : '';
     return '<tr class="' + rowClass + '">'
-      + '<td style="min-width:240px"><div class="st-org-name">' + t.name + '</div><div class="st-org-slug">' + t.slug + '</div></td>'
+      + '<td><div class="st-org-name" style="white-space:nowrap">' + t.name + '</div><div class="st-org-slug">' + t.slug + '</div></td>'
       + '<td style="text-align:right!important"><span class="st-score st-score-' + tier + '">' + t.risk_score + '</span></td>'
       + '<td style="text-align:right!important"><span class="st-num">' + t.fraud_count + '</span></td>'
       + '<td style="text-align:right!important"><span class="st-num st-num-warn">' + t.open_count + '</span></td>'
