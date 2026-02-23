@@ -178,7 +178,7 @@ export function renderPage() {
       <div class="phx-page-header">
         <div>
           <h1 class="phx-page-title">Organization Management</h1>
-          <p class="phx-page-desc">Real-time overview of all organizations</p>
+          <p class="phx-page-desc">Real-time overview of all your organizations</p>
         </div>
         <button class="phx-btn-primary" onclick="window._saShowCreate()">
           ${icon('plus', 16)} Add organization
@@ -187,10 +187,10 @@ export function renderPage() {
 
       <!-- KPI Strip -->
       <div class="phx-kpi-row">
-        ${kpiCard(icon('building', 20), counts.all, 'Total Organizations', `${counts.active} active`, 'blue', 'all')}
-        ${kpiCard(icon('check', 20), counts.active, 'Active', `${counts.suspended} suspended`, 'green', 'active')}
+        ${kpiCard(icon('building', 20), counts.all, 'Total Organizations', 'All registered organizations', 'blue', 'all')}
+        ${kpiCard(icon('check', 20), counts.active, 'Active Organizations', 'Currently operational', 'green', 'active')}
         ${kpiCard(icon('barChart', 20), '$' + totalMRR.toLocaleString(), 'Total MRR', '$' + (totalMRR * 12).toLocaleString() + ' ARR', 'purple')}
-        ${kpiCard(icon('shield', 20), entCount, 'Enterprise', `${entCount} Enterprise · ${growthCount} Growth plans`, 'orange')}
+        ${kpiCard(icon('shield', 20), entCount, 'Enterprise Plans', `${growthCount} Growth plans`, 'orange')}
       </div>
 
       <!-- Toolbar -->

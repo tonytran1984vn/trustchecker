@@ -7272,54 +7272,52 @@ html {
 }
 
 .sa-page.phx-page .phx-kpi {
-  background: var(--phx-card) !important;
-  border: 1px solid var(--phx-border) !important;
-  border-radius: var(--phx-radius);
-  padding: 1.25rem;
+  background: #FFFFFF !important;
+  border: 1px solid #F1F5F9 !important;
+  border-radius: 16px;
+  padding: 24px;
   display: flex !important;
   align-items: center;
   gap: 1rem;
-  box-shadow: var(--phx-shadow);
-  transition: box-shadow 0.2s, transform 0.2s;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
 }
 
 .sa-page.phx-page .phx-kpi:hover {
-  box-shadow: var(--phx-shadow-lg);
   transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08);
 }
 
 .sa-page.phx-page .phx-kpi-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-
-
 .sa-page.phx-page .phx-kpi-blue .phx-kpi-icon {
-  background: rgba(56, 116, 255, 0.1);
-  color: var(--phx-blue);
+  background: #EFF6FF;
+  color: #3B82F6;
 }
 
 .sa-page.phx-page .phx-kpi-green .phx-kpi-icon {
-  background: rgba(37, 176, 3, 0.1);
-  color: var(--phx-green);
+  background: #ECFDF5;
+  color: #10B981;
 }
 
 .sa-page.phx-page .phx-kpi-purple .phx-kpi-icon {
-  background: rgba(111, 66, 193, 0.1);
-  color: var(--phx-purple);
+  background: #F5F3FF;
+  color: #8B5CF6;
 }
 
 .sa-page.phx-page .phx-kpi-orange .phx-kpi-icon {
-  background: rgba(229, 120, 11, 0.1);
-  color: var(--phx-orange);
+  background: #FFFBEB;
+  color: #F59E0B;
 }
 
 .sa-page.phx-page .phx-kpi-body {
@@ -7329,25 +7327,27 @@ html {
 }
 
 .sa-page.phx-page .phx-kpi-val {
-  font-size: 1.75rem;
-  font-weight: 800;
+  font-size: 2.5rem;
+  font-weight: 700;
   color: var(--phx-text) !important;
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 .sa-page.phx-page .phx-kpi-title {
-  font-size: 0.78rem;
-  color: var(--phx-text-secondary);
-  font-weight: 600;
-  margin-top: 0.2rem;
+  font-size: 0.94rem;
+  color: #6B7280;
+  font-weight: 500;
+  margin-top: 4px;
 }
 
 .sa-page.phx-page .phx-kpi-desc {
-  font-size: 0.72rem;
-  color: var(--phx-text-muted);
+  font-size: 0.81rem;
+  color: #94A3B8;
+  font-weight: 400;
   position: absolute;
-  bottom: 0.65rem;
-  right: 1rem;
+  bottom: 12px;
+  right: 24px;
 }
 
 /* Card */
