@@ -2,17 +2,18 @@
  * TrustChecker – Carbon Passport v3.0 Dashboard
  * Cross-Cutting ESG Governance Intelligence
  */
-import { State } from '../../core/state.js';
+import { State, render as globalRender } from '../../core/state.js';
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
 
 let carbon = { scope: null, leaderboard: null, report: null, risk: null, regulatory: null, maturity: null, flow: null, roleMatrix: null, benchmark: null };
 let _carbonFetching = false;
+let _carbonLoaded = false;
 let _bmPage = 0;
 let _bmPageSize = 5;
 
 async function fetchCarbonData() {
-    if (_carbonFetching) return;
+    if (_carbonFetching || _carbonLoaded) return;
     _carbonFetching = true;
     try {
         const [scope, leaderboard, report, risk, regulatory, maturity, flow, roleMatrix, benchmark] = await Promise.all([
@@ -27,11 +28,9 @@ async function fetchCarbonData() {
             API.get('/scm/carbon/benchmark').catch(() => null)
         ]);
         carbon = { scope, leaderboard, report, risk, regulatory, maturity, flow, roleMatrix, benchmark };
-        // Direct DOM update — find workspace tab content and re-render
-        setTimeout(() => {
-            const ws = document.querySelector('.ws-content');
-            if (ws) ws.innerHTML = renderContent();
-        }, 50);
+        _carbonLoaded = true;
+        // Re-render the entire app so carbon data is displayed
+        setTimeout(() => globalRender(), 50);
     } catch (e) { console.error('Carbon fetch error:', e); }
     _carbonFetching = false;
 }
@@ -351,6 +350,7 @@ export function renderPage() { return render(); }
 
 window.refreshCarbon = async function () {
     _carbonFetching = false;
+    _carbonLoaded = false;
     carbon = { scope: null, leaderboard: null, report: null, risk: null, regulatory: null, maturity: null, flow: null, roleMatrix: null, benchmark: null };
     _bmPage = 0;
     await fetchCarbonData();

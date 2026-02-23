@@ -3,6 +3,7 @@
  * Product carbon passports, partner ESG leaderboard, GRI reporting,
  * Risk factor mapping, regulatory alignment, maturity assessment
  * 
+ * ★ Multi-tenant: all data queries scoped by req.tenantId (org_id)
  * Endpoints: 11 (5 original + 6 new v3.0)
  */
 const express = require('express');
@@ -15,10 +16,65 @@ const { cacheMiddleware } = require('../cache');
 
 router.use(authMiddleware);
 
+// ─── Helper: tenant-scoped data fetchers ────────────────────────────────────
+async function getOrgProducts(orgId) {
+    if (orgId) {
+        return db.prepare('SELECT * FROM products WHERE org_id = ? LIMIT 100').all(orgId);
+    }
+    return db.prepare('SELECT * FROM products LIMIT 100').all();
+}
+
+async function getOrgShipments(orgId) {
+    if (orgId) {
+        return db.prepare(`
+            SELECT s.* FROM shipments s
+            INNER JOIN batches b ON s.batch_id = b.id
+            INNER JOIN products p ON b.product_id = p.id
+            WHERE p.org_id = ?
+        `).all(orgId);
+    }
+    return db.prepare('SELECT * FROM shipments').all();
+}
+
+async function getOrgEvents(orgId) {
+    if (orgId) {
+        return db.prepare('SELECT * FROM supply_chain_events WHERE org_id = ?').all(orgId)
+            .catch(() => db.prepare(`
+                SELECT e.* FROM supply_chain_events e
+                INNER JOIN products p ON e.product_id = p.id
+                WHERE p.org_id = ?
+            `).all(orgId))
+            .catch(() => db.prepare('SELECT * FROM supply_chain_events').all());
+    }
+    return db.prepare('SELECT * FROM supply_chain_events').all();
+}
+
+async function getOrgPartners(orgId) {
+    if (orgId) {
+        return db.prepare('SELECT * FROM partners WHERE org_id = ?').all(orgId)
+            .catch(() => db.prepare('SELECT * FROM partners').all());
+    }
+    return db.prepare('SELECT * FROM partners').all();
+}
+
+async function getOrgViolations(orgId) {
+    if (orgId) {
+        return db.prepare(`
+            SELECT v.* FROM sla_violations v
+            INNER JOIN partners p ON v.partner_id = p.id
+            WHERE p.org_id = ?
+        `).all(orgId).catch(() => db.prepare('SELECT * FROM sla_violations').all());
+    }
+    return db.prepare('SELECT * FROM sla_violations').all();
+}
+
 // ─── GET /api/scm/carbon/footprint/:productId — Product carbon passport ─────
 router.get('/footprint/:productId', async (req, res) => {
     try {
-        const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.productId);
+        const orgId = req.tenantId || null;
+        const product = orgId
+            ? await db.prepare('SELECT * FROM products WHERE id = ? AND org_id = ?').get(req.params.productId, orgId)
+            : await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.productId);
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
         const events = await db.prepare('SELECT * FROM supply_chain_events WHERE product_id = ?').all(product.id);
@@ -38,12 +94,12 @@ router.get('/footprint/:productId', async (req, res) => {
 });
 
 // ─── GET /api/scm/carbon/scope — Scope 1/2/3 breakdown ─────────────────────
-// Cache 120s — aggregates across full tables
 router.get('/scope', cacheMiddleware(120), async (req, res) => {
     try {
-        const products = await db.prepare('SELECT * FROM products LIMIT 100').all();
-        const shipments = await db.prepare('SELECT * FROM shipments').all();
-        const events = await db.prepare('SELECT * FROM supply_chain_events').all();
+        const orgId = req.tenantId || null;
+        const products = await getOrgProducts(orgId);
+        const shipments = await getOrgShipments(orgId);
+        const events = await getOrgEvents(orgId);
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
 
@@ -55,12 +111,12 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
 });
 
 // ─── GET /api/scm/carbon/leaderboard — Partner ESG leaderboard ──────────────
-// Cache 120s — partner metrics don't change rapidly
 router.get('/leaderboard', cacheMiddleware(120), async (req, res) => {
     try {
-        const partners = await db.prepare('SELECT * FROM partners').all();
-        const shipments = await db.prepare('SELECT * FROM shipments').all();
-        const violations = await db.prepare('SELECT * FROM sla_violations').all();
+        const orgId = req.tenantId || null;
+        const partners = await getOrgPartners(orgId);
+        const shipments = await getOrgShipments(orgId);
+        const violations = await getOrgViolations(orgId);
 
         const leaderboard = await engineClient.carbonLeaderboard(partners, shipments, violations);
 
@@ -79,14 +135,14 @@ router.get('/leaderboard', cacheMiddleware(120), async (req, res) => {
 });
 
 // ─── GET /api/scm/carbon/report — GRI-format ESG report ─────────────────────
-// Cache 180s — heaviest endpoint, queries 6 tables
 router.get('/report', cacheMiddleware(180), async (req, res) => {
     try {
-        const products = await db.prepare('SELECT * FROM products LIMIT 100').all();
-        const shipments = await db.prepare('SELECT * FROM shipments').all();
-        const events = await db.prepare('SELECT * FROM supply_chain_events').all();
-        const partners = await db.prepare('SELECT * FROM partners').all();
-        const violations = await db.prepare('SELECT * FROM sla_violations').all();
+        const orgId = req.tenantId || null;
+        const products = await getOrgProducts(orgId);
+        const shipments = await getOrgShipments(orgId);
+        const events = await getOrgEvents(orgId);
+        const partners = await getOrgPartners(orgId);
+        const violations = await getOrgViolations(orgId);
         const certifications = await db.prepare('SELECT * FROM certifications').all();
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
@@ -145,11 +201,12 @@ router.post('/offset', requirePermission('esg:manage'), async (req, res) => {
 // ─── GET /api/scm/carbon/risk-factors — Carbon → Risk factor mapping ────────
 router.get('/risk-factors', cacheMiddleware(120), async (req, res) => {
     try {
-        const products = await db.prepare('SELECT * FROM products LIMIT 100').all();
-        const shipments = await db.prepare('SELECT * FROM shipments').all();
-        const events = await db.prepare('SELECT * FROM supply_chain_events').all();
-        const partners = await db.prepare('SELECT * FROM partners').all();
-        const violations = await db.prepare('SELECT * FROM sla_violations').all();
+        const orgId = req.tenantId || null;
+        const products = await getOrgProducts(orgId);
+        const shipments = await getOrgShipments(orgId);
+        const events = await getOrgEvents(orgId);
+        const partners = await getOrgPartners(orgId);
+        const violations = await getOrgViolations(orgId);
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
         const leaderboard = await engineClient.carbonLeaderboard(partners, shipments, violations);
@@ -165,11 +222,12 @@ router.get('/risk-factors', cacheMiddleware(120), async (req, res) => {
 // ─── GET /api/scm/carbon/regulatory — Regulatory alignment status ───────────
 router.get('/regulatory', cacheMiddleware(120), async (req, res) => {
     try {
-        const products = await db.prepare('SELECT * FROM products LIMIT 100').all();
-        const shipments = await db.prepare('SELECT * FROM shipments').all();
-        const events = await db.prepare('SELECT * FROM supply_chain_events').all();
-        const partners = await db.prepare('SELECT * FROM partners').all();
-        const violations = await db.prepare('SELECT * FROM sla_violations').all();
+        const orgId = req.tenantId || null;
+        const products = await getOrgProducts(orgId);
+        const shipments = await getOrgShipments(orgId);
+        const events = await getOrgEvents(orgId);
+        const partners = await getOrgPartners(orgId);
+        const violations = await getOrgViolations(orgId);
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
         const leaderboard = await engineClient.carbonLeaderboard(partners, shipments, violations);
@@ -194,9 +252,16 @@ router.get('/regulatory', cacheMiddleware(120), async (req, res) => {
 // ─── GET /api/scm/carbon/maturity — Carbon maturity level ───────────────────
 router.get('/maturity', async (req, res) => {
     try {
-        const products = (await db.prepare('SELECT COUNT(*) as c FROM products').get())?.c || 0;
+        const orgId = req.tenantId || null;
+        const productQ = orgId
+            ? await db.prepare('SELECT COUNT(*) as c FROM products WHERE org_id = ?').get(orgId)
+            : await db.prepare('SELECT COUNT(*) as c FROM products').get();
+        const products = productQ?.c || 0;
         const offsets = (await db.prepare("SELECT COUNT(*) as c FROM evidence_items WHERE entity_type = 'carbon_offset'").get())?.c || 0;
-        const partners = (await db.prepare('SELECT COUNT(*) as c FROM partners').get())?.c || 0;
+        const partnerQ = orgId
+            ? await db.prepare('SELECT COUNT(*) as c FROM partners WHERE org_id = ?').get(orgId).catch(() => db.prepare('SELECT COUNT(*) as c FROM partners').get())
+            : await db.prepare('SELECT COUNT(*) as c FROM partners').get();
+        const partners = partnerQ?.c || 0;
 
         // Detect implemented features
         const features = ['scope_calculation']; // Always have this
@@ -252,12 +317,13 @@ router.get('/role-matrix', (req, res) => {
     }
 });
 
-// ─── GET /api/scm/carbon/benchmark — Cross-tenant industry benchmark (SA) ───
+// ─── GET /api/scm/carbon/benchmark — Cross-tenant industry benchmark ────────
 router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
     try {
-        const products = await db.prepare('SELECT * FROM products LIMIT 100').all();
-        const shipments = await db.prepare('SELECT * FROM shipments').all();
-        const events = await db.prepare('SELECT * FROM supply_chain_events').all();
+        const orgId = req.tenantId || null;
+        const products = await getOrgProducts(orgId);
+        const shipments = await getOrgShipments(orgId);
+        const events = await getOrgEvents(orgId);
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
 
