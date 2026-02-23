@@ -1,12 +1,34 @@
 /**
  * Company Admin – Risk Rules (Tenant Scope)
  * ═══════════════════════════════════════════
- * Duplicate threshold, geo restriction, velocity threshold
- * NO global AI model access
+ * Real data from /api/scm/model + /api/scm/risk
  */
 import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';
+import { render } from '../../core/state.js';
+
+let rules = null, loading = false;
+
+async function load() {
+  if (loading) return; loading = true;
+  try {
+    const [models, risks] = await Promise.all([
+      API.get('/scm/model?limit=50').catch(() => ({ models: [] })),
+      API.get('/scm/risk?limit=50').catch(() => ({ alerts: [] })),
+    ]);
+    const modelList = Array.isArray(models) ? models : (models.models || []);
+    const riskList = Array.isArray(risks) ? risks : (risks.alerts || risks.rules || []);
+    rules = { models: modelList, risks: riskList };
+  } catch (e) { rules = { models: [], risks: [] }; }
+  loading = false;
+}
 
 export function renderPage() {
+  if (!rules && !loading) { load().then(() => render()); }
+  if (loading && !rules) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Risk Rules...</div></div>`;
+
+  const models = rules?.models || [];
+
   return `
     <div class="sa-page">
       <div class="sa-page-title">
@@ -14,75 +36,61 @@ export function renderPage() {
         <span style="font-size:0.75rem;color:var(--text-secondary);background:rgba(255,255,255,0.04);padding:4px 10px;border-radius:6px">Organization Scope Only</span>
       </div>
 
-      <div class="sa-grid-2col">
-        <!-- Duplicate Detection -->
+      <!-- Risk Models from DB -->
+      <section class="sa-section" style="margin-bottom:1.5rem">
+        <h2 class="sa-section-title">${icon('settings', 20)} Active Risk Models</h2>
         <div class="sa-card">
-          <h3>${icon('alert', 16)} Duplicate Detection</h3>
-          <div class="sa-threshold-list">
-            ${thresholdItem('Duplicate QR Threshold', 'Alert when same QR scanned from different locations within', '30 minutes', 'active')}
-            ${thresholdItem('Serial Reuse Detection', 'Flag products with reused serial numbers', 'Immediate', 'active')}
-            ${thresholdItem('Batch Duplication', 'Detect duplicate batch IDs in system', 'On creation', 'active')}
-          </div>
-        </div>
-
-        <!-- Geo Restrictions -->
-        <div class="sa-card">
-          <h3>${icon('globe', 16)} Geographic Restrictions</h3>
-          <div class="sa-threshold-list">
-            ${thresholdItem('Allowed Regions', 'Scans only accepted from configured countries', 'VN, SG, TH, JP', 'active')}
-            ${thresholdItem('Geo Anomaly Distance', 'Flag if consecutive scans > distance apart', '500 km / 1 hour', 'active')}
-            ${thresholdItem('Blocked Countries', 'Reject scans from sanctioned regions', '3 countries', 'active')}
-          </div>
-        </div>
-      </div>
-
-      <!-- Velocity Rules -->
-      <section class="sa-section" style="margin-top:1.5rem">
-        <h2 class="sa-section-title">${icon('zap', 20)} Velocity Rules</h2>
-        <div class="sa-card">
-          <div class="sa-threshold-list">
-            ${thresholdItem('Scan Velocity', 'Max scans per QR code per time window', '10 scans / hour', 'active')}
-            ${thresholdItem('API Rate Limit', 'Max API calls per partner per minute', '100 req/min', 'active')}
-            ${thresholdItem('Batch Transfer Rate', 'Max transfers per node per day', '50 transfers/day', 'warning')}
-            ${thresholdItem('Login Attempt Limit', 'Lock account after failed attempts', '5 attempts / 15 min', 'active')}
+          ${models.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted)">No risk models configured yet</div>' : `
+          <table class="sa-table">
+            <thead><tr><th>Model Name</th><th>Type</th><th>Version</th><th>Accuracy</th><th>Status</th><th>Last Updated</th></tr></thead>
+            <tbody>
+              ${models.map(m => `
+                <tr class="sa-row-clickable">
+                  <td><strong>${m.name || m.model_name || '—'}</strong></td>
+                  <td>${(m.model_type || m.type || '—').replace(/_/g, ' ')}</td>
+                  <td class="sa-code">${m.version || 'v1'}</td>
+                  <td class="sa-code">${m.accuracy ? (m.accuracy * 100).toFixed(1) + '%' : '—'}</td>
+                  <td><span class="sa-status-pill sa-pill-${m.status === 'active' || m.status === 'production' ? 'green' : 'orange'}">${m.status || 'draft'}</span></td>
+                  <td style="color:var(--text-secondary)">${m.updated_at ? new Date(m.updated_at).toLocaleDateString('en-US') : '—'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>`}
+          <div style="margin-top:1rem;text-align:right">
+            <button class="btn btn-primary btn-sm">+ Add Risk Rule</button>
           </div>
         </div>
       </section>
 
-      <!-- Custom Rules -->
-      <section class="sa-section">
-        <h2 class="sa-section-title">${icon('settings', 20)} Custom Rules</h2>
+      <div class="sa-grid-2col">
+        <!-- Built-in Rules -->
         <div class="sa-card">
-          <table class="sa-table">
-            <thead>
-              <tr><th>Rule Name</th><th>Condition</th><th>Action</th><th>Priority</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>Night Scan Alert</strong></td>
-                <td>Scan between 00:00–05:00 local time</td>
-                <td>Flag + Notify</td>
-                <td><span class="sa-score sa-score-warning">Medium</span></td>
-                <td><span class="sa-status-pill sa-pill-green">active</span></td>
-              </tr>
-              <tr>
-                <td><strong>High Value Product</strong></td>
-                <td>Product value > $100 USD</td>
-                <td>Require double-scan</td>
-                <td><span class="sa-score sa-score-danger">High</span></td>
-                <td><span class="sa-status-pill sa-pill-green">active</span></td>
-              </tr>
-              <tr>
-                <td><strong>New Device Alert</strong></td>
-                <td>First scan from unknown device</td>
-                <td>Log + Flag</td>
-                <td><span class="sa-score sa-score-info">Low</span></td>
-                <td><span class="sa-status-pill sa-pill-orange">draft</span></td>
-              </tr>
-            </tbody>
-          </table>
-          <div style="margin-top:1rem;text-align:right">
-            <button class="btn btn-primary btn-sm">+ Add Custom Rule</button>
+          <h3>${icon('alert', 16)} Duplicate Detection</h3>
+          <div class="sa-threshold-list">
+            ${thresholdItem('Duplicate QR Threshold', 'Alert when same QR scanned from different locations within', '30 minutes')}
+            ${thresholdItem('Serial Reuse Detection', 'Flag products with reused serial numbers', 'Immediate')}
+            ${thresholdItem('Batch Duplication', 'Detect duplicate batch IDs in system', 'On creation')}
+          </div>
+        </div>
+
+        <div class="sa-card">
+          <h3>${icon('globe', 16)} Geographic Restrictions</h3>
+          <div class="sa-threshold-list">
+            ${thresholdItem('Allowed Regions', 'Scans only accepted from configured countries', 'VN, SG, TH, JP')}
+            ${thresholdItem('Geo Anomaly Distance', 'Flag if consecutive scans > distance apart', '500 km / 1 hour')}
+            ${thresholdItem('Blocked Countries', 'Reject scans from sanctioned regions', '3 countries')}
+          </div>
+        </div>
+      </div>
+
+      <section class="sa-section" style="margin-top:1.5rem">
+        <h2 class="sa-section-title">${icon('zap', 20)} Velocity Rules</h2>
+        <div class="sa-card">
+          <div class="sa-threshold-list">
+            ${thresholdItem('Scan Velocity', 'Max scans per QR code per time window', '10 scans / hour')}
+            ${thresholdItem('API Rate Limit', 'Max API calls per partner per minute', '100 req/min')}
+            ${thresholdItem('Batch Transfer Rate', 'Max transfers per node per day', '50 transfers/day')}
+            ${thresholdItem('Login Attempt Limit', 'Lock account after failed attempts', '5 attempts / 15 min')}
           </div>
         </div>
       </section>
@@ -90,7 +98,7 @@ export function renderPage() {
   `;
 }
 
-function thresholdItem(name, desc, value, status) {
+function thresholdItem(name, desc, value) {
   return `
     <div class="sa-threshold-item">
       <div class="sa-threshold-header">

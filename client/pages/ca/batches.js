@@ -1,26 +1,35 @@
 /**
  * Company Admin – Batch Management
  * ══════════════════════════════════
- * Create, transfer, split/merge, destroy/recall batches
+ * Real data from /api/scm/batches
  */
 import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';
+import { render } from '../../core/state.js';
 
-let filter = 'all';
-window._caBatchFilter = (f) => { filter = f; window.render(); };
+let batches = null, loading = false, filter = 'all';
+window._caBatchFilter = (f) => { filter = f; render(); };
+
+async function load() {
+  if (loading) return; loading = true;
+  try {
+    const res = await API.get('/scm/batches');
+    batches = Array.isArray(res) ? res : (res.batches || []);
+  } catch (e) { batches = []; }
+  loading = false;
+}
 
 export function renderPage() {
-    const batches = [
-        { id: 'BATCH-2026-0142', product: 'Premium Coffee 250g', qty: 2400, from: 'Factory HCM-01', to: 'Warehouse DN-02', status: 'in-transit', created: '2026-02-18' },
-        { id: 'BATCH-2026-0141', product: 'Green Tea Organic 100g', qty: 5000, from: 'Factory HN-02', to: 'Dist. SG-01', status: 'delivered', created: '2026-02-17' },
-        { id: 'BATCH-2026-0140', product: 'Coconut Oil 500ml', qty: 1200, from: 'Warehouse DN-02', to: 'Retail BKK-03', status: 'pending', created: '2026-02-17' },
-        { id: 'BATCH-2026-0139', product: 'Rice Noodle 1kg', qty: 8000, from: 'Factory HCM-01', to: 'Warehouse DN-02', status: 'delivered', created: '2026-02-16' },
-        { id: 'BATCH-2026-0138', product: 'Fish Sauce 250ml', qty: 3000, from: 'Factory HCM-01', to: 'Dist. SG-01', status: 'recalled', created: '2026-02-15' },
-    ];
+  if (!batches && !loading) { load().then(() => render()); }
+  if (loading && !batches) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Batches...</div></div>`;
 
-    const filtered = filter === 'all' ? batches : batches.filter(b => b.status === filter);
-    const counts = { all: batches.length, pending: 1, 'in-transit': 1, delivered: 2, recalled: 1 };
+  const list = batches || [];
+  const filtered = filter === 'all' ? list : list.filter(b => b.status === filter);
+  const statuses = ['all', 'pending', 'in-transit', 'delivered', 'recalled'];
+  const counts = {};
+  statuses.forEach(s => { counts[s] = s === 'all' ? list.length : list.filter(b => b.status === s).length; });
 
-    return `
+  return `
     <div class="sa-page">
       <div class="sa-page-title">
         <h1>${icon('clipboard', 28)} Batch Management</h1>
@@ -32,27 +41,26 @@ export function renderPage() {
 
       <div class="sa-toolbar">
         <div class="sa-filters">
-          ${['all', 'pending', 'in-transit', 'delivered', 'recalled'].map(f =>
-        `<button class="sa-filter-btn ${filter === f ? 'active' : ''}" onclick="_caBatchFilter('${f}')">${f.charAt(0).toUpperCase() + f.slice(1)} <span class="sa-filter-count">${counts[f] || 0}</span></button>`
-    ).join('')}
+          ${statuses.map(f => `<button class="sa-filter-btn ${filter === f ? 'active' : ''}" onclick="_caBatchFilter('${f}')">${f.charAt(0).toUpperCase() + f.slice(1)} <span class="sa-filter-count">${counts[f] || 0}</span></button>`).join('')}
         </div>
       </div>
 
       <div class="sa-card">
+        ${filtered.length === 0 ? '<div style="text-align:center;padding:40px;color:var(--text-muted)">No batches found</div>' : `
         <table class="sa-table">
           <thead>
-            <tr><th>Batch ID</th><th>Product</th><th>Qty</th><th>From</th><th>To</th><th>Status</th><th>Created</th><th>Actions</th></tr>
+            <tr><th>Batch ID</th><th>Product</th><th>Qty</th><th>Origin</th><th>Destination</th><th>Status</th><th>Created</th><th>Actions</th></tr>
           </thead>
           <tbody>
             ${filtered.map(b => `
               <tr class="sa-row-clickable">
-                <td><strong class="sa-code">${b.id}</strong></td>
-                <td>${b.product}</td>
-                <td class="sa-code">${b.qty.toLocaleString()}</td>
-                <td>${b.from}</td>
-                <td>${b.to}</td>
-                <td><span class="sa-status-pill sa-pill-${b.status === 'delivered' ? 'green' : b.status === 'in-transit' ? 'blue' : b.status === 'pending' ? 'orange' : 'red'}">${b.status}</span></td>
-                <td style="color:var(--text-secondary)">${b.created}</td>
+                <td><strong class="sa-code">${b.batch_code || b.id}</strong></td>
+                <td>${b.product_name || b.product || '—'}</td>
+                <td class="sa-code">${(b.quantity || 0).toLocaleString()}</td>
+                <td>${b.origin || b.from || '—'}</td>
+                <td>${b.destination || b.to || '—'}</td>
+                <td><span class="sa-status-pill sa-pill-${b.status === 'delivered' ? 'green' : b.status === 'in-transit' || b.status === 'in_transit' ? 'blue' : b.status === 'pending' ? 'orange' : 'red'}">${b.status}</span></td>
+                <td style="color:var(--text-secondary)">${b.created_at ? new Date(b.created_at).toLocaleDateString('en-US') : '—'}</td>
                 <td>
                   <button class="btn btn-xs btn-outline">Transfer</button>
                   <button class="btn btn-xs btn-ghost">⋯</button>
@@ -60,7 +68,7 @@ export function renderPage() {
               </tr>
             `).join('')}
           </tbody>
-        </table>
+        </table>`}
       </div>
     </div>
   `;

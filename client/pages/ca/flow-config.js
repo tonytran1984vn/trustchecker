@@ -1,12 +1,37 @@
 /**
  * Company Admin – Flow Configuration
  * ════════════════════════════════════
- * Define supply flow, batch transfer logic, shipment validation rules
+ * Real data from /api/scm/supply/routes + /api/scm/supply/channel-rules
  */
 import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';
+import { render } from '../../core/state.js';
+
+let data = null, loading = false;
+
+async function load() {
+  if (loading) return; loading = true;
+  try {
+    const [routes, rules] = await Promise.all([
+      API.get('/scm/supply/routes').catch(() => ({ routes: [] })),
+      API.get('/scm/supply/channel-rules').catch(() => ({ rules: [] })),
+    ]);
+    data = {
+      routes: Array.isArray(routes) ? routes : (routes.routes || []),
+      rules: Array.isArray(rules) ? rules : (rules.rules || []),
+    };
+  } catch (e) { data = { routes: [], rules: [] }; }
+  loading = false;
+}
 
 export function renderPage() {
-    return `
+  if (!data && !loading) { load().then(() => render()); }
+  if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Flow Configuration...</div></div>`;
+
+  const routes = data?.routes || [];
+  const rules = data?.rules || [];
+
+  return `
     <div class="sa-page">
       <div class="sa-page-title">
         <h1>${icon('network', 28)} Flow Configuration</h1>
@@ -16,44 +41,43 @@ export function renderPage() {
       </div>
 
       <div class="sa-grid-2col">
-        <!-- Active Flows -->
+        <!-- Active Flows from DB -->
         <div class="sa-card">
-          <h3>Active Supply Flows</h3>
+          <h3>Active Supply Routes</h3>
+          ${routes.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted)">No routes configured</div>' : `
           <div class="sa-spike-list">
-            ${flowItem('Standard Production', 'Factory → Warehouse → Distributor → Retailer', 4, 'active')}
-            ${flowItem('Direct-to-Store', 'Factory → Retailer', 2, 'active')}
-            ${flowItem('Export Pipeline', 'Factory → Warehouse → Port → Intl Distributor', 4, 'active')}
-            ${flowItem('Recall Flow', 'Retailer → Warehouse → Factory (reverse)', 3, 'draft')}
-          </div>
+            ${routes.map(r => flowItem(
+    r.name || (r.origin + ' → ' + r.destination),
+    r.origin + ' → ' + r.destination,
+    r.hop_count || r.nodes || 2,
+    r.status || 'active'
+  )).join('')}
+          </div>`}
         </div>
 
-        <!-- Batch Transfer Rules -->
+        <!-- Channel Rules from DB -->
         <div class="sa-card">
-          <h3>Batch Transfer Logic</h3>
+          <h3>Channel Rules</h3>
+          ${rules.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted)">No rules configured</div>' : `
           <div class="sa-threshold-list">
-            ${ruleItem('Auto-approve transfers', 'Transfers under 500 units auto-approved', true)}
-            ${ruleItem('QR validation required', 'Each item scanned before transfer', true)}
-            ${ruleItem('Temperature check', 'Cold-chain validation at each hop', false)}
-            ${ruleItem('Geo-fence validation', 'GPS must match destination node', true)}
-          </div>
+            ${rules.map(r => ruleItem(
+    r.rule_name || r.name || '—',
+    r.description || r.condition || '—',
+    r.is_active !== false
+  )).join('')}
+          </div>`}
         </div>
       </div>
 
       <!-- Shipment Validation Rules -->
       <section class="sa-section" style="margin-top:1.5rem">
-        <h2 class="sa-section-title">${icon('shield', 20)} Shipment Validation Rules</h2>
+        <h2 class="sa-section-title">${icon('shield', 20)} Route Integrity</h2>
         <div class="sa-card">
-          <table class="sa-table">
-            <thead>
-              <tr><th>Rule</th><th>Scope</th><th>Condition</th><th>Action</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-              <tr><td><strong>Weight Mismatch</strong></td><td>All transfers</td><td>Δ > 5%</td><td>Flag + Hold</td><td><span class="sa-status-pill sa-pill-green">active</span></td></tr>
-              <tr><td><strong>Missing Documents</strong></td><td>Export only</td><td>No invoice attached</td><td>Block transfer</td><td><span class="sa-status-pill sa-pill-green">active</span></td></tr>
-              <tr><td><strong>Expiry Check</strong></td><td>Perishables</td><td>< 30 days remaining</td><td>Warning</td><td><span class="sa-status-pill sa-pill-orange">warning</span></td></tr>
-              <tr><td><strong>Duplicate Serial</strong></td><td>All items</td><td>Serial seen before</td><td>Reject + Alert</td><td><span class="sa-status-pill sa-pill-green">active</span></td></tr>
-            </tbody>
-          </table>
+          <div class="sa-metrics-row">
+            <div class="sa-metric-card sa-metric-green"><div class="sa-metric-body"><div class="sa-metric-value">${routes.length}</div><div class="sa-metric-label">Routes</div></div></div>
+            <div class="sa-metric-card sa-metric-blue"><div class="sa-metric-body"><div class="sa-metric-value">${rules.length}</div><div class="sa-metric-label">Channel Rules</div></div></div>
+            <div class="sa-metric-card sa-metric-orange"><div class="sa-metric-body"><div class="sa-metric-value">${rules.filter(r => r.is_active !== false).length}</div><div class="sa-metric-label">Active Rules</div></div></div>
+          </div>
         </div>
       </section>
     </div>
@@ -61,7 +85,7 @@ export function renderPage() {
 }
 
 function flowItem(name, path, hops, status) {
-    return `
+  return `
     <div class="sa-spike-item sa-spike-${status === 'active' ? 'info' : 'warning'}">
       <div class="sa-spike-header">
         <strong>${name}</strong>
@@ -73,7 +97,7 @@ function flowItem(name, path, hops, status) {
 }
 
 function ruleItem(name, desc, enabled) {
-    return `
+  return `
     <div class="sa-threshold-item">
       <div class="sa-threshold-header">
         <strong>${name}</strong>

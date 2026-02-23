@@ -1,71 +1,63 @@
 /**
  * Company Admin – Code Batch Assignment
- * Bind codes to batch context: production date, distributor, region, expiry
+ * Real data from /api/scm/batches + /api/qr
  */
 import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';
+import { render } from '../../core/state.js';
 
-const ASSIGNMENTS = [
-    { batch: 'B-2026-0895', product: 'Premium Coffee Blend', codes: 10000, assigned: 10000, unassigned: 0, production: '2026-02-19', expiry: '2028-02-19', factory: 'HCM-01', distributor: 'D-VN-012 (Saigon Trading)', region: 'VN-South', status: 'complete' },
-    { batch: 'B-2026-0891', product: 'Organic Tea Collection', codes: 5000, assigned: 5000, unassigned: 0, production: '2026-02-18', expiry: '2028-02-18', factory: 'HN-02', distributor: 'D-VN-008 (Hanoi Express)', region: 'VN-North', status: 'complete' },
-    { batch: 'B-2026-0887', product: 'Manuka Honey UMF15+', codes: 2000, assigned: 1200, unassigned: 800, production: '2026-02-17', expiry: '2029-02-17', factory: 'SG-01', distributor: 'Pending assignment', region: 'APAC', status: 'partial' },
-    { batch: 'B-2026-0882', product: 'Premium Coffee (Dark)', codes: 8000, assigned: 0, unassigned: 8000, production: '2026-02-15', expiry: '2028-02-15', factory: 'HCM-01', distributor: 'Not assigned', region: '—', status: 'unassigned' },
-];
+let data = null, loading = false;
 
-const METADATA_FIELDS = [
-    { field: 'batch_id', required: true, desc: 'Unique batch identifier', source: 'System auto' },
-    { field: 'production_date', required: true, desc: 'Manufacturing date', source: 'Factory input' },
-    { field: 'expiry_date', required: true, desc: 'Product shelf life end', source: 'Product config' },
-    { field: 'factory_code', required: true, desc: 'Production facility ID', source: 'Node registry' },
-    { field: 'distributor_id', required: true, desc: 'Assigned distributor', source: 'Partner registry' },
-    { field: 'region', required: true, desc: 'Target distribution region', source: 'Geo config' },
-    { field: 'product_sku', required: true, desc: 'Product line SKU', source: 'Product catalog' },
-    { field: 'quality_grade', required: false, desc: 'QC grade (A/B/C)', source: 'QC team' },
-    { field: 'certification', required: false, desc: 'Organic, Halal, ISO cert', source: 'Compliance' },
-    { field: 'customs_ref', required: false, desc: 'Export customs reference', source: 'Logistics' },
-];
+async function load() {
+  if (loading) return; loading = true;
+  try {
+    const [batches, codes] = await Promise.all([
+      API.get('/scm/batches?limit=50').catch(() => []),
+      API.get('/qr?limit=1').catch(() => ({ total: 0 })),
+    ]);
+    data = {
+      batches: Array.isArray(batches) ? batches : (batches.batches || []),
+      totalCodes: codes.total || 0,
+    };
+  } catch (e) { data = { batches: [], totalCodes: 0 }; }
+  loading = false;
+}
 
 export function renderPage() {
-    return `
+  if (!data && !loading) { load().then(() => render()); }
+  if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Batch Assignments...</div></div>`;
+
+  const batches = data?.batches || [];
+  const complete = batches.filter(b => b.status === 'delivered' || b.status === 'complete').length;
+  const pending = batches.filter(b => b.status === 'pending' || b.status === 'in_transit').length;
+
+  return `
     <div class="sa-page">
       <div class="sa-page-title"><h1>${icon('clipboard', 28)} Batch Assignment</h1><div class="sa-title-actions"><button class="btn btn-primary btn-sm">+ Assign Codes to Batch</button></div></div>
 
       <div class="sa-metrics-row" style="margin-bottom:1.5rem">
-        ${m('Total Codes', '25,000', 'Across 4 batches', 'blue', 'zap')}
-        ${m('Fully Assigned', '2', '15,000 codes bound', 'green', 'check')}
-        ${m('Partial', '1', '800 codes pending', 'orange', 'clock')}
-        ${m('Unassigned', '1', '8,000 codes (no batch context)', 'red', 'alertTriangle')}
+        ${m('Total Batches', String(batches.length), 'In system', 'blue', 'clipboard')}
+        ${m('Complete', String(complete), 'Fully assigned', 'green', 'check')}
+        ${m('Pending', String(pending), 'Codes to assign', 'orange', 'clock')}
+        ${m('Total Codes', String(data?.totalCodes || 0), 'Platform-wide', 'blue', 'zap')}
       </div>
 
       <div class="sa-card" style="margin-bottom:1.5rem">
         <h3>📦 Batch ↔ Code Assignments</h3>
-        <p style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:1rem">Every code must be bound to a batch with full metadata before activation. Unbound codes cannot be scanned.</p>
-        <table class="sa-table"><thead><tr><th>Batch</th><th>Product</th><th>Codes</th><th>Assigned</th><th>Production</th><th>Expiry</th><th>Factory</th><th>Distributor</th><th>Region</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-          ${ASSIGNMENTS.map(a => `<tr class="${a.status === 'unassigned' ? 'ops-alert-row' : ''}">
-            <td class="sa-code">${a.batch}</td><td><strong>${a.product}</strong></td>
-            <td style="text-align:right">${a.codes.toLocaleString()}</td>
-            <td style="text-align:right">${a.assigned.toLocaleString()} ${a.unassigned > 0 ? `<span style="color:#ef4444;font-size:0.72rem">(${a.unassigned} pending)</span>` : ''}</td>
-            <td class="sa-code" style="font-size:0.78rem">${a.production}</td>
-            <td class="sa-code" style="font-size:0.78rem">${a.expiry}</td>
-            <td>${a.factory}</td>
-            <td style="font-size:0.78rem">${a.distributor}</td>
-            <td>${a.region}</td>
-            <td><span class="sa-status-pill sa-pill-${a.status === 'complete' ? 'green' : a.status === 'partial' ? 'orange' : 'red'}">${a.status}</span></td>
-            <td>${a.status !== 'complete' ? '<button class="btn btn-xs btn-outline">Assign</button>' : '<button class="btn btn-xs btn-ghost">Reassign</button>'}</td>
+        <p style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:1rem">Each code is bound to a batch with full metadata before activation.</p>
+        ${batches.length === 0 ? '<div style="text-align:center;padding:40px;color:var(--text-muted)">No batches found</div>' : `
+        <table class="sa-table"><thead><tr><th>Batch</th><th>Product</th><th>Qty</th><th>Origin</th><th>Destination</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>
+          ${batches.map(b => `<tr class="${b.status === 'pending' ? 'ops-alert-row' : ''}">
+            <td class="sa-code">${b.batch_code || b.id?.substring(0, 12) || '—'}</td>
+            <td><strong>${b.product_name || '—'}</strong></td>
+            <td style="text-align:right">${(b.quantity || 0).toLocaleString()}</td>
+            <td>${b.origin || '—'}</td>
+            <td>${b.destination || '—'}</td>
+            <td><span class="sa-status-pill sa-pill-${b.status === 'delivered' || b.status === 'complete' ? 'green' : b.status === 'pending' ? 'orange' : 'blue'}">${(b.status || 'pending').replace(/_/g, ' ')}</span></td>
+            <td style="color:var(--text-secondary)">${b.created_at ? new Date(b.created_at).toLocaleDateString('en-US') : '—'}</td>
+            <td><button class="btn btn-xs btn-outline">${b.status === 'pending' ? 'Assign' : 'Reassign'}</button></td>
           </tr>`).join('')}
-        </tbody></table>
-      </div>
-
-      <div class="sa-card">
-        <h3>🏷 Required Metadata per Code</h3>
-        <p style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:1rem">Each code inherits batch metadata. Without these fields, Risk Engine cannot evaluate context.</p>
-        <table class="sa-table"><thead><tr><th>Field</th><th>Required</th><th>Description</th><th>Data Source</th></tr></thead><tbody>
-          ${METADATA_FIELDS.map(f => `<tr>
-            <td class="sa-code" style="font-size:0.78rem">${f.field}</td>
-            <td><span class="sa-status-pill sa-pill-${f.required ? 'red' : 'blue'}">${f.required ? 'required' : 'optional'}</span></td>
-            <td style="font-size:0.82rem">${f.desc}</td>
-            <td style="font-size:0.78rem">${f.source}</td>
-          </tr>`).join('')}
-        </tbody></table>
+        </tbody></table>`}
       </div>
     </div>`;
 }

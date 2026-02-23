@@ -1,15 +1,35 @@
 /**
  * Company Admin – Company Profile
  * ═════════════════════════════════
- * Legal name, domain, industry, country
+ * Real data from /api/org + /api/org/members + /api/products
  */
 import { icon } from '../../core/icons.js';
-import { State } from '../../core/state.js';
+import { API } from '../../core/api.js';
+import { render, State } from '../../core/state.js';
+
+let data = null, loading = false;
+
+async function load() {
+  if (loading) return; loading = true;
+  try {
+    const [org, members, products] = await Promise.all([
+      API.get('/org'),
+      API.get('/org/members').catch(() => ({ members: [], total: 0 })),
+      API.get('/products?limit=1&offset=0').catch(() => ({ total: 0 })),
+    ]);
+    data = { org, members: members.members || [], memberCount: members.total || 0, productCount: products.total || 0 };
+  } catch (e) { data = { org: {}, members: [], memberCount: 0, productCount: 0 }; }
+  loading = false;
+}
 
 export function renderPage() {
-    const org = State.org || {};
+  if (!data && !loading) { load().then(() => render()); }
+  if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Company Profile...</div></div>`;
 
-    return `
+  const o = data?.org || {};
+  const settings = typeof o.settings === 'string' ? JSON.parse(o.settings || '{}') : (o.settings || {});
+
+  return `
     <div class="sa-page">
       <div class="sa-page-title">
         <h1>${icon('building', 28)} Company Profile</h1>
@@ -23,13 +43,13 @@ export function renderPage() {
         <div class="sa-card">
           <h3>Company Information</h3>
           <div class="sa-detail-grid">
-            ${field('Legal Name', org.name || 'TrustChecker Demo Corp')}
-            ${field('Display Name', org.name || 'TrustChecker Demo')}
-            ${field('Domain', 'trustchecker-demo.com')}
-            ${field('Industry', 'Food & Beverage / Manufacturing')}
-            ${field('Country', 'Vietnam 🇻🇳')}
-            ${field('Registration #', 'BIZ-2024-VN-0041234')}
-            ${field('Tax ID', 'VN-0312345678')}
+            ${field('Legal Name', o.name || '—')}
+            ${field('Slug', o.slug || '—')}
+            ${field('Plan', (o.plan || 'free').charAt(0).toUpperCase() + (o.plan || 'free').slice(1))}
+            ${field('Status', o.status || 'active')}
+            ${field('Industry', settings.industry || 'Not set')}
+            ${field('Country', settings.country || 'Not set')}
+            ${field('Created', o.created_at ? new Date(o.created_at).toLocaleDateString('en-US') : '—')}
           </div>
         </div>
 
@@ -37,13 +57,12 @@ export function renderPage() {
         <div class="sa-card">
           <h3>Contact & Address</h3>
           <div class="sa-detail-grid">
-            ${field('Primary Contact', 'Nguyen Van Toan')}
-            ${field('Email', 'admin@trustchecker-demo.com')}
-            ${field('Phone', '+84 28 3821 XXXX')}
-            ${field('Address', '123 Nguyen Hue Blvd, District 1')}
-            ${field('City', 'Ho Chi Minh City')}
-            ${field('Postal Code', '700000')}
-            ${field('Timezone', 'Asia/Ho_Chi_Minh (UTC+7)')}
+            ${field('Primary Contact', settings.contact_name || '—')}
+            ${field('Email', settings.contact_email || '—')}
+            ${field('Phone', settings.phone || '—')}
+            ${field('Address', settings.address || '—')}
+            ${field('City', settings.city || '—')}
+            ${field('Timezone', settings.timezone || 'UTC')}
           </div>
         </div>
       </div>
@@ -55,33 +74,22 @@ export function renderPage() {
           <div class="sa-metric-card sa-metric-gold">
             <div class="sa-metric-icon">${icon('tag', 22)}</div>
             <div class="sa-metric-body">
-              <div class="sa-metric-value">${State.plan === 'enterprise' ? 'Enterprise' : State.plan || 'Pro'}</div>
+              <div class="sa-metric-value">${(o.plan || 'free').charAt(0).toUpperCase() + (o.plan || 'free').slice(1)}</div>
               <div class="sa-metric-label">Current Plan</div>
-              <div class="sa-metric-sub">Renews Mar 2026</div>
             </div>
           </div>
           <div class="sa-metric-card sa-metric-blue">
             <div class="sa-metric-icon">${icon('users', 22)}</div>
             <div class="sa-metric-body">
-              <div class="sa-metric-value">48</div>
-              <div class="sa-metric-label">Active Users</div>
-              <div class="sa-metric-sub">Limit: 100</div>
+              <div class="sa-metric-value">${data?.memberCount || 0}</div>
+              <div class="sa-metric-label">Team Members</div>
             </div>
           </div>
           <div class="sa-metric-card sa-metric-green">
             <div class="sa-metric-icon">${icon('products', 22)}</div>
             <div class="sa-metric-body">
-              <div class="sa-metric-value">1,247</div>
+              <div class="sa-metric-value">${(data?.productCount || 0).toLocaleString()}</div>
               <div class="sa-metric-label">Products</div>
-              <div class="sa-metric-sub">Limit: 10,000</div>
-            </div>
-          </div>
-          <div class="sa-metric-card sa-metric-purple">
-            <div class="sa-metric-icon">${icon('zap', 22)}</div>
-            <div class="sa-metric-body">
-              <div class="sa-metric-value">142K</div>
-              <div class="sa-metric-label">API Calls (30d)</div>
-              <div class="sa-metric-sub">Limit: 500K</div>
             </div>
           </div>
         </div>
@@ -92,10 +100,10 @@ export function renderPage() {
         <h2 class="sa-section-title">${icon('palette', 20)} Branding</h2>
         <div class="sa-card">
           <div class="sa-detail-grid">
-            ${field('App Name', State.branding?.app_name || 'TrustChecker')}
+            ${field('App Name', State.branding?.app_name || o.name || 'TrustChecker')}
             ${field('Primary Color', State.branding?.primary_color || '#6366f1')}
             ${field('Logo', 'Default shield icon')}
-            ${field('Custom Domain', 'Not configured')}
+            ${field('Custom Domain', settings.custom_domain || 'Not configured')}
           </div>
         </div>
       </section>
@@ -104,7 +112,7 @@ export function renderPage() {
 }
 
 function field(label, value) {
-    return `
+  return `
     <div class="sa-detail-item">
       <span class="sa-detail-label">${label}</span>
       <span>${value}</span>
