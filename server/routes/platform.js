@@ -98,30 +98,21 @@ router.post('/tenants', async (req, res) => {
 // PLATFORM-WIDE FEATURE FLAGS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// GET /feature-flags — Read platform-wide flags (merged from all orgs)
+// GET /feature-flags — Read platform-wide flags from dedicated table
 router.get('/feature-flags', async (req, res) => {
     try {
-        const orgs = await db.all('SELECT feature_flags FROM organizations');
-        const merged = {};
-        orgs.forEach(o => {
-            try {
-                let f = {};
-                if (typeof o.feature_flags === 'string') {
-                    f = JSON.parse(o.feature_flags || '{}');
-                } else if (o.feature_flags && typeof o.feature_flags === 'object') {
-                    f = o.feature_flags;
-                }
-                Object.entries(f).forEach(([k, v]) => { if (merged[k] === undefined) merged[k] = v; });
-            } catch (e) { /* skip */ }
-        });
-        res.json({ flags: merged });
+        const rows = await db.all('SELECT key, label, description, icon, color, enabled FROM platform_feature_flags ORDER BY key');
+        // Also return as a simple key→value map for backward compat
+        const flags = {};
+        rows.forEach(r => { flags[r.key] = r.enabled; });
+        res.json({ flags, flagList: rows });
     } catch (err) {
         console.error('[Platform] Feature flags read error:', err);
         res.status(500).json({ error: 'Failed to read feature flags' });
     }
 });
 
-// PUT /feature-flags — Toggle a flag across ALL organizations
+// PUT /feature-flags — Toggle a single flag
 router.put('/feature-flags', async (req, res) => {
     try {
         const { key, value } = req.body;
@@ -129,30 +120,25 @@ router.put('/feature-flags', async (req, res) => {
             return res.status(400).json({ error: 'key (string) and value (boolean) required' });
         }
 
-        // Update each org's feature_flags JSON
-        const orgs = await db.all('SELECT id, feature_flags FROM organizations');
-        for (const o of orgs) {
-            let flags = {};
-            try {
-                if (typeof o.feature_flags === 'string') {
-                    flags = JSON.parse(o.feature_flags || '{}');
-                } else if (o.feature_flags && typeof o.feature_flags === 'object') {
-                    flags = { ...o.feature_flags };
-                }
-            } catch (e) { /* skip */ }
-            flags[key] = value;
-            await db.run("UPDATE organizations SET feature_flags = ?, updated_at = datetime('now') WHERE id = ?",
-                [JSON.stringify(flags), o.id]);
+        // Update dedicated table
+        const existing = await db.get('SELECT key FROM platform_feature_flags WHERE key = ?', [key]);
+        if (!existing) {
+            return res.status(404).json({ error: `Flag "${key}" not found` });
         }
+
+        await db.run(
+            "UPDATE platform_feature_flags SET enabled = ?, updated_at = NOW(), updated_by = ? WHERE key = ?",
+            [value, req.user.id, key]
+        );
 
         // Audit log
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'FEATURE_FLAG_TOGGLED', 'platform', ?, ?)`,
-            [uuidv4(), req.user.id, 'feature_flag', JSON.stringify({ flag: key, value, affected_orgs: orgs.length })]
+            [uuidv4(), req.user.id, key, JSON.stringify({ flag: key, value })]
         );
 
         if (typeof db.save === 'function') await db.save();
-        res.json({ message: `Flag "${key}" ${value ? 'enabled' : 'disabled'} for ${orgs.length} organizations`, key, value });
+        res.json({ message: `Flag "${key}" ${value ? 'enabled' : 'disabled'}`, key, value });
     } catch (err) {
         console.error('[Platform] Feature flag toggle error:', err);
         res.status(500).json({ error: 'Failed to toggle feature flag' });

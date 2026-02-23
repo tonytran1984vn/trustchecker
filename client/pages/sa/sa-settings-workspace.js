@@ -11,20 +11,33 @@ import { renderPage as renderServices } from './services-status.js';
 import { renderPage as renderIncidents } from './incidents.js';
 
 // ═══════════════════════════════════════════════════════════════
-// Feature Flags Tab
+// Feature Flags Tab (DB-backed via platform_feature_flags table)
 // ═══════════════════════════════════════════════════════════════
+let _flagList = null;  // Full flag data from API
+let _flagsLoading = false;
+
+function loadFeatureFlags() {
+    if (_flagsLoading) return;
+    _flagsLoading = true;
+    API.get('/platform/feature-flags').then(data => {
+        if (data?.flagList) {
+            _flagList = data.flagList;
+            // Also update State.featureFlags for backward compat
+            State.featureFlags = {};
+            data.flagList.forEach(f => { State.featureFlags[f.key] = f.enabled; });
+        }
+        _flagsLoading = false;
+        window.render();
+    }).catch(() => { _flagsLoading = false; });
+}
+
 function renderFeatureFlags() {
-    const flags = State.featureFlags || {};
-    const flagList = [
-        { key: 'ai_anomaly', label: 'AI Anomaly Detection', desc: 'ML-powered fraud pattern detection', icon: '🤖', color: '#8b5cf6' },
-        { key: 'digital_twin', label: 'Digital Twin', desc: 'Virtual product simulation engine', icon: '🔮', color: '#06b6d4' },
-        { key: 'carbon_tracking', label: 'Carbon Intelligence', desc: 'Product Carbon Passports · Scope 1,2,3 · ESG', icon: '🌱', color: '#10b981' },
-        { key: 'nft_certificates', label: 'NFT Certificates', desc: 'Blockchain-based product certificates', icon: '🎫', color: '#f59e0b' },
-        { key: 'demand_sensing', label: 'Demand Sensing AI', desc: 'Predictive inventory analytics', icon: '📊', color: '#3b82f6' },
-        { key: 'gri_reports', label: 'GRI Sustainability Reports', desc: 'Automated ESG compliance reporting', icon: '📋', color: '#22c55e' },
-        { key: 'sso_saml', label: 'SSO / SAML Integration', desc: 'Enterprise single sign-on support', icon: '🔐', color: '#ef4444' },
-        { key: 'webhook_events', label: 'Webhook Events', desc: 'Real-time event delivery to external systems', icon: '🔗', color: '#a855f7' },
-    ];
+    if (!_flagList) {
+        loadFeatureFlags();
+        return `<div style="text-align:center;padding:40px;color:var(--text-muted)">Loading feature flags...</div>`;
+    }
+
+    const enabledCount = _flagList.filter(f => f.enabled).length;
 
     return `
     <div style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
@@ -32,23 +45,24 @@ function renderFeatureFlags() {
             <div style="font-size:0.78rem;color:var(--text-muted)">Manage platform-wide feature toggles. Changes apply to all tenants.</div>
         </div>
         <div style="font-size:0.72rem;color:var(--text-muted);background:var(--bg-secondary);padding:4px 12px;border-radius:20px">
-            ${Object.values(flags).filter(v => v).length} / ${flagList.length} enabled
+            ${enabledCount} / ${_flagList.length} enabled
         </div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:12px">
-        ${flagList.map(f => {
-        const enabled = flags[f.key] ?? false;
+        ${_flagList.map(f => {
+        const enabled = f.enabled;
+        const color = f.color || '#6b7280';
         return `
-            <div class="card" style="padding:16px;display:flex;align-items:center;gap:14px;transition:all 0.2s;border-left:3px solid ${enabled ? f.color : 'transparent'};opacity:${enabled ? '1' : '0.6'}">
-                <div style="width:40px;height:40px;border-radius:10px;background:${enabled ? f.color + '22' : 'var(--bg-secondary)'};display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0">${f.icon}</div>
+            <div class="card" style="padding:16px;display:flex;align-items:center;gap:14px;transition:all 0.2s;border-left:3px solid ${enabled ? color : 'transparent'};opacity:${enabled ? '1' : '0.6'}">
+                <div style="width:40px;height:40px;border-radius:10px;background:${enabled ? color + '22' : 'var(--bg-secondary)'};display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0">${f.icon || '⚡'}</div>
                 <div style="flex:1;min-width:0">
                     <div style="font-size:0.82rem;font-weight:700">${f.label}</div>
-                    <div style="font-size:0.68rem;color:var(--text-muted);margin-top:2px">${f.desc}</div>
+                    <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">${f.description || ''}</div>
                 </div>
                 <label style="position:relative;width:48px;height:26px;cursor:pointer;flex-shrink:0">
                     <input type="checkbox" ${enabled ? 'checked' : ''} onchange="toggleFlag('${f.key}', this.checked)"
                         style="display:none">
-                    <div style="position:absolute;inset:0;background:${enabled ? f.color : '#cbd5e1'};border-radius:13px;transition:background 0.3s;${enabled ? '' : 'border:1px solid #94a3b8;'}"></div>
+                    <div style="position:absolute;inset:0;background:${enabled ? color : '#cbd5e1'};border-radius:13px;transition:background 0.3s;${enabled ? '' : 'border:1px solid #94a3b8;'}"></div>
                     <div style="position:absolute;top:3px;left:${enabled ? '24px' : '3px'};width:20px;height:20px;background:#fff;border-radius:50%;transition:left 0.3s;box-shadow:0 2px 4px rgba(0,0,0,0.25)"></div>
                 </label>
             </div>`;
@@ -233,6 +247,11 @@ window.changePasswordOps = async function () {
 // Feature flag toggle
 window.toggleFlag = async function (key, value) {
     try {
+        // Optimistic update
+        if (_flagList) {
+            const item = _flagList.find(f => f.key === key);
+            if (item) item.enabled = value;
+        }
         if (!State.featureFlags) State.featureFlags = {};
         State.featureFlags[key] = value;
         window.render();
@@ -240,35 +259,17 @@ window.toggleFlag = async function (key, value) {
         showToast(`${value ? '✅ Enabled' : '⛔ Disabled'}: ${key.replace(/_/g, ' ')} — ${res.message || 'saved'}`, value ? 'success' : 'info');
     } catch (e) {
         // Revert on failure
+        if (_flagList) {
+            const item = _flagList.find(f => f.key === key);
+            if (item) item.enabled = !value;
+        }
         State.featureFlags[key] = !value;
         window.render();
         showToast('Failed to toggle: ' + e.message, 'error');
     }
 };
 
-let _flagsLoaded = false;
-
 export function renderPage() {
-    // Load flags from API on first visit
-    if (!_flagsLoaded) {
-        _flagsLoaded = true;
-        if (!State.featureFlags) {
-            // Defaults while loading
-            State.featureFlags = {
-                ai_anomaly: true, digital_twin: true, carbon_tracking: true,
-                nft_certificates: true, demand_sensing: false, gri_reports: true,
-                sso_saml: false, webhook_events: true,
-            };
-        }
-        // Fetch real flags from DB
-        API.get('/platform/feature-flags').then(data => {
-            if (data?.flags) {
-                State.featureFlags = { ...State.featureFlags, ...data.flags };
-                window.render();
-            }
-        }).catch(() => { /* use defaults */ });
-    }
-
     return renderWorkspace({
         domain: 'operations',
         title: 'Operations',
