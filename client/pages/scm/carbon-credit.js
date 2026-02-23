@@ -1393,7 +1393,7 @@ export function render() {
     const role = getUserCIERole();
     const roleDisplay = role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     return `
-    <div class="sa-page">
+    <div id="cie-root"><div class="sa-page">
         <div class="sa-page-title">
             <h1>${icon('globe')} Carbon Integrity Engine <span style="font-size:0.6em;color:#64748b;font-weight:400">v2.0</span></h1>
             <div style="display:flex;align-items:center;gap:8px;margin:4px 0 16px">
@@ -1405,12 +1405,23 @@ export function render() {
             ${visibleTabs.map(t => tabBtn(t.id, t.label, t.ic)).join('')}
         </div>
         ${tabContent}
-    </div>`;
+    </div></div>`;
 }
 export function renderPage() { return render(); }
 
 // ─── Global handlers ─────────────────────────────────────────────────
-window.cieTab = (tab) => { activeTab = tab; const el = document.getElementById('app') || document.querySelector('.sa-page')?.parentElement; if (el) el.innerHTML = render(); };
+window.cieTab = (tab) => {
+    activeTab = tab;
+    const el = document.getElementById('cie-root');
+    if (el) {
+        // Re-render just the inner content of #cie-root
+        const tmp = document.createElement('div');
+        tmp.innerHTML = render();
+        // Extract inner content (skip the #cie-root wrapper itself)
+        const inner = tmp.querySelector('#cie-root');
+        el.innerHTML = inner ? inner.innerHTML : tmp.innerHTML;
+    }
+};
 window.cieIssueCIP = () => { if (typeof showToast === 'function') showToast('CIP issuance requires Carbon Officer submission → IVU review → Compliance approval', 'info'); else alert('CIP issuance requires Carbon Officer submission → IVU review → Compliance approval'); };
 window.cieRefresh = async () => { await loadCIE(); window.cieTab(activeTab); };
 
