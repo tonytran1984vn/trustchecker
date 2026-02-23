@@ -117,6 +117,8 @@ async function sendAlert(eventType, eventData = {}) {
 
         for (const wh of webhooks) {
             if (!wh.url || !wh.enabled) continue;
+            // Event filtering: if webhook has events array, only send matching events
+            if (wh.events && wh.events.length > 0 && !wh.events.includes(eventType)) continue;
             try {
                 const resp = await fetch(wh.url, {
                     method: 'POST',
