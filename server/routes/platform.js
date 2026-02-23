@@ -268,6 +268,69 @@ router.post('/email-settings/test', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// CHANNEL SETTINGS (Slack / SMS / Push)
+// ═══════════════════════════════════════════════════════════════════════════════
+const slackService = require('../services/slack');
+
+// GET /channel-settings/:channel
+router.get('/channel-settings/:channel', async (req, res) => {
+    try {
+        const row = await db.get("SELECT * FROM channel_settings WHERE channel = $1", [req.params.channel]);
+        if (!row) return res.json({ config: { enabled: false, config: {} } });
+        res.json({ config: { ...row, config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config } });
+    } catch (err) {
+        console.error('[Platform] Channel settings read error:', err);
+        res.status(500).json({ error: 'Failed to read channel settings' });
+    }
+});
+
+// PUT /channel-settings/:channel
+router.put('/channel-settings/:channel', async (req, res) => {
+    try {
+        const { enabled, config } = req.body;
+        const updates = [];
+        const params = [];
+        let idx = 1;
+
+        if (enabled !== undefined) { updates.push(`enabled = $${idx++}`); params.push(enabled); }
+        if (config !== undefined) { updates.push(`config = $${idx++}::jsonb`); params.push(JSON.stringify(config)); }
+        updates.push(`updated_at = NOW()`);
+        updates.push(`updated_by = $${idx++}`); params.push(req.user.id);
+        params.push(req.params.channel);
+
+        await db.run(`UPDATE channel_settings SET ${updates.join(', ')} WHERE channel = $${idx}`, params);
+
+        // Invalidate cache for slack
+        if (req.params.channel === 'slack') slackService.invalidateConfig();
+
+        res.json({ message: `${req.params.channel} settings updated` });
+    } catch (err) {
+        console.error('[Platform] Channel settings update error:', err);
+        res.status(500).json({ error: 'Failed to update channel settings' });
+    }
+});
+
+// POST /channel-settings/:channel/test
+router.post('/channel-settings/:channel/test', async (req, res) => {
+    try {
+        let result;
+        if (req.params.channel === 'slack') {
+            result = await slackService.sendTest();
+        } else {
+            return res.status(400).json({ error: `Test not implemented for ${req.params.channel} yet` });
+        }
+        if (result.sent) {
+            res.json({ message: `Test ${req.params.channel} sent!`, results: result.results });
+        } else {
+            res.status(400).json({ error: result.reason || 'Failed' });
+        }
+    } catch (err) {
+        console.error('[Platform] Channel test error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // PLATFORM USER MANAGEMENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
