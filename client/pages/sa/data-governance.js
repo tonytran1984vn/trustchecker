@@ -4,7 +4,7 @@
 import { icon } from '../../core/icons.js';
 
 export function renderPage() {
-    return `
+  return `
     <div class="sa-page">
       <div class="sa-page-title"><h1>${icon('lock', 28)} Data Governance</h1></div>
       <div class="sa-grid-2col">
@@ -30,7 +30,7 @@ export function renderPage() {
         <div class="sa-card">
           <h3>GDPR Deletion Queue</h3>
           <table class="sa-table sa-table-compact">
-            <thead><tr><th>Request ID</th><th>Tenant</th><th>Type</th><th>Submitted</th><th>Status</th></tr></thead>
+            <thead><tr><th>Request ID</th><th>Organization</th><th>Type</th><th>Submitted</th><th>Status</th></tr></thead>
             <tbody>
               <tr><td class="sa-code">DEL-0089</td><td>FreshMart EU</td><td>User Data Erasure</td><td>2026-02-18</td><td><span class="sa-status-pill sa-pill-orange">Pending</span></td></tr>
               <tr><td class="sa-code">DEL-0088</td><td>HealthPlus Co</td><td>Account Deletion</td><td>2026-02-15</td><td><span class="sa-status-pill sa-pill-green">Completed</span></td></tr>

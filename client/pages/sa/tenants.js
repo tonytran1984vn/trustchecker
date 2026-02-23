@@ -50,19 +50,19 @@ async function createTenant(form) {
       password: form.admin_password,
     };
     window.render();
-    window.showToast?.('✅ Tenant created successfully', 'success');
+    window.showToast?.('✅ Organization created successfully', 'success');
     loadStarted = false; loadTenants();
   } catch (e) {
-    createError = e.message || 'Failed to create tenant';
+    createError = e.message || 'Failed to create organization';
     creating = false; window.render();
   }
 }
 
 async function suspendTenant(id) {
-  if (!confirm('Suspend this tenant? Their users will lose access.')) return;
+  if (!confirm('Suspend this organization? Their users will lose access.')) return;
   try {
     await API.post(`/platform/tenants/${id}/suspend`, { reason: 'Suspended by Super Admin' });
-    window.showToast?.('Tenant suspended', 'warning');
+    window.showToast?.('Organization suspended', 'warning');
     loadStarted = false; await loadTenants();
   } catch (e) { window.showToast?.('Failed to suspend: ' + e.message, 'error'); }
 }
@@ -70,7 +70,7 @@ async function suspendTenant(id) {
 async function activateTenant(id) {
   try {
     await API.post(`/platform/tenants/${id}/activate`, {});
-    window.showToast?.('Tenant activated', 'success');
+    window.showToast?.('Organization activated', 'success');
     loadStarted = false; await loadTenants();
   } catch (e) { window.showToast?.('Failed: ' + e.message, 'error'); }
 }
@@ -333,7 +333,7 @@ function renderModal() {
     <div class="phx-overlay" onclick="if(event.target===this)window._saCloseCreate()">
       <div class="phx-modal">
         <div class="phx-modal-head">
-          <h2>✅ Tenant Created Successfully</h2>
+          <h2>✅ Organization Created Successfully</h2>
           <button class="phx-modal-close" onclick="window._saCloseCreate()">✕</button>
         </div>
         <div class="phx-modal-body">
@@ -399,7 +399,7 @@ function renderModal() {
     <div class="phx-overlay" onclick="if(event.target===this)window._saCloseCreate()">
       <div class="phx-modal" style="max-width:600px">
         <div class="phx-modal-head" style="padding:14px 20px">
-          <h2 style="font-size:1rem">Add new tenant</h2>
+          <h2 style="font-size:1rem">Add new organization</h2>
           <button class="phx-modal-close" onclick="window._saCloseCreate()">✕</button>
         </div>
         <form onsubmit="event.preventDefault();window._saDoCreate(this)" class="phx-modal-body" style="padding:14px 20px">
@@ -645,7 +645,7 @@ function renderModal() {
           <div class="phx-modal-foot" style="padding:10px 0 0">
             <button type="button" class="phx-btn-secondary" style="padding:8px 18px;font-size:0.78rem" onclick="window._saCloseCreate()">Cancel</button>
             <button type="submit" class="phx-btn-primary" style="padding:8px 18px;font-size:0.78rem" ${creating ? 'disabled' : ''}>
-              ${creating ? '<span class="phx-spinner-sm"></span> Creating...' : `${icon('plus', 14)} Create tenant`}
+              ${creating ? '<span class="phx-spinner-sm"></span> Creating...' : `${icon('plus', 14)} Create organization`}
             </button>
           </div>
         </form>

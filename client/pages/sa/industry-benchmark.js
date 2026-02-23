@@ -24,20 +24,20 @@ export function renderPage() {
 
   return `
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('globe', 28)} Industry Benchmark Engine</h1><div class="sa-title-actions"><span style="font-size:0.72rem;color:var(--text-secondary)">Cross-tenant intelligence · Dữ liệu thực từ PostgreSQL</span></div></div>
+      <div class="sa-page-title"><h1>${icon('globe', 28)} Industry Benchmark Engine</h1><div class="sa-title-actions"><span style="font-size:0.72rem;color:var(--text-secondary)">Cross-organization intelligence · Dữ liệu thực từ PostgreSQL</span></div></div>
 
       <div class="sa-metrics-row" style="margin-bottom:1.5rem">
-        ${m('Active Tenants', heatmap.length.toString(), 'Across ' + new Set(heatmap.flatMap(h => h.industry.split(', '))).size + ' industries', 'blue', 'building')}
-        ${m('Total Scans', heatmap.reduce((s, h) => s + h.scans, 0).toLocaleString(), 'Across all tenants', 'green', 'zap')}
+        ${m('Active Organizations', heatmap.length.toString(), 'Across ' + new Set(heatmap.flatMap(h => h.industry.split(', '))).size + ' industries', 'blue', 'building')}
+        ${m('Total Scans', heatmap.reduce((s, h) => s + h.scans, 0).toLocaleString(), 'Across all organizations', 'green', 'zap')}
         ${m('Active Fraud Patterns', patterns.length.toString(), 'Alert types detected', 'red', 'alertTriangle')}
-        ${m('High Risk Tenants', heatmap.filter(h => h.tier === 'High').length.toString(), 'Cần audit ngay', 'orange', 'target')}
+        ${m('High Risk Organizations', heatmap.filter(h => h.tier === 'High').length.toString(), 'Cần audit ngay', 'orange', 'target')}
       </div>
 
       <!-- TENANT RISK HEATMAP -->
       <div class="sa-card" style="margin-bottom:1.5rem">
-        <h3>🌍 Tenant Risk Heatmap</h3>
-        <p style="font-size:0.72rem;color:var(--text-secondary);margin-bottom:0.75rem">So sánh rủi ro cross-tenant dựa trên dữ liệu thực.</p>
-        <table class="sa-table"><thead><tr><th>Tenant</th><th>Industry</th><th>Scans</th><th>Dup Rate</th><th>Frauds</th><th>Avg Trust</th><th>Risk Tier</th></tr></thead><tbody>
+        <h3>🌍 Organization Risk Heatmap</h3>
+        <p style="font-size:0.72rem;color:var(--text-secondary);margin-bottom:0.75rem">So sánh rủi ro cross-organization dựa trên dữ liệu thực.</p>
+        <table class="sa-table"><thead><tr><th>Organization</th><th>Industry</th><th>Scans</th><th>Dup Rate</th><th>Frauds</th><th>Avg Trust</th><th>Risk Tier</th></tr></thead><tbody>
           ${heatmap.map(t => `<tr class="${t.tier === 'High' ? 'ops-alert-row' : ''}">
             <td><strong>${t.name}</strong></td>
             <td style="font-size:0.78rem">${t.industry}</td>
@@ -71,7 +71,7 @@ export function renderPage() {
 
         <div class="sa-card" style="border-left:4px solid #ef4444">
           <h3>🕵️ Fraud Pattern Library</h3>
-          <p style="font-size:0.72rem;color:var(--text-secondary);margin-bottom:0.5rem">Patterns detected across all tenants</p>
+          <p style="font-size:0.72rem;color:var(--text-secondary);margin-bottom:0.5rem">Patterns detected across all organizations</p>
           ${patterns.map(p => `
             <div style="padding:0.6rem 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
               <div>

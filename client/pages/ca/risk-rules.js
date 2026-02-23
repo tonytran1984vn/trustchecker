@@ -7,11 +7,11 @@
 import { icon } from '../../core/icons.js';
 
 export function renderPage() {
-    return `
+  return `
     <div class="sa-page">
       <div class="sa-page-title">
         <h1>${icon('target', 28)} Risk Rules</h1>
-        <span style="font-size:0.75rem;color:var(--text-secondary);background:rgba(255,255,255,0.04);padding:4px 10px;border-radius:6px">Tenant Scope Only</span>
+        <span style="font-size:0.75rem;color:var(--text-secondary);background:rgba(255,255,255,0.04);padding:4px 10px;border-radius:6px">Organization Scope Only</span>
       </div>
 
       <div class="sa-grid-2col">
@@ -91,7 +91,7 @@ export function renderPage() {
 }
 
 function thresholdItem(name, desc, value, status) {
-    return `
+  return `
     <div class="sa-threshold-item">
       <div class="sa-threshold-header">
         <strong>${name}</strong>

@@ -12,12 +12,12 @@ export function renderPage() {
     return renderWorkspace({
         domain: 'financial',
         title: 'Financial',
-        subtitle: 'Revenue · Plans · Tenant billing',
+        subtitle: 'Revenue · Plans · Organization billing',
         icon: icon('barChart', 24),
         tabs: [
             { id: 'revenue', label: 'Revenue', icon: icon('barChart', 14), render: renderRevenue },
             { id: 'plans', label: 'Plans', icon: icon('tag', 14), render: renderPlans },
-            { id: 'tenants', label: 'Tenants', icon: icon('building', 14), render: renderTenants },
+            { id: 'tenants', label: 'Organizations', icon: icon('building', 14), render: renderTenants },
         ],
     });
 }

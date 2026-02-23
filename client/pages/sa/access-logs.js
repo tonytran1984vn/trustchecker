@@ -4,14 +4,14 @@
 import { icon } from '../../core/icons.js';
 
 export function renderPage() {
-    return `
+  return `
     <div class="sa-page">
       <div class="sa-page-title"><h1>${icon('scroll', 28)} Access Logs</h1></div>
       <div class="sa-card">
-        <h3>Cross-Tenant Access & Impersonation Log</h3>
+        <h3>Cross-Organization Access & Impersonation Log</h3>
         <table class="sa-table">
           <thead>
-            <tr><th>Time</th><th>Platform User</th><th>Action</th><th>Target Tenant</th><th>Reason</th><th>Duration</th><th>IP</th></tr>
+            <tr><th>Time</th><th>Platform User</th><th>Action</th><th>Target Organization</th><th>Reason</th><th>Duration</th><th>IP</th></tr>
           </thead>
           <tbody>
             <tr>
@@ -45,12 +45,12 @@ export function renderPage() {
         </table>
       </div>
       <div class="sa-card" style="margin-top:1rem">
-        <h3>Cross-Tenant Access Policy</h3>
+        <h3>Cross-Organization Access Policy</h3>
         <div class="sa-detail-grid">
           <div class="sa-detail-item"><span class="sa-detail-label">Reason Required</span><span class="sa-mfa-on">Mandatory</span></div>
           <div class="sa-detail-item"><span class="sa-detail-label">Time Limit</span><span>30 minutes per session</span></div>
           <div class="sa-detail-item"><span class="sa-detail-label">Auto-Log</span><span class="sa-mfa-on">All actions recorded</span></div>
-          <div class="sa-detail-item"><span class="sa-detail-label">Notification</span><span>Tenant Admin notified on entry/exit</span></div>
+          <div class="sa-detail-item"><span class="sa-detail-label">Notification</span><span>Organization Admin notified on entry/exit</span></div>
         </div>
       </div>
     </div>

@@ -14,7 +14,7 @@ let showModal = false;
 let editUser = null;
 
 const PLATFORM_ROLES = [
-  { id: 'super_admin', label: 'Super Admin', desc: 'Infrastructure custodian — tenant lifecycle, config, platform health', color: '#ef4444', icon: '🔴' },
+  { id: 'super_admin', label: 'Super Admin', desc: 'Infrastructure custodian — organization lifecycle, config, platform health', color: '#ef4444', icon: '🔴' },
   { id: 'platform_security', label: 'Platform Security', desc: 'SOC/CSIRT — key rotation, incident response, session monitoring', color: '#f59e0b', icon: '🛡' },
   { id: 'data_gov_officer', label: 'Data Governance', desc: 'Data classification, retention, GDPR, cross-border policy', color: '#8b5cf6', icon: '📊' },
   { id: 'auditor', label: 'Platform Auditor', desc: 'Read-only audit across all platform sections', color: '#94a3b8', icon: '🔍' },

@@ -21,16 +21,16 @@ export function renderPage() {
 
   return `
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('alert', 28)} Suspicious Tenants</h1>
-        <span style="font-size:0.72rem;color:#94a3b8">${tenants.length} tenant có fraud alerts</span>
+      <div class="sa-page-title"><h1>${icon('alert', 28)} Suspicious Organizations</h1>
+        <span style="font-size:0.72rem;color:#94a3b8">${tenants.length} organizations with fraud alerts</span>
       </div>
 
-      ${tenants.length === 0 ? '<div class="sa-card" style="text-align:center;padding:40px;color:#94a3b8">Không có tenant đáng ngờ</div>' : ''}
+      ${tenants.length === 0 ? '<div class="sa-card" style="text-align:center;padding:40px;color:#94a3b8">No suspicious organizations detected</div>' : ''}
 
       <div class="sa-card">
         <table class="sa-table">
           <thead><tr>
-            <th>Tenant</th><th>Risk Score</th><th>Fraud Alerts</th><th>Open</th><th>Critical</th><th>Patterns</th><th>Khuyến nghị</th><th>Mức độ</th>
+            <th>Organization</th><th>Risk Score</th><th>Fraud Alerts</th><th>Open</th><th>Critical</th><th>Patterns</th><th>Recommendation</th><th>Severity</th>
           </tr></thead>
           <tbody>
             ${tenants.map(t => {

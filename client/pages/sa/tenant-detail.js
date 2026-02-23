@@ -69,7 +69,7 @@ async function doSuspend() {
   if (!tenant || !confirm(`Suspend ${tenant.name}? All users will lose access.`)) return;
   try {
     await API.post(`/platform/tenants/${tenant.id}/suspend`, { reason: 'Suspended by Platform Admin' });
-    window.showToast?.('Tenant suspended', 'warning');
+    window.showToast?.('Organization suspended', 'warning');
     currentTenantId = null; loadTenant(tenant.id);
   } catch (e) { window.showToast?.('Failed: ' + e.message, 'error'); }
 }
@@ -78,7 +78,7 @@ async function doActivate() {
   if (!tenant) return;
   try {
     await API.post(`/platform/tenants/${tenant.id}/activate`, {});
-    window.showToast?.('Tenant re-activated', 'success');
+    window.showToast?.('Organization re-activated', 'success');
     currentTenantId = null; loadTenant(tenant.id);
   } catch (e) { window.showToast?.('Failed: ' + e.message, 'error'); }
 }
@@ -115,9 +115,9 @@ export function renderPage() {
   if (!tenant) {
     return `<div style="text-align:center;padding:80px">
       <div style="font-size:3rem;margin-bottom:12px">🔍</div>
-      <h3 style="margin-bottom:8px;color:var(--text-muted)">Tenant not found</h3>
-      <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:16px">The tenant may have been removed or the ID is invalid.</p>
-      <button class="btn btn-primary" onclick="navigate('sa-tenants')">← Back to Tenants</button>
+      <h3 style="margin-bottom:8px;color:var(--text-muted)">Organization not found</h3>
+      <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:16px">The organization may have been removed or the ID is invalid.</p>
+      <button class="btn btn-primary" onclick="navigate('sa-tenants')">← Back to Organizations</button>
     </div>`;
   }
 
@@ -207,7 +207,7 @@ export function renderPage() {
     <div class="tdt">
       <!-- Hero Banner -->
       <div class="tdt-hero" style="background:${pGrad}">
-        <div class="tdt-hero-back" onclick="navigate('sa-tenants')">← Back to Tenants</div>
+        <div class="tdt-hero-back" onclick="navigate('sa-tenants')">← Back to Organizations</div>
         <div class="tdt-hero-main">
           <div class="tdt-hero-avatar">${initials}</div>
           <div class="tdt-hero-info">
@@ -253,7 +253,7 @@ function renderTab() {
   switch (activeTab) {
     case 'overview': return renderOverview();
     case 'users': return renderUsersTab();
-    case 'usage': return ph('📊', 'Usage Analytics', 'Usage metrics and quota tracking for this tenant.');
+    case 'usage': return ph('📊', 'Usage Analytics', 'Usage metrics and quota tracking for this organization.');
     case 'security': return ph('🔒', 'Security Events', 'Audit log, access events, and security configuration.');
     case 'billing': return renderBilling();
     default: return renderOverview();
