@@ -7300,7 +7300,7 @@ html {
   flex-shrink: 0;
 }
 
-.sa-page.phx-page .phx-kpi-blue {}
+
 
 .sa-page.phx-page .phx-kpi-blue .phx-kpi-icon {
   background: rgba(56, 116, 255, 0.1);
@@ -7329,7 +7329,7 @@ html {
 }
 
 .sa-page.phx-page .phx-kpi-val {
-  font-size: 1.55rem;
+  font-size: 1.75rem;
   font-weight: 800;
   color: var(--phx-text) !important;
   line-height: 1;

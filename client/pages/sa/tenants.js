@@ -177,20 +177,20 @@ export function renderPage() {
       <!-- Header -->
       <div class="phx-page-header">
         <div>
-          <h1 class="phx-page-title">Tenant Management</h1>
-          <p class="phx-page-desc">Here's what's going on with your tenants right now</p>
+          <h1 class="phx-page-title">Organization Management</h1>
+          <p class="phx-page-desc">Real-time overview of all organizations</p>
         </div>
         <button class="phx-btn-primary" onclick="window._saShowCreate()">
-          ${icon('plus', 16)} Add new tenant
+          ${icon('plus', 16)} Add organization
         </button>
       </div>
 
       <!-- KPI Strip -->
       <div class="phx-kpi-row">
-        ${kpiCard(icon('building', 20), counts.all, 'Total Tenants', 'All registered organizations', 'blue')}
-        ${kpiCard(icon('check', 20), counts.active, 'Active', 'Currently operational', 'green')}
+        ${kpiCard(icon('building', 20), counts.all, 'Total Organizations', `${counts.active} active`, 'blue', 'all')}
+        ${kpiCard(icon('check', 20), counts.active, 'Active', `${counts.suspended} suspended`, 'green', 'active')}
         ${kpiCard(icon('barChart', 20), '$' + totalMRR.toLocaleString(), 'Total MRR', '$' + (totalMRR * 12).toLocaleString() + ' ARR', 'purple')}
-        ${kpiCard(icon('shield', 20), entCount, 'Enterprise', `${growthCount} Growth plans`, 'orange')}
+        ${kpiCard(icon('shield', 20), entCount, 'Enterprise', `${entCount} Enterprise · ${growthCount} Growth plans`, 'orange')}
       </div>
 
       <!-- Toolbar -->
@@ -211,13 +211,13 @@ export function renderPage() {
 
         <!-- Table -->
         ${loading && tenants.length === 0 ?
-      `<div class="phx-loading">${icon('activity', 20)} Loading tenants...</div>` :
+      `<div class="phx-loading">${icon('activity', 20)} Loading organizations...</div>` :
       filtered.length === 0 ?
         `<div class="phx-empty">
               <div class="phx-empty-art">${icon('building', 44)}</div>
-              <h3>No tenants found</h3>
-              <p>${tenants.length === 0 ? 'Get started by adding your first tenant.' : 'Try adjusting your filters.'}</p>
-              ${tenants.length === 0 ? `<button class="phx-btn-primary phx-btn-sm" onclick="window._saShowCreate()">${icon('plus', 14)} Add first tenant</button>` : ''}
+              <h3>No organizations found</h3>
+              <p>${tenants.length === 0 ? 'Get started by adding your first organization.' : 'Try adjusting your filters.'}</p>
+              ${tenants.length === 0 ? `<button class="phx-btn-primary phx-btn-sm" onclick="window._saShowCreate()">${icon('plus', 14)} Add first organization</button>` : ''}
             </div>` :
         renderTable(paginated) + renderPagination(filtered.length)
     }
@@ -227,8 +227,9 @@ export function renderPage() {
     </div>`;
 }
 
-function kpiCard(ic, val, title, desc, color) {
-  return `<div class="phx-kpi">
+function kpiCard(ic, val, title, desc, color, filterVal) {
+  const click = filterVal ? ` onclick="window._saTenantsFilter('${filterVal}')" style="cursor:pointer"` : '';
+  return `<div class="phx-kpi"${click}>
     <div class="phx-kpi-icon phx-kpi-${color}">${ic}</div>
     <div class="phx-kpi-body">
       <span class="phx-kpi-val">${val}</span>
