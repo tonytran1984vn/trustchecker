@@ -57,25 +57,28 @@ function renderFeatureFlags() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Notifications Tab
+// Notifications Tab (DB-backed)
 // ═══════════════════════════════════════════════════════════════
+let _notifData = null;
+let _notifLoading = false;
+
+function loadNotifications() {
+    if (_notifLoading) return;
+    _notifLoading = true;
+    API.get('/platform/notifications').then(data => {
+        _notifData = data;
+        _notifLoading = false;
+        window.render();
+    }).catch(() => { _notifLoading = false; });
+}
+
 function renderNotifications() {
-    const channels = [
-        { key: 'email_alerts', label: 'Email Alerts', desc: 'Critical fraud & anomaly notifications', icon: '📧', default: true },
-        { key: 'slack_webhooks', label: 'Slack Webhooks', desc: 'Real-time channel notifications', icon: '💬', default: false },
-        { key: 'sms_alerts', label: 'SMS Alerts', desc: 'High-priority mobile notifications', icon: '📱', default: false },
-        { key: 'push_notifications', label: 'Push Notifications', desc: 'Browser & mobile push alerts', icon: '🔔', default: true },
-    ];
-    const events = [
-        { key: 'fraud_detected', label: 'Fraud Detected', severity: 'critical' },
-        { key: 'scan_anomaly', label: 'Scan Anomaly', severity: 'warning' },
-        { key: 'sla_violation', label: 'SLA Violation', severity: 'warning' },
-        { key: 'new_tenant', label: 'New Tenant Registered', severity: 'info' },
-        { key: 'usage_threshold', label: 'Usage Threshold (>80%)', severity: 'warning' },
-        { key: 'certificate_expiry', label: 'Certificate Expiring', severity: 'critical' },
-        { key: 'system_health', label: 'System Health Alert', severity: 'critical' },
-        { key: 'payment_failed', label: 'Payment Failed', severity: 'warning' },
-    ];
+    if (!_notifData) {
+        loadNotifications();
+        return `<div style="text-align:center;padding:40px;color:var(--text-muted)">Loading notifications...</div>`;
+    }
+
+    const { channels = [], events = [] } = _notifData;
     const sevColors = { critical: '#ef4444', warning: '#f59e0b', info: '#3b82f6' };
     const sevLabels = { critical: 'Critical', warning: 'Warning', info: 'Info' };
 
@@ -87,12 +90,17 @@ function renderNotifications() {
             <div style="padding:0 16px 16px">
                 ${channels.map(c => `
                 <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)">
-                    <span style="font-size:1.2rem">${c.icon}</span>
+                    <span style="font-size:1.2rem">${c.icon || '🔔'}</span>
                     <div style="flex:1">
                         <div style="font-size:0.82rem;font-weight:600">${c.label}</div>
-                        <div style="font-size:0.68rem;color:var(--text-muted)">${c.desc}</div>
+                        <div style="font-size:0.78rem;color:var(--text-muted)">${c.description || ''}</div>
                     </div>
-                    <span class="badge ${c.default ? 'valid' : ''}" style="font-size:0.65rem">${c.default ? 'Active' : 'Inactive'}</span>
+                    <label style="position:relative;width:40px;height:22px;cursor:pointer;flex-shrink:0">
+                        <input type="checkbox" ${c.enabled ? 'checked' : ''} onchange="toggleNotifPref('${c.id}', this.checked)"
+                            style="display:none">
+                        <div style="position:absolute;inset:0;background:${c.enabled ? '#10b981' : '#cbd5e1'};border-radius:11px;transition:background 0.3s"></div>
+                        <div style="position:absolute;top:2px;left:${c.enabled ? '20px' : '2px'};width:18px;height:18px;background:#fff;border-radius:50%;transition:left 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.25)"></div>
+                    </label>
                 </div>`).join('')}
             </div>
         </div>
@@ -103,17 +111,46 @@ function renderNotifications() {
             <div style="padding:0 16px 16px">
                 ${events.map(e => `
                 <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
-                    <div style="width:8px;height:8px;border-radius:50%;background:${sevColors[e.severity]};flex-shrink:0"></div>
+                    <div style="width:8px;height:8px;border-radius:50%;background:${sevColors[e.severity] || '#6b7280'};flex-shrink:0"></div>
                     <div style="flex:1">
-                        <div style="font-size:0.78rem;font-weight:600">${e.label}</div>
+                        <div style="font-size:0.82rem;font-weight:600">${e.label}</div>
                     </div>
-                    <span style="font-size:0.62rem;padding:2px 8px;border-radius:10px;background:${sevColors[e.severity]}22;color:${sevColors[e.severity]};font-weight:600">${sevLabels[e.severity]}</span>
-                    <span class="badge valid" style="font-size:0.62rem">Subscribed</span>
+                    <span style="font-size:0.72rem;padding:2px 8px;border-radius:10px;background:${(sevColors[e.severity] || '#6b7280')}22;color:${sevColors[e.severity] || '#6b7280'};font-weight:600">${sevLabels[e.severity] || e.severity}</span>
+                    <label style="position:relative;width:40px;height:22px;cursor:pointer;flex-shrink:0">
+                        <input type="checkbox" ${e.enabled ? 'checked' : ''} onchange="toggleNotifPref('${e.id}', this.checked)"
+                            style="display:none">
+                        <div style="position:absolute;inset:0;background:${e.enabled ? '#10b981' : '#cbd5e1'};border-radius:11px;transition:background 0.3s"></div>
+                        <div style="position:absolute;top:2px;left:${e.enabled ? '20px' : '2px'};width:18px;height:18px;background:#fff;border-radius:50%;transition:left 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.25)"></div>
+                    </label>
                 </div>`).join('')}
             </div>
         </div>
     </div>`;
 }
+
+// Toggle notification preference via API
+window.toggleNotifPref = async function (id, enabled) {
+    try {
+        // Optimistic update
+        if (_notifData) {
+            const all = [...(_notifData.channels || []), ...(_notifData.events || [])];
+            const item = all.find(i => i.id === id);
+            if (item) item.enabled = enabled;
+            window.render();
+        }
+        const res = await API.put('/platform/notifications/' + id, { enabled });
+        showToast(`${enabled ? '✅ Enabled' : '⛔ Disabled'}: ${res.message || 'updated'}`, enabled ? 'success' : 'info');
+    } catch (e) {
+        // Revert on failure
+        if (_notifData) {
+            const all = [...(_notifData.channels || []), ...(_notifData.events || [])];
+            const item = all.find(i => i.id === id);
+            if (item) item.enabled = !enabled;
+            window.render();
+        }
+        showToast('Failed to update: ' + e.message, 'error');
+    }
+};
 
 // ═══════════════════════════════════════════════════════════════
 // General Settings Tab

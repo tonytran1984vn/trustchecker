@@ -160,6 +160,55 @@ router.put('/feature-flags', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// NOTIFICATION PREFERENCES (DB-backed)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// GET /notifications — Read notification preferences for current user
+router.get('/notifications', async (req, res) => {
+    try {
+        const channels = await db.all(
+            "SELECT id, key, label, description, icon, enabled FROM notification_preferences WHERE user_id = ? AND category = 'channel' ORDER BY created_at",
+            [req.user.id]
+        );
+        const events = await db.all(
+            "SELECT id, key, label, description, severity, enabled FROM notification_preferences WHERE user_id = ? AND category = 'event' ORDER BY created_at",
+            [req.user.id]
+        );
+        res.json({ channels, events });
+    } catch (err) {
+        console.error('[Platform] Notifications read error:', err);
+        res.status(500).json({ error: 'Failed to read notification preferences' });
+    }
+});
+
+// PUT /notifications/:id — Toggle a notification preference
+router.put('/notifications/:id', async (req, res) => {
+    try {
+        const { enabled } = req.body;
+        if (typeof enabled !== 'boolean') {
+            return res.status(400).json({ error: 'enabled (boolean) required' });
+        }
+
+        const pref = await db.get(
+            'SELECT id, key, category FROM notification_preferences WHERE id = ? AND user_id = ?',
+            [req.params.id, req.user.id]
+        );
+        if (!pref) return res.status(404).json({ error: 'Preference not found' });
+
+        await db.run(
+            "UPDATE notification_preferences SET enabled = ?, updated_at = NOW() WHERE id = ?",
+            [enabled, req.params.id]
+        );
+
+        if (typeof db.save === 'function') await db.save();
+        res.json({ message: `${pref.key} ${enabled ? 'enabled' : 'disabled'}`, id: req.params.id, enabled });
+    } catch (err) {
+        console.error('[Platform] Notification toggle error:', err);
+        res.status(500).json({ error: 'Failed to toggle notification preference' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // PLATFORM USER MANAGEMENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
