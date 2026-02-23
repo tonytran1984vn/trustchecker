@@ -503,7 +503,9 @@ window.toggleSlackAllEvents = function (idx, checked) {
     const cfg = _channelConfigs.slack || {};
     const wh = (cfg.config?.webhooks || [])[idx];
     if (!wh) return;
-    wh.events = checked ? [] : []; // Empty = all events
+    // checked = All Events → empty array (backend treats as "all")
+    // unchecked = switch to individual selection → populate all 8 event keys
+    wh.events = checked ? [] : ['fraud_detected', 'scan_anomaly', 'sla_violation', 'new_tenant', 'usage_threshold', 'certificate_expiry', 'system_health', 'payment_failed'];
     window.render();
 };
 window.testChannel = async function (ch) {
