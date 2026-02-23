@@ -217,7 +217,7 @@ router.get('/email-settings', async (req, res) => {
 // PUT /email-settings — Update SMTP config + recipients
 router.put('/email-settings', async (req, res) => {
     try {
-        const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, from_name, from_email, recipients, enabled } = req.body;
+        const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, from_name, from_email, recipients, enabled, smtp_accounts, daily_limit } = req.body;
 
         // Build SET clause dynamically (only update provided fields)
         const updates = [];
@@ -233,6 +233,8 @@ router.put('/email-settings', async (req, res) => {
         if (from_email !== undefined) { updates.push(`from_email = $${idx++}`); params.push(from_email); }
         if (recipients !== undefined) { updates.push(`recipients = $${idx++}::jsonb`); params.push(JSON.stringify(recipients)); }
         if (enabled !== undefined) { updates.push(`enabled = $${idx++}`); params.push(enabled); }
+        if (smtp_accounts !== undefined) { updates.push(`smtp_accounts = $${idx++}::jsonb`); params.push(JSON.stringify(smtp_accounts)); }
+        if (daily_limit !== undefined) { updates.push(`daily_limit = $${idx++}`); params.push(daily_limit); }
 
         updates.push(`updated_at = NOW()`);
         updates.push(`updated_by = $${idx++}`); params.push(req.user.id);
