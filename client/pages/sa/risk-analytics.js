@@ -53,14 +53,19 @@ export function renderPage() {
         <!-- Fraud Pattern Clustering -->
         <div class="sa-card">
           <h3>🔬 Fraud Pattern Clustering</h3>
-          <table class="sa-table sa-table-compact">
-            <thead><tr><th>Pattern</th><th>Incidents</th><th>Critical</th><th>Open</th></tr></thead>
+          <table class="sa-table sa-table-compact" style="font-family:var(--font-primary),system-ui,-apple-system,sans-serif;font-size:0.82rem">
+            <thead><tr>
+              <th style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;padding:10px 14px">Pattern</th>
+              <th style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;padding:10px 14px;text-align:right">Incidents</th>
+              <th style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;padding:10px 14px;text-align:right">Critical</th>
+              <th style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;padding:10px 14px;text-align:right">Open</th>
+            </tr></thead>
             <tbody>
               ${patterns.map(p => `<tr>
-                <td style="font-weight:600">${(p.alert_type || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</td>
-                <td style="font-weight:700;text-align:center">${p.incidents}</td>
-                <td style="text-align:center;color:${parseInt(p.critical) > 0 ? '#ef4444' : '#94a3b8'};font-weight:600">${p.critical}</td>
-                <td style="text-align:center;color:${parseInt(p.open_count) > 0 ? '#f59e0b' : '#94a3b8'}">${p.open_count}</td>
+                <td style="font-weight:600;padding:10px 14px;font-size:0.82rem">${(p.alert_type || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</td>
+                <td style="font-weight:700;text-align:right;padding:10px 14px;font-size:0.82rem">${p.incidents}</td>
+                <td style="text-align:right;padding:10px 14px;font-size:0.82rem;color:${parseInt(p.critical) > 0 ? '#ef4444' : '#94a3b8'};font-weight:600">${p.critical}</td>
+                <td style="text-align:right;padding:10px 14px;font-size:0.82rem;color:${parseInt(p.open_count) > 0 ? '#f59e0b' : '#94a3b8'}">${p.open_count}</td>
               </tr>`).join('')}
             </tbody>
           </table>
