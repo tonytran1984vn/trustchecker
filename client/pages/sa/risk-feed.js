@@ -20,19 +20,19 @@ async function loadFeed() {
   try {
     feedData = await API.get('/risk-graph/fraud-feed');
     loadedAt = now;
-  } catch (e) { feedData = { alerts: [], summary: {}, topTenants: [], topTypes: [], insights: [{ level: 'info', msg: 'Không thể tải dữ liệu — ' + e.message }] }; }
+  } catch (e) { feedData = { alerts: [], summary: {}, topTenants: [], topTypes: [], insights: [{ level: 'info', msg: 'Unable to load data — ' + e.message }] }; }
   loading = false;
 }
 
 function timeAgo(iso) {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
-  if (m < 1) return 'Vừa xong';
-  if (m < 60) return m + 'm trước';
+  if (m < 1) return 'Just now';
+  if (m < 60) return m + 'm ago';
   const h = Math.floor(m / 60);
-  if (h < 24) return h + 'h trước';
+  if (h < 24) return h + 'h ago';
   const d = Math.floor(h / 24);
-  return d + 'd trước';
+  return d + 'd ago';
 }
 
 const SEV_ICON = { critical: '🔴', high: '🟠', medium: '🟡', low: '🟢' };
@@ -50,7 +50,7 @@ export function renderPage() {
 
   if (loading && !feedData) {
     return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('radio', 28)} Global Fraud Feed</h1></div>
-        <div style="text-align:center;padding:60px;color:var(--text-muted)"><span class="phx-spinner-sm"></span> Đang tải dữ liệu thực...</div></div>`;
+        <div style="text-align:center;padding:60px;color:var(--text-muted)"><span class="phx-spinner-sm"></span> Loading live data...</div></div>`;
   }
 
   const d = feedData || { alerts: [], summary: {}, topTenants: [], topTypes: [], insights: [] };
@@ -65,7 +65,7 @@ export function renderPage() {
 
       <!-- ═══ KPI Row ═══ -->
       <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px">
-        ${kpi('🚨', s.total || 0, 'Tổng Alerts', '#ef4444')}
+        ${kpi('🚨', s.total || 0, 'Total Alerts', '#ef4444')}
         ${kpi('🔴', s.critical || 0, 'Critical', '#dc2626')}
         ${kpi('🟠', s.high || 0, 'High', '#ea580c')}
         ${kpi('🟡', s.medium || 0, 'Medium', '#ca8a04')}
@@ -76,7 +76,7 @@ export function renderPage() {
       <!-- ═══ Executive Alert Panel ═══ -->
       <div style="background:#fff;border-radius:14px;padding:16px 20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.06)">
         <div style="font-size:0.82rem;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px">
-          ${icon('alert-triangle', 16)} <span>Cảnh báo & Khuyến nghị cho Admin</span>
+          ${icon('alert-triangle', 16)} <span>Alerts & Recommendations for Admin</span>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
           ${(d.insights || []).map(i => `
@@ -90,7 +90,7 @@ export function renderPage() {
       <!-- ═══ Top Risk Tenants + Type Breakdown ═══ -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
         <div style="background:#fff;border-radius:14px;padding:14px 18px;box-shadow:0 1px 4px rgba(0,0,0,0.06)">
-          <div style="font-size:0.75rem;font-weight:700;margin-bottom:8px;color:#64748b">🏢 TOP RISK TENANTS</div>
+          <div style="font-size:0.75rem;font-weight:700;margin-bottom:8px;color:#64748b">🏢 TOP RISK ORGANIZATIONS</div>
           ${(d.topTenants || []).map((t, i) => `
             <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:0.78rem">
               <span style="width:18px;height:18px;border-radius:50%;background:${['#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#64748b'][i]};color:#fff;font-size:0.6rem;display:flex;align-items:center;justify-content:center;font-weight:700">${i + 1}</span>
@@ -131,13 +131,13 @@ export function renderPage() {
           <span style="font-size:0.82rem;font-weight:700">${icon('list', 16)} Fraud Alert Feed (${totalAlerts} alerts)</span>
           <div style="display:flex;align-items:center;gap:12px">
             <div style="display:flex;align-items:center;gap:4px;font-size:0.72rem;color:#64748b">
-              <span>Hiển thị</span>
+              <span>Show</span>
               <select onchange="window._rfPageSize(Number(this.value))" style="border:1px solid #e2e8f0;border-radius:6px;padding:2px 6px;font-size:0.72rem;background:#fff;cursor:pointer">
                 ${[10, 20, 50, 100].map(n => '<option value="' + n + '"' + (n === pageSize ? ' selected' : '') + '>' + n + '</option>').join('')}
               </select>
               <span>/ trang</span>
             </div>
-            <span style="font-size:0.65rem;color:#94a3b8">Cập nhật: ${loadedAt ? new Date(loadedAt).toLocaleTimeString('vi-VN') : '—'}</span>
+            <span style="font-size:0.65rem;color:#94a3b8">Updated: ${loadedAt ? new Date(loadedAt).toLocaleTimeString('en-US') : '—'}</span>
           </div>
         </div>
         <div style="overflow-x:auto">
@@ -145,12 +145,12 @@ export function renderPage() {
             <thead>
               <tr style="background:#f8fafc">
                 <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">SEV</th>
-                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">THỜI GIAN</th>
-                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">TENANT</th>
-                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">LOẠI</th>
-                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">MÔ TẢ</th>
-                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">SẢN PHẨM</th>
-                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">TRẠNG THÁI</th>
+                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">TIME</th>
+                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">ORGANIZATION</th>
+                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">TYPE</th>
+                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">DESCRIPTION</th>
+                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">PRODUCT</th>
+                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">STATUS</th>
               </tr>
             </thead>
             <tbody>
@@ -170,10 +170,10 @@ export function renderPage() {
         </div>
         ${totalPages > 1 ? `
         <div style="padding:12px 18px;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:0.72rem;color:#94a3b8">Hiển thị ${showFrom}–${showTo} / ${totalAlerts}</span>
+          <span style="font-size:0.72rem;color:#94a3b8">Showing ${showFrom}–${showTo} / ${totalAlerts}</span>
           <div style="display:flex;gap:4px;align-items:center">
             <button onclick="window._rfPage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}
-              style="padding:4px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:0.72rem;cursor:${currentPage <= 1 ? 'default' : 'pointer'};background:${currentPage <= 1 ? '#f8fafc' : '#fff'};color:${currentPage <= 1 ? '#cbd5e1' : '#334155'}">← Trước</button>
+              style="padding:4px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:0.72rem;cursor:${currentPage <= 1 ? 'default' : 'pointer'};background:${currentPage <= 1 ? '#f8fafc' : '#fff'};color:${currentPage <= 1 ? '#cbd5e1' : '#334155'}">← Prev</button>
             ${Array.from({ length: totalPages }, (_, i) => i + 1).filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1).reduce((acc, p, idx, arr) => {
         if (idx > 0 && p - arr[idx - 1] > 1) acc.push('<span style="color:#94a3b8;font-size:0.72rem">…</span>');
         acc.push('<button onclick="window._rfPage(' + p + ')" style="padding:4px 10px;border:1px solid ' + (p === currentPage ? '#3b82f6' : '#e2e8f0') + ';border-radius:6px;font-size:0.72rem;cursor:pointer;background:' + (p === currentPage ? '#3b82f6' : '#fff') + ';color:' + (p === currentPage ? '#fff' : '#334155') + ';font-weight:' + (p === currentPage ? '700' : '400') + '">' + p + '</button>');

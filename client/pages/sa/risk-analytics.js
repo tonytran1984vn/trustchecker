@@ -15,7 +15,7 @@ async function load() {
 
 export function renderPage() {
   if (!data && !loading) { load().then(() => render()); }
-  if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Đang tải Risk Analytics...</div></div>`;
+  if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Risk Analytics...</div></div>`;
 
   const regions = data?.riskByRegion || [];
   const cats = data?.riskByCategory || [];
@@ -34,7 +34,7 @@ export function renderPage() {
           <div class="sa-analytics-bars">
             ${regions.map(r => barItem(r.name, r.risky, Math.round(r.risky / maxRisky * 100), r.pct + '% risky')).join('')}
           </div>
-          ${regions.length === 0 ? '<div style="color:#94a3b8;font-size:0.78rem">Chưa có dữ liệu scan</div>' : ''}
+          ${regions.length === 0 ? '<div style="color:#94a3b8;font-size:0.78rem">No scan data available</div>' : ''}
         </div>
 
         <!-- Risk by Industry -->
@@ -68,11 +68,11 @@ export function renderPage() {
 
         <!-- Summary Stats -->
         <div class="sa-card">
-          <h3>📊 Tổng quan</h3>
+          <h3>📊 Overview</h3>
           <div class="sa-detail-grid" style="margin-top:0.5rem">
-            <div class="sa-detail-item"><span class="sa-detail-label">Tổng Regions</span><span class="sa-score sa-score-info">${regions.length}</span></div>
-            <div class="sa-detail-item"><span class="sa-detail-label">Tổng Categories</span><span class="sa-score sa-score-info">${cats.length}</span></div>
-            <div class="sa-detail-item"><span class="sa-detail-label">Tổng Patterns</span><span class="sa-score sa-score-warning">${patterns.length}</span></div>
+            <div class="sa-detail-item"><span class="sa-detail-label">Total Regions</span><span class="sa-score sa-score-info">${regions.length}</span></div>
+            <div class="sa-detail-item"><span class="sa-detail-label">Total Categories</span><span class="sa-score sa-score-info">${cats.length}</span></div>
+            <div class="sa-detail-item"><span class="sa-detail-label">Total Patterns</span><span class="sa-score sa-score-warning">${patterns.length}</span></div>
             <div class="sa-detail-item"><span class="sa-detail-label">Total Risk Events</span><span class="sa-score sa-score-danger">${regions.reduce((s, r) => s + r.risky, 0)}</span></div>
           </div>
         </div>
