@@ -99,7 +99,17 @@ const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(
 function timeSince(d) {
   if (!d) return '—';
   const dt = new Date(d);
-  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const now = new Date();
+  const diffMs = now - dt;
+  const diffDays = Math.floor(diffMs / 86400000);
+  let relative = '';
+  if (diffDays === 0) relative = 'Today';
+  else if (diffDays === 1) relative = 'Yesterday';
+  else if (diffDays < 30) relative = diffDays + 'd ago';
+  else if (diffDays < 365) relative = Math.floor(diffDays / 30) + 'mo ago';
+  else relative = Math.floor(diffDays / 365) + 'y ago';
+  const formatted = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `<span title="${formatted}">${formatted}</span><div style="font-size:0.62rem;color:#94a3b8;margin-top:1px">${relative}</div>`;
 }
 
 const FEATURE_LIST = [
@@ -186,7 +196,7 @@ export function renderPage() {
           </div>
           <div class="phx-search-pill">
             ${icon('search', 15)}
-            <input type="text" placeholder="Search tenants..." value="${searchTerm}"
+            <input type="text" placeholder="Search organizations..." value="${searchTerm}"
               oninput="window._saTenantsSearch(this.value)">
           </div>
         </div>
@@ -235,7 +245,7 @@ function renderTable(list) {
           <th>Plan</th>
           <th>Status</th>
           <th style="text-align:right">MRR</th>
-          <th>Features</th>
+          <th style="text-align:right">Features</th>
           <th>Created</th>
           <th class="phx-th-right">Actions</th>
         </tr>
@@ -250,7 +260,7 @@ function tableRow(t) {
   const status = t.status || 'active';
   const plan = t.plan || 'free';
   const initial = (t.name || 'T')[0];
-  const planColors = { enterprise: 'orange', business: 'orange', growth: 'purple', starter: 'blue', free: 'gray' };
+  const planColors = { enterprise: 'orange', business: 'orange', growth: 'purple', starter: 'blue', free: 'gray', core: 'teal' };
   const statusColors = { active: 'green', suspended: 'red', archived: 'gray' };
   const feats = featureFlags(t.feature_flags);
   const featCount = t.feature_flags ? Object.keys(t.feature_flags).filter(k => t.feature_flags[k]).length : 0;
@@ -260,7 +270,7 @@ function tableRow(t) {
   return `<tr class="phx-row" onclick="navigate('sa-tenant-detail',{tenantId:'${t.id}'})">
       <td>
         <div class="phx-org-cell">
-          <div class="phx-org-avatar phx-bg-${planColors[plan] || 'blue'}">${initial}</div>
+          <div class="phx-avatar phx-avatar-${planColors[plan] || 'blue'}">${initial}</div>
           <div>
             <div class="phx-org-name">${esc(t.name || '')}</div>
             <div class="phx-org-slug">${esc(t.slug || '')}</div>
@@ -272,11 +282,11 @@ function tableRow(t) {
       <td style="text-align:right">
         <span class="phx-mono" style="color:${mrrColor};font-weight:700">$${mrrVal.toLocaleString()}/mo</span>
       </td>
-      <td>${featCount > 0 ? `<span class="phx-feat-count">${featCount} Features</span>` : '<span class="phx-muted">—</span>'}</td>
+      <td style="text-align:right">${featCount > 0 ? `<span class="phx-feat-count">${featCount} Features</span>` : '<span class="phx-muted">—</span>'}</td>
       <td class="phx-muted">${timeSince(t.created_at)}</td>
       <td class="phx-td-actions" onclick="event.stopPropagation()">
         ${status === 'active' ? `<button class="phx-btn-outline phx-btn-xs phx-btn-warn" onclick="window._saSuspend('${t.id}')" title="Suspend this organization">⚠ Suspend</button>` : ''}
-        ${status === 'suspended' ? `<button class="phx-btn-outline phx-btn-xs phx-btn-success" onclick="window._saActivate('${t.id}')" title="Reactivate this organization">✓ Reactivate</button>` : ''}
+        ${status === 'suspended' ? `<button class="phx-btn-solid-green phx-btn-xs" onclick="window._saActivate('${t.id}')" title="Reactivate this organization">✓ Reactivate</button>` : ''}
         <button class="phx-btn-outline phx-btn-xs" onclick="navigate('sa-tenant-detail',{tenantId:'${t.id}'})" title="View details">👁</button>
       </td>
     </tr>`;

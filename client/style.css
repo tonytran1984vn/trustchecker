@@ -7221,7 +7221,23 @@ html {
 }
 
 .sa-page.phx-page .phx-btn-warn:hover {
-  background: rgba(229, 120, 11, 0.06) !important;
+  background: rgba(239, 68, 68, 0.08) !important;
+  color: #ef4444 !important;
+  border-color: #ef4444 !important;
+}
+
+.sa-page.phx-page .phx-btn-solid-green {
+  background: #10b981 !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+
+.sa-page.phx-page .phx-btn-solid-green:hover {
+  background: #059669 !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
 .sa-page.phx-page .phx-btn-success {
@@ -7508,6 +7524,10 @@ html {
   background: linear-gradient(135deg, #94a3b8, #64748b) !important;
 }
 
+.sa-page.phx-page .phx-avatar-teal {
+  background: linear-gradient(135deg, #14b8a6, #0f766e) !important;
+}
+
 .sa-page.phx-page .phx-org-name {
   font-weight: 700;
   color: var(--phx-text) !important;
@@ -7551,6 +7571,11 @@ html {
 .sa-page.phx-page .phx-badge-gray {
   background: #f0f2f5 !important;
   color: var(--phx-text-muted) !important;
+}
+
+.sa-page.phx-page .phx-badge-teal {
+  background: #F0FDFA !important;
+  color: #0F766E !important;
 }
 
 /* Status Dot */
