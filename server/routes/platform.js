@@ -8,6 +8,7 @@
  */
 const express = require('express');
 const router = express.Router();
+const emailService = require('../services/email');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
@@ -191,6 +192,76 @@ router.put('/notifications/:id', async (req, res) => {
     } catch (err) {
         console.error('[Platform] Notification toggle error:', err);
         res.status(500).json({ error: 'Failed to toggle notification preference' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EMAIL SETTINGS (SMTP config + recipients)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// GET /email-settings — Read SMTP config (password masked)
+router.get('/email-settings', async (req, res) => {
+    try {
+        const cfg = await db.get("SELECT * FROM email_settings WHERE id = 'default'");
+        if (!cfg) return res.json({ config: null });
+        // Mask password
+        const masked = { ...cfg };
+        if (masked.smtp_pass) masked.smtp_pass = '••••••••';
+        res.json({ config: masked });
+    } catch (err) {
+        console.error('[Platform] Email settings read error:', err);
+        res.status(500).json({ error: 'Failed to read email settings' });
+    }
+});
+
+// PUT /email-settings — Update SMTP config + recipients
+router.put('/email-settings', async (req, res) => {
+    try {
+        const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, from_name, from_email, recipients, enabled } = req.body;
+
+        // Build SET clause dynamically (only update provided fields)
+        const updates = [];
+        const params = [];
+        let idx = 1;
+
+        if (smtp_host !== undefined) { updates.push(`smtp_host = $${idx++}`); params.push(smtp_host); }
+        if (smtp_port !== undefined) { updates.push(`smtp_port = $${idx++}`); params.push(smtp_port); }
+        if (smtp_user !== undefined) { updates.push(`smtp_user = $${idx++}`); params.push(smtp_user); }
+        if (smtp_pass !== undefined && smtp_pass !== '••••••••') { updates.push(`smtp_pass = $${idx++}`); params.push(smtp_pass); }
+        if (smtp_secure !== undefined) { updates.push(`smtp_secure = $${idx++}`); params.push(smtp_secure); }
+        if (from_name !== undefined) { updates.push(`from_name = $${idx++}`); params.push(from_name); }
+        if (from_email !== undefined) { updates.push(`from_email = $${idx++}`); params.push(from_email); }
+        if (recipients !== undefined) { updates.push(`recipients = $${idx++}::jsonb`); params.push(JSON.stringify(recipients)); }
+        if (enabled !== undefined) { updates.push(`enabled = $${idx++}`); params.push(enabled); }
+
+        updates.push(`updated_at = NOW()`);
+        updates.push(`updated_by = $${idx++}`); params.push(req.user.id);
+
+        if (updates.length > 2) {
+            await db.run(`UPDATE email_settings SET ${updates.join(', ')} WHERE id = 'default'`, params);
+            emailService.invalidateConfig();
+        }
+
+        if (typeof db.save === 'function') await db.save();
+        res.json({ message: 'Email settings updated' });
+    } catch (err) {
+        console.error('[Platform] Email settings update error:', err);
+        res.status(500).json({ error: 'Failed to update email settings' });
+    }
+});
+
+// POST /email-settings/test — Send test email
+router.post('/email-settings/test', async (req, res) => {
+    try {
+        const result = await emailService.sendTestEmail();
+        if (result.sent) {
+            res.json({ message: 'Test email sent!', messageId: result.messageId });
+        } else {
+            res.status(400).json({ error: result.reason || 'Failed to send test email' });
+        }
+    } catch (err) {
+        console.error('[Platform] Test email error:', err);
+        res.status(500).json({ error: err.message });
     }
 });
 

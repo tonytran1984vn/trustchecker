@@ -75,6 +75,8 @@ function renderFeatureFlags() {
 // ═══════════════════════════════════════════════════════════════
 let _notifData = null;
 let _notifLoading = false;
+let _emailConfig = null;
+let _emailLoading = false;
 
 function loadNotifications() {
     if (_notifLoading) return;
@@ -86,17 +88,105 @@ function loadNotifications() {
     }).catch(() => { _notifLoading = false; });
 }
 
+function loadEmailConfig() {
+    if (_emailLoading) return;
+    _emailLoading = true;
+    API.get('/platform/email-settings').then(data => {
+        _emailConfig = data?.config || {};
+        _emailLoading = false;
+        window.render();
+    }).catch(() => { _emailLoading = false; });
+}
+
 function renderNotifications() {
-    if (!_notifData) {
-        loadNotifications();
+    if (!_notifData) { loadNotifications(); }
+    if (!_emailConfig) { loadEmailConfig(); }
+
+    if (!_notifData || !_emailConfig) {
         return `<div style="text-align:center;padding:40px;color:var(--text-muted)">Loading notifications...</div>`;
     }
 
     const { channels = [], events = [] } = _notifData;
     const sevColors = { critical: '#ef4444', warning: '#f59e0b', info: '#3b82f6' };
     const sevLabels = { critical: 'Critical', warning: 'Warning', info: 'Info' };
+    const cfg = _emailConfig;
+    const recipients = cfg.recipients || [];
+
+    const inputStyle = 'width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.82rem;outline:none';
 
     return `
+    <!-- Email Configuration -->
+    <div class="card" style="margin-bottom:16px;border:1px solid ${cfg.enabled ? '#10b98133' : 'var(--border)'}">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+            <div class="card-title">📧 Email Alert Configuration</div>
+            <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:0.75rem;color:${cfg.enabled ? '#10b981' : 'var(--text-muted)'};font-weight:600">${cfg.enabled ? 'Active' : 'Inactive'}</span>
+                <label style="position:relative;width:40px;height:22px;cursor:pointer;flex-shrink:0">
+                    <input type="checkbox" ${cfg.enabled ? 'checked' : ''} onchange="saveEmailSetting('enabled', this.checked)" style="display:none">
+                    <div style="position:absolute;inset:0;background:${cfg.enabled ? '#10b981' : '#cbd5e1'};border-radius:11px;transition:background 0.3s"></div>
+                    <div style="position:absolute;top:2px;left:${cfg.enabled ? '20px' : '2px'};width:18px;height:18px;background:#fff;border-radius:50%;transition:left 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.25)"></div>
+                </label>
+            </div>
+        </div>
+        <div style="padding:0 20px 20px">
+            <!-- SMTP Settings -->
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:16px">
+                <div>
+                    <label style="font-size:0.75rem;color:var(--text-muted);font-weight:600;display:block;margin-bottom:4px">SMTP Host</label>
+                    <input id="smtp_host" value="${cfg.smtp_host || 'smtp.gmail.com'}" style="${inputStyle}" placeholder="smtp.gmail.com">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;color:var(--text-muted);font-weight:600;display:block;margin-bottom:4px">Port</label>
+                    <input id="smtp_port" value="${cfg.smtp_port || 587}" type="number" style="${inputStyle}" placeholder="587">
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+                <div>
+                    <label style="font-size:0.75rem;color:var(--text-muted);font-weight:600;display:block;margin-bottom:4px">SMTP Username (Email)</label>
+                    <input id="smtp_user" value="${cfg.smtp_user || ''}" style="${inputStyle}" placeholder="your-gmail@gmail.com">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;color:var(--text-muted);font-weight:600;display:block;margin-bottom:4px">SMTP Password (App Password)</label>
+                    <input id="smtp_pass" value="${cfg.smtp_pass || ''}" type="password" style="${inputStyle}" placeholder="xxxx xxxx xxxx xxxx">
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+                <div>
+                    <label style="font-size:0.75rem;color:var(--text-muted);font-weight:600;display:block;margin-bottom:4px">From Name</label>
+                    <input id="from_name" value="${cfg.from_name || 'TrustChecker Alerts'}" style="${inputStyle}">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;color:var(--text-muted);font-weight:600;display:block;margin-bottom:4px">From Email</label>
+                    <input id="from_email" value="${cfg.from_email || 'alerts@trustchecker.io'}" style="${inputStyle}">
+                </div>
+            </div>
+
+            <!-- Recipients -->
+            <div style="margin-bottom:16px">
+                <label style="font-size:0.75rem;color:var(--text-muted);font-weight:600;display:block;margin-bottom:8px">Alert Recipients</label>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+                    ${recipients.map((r, i) => `
+                    <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg-secondary);border-radius:16px;font-size:0.78rem;border:1px solid var(--border)">
+                        ${r}
+                        <span onclick="removeRecipient(${i})" style="cursor:pointer;color:var(--text-muted);font-size:0.9rem;line-height:1">&times;</span>
+                    </span>`).join('')}
+                    ${!recipients.length ? '<span style="font-size:0.78rem;color:var(--text-muted)">No recipients added</span>' : ''}
+                </div>
+                <div style="display:flex;gap:8px">
+                    <input id="new_recipient" type="email" placeholder="email@example.com" style="${inputStyle};flex:1"
+                        onkeydown="if(event.key==='Enter'){event.preventDefault();addRecipient()}">
+                    <button onclick="addRecipient()" style="padding:8px 16px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.78rem;font-weight:600;white-space:nowrap">+ Add</button>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:12px;border-top:1px solid var(--border)">
+                <button onclick="sendTestEmail()" style="padding:8px 20px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:0.78rem;font-weight:600">📧 Send Test Email</button>
+                <button onclick="saveEmailConfig()" style="padding:8px 20px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:0.78rem;font-weight:600">💾 Save Settings</button>
+            </div>
+        </div>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <!-- Channels -->
         <div class="card">
@@ -142,10 +232,76 @@ function renderNotifications() {
     </div>`;
 }
 
+// ── Email Config Actions ────────────────────────────────────────
+window.saveEmailConfig = async function () {
+    try {
+        const data = {
+            smtp_host: document.getElementById('smtp_host')?.value,
+            smtp_port: parseInt(document.getElementById('smtp_port')?.value) || 587,
+            smtp_user: document.getElementById('smtp_user')?.value,
+            smtp_pass: document.getElementById('smtp_pass')?.value,
+            from_name: document.getElementById('from_name')?.value,
+            from_email: document.getElementById('from_email')?.value,
+            recipients: _emailConfig?.recipients || [],
+        };
+        await API.put('/platform/email-settings', data);
+        _emailConfig = { ..._emailConfig, ...data };
+        showToast('✅ Email settings saved!', 'success');
+    } catch (e) {
+        showToast('Failed to save: ' + e.message, 'error');
+    }
+};
+
+window.saveEmailSetting = async function (key, value) {
+    try {
+        await API.put('/platform/email-settings', { [key]: value });
+        _emailConfig[key] = value;
+        window.render();
+        showToast(`Email alerts ${value ? 'enabled' : 'disabled'}`, value ? 'success' : 'info');
+    } catch (e) {
+        showToast('Failed: ' + e.message, 'error');
+    }
+};
+
+window.addRecipient = async function () {
+    const input = document.getElementById('new_recipient');
+    const email = input?.value?.trim();
+    if (!email || !email.includes('@')) return showToast('Enter a valid email', 'error');
+    const list = _emailConfig?.recipients || [];
+    if (list.includes(email)) return showToast('Already added', 'info');
+    list.push(email);
+    try {
+        await API.put('/platform/email-settings', { recipients: list });
+        _emailConfig.recipients = list;
+        window.render();
+        showToast('✅ Recipient added: ' + email, 'success');
+    } catch (e) { showToast('Failed: ' + e.message, 'error'); }
+};
+
+window.removeRecipient = async function (idx) {
+    const list = [...(_emailConfig?.recipients || [])];
+    const removed = list.splice(idx, 1);
+    try {
+        await API.put('/platform/email-settings', { recipients: list });
+        _emailConfig.recipients = list;
+        window.render();
+        showToast('Removed: ' + removed[0], 'info');
+    } catch (e) { showToast('Failed: ' + e.message, 'error'); }
+};
+
+window.sendTestEmail = async function () {
+    try {
+        showToast('📧 Sending test email...', 'info');
+        const res = await API.post('/platform/email-settings/test');
+        showToast('✅ ' + (res.message || 'Test email sent!'), 'success');
+    } catch (e) {
+        showToast('❌ ' + (e.message || 'Failed to send test email'), 'error');
+    }
+};
+
 // Toggle notification preference via API
 window.toggleNotifPref = async function (id, enabled) {
     try {
-        // Optimistic update
         if (_notifData) {
             const all = [...(_notifData.channels || []), ...(_notifData.events || [])];
             const item = all.find(i => i.id === id);
@@ -155,7 +311,6 @@ window.toggleNotifPref = async function (id, enabled) {
         const res = await API.put('/platform/notifications/' + id, { enabled });
         showToast(`${enabled ? '✅ Enabled' : '⛔ Disabled'}: ${res.message || 'updated'}`, enabled ? 'success' : 'info');
     } catch (e) {
-        // Revert on failure
         if (_notifData) {
             const all = [...(_notifData.channels || []), ...(_notifData.events || [])];
             const item = all.find(i => i.id === id);
