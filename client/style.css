@@ -3938,30 +3938,32 @@ html {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.82rem;
+  font-size: 0.84rem;
+  font-family: var(--font-primary, 'Inter', system-ui, -apple-system, sans-serif);
 }
 
 .sa-table th {
   text-align: left;
-  padding: 0.6rem 0.75rem;
-  font-weight: 600;
-  font-size: 0.7rem;
+  padding: 0.75rem 1rem;
+  font-weight: 700;
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+  letter-spacing: 0.06em;
+  color: var(--text-secondary, #64748b);
+  border-bottom: 2px solid var(--border-color, rgba(255, 255, 255, 0.06));
   white-space: nowrap;
 }
 
 .sa-table td {
-  padding: 0.6rem 0.75rem;
+  padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.04));
   vertical-align: middle;
+  font-size: 0.84rem;
 }
 
 .sa-table-compact td,
 .sa-table-compact th {
-  padding: 0.4rem 0.6rem;
+  padding: 0.5rem 0.75rem;
 }
 
 .sa-row-clickable {
@@ -5867,18 +5869,19 @@ html {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.875rem;
+  font-size: 0.84rem;
+  font-family: var(--font-primary, 'Inter', system-ui, -apple-system, sans-serif);
 }
 
 .sa-table th {
   text-align: left;
   padding: 0.75rem 1rem;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.06em;
   color: #64748b;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.06);
   white-space: nowrap;
 }
 
@@ -5887,6 +5890,7 @@ html {
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   vertical-align: middle;
   color: #cbd5e1;
+  font-size: 0.84rem;
 }
 
 .sa-row-hover {
@@ -8073,9 +8077,8 @@ html {
 /* Light: Tables */
 [data-theme="light"] .sa-table th {
   background: #fafbfd !important;
-  color: #8A94AD !important;
-  border-bottom: 1px solid #E3E6ED !important;
-  font-family: 'Nunito Sans', sans-serif !important;
+  color: #64748b !important;
+  border-bottom: 2px solid #E3E6ED !important;
 }
 
 [data-theme="light"] .sa-table td {
