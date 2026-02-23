@@ -13,6 +13,8 @@ let loading = false;
 let loadStarted = false;
 let filter = 'all';
 let searchTerm = '';
+let currentPage = 1;
+const ROWS_PER_PAGE = 10;
 let showCreateModal = false;
 let createError = '';
 let creating = false;
@@ -149,6 +151,12 @@ export function renderPage() {
     return true;
   });
 
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  const startIdx = (currentPage - 1) * ROWS_PER_PAGE;
+  const paginated = filtered.slice(startIdx, startIdx + ROWS_PER_PAGE);
+
   const counts = {
     all: tenants.length,
     active: tenants.filter(t => (t.status || 'active') === 'active').length,
@@ -211,7 +219,7 @@ export function renderPage() {
               <p>${tenants.length === 0 ? 'Get started by adding your first tenant.' : 'Try adjusting your filters.'}</p>
               ${tenants.length === 0 ? `<button class="phx-btn-primary phx-btn-sm" onclick="window._saShowCreate()">${icon('plus', 14)} Add first tenant</button>` : ''}
             </div>` :
-        renderTable(filtered)
+        renderTable(paginated) + renderPagination(filtered.length)
     }
       </div>
 
@@ -254,6 +262,30 @@ function renderTable(list) {
         ${list.map(t => tableRow(t)).join('')}
       </tbody>
     </table>`;
+}
+
+function renderPagination(totalItems) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / ROWS_PER_PAGE));
+  if (totalPages <= 1) return '';
+  const startItem = (currentPage - 1) * ROWS_PER_PAGE + 1;
+  const endItem = Math.min(currentPage * ROWS_PER_PAGE, totalItems);
+
+  let pages = '';
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || Math.abs(i - currentPage) <= 1) {
+      pages += `<button class="phx-page-btn ${i === currentPage ? 'active' : ''}" onclick="window._saTenantsPage(${i})">${i}</button>`;
+    } else if (Math.abs(i - currentPage) === 2) {
+      pages += `<span class="phx-page-dots">\u2026</span>`;
+    }
+  }
+  return `<div class="phx-pagination">
+    <span class="phx-page-info">Showing ${startItem}\u2013${endItem} of ${totalItems}</span>
+    <div class="phx-page-nav">
+      <button class="phx-page-btn" ${currentPage <= 1 ? 'disabled' : ''} onclick="window._saTenantsPage(${currentPage - 1})">\u2039 Prev</button>
+      ${pages}
+      <button class="phx-page-btn" ${currentPage >= totalPages ? 'disabled' : ''} onclick="window._saTenantsPage(${currentPage + 1})">Next \u203a</button>
+    </div>
+  </div>`;
 }
 
 function tableRow(t) {
@@ -621,8 +653,9 @@ function renderModal() {
 }
 
 // ─── Exports ─────────────────────────────────────────────────
-window._saTenantsFilter = (f) => { filter = f; window.render(); };
-window._saTenantsSearch = (q) => { searchTerm = q; window.render(); };
+window._saTenantsFilter = (f) => { filter = f; currentPage = 1; window.render(); };
+window._saTenantsSearch = (q) => { searchTerm = q; currentPage = 1; window.render(); };
+window._saTenantsPage = (p) => { currentPage = p; window.render(); };
 window._saShowCreate = () => { showCreateModal = true; createError = ''; createdCredentials = null; window.render(); };
 window._saCloseCreate = closeModal;
 window._saSlugify = slugify;
