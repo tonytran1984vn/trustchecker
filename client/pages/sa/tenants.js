@@ -234,7 +234,7 @@ function renderTable(list) {
           <th>Organization</th>
           <th>Plan</th>
           <th>Status</th>
-          <th>MRR</th>
+          <th style="text-align:right">MRR</th>
           <th>Features</th>
           <th>Created</th>
           <th class="phx-th-right">Actions</th>
@@ -254,6 +254,8 @@ function tableRow(t) {
   const statusColors = { active: 'green', suspended: 'red', archived: 'gray' };
   const feats = featureFlags(t.feature_flags);
   const featCount = t.feature_flags ? Object.keys(t.feature_flags).filter(k => t.feature_flags[k]).length : 0;
+  const mrrVal = (plan === 'enterprise' && t.enterprise_config?.monthly_base) ? t.enterprise_config.monthly_base : (PLAN_MRR[plan] || 0);
+  const mrrColor = mrrVal === 0 ? '#10b981' : plan === 'enterprise' ? '#ef4444' : plan === 'business' ? '#f59e0b' : '#10b981';
 
   return `<tr class="phx-row" onclick="navigate('sa-tenant-detail',{tenantId:'${t.id}'})">
       <td>
@@ -266,19 +268,16 @@ function tableRow(t) {
         </div>
       </td>
       <td><span class="phx-badge phx-badge-${planColors[plan] || 'blue'}">${plan}</span></td>
-      <td><span class="phx-status phx-status-${statusColors[status] || 'gray'}">${status}</span></td>
-      <td>
-        <span class="phx-mono" style="color:${plan === 'enterprise' ? '#ef4444' : plan === 'business' ? '#f59e0b' : '#10b981'};font-weight:700">
-          $${((plan === 'enterprise' && t.enterprise_config?.monthly_base) ? t.enterprise_config.monthly_base : (PLAN_MRR[plan] || 0)).toLocaleString()}
-        </span>
-        <span style="font-size:0.62rem;color:var(--text-muted)">/mo</span>
+      <td><span class="phx-status-badge phx-status-badge-${statusColors[status] || 'gray'}"><span class="phx-status-dot-inline"></span>${status.charAt(0).toUpperCase() + status.slice(1)}</span></td>
+      <td style="text-align:right">
+        <span class="phx-mono" style="color:${mrrColor};font-weight:700">$${mrrVal.toLocaleString()}/mo</span>
       </td>
-      <td>${featCount > 0 ? `<span class="phx-feat-count">${featCount} features</span>` : '<span class="phx-muted">—</span>'}</td>
+      <td>${featCount > 0 ? `<span class="phx-feat-count">${featCount} Features</span>` : '<span class="phx-muted">—</span>'}</td>
       <td class="phx-muted">${timeSince(t.created_at)}</td>
       <td class="phx-td-actions" onclick="event.stopPropagation()">
-        ${status === 'active' ? `<button class="phx-btn-outline phx-btn-xs phx-btn-warn" onclick="window._saSuspend('${t.id}')" title="Suspend">${icon('alert', 13)} Suspend</button>` : ''}
-        ${status === 'suspended' ? `<button class="phx-btn-outline phx-btn-xs phx-btn-success" onclick="window._saActivate('${t.id}')" title="Re-Activate">${icon('check', 13)} Re-Activate</button>` : ''}
-        <button class="phx-btn-outline phx-btn-xs" onclick="navigate('sa-tenant-detail',{tenantId:'${t.id}'})" title="Details">${icon('search', 13)}</button>
+        ${status === 'active' ? `<button class="phx-btn-outline phx-btn-xs phx-btn-warn" onclick="window._saSuspend('${t.id}')" title="Suspend this organization">⚠ Suspend</button>` : ''}
+        ${status === 'suspended' ? `<button class="phx-btn-outline phx-btn-xs phx-btn-success" onclick="window._saActivate('${t.id}')" title="Reactivate this organization">✓ Reactivate</button>` : ''}
+        <button class="phx-btn-outline phx-btn-xs" onclick="navigate('sa-tenant-detail',{tenantId:'${t.id}'})" title="View details">👁</button>
       </td>
     </tr>`;
 }

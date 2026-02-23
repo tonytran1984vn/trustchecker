@@ -7438,10 +7438,10 @@ html {
 .sa-page.phx-page .phx-table th {
   text-align: left;
   padding: 0.7rem 1rem !important;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.04em;
   color: var(--phx-text-muted) !important;
   border-bottom: 1px solid var(--phx-border);
   white-space: nowrap;
@@ -7517,8 +7517,9 @@ html {
 
 .sa-page.phx-page .phx-org-slug {
   font-size: 0.72rem;
-  color: var(--phx-text-muted) !important;
+  color: #64748b !important;
   font-family: 'SFMono-Regular', Consolas, monospace;
+  margin-top: 2px;
 }
 
 /* Badges */
@@ -7533,8 +7534,8 @@ html {
 }
 
 .sa-page.phx-page .phx-badge-orange {
-  background: rgba(229, 120, 11, 0.1) !important;
-  color: var(--phx-orange) !important;
+  background: #FFF4E5 !important;
+  color: #C2410C !important;
 }
 
 .sa-page.phx-page .phx-badge-purple {
@@ -7543,8 +7544,8 @@ html {
 }
 
 .sa-page.phx-page .phx-badge-blue {
-  background: rgba(56, 116, 255, 0.1) !important;
-  color: var(--phx-blue) !important;
+  background: #EFF6FF !important;
+  color: #1E40AF !important;
 }
 
 .sa-page.phx-page .phx-badge-gray {
@@ -7593,6 +7594,54 @@ html {
   background: rgba(56, 116, 255, 0.08) !important;
   padding: 2px 8px;
   border-radius: 4px;
+}
+
+/* Status Badge */
+.sa-page.phx-page .phx-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.sa-page.phx-page .phx-status-badge .phx-status-dot-inline {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.sa-page.phx-page .phx-status-badge-green {
+  background: #ECFDF5 !important;
+  color: #065F46 !important;
+}
+
+.sa-page.phx-page .phx-status-badge-green .phx-status-dot-inline {
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.sa-page.phx-page .phx-status-badge-red {
+  background: #FEF2F2 !important;
+  color: #991B1B !important;
+}
+
+.sa-page.phx-page .phx-status-badge-red .phx-status-dot-inline {
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+}
+
+.sa-page.phx-page .phx-status-badge-gray {
+  background: #F3F4F6 !important;
+  color: #4B5563 !important;
+}
+
+.sa-page.phx-page .phx-status-badge-gray .phx-status-dot-inline {
+  background: #9CA3AF;
 }
 
 .sa-page.phx-page .phx-td-actions {
@@ -8772,7 +8821,10 @@ html {
   border: 1px solid #e5e7eb !important;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
-[data-theme="light"] .sa-card h3 { color: #111827 !important; }
+
+[data-theme="light"] .sa-card h3 {
+  color: #111827 !important;
+}
 
 /* ── SA Table ── */
 [data-theme="light"] .sa-table th {
@@ -8780,24 +8832,42 @@ html {
   background: #f9fafb !important;
   border-color: #f3f4f6 !important;
 }
+
 [data-theme="light"] .sa-table td {
   color: #374151 !important;
   border-color: #f3f4f6 !important;
 }
-[data-theme="light"] .sa-table strong { color: #111827 !important; }
-[data-theme="light"] .sa-table-compact th { background: #f9fafb !important; }
+
+[data-theme="light"] .sa-table strong {
+  color: #111827 !important;
+}
+
+[data-theme="light"] .sa-table-compact th {
+  background: #f9fafb !important;
+}
 
 /* ── KV List ── */
 [data-theme="light"] .sa-kv {
   color: #374151 !important;
   border-color: #f3f4f6 !important;
 }
-[data-theme="light"] .sa-kv>span:first-child { color: #6b7280 !important; }
+
+[data-theme="light"] .sa-kv>span:first-child {
+  color: #6b7280 !important;
+}
 
 /* ── Analytics Bar Charts ── */
-[data-theme="light"] .sa-bar-track { background: #f3f4f6 !important; }
-[data-theme="light"] .sa-bar-label { color: #374151 !important; }
-[data-theme="light"] .sa-bar-count { color: #6b7280 !important; }
+[data-theme="light"] .sa-bar-track {
+  background: #f3f4f6 !important;
+}
+
+[data-theme="light"] .sa-bar-label {
+  color: #374151 !important;
+}
+
+[data-theme="light"] .sa-bar-count {
+  color: #6b7280 !important;
+}
 
 /* ── Chart Placeholder ── */
 [data-theme="light"] .sa-chart-placeholder {
@@ -8807,18 +8877,35 @@ html {
 }
 
 /* ── Detail Items ── */
-[data-theme="light"] .sa-detail-item { color: #374151 !important; }
-[data-theme="light"] .sa-detail-label { color: #6b7280 !important; }
+[data-theme="light"] .sa-detail-item {
+  color: #374151 !important;
+}
+
+[data-theme="light"] .sa-detail-label {
+  color: #6b7280 !important;
+}
 
 /* ── Page / Misc ── */
-[data-theme="light"] .ops-alert-row { background: rgba(239, 68, 68, 0.03) !important; }
-[data-theme="light"] .sa-page-title h1 { color: #111827 !important; }
-[data-theme="light"] .sa-mfa-on { color: var(--color-success) !important; }
+[data-theme="light"] .ops-alert-row {
+  background: rgba(239, 68, 68, 0.03) !important;
+}
+
+[data-theme="light"] .sa-page-title h1 {
+  color: #111827 !important;
+}
+
+[data-theme="light"] .sa-mfa-on {
+  color: var(--color-success) !important;
+}
+
 [data-theme="light"] .sa-live-badge {
   background: rgba(239, 68, 68, 0.08) !important;
   color: #dc2626 !important;
 }
-[data-theme="light"] .sa-loading { color: #6b7280 !important; }
+
+[data-theme="light"] .sa-loading {
+  color: #6b7280 !important;
+}
 
 /* ── Feature Flag / Notification ── */
 [data-theme="light"] .sa-flag-card,
@@ -8868,31 +8955,64 @@ html {
 }
 
 /* ── Card smooth interactions ── */
-.sa-card { transition: var(--transition); }
+.sa-card {
+  transition: var(--transition);
+}
+
 .sa-card:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
 
 /* ── Metric color accent borders (top bar) ── */
-.sa-metric-blue { border-top: 3px solid var(--color-info); }
-.sa-metric-green { border-top: 3px solid var(--color-success); }
-.sa-metric-orange { border-top: 3px solid var(--color-warning); }
-.sa-metric-purple { border-top: 3px solid var(--violet); }
-.sa-metric-red { border-top: 3px solid var(--color-danger); }
+.sa-metric-blue {
+  border-top: 3px solid var(--color-info);
+}
+
+.sa-metric-green {
+  border-top: 3px solid var(--color-success);
+}
+
+.sa-metric-orange {
+  border-top: 3px solid var(--color-warning);
+}
+
+.sa-metric-purple {
+  border-top: 3px solid var(--violet);
+}
+
+.sa-metric-red {
+  border-top: 3px solid var(--color-danger);
+}
 
 /* ── Score badge critical pulse ── */
 @keyframes pulse-danger {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-  50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+
+  50% {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15);
+  }
 }
-.sa-score-danger { animation: pulse-danger 2.5s ease-in-out infinite; }
+
+.sa-score-danger {
+  animation: pulse-danger 2.5s ease-in-out infinite;
+}
 
 /* ── Loading skeleton shimmer ── */
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
 }
+
 .sa-skeleton {
   background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-card-hover) 50%, var(--bg-card) 75%);
   background-size: 200% 100%;
@@ -8901,7 +9021,8 @@ html {
 }
 
 /* ── Smooth bar fills ── */
-.sa-bar-fill, .sev-fill {
+.sa-bar-fill,
+.sev-fill {
   transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -8914,9 +9035,17 @@ html {
 
 /* ── LIVE badge pulse ── */
 @keyframes live-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
 }
+
 .sa-live-badge::before {
   content: '';
   width: 6px;
@@ -8948,12 +9077,20 @@ input:focus-visible {
 }
 
 /* ── Ensure minimum contrast for warning text in light ── */
-[data-theme="light"] .sa-score-warning { color: #92400e !important; }
-[data-theme="light"] .sa-pill-orange { color: #92400e !important; }
+[data-theme="light"] .sa-score-warning {
+  color: #92400e !important;
+}
+
+[data-theme="light"] .sa-pill-orange {
+  color: #92400e !important;
+}
 
 /* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
