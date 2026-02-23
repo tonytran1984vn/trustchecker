@@ -4,7 +4,6 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let data = null, loading = false;
 
@@ -19,10 +18,14 @@ async function load() {
     data = { rules, totalCodes: qrRes.total || 0 };
   } catch (e) { data = { rules: [], totalCodes: 0 }; }
   loading = false;
+  // Targeted DOM update
+  setTimeout(() => {
+    const el = document.getElementById('code-format-root');
+    if (el) el.innerHTML = renderContent();
+  }, 50);
 }
 
-export function renderPage() {
-  if (!data && !loading) { load().then(() => render()); }
+function renderContent() {
   if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Format Rules...</div></div>`;
 
   const rules = data?.rules || [];
@@ -71,5 +74,10 @@ export function renderPage() {
         </tbody></table>
       </div>
     </div>`;
+}
+
+export function renderPage() {
+  if (!data && !loading) load();
+  return `<div id="code-format-root">${renderContent()}</div>`;
 }
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
