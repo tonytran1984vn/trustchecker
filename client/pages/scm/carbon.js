@@ -2,7 +2,7 @@
  * TrustChecker – Carbon Passport v3.0 Dashboard
  * Cross-Cutting ESG Governance Intelligence
  */
-import { State, render as globalRender } from '../../core/state.js';
+import { State } from '../../core/state.js';
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
 
@@ -29,8 +29,11 @@ async function fetchCarbonData() {
         ]);
         carbon = { scope, leaderboard, report, risk, regulatory, maturity, flow, roleMatrix, benchmark };
         _carbonLoaded = true;
-        // Re-render the entire app so carbon data is displayed
-        setTimeout(() => globalRender(), 50);
+        // Targeted DOM update — only update the carbon page content, not the whole app
+        setTimeout(() => {
+            const el = document.getElementById('carbon-passport-root');
+            if (el) el.innerHTML = renderContent();
+        }, 50);
     } catch (e) { console.error('Carbon fetch error:', e); }
     _carbonFetching = false;
 }
@@ -55,7 +58,7 @@ function permCell(val) {
 
 export function render() {
     fetchCarbonData();
-    return renderContent();
+    return `<div id="carbon-passport-root">${renderContent()}</div>`;
 }
 
 function renderContent() {
