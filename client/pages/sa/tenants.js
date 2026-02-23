@@ -397,12 +397,12 @@ function renderModal() {
   // Create form
   return `
     <div class="phx-overlay" onclick="if(event.target===this)window._saCloseCreate()">
-      <div class="phx-modal" style="max-width:600px">
+      <div class="phx-modal" style="max-width:640px;max-height:90vh;display:flex;flex-direction:column">
         <div class="phx-modal-head" style="padding:14px 20px">
           <h2 style="font-size:1rem">Add new organization</h2>
           <button class="phx-modal-close" onclick="window._saCloseCreate()">✕</button>
         </div>
-        <form onsubmit="event.preventDefault();window._saDoCreate(this)" class="phx-modal-body" style="padding:14px 20px">
+        <form onsubmit="event.preventDefault();window._saDoCreate(this)" class="phx-modal-body" style="padding:14px 20px;overflow-y:auto;flex:1">
           ${createError ? `<div class="phx-alert-error" style="margin-bottom:10px;font-size:0.78rem">${esc(createError)}</div>` : ''}
 
           <div style="display:grid;grid-template-columns:1fr 140px 140px;gap:10px;margin-bottom:12px">
