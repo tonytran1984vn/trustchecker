@@ -47,7 +47,7 @@ export function renderPage() {
         .st-score-low{background:#DBEAFE;color:#1E40AF}
         .st-chip{display:inline-block;font-size:0.65rem;font-weight:500;padding:4px 10px;border-radius:9999px;background:#F1F5F9;color:#475569;margin:2px 3px;white-space:nowrap}
         .st-chip-danger{display:inline-block;font-size:0.65rem;font-weight:600;padding:4px 10px;border-radius:9999px;background:#FEE2E2;color:#DC2626;margin:2px 3px;white-space:nowrap}
-        .st-chip-warning{display:inline-block;font-size:0.65rem;font-weight:500;padding:4px 10px;border-radius:9999px;background:#FEF3C7;color:#92400E;margin:2px 3px;white-space:nowrap}
+        .st-chip-warning{display:inline-block;font-size:0.65rem;font-weight:500;padding:4px 10px;border-radius:9999px;background:#FEF3C7;color:#D97706;margin:2px 3px;white-space:nowrap}
         .st-num{font-weight:700;font-size:0.85rem}
         .st-num-warn{color:#f59e0b}
         .st-num-crit{color:#ef4444}
@@ -64,17 +64,17 @@ export function renderPage() {
         .st-sev-low{background:#DBEAFE;color:#1E40AF}
       </style>
 
-      <div class="sa-card">
+      <div class="sa-card" style="overflow-x:auto">
         <table class="st-table">
           <thead><tr>
-            <th>Organization</th>
-            <th class="st-right">Risk Score</th>
-            <th class="st-right">Fraud Alerts</th>
-            <th class="st-right">Open Cases</th>
-            <th class="st-right">Critical</th>
-            <th>Detected Patterns</th>
-            <th>Recommended Action</th>
-            <th>Risk Level</th>
+            <th style="text-align:left!important;min-width:240px">Organization</th>
+            <th style="text-align:right!important">Risk Score</th>
+            <th style="text-align:right!important">Fraud Alerts</th>
+            <th style="text-align:right!important">Open Cases</th>
+            <th style="text-align:right!important">Critical</th>
+            <th style="text-align:left!important">Detected Patterns</th>
+            <th style="text-align:center!important">Recommended Action</th>
+            <th style="text-align:center!important">Risk Level</th>
           </tr></thead>
           <tbody>
             ${tenants.map(t => {
@@ -92,14 +92,14 @@ export function renderPage() {
       : '<span class="st-chip">' + t.pattern_types + ' types</span>';
     const rowClass = t.risk_score >= 90 ? 'st-row-danger' : '';
     return '<tr class="' + rowClass + '">'
-      + '<td><div class="st-org-name">' + t.name + '</div><div class="st-org-slug">' + t.slug + '</div></td>'
-      + '<td class="st-right"><span class="st-score st-score-' + tier + '">' + t.risk_score + '</span></td>'
-      + '<td class="st-right"><span class="st-num">' + t.fraud_count + '</span></td>'
-      + '<td class="st-right"><span class="st-num st-num-warn">' + t.open_count + '</span></td>'
-      + '<td class="st-right"><span class="st-num st-num-crit">' + t.critical_count + '</span></td>'
+      + '<td style="min-width:240px"><div class="st-org-name">' + t.name + '</div><div class="st-org-slug">' + t.slug + '</div></td>'
+      + '<td style="text-align:right!important"><span class="st-score st-score-' + tier + '">' + t.risk_score + '</span></td>'
+      + '<td style="text-align:right!important"><span class="st-num">' + t.fraud_count + '</span></td>'
+      + '<td style="text-align:right!important"><span class="st-num st-num-warn">' + t.open_count + '</span></td>'
+      + '<td style="text-align:right!important"><span class="st-num st-num-crit">' + t.critical_count + '</span></td>'
       + '<td>' + patterns + '</td>'
-      + '<td>' + action + '</td>'
-      + '<td><span class="st-severity st-sev-' + tier + '">' + tierIcon + ' ' + tierLabel + '</span></td>'
+      + '<td style="text-align:center">' + action + '</td>'
+      + '<td style="text-align:center"><span class="st-severity st-sev-' + tier + '">' + tierIcon + ' ' + tierLabel + '</span></td>'
       + '</tr>';
   }).join('')}
           </tbody>
