@@ -334,7 +334,7 @@ router.post('/channel-settings/:channel/test', async (req, res) => {
 // PLATFORM USER MANAGEMENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const PLATFORM_ROLES = ['super_admin', 'platform_security', 'data_gov_officer', 'auditor', 'developer', 'platform_devops'];
+const PLATFORM_ROLES = ['super_admin', 'platform_security', 'data_gov_officer', 'global_risk_committee', 'emission_engine', 'change_management_officer', 'incident_response_lead', 'auditor', 'developer', 'platform_devops'];
 
 // ─── GET /users — List platform users ────────────────────────────────────────
 router.get('/users', async (req, res) => {
