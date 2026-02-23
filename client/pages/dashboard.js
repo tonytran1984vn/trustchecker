@@ -60,10 +60,20 @@ export function renderPage() {
       </div>
 
       <div class="card">
-        <div class="card-header">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
           <div class="card-title">📡 Live Events</div>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.78rem;color:var(--text-muted);user-select:none">
+            <span>${isLiveEventsOn() ? 'On' : 'Off'}</span>
+            <span onclick="toggleLiveEvents()" style="position:relative;width:36px;height:20px;display:inline-block;cursor:pointer">
+              <span style="position:absolute;inset:0;background:${isLiveEventsOn() ? '#10b981' : '#cbd5e1'};border-radius:10px;transition:background 0.3s"></span>
+              <span style="position:absolute;top:2px;left:${isLiveEventsOn() ? '18px' : '2px'};width:16px;height:16px;background:#fff;border-radius:50%;transition:left 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.25)"></span>
+            </span>
+          </label>
         </div>
-        <div class="event-feed" id="event-feed">${renderEventFeed()}</div>
+        ${isLiveEventsOn()
+      ? `<div class="event-feed" id="event-feed">${renderEventFeed()}</div>`
+      : `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.82rem">Live event feed is off. Toggle on to monitor real-time activity.</div>`
+    }
       </div>
     </div>
 
@@ -221,4 +231,15 @@ export function initDashboardCharts() {
 }
 
 window.initDashboardCharts = initDashboardCharts;
+
+// ── Live Events Toggle (default: off) ──
+function isLiveEventsOn() {
+  return localStorage.getItem('tc_live_events') === 'on';
+}
+
+window.toggleLiveEvents = function () {
+  const next = isLiveEventsOn() ? 'off' : 'on';
+  localStorage.setItem('tc_live_events', next);
+  if (typeof window.render === 'function') window.render();
+};
 
