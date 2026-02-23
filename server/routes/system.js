@@ -6,11 +6,11 @@ const { safeError } = require('../utils/safe-error');
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const db = require('../db');
 
 router.use(authMiddleware);
-router.use(requireRole('admin'));
+router.use(requirePermission('settings:update'));
 
 // ─── GET /info — Full system info ────────────────────────────
 router.get('/info', async (req, res) => {

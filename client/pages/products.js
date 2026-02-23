@@ -1,5 +1,6 @@
 /**
- * TrustChecker – Products Page
+ * TrustChecker – Products Page (Enhanced)
+ * Product CRUD + QR code management with deletion & history.
  */
 import { State, render } from '../core/state.js';
 import { API } from '../core/api.js';
@@ -12,6 +13,7 @@ export function renderPage() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;gap:12px">
       <input class="input" style="max-width:300px" placeholder="Search products..." oninput="searchProducts(this.value)">
       <div style="display:flex;gap:8px">
+        <button class="btn" onclick="showDeletionHistory()" title="View QR deletion history">🗑️ Deletion Log</button>
         <button class="btn" onclick="exportProductsCSV()" title="Export CSV">📊 Export CSV</button>
         <button class="btn btn-primary" onclick="showAddProduct()">+ Add Product</button>
       </div>
@@ -37,6 +39,7 @@ export function renderPage() {
     </div>
   `;
 }
+
 function showAddProduct() {
   State.modal = `
     <div class="modal">
@@ -55,6 +58,7 @@ function showAddProduct() {
   `;
   render();
 }
+
 async function addProduct() {
   try {
     const res = await API.post('/products', {
@@ -66,19 +70,21 @@ async function addProduct() {
       origin_country: document.getElementById('np-origin').value
     });
     State.modal = null;
-    showToast('✅ Product registered! QR code generated.', 'success');
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Product registered! QR code generated.', 'success');
     navigate('products');
   } catch (e) {
     showToast('Failed: ' + e.message, 'error');
   }
 }
+
 async function showProductDetail(id) {
   try {
     const detail = await API.get(`/products/${id}`);
     const p = detail.product;
-    const qr = detail.qr_codes?.[0];
+    const codes = detail.qr_codes || [];
+    const qr = codes[0];
     State.modal = `
-      <div class="modal" style="max-width:600px">
+      <div class="modal" style="max-width:650px">
         <div class="modal-title">${p.name}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;font-size:0.82rem">
           <div><span style="color:var(--text-muted)">SKU:</span> <span style="font-family:'JetBrains Mono'">${p.sku}</span></div>
@@ -88,14 +94,75 @@ async function showProductDetail(id) {
           <div><span style="color:var(--text-muted)">Origin:</span> ${p.origin_country || '—'}</div>
           <div><span style="color:var(--text-muted)">Trust Score:</span> <span style="font-weight:800;color:${scoreColor(p.trust_score)}">${Math.round(p.trust_score)}</span></div>
         </div>
-        ${qr?.qr_image_base64 ? `<div style="text-align:center;margin:16px 0"><img src="${qr.qr_image_base64}" style="width:180px;border-radius:12px;border:2px solid var(--border)"></div>` : ''}
-        ${qr ? `<div style="font-size:0.7rem;font-family:'JetBrains Mono';color:var(--text-muted);text-align:center;word-break:break-all">${qr.qr_data}</div>` : ''}
+        ${qr?.qr_image_base64 ? `<div style="text-align:center;margin:16px 0"><img src="${qr.qr_image_base64}" alt="Product QR code" style="width:180px;border-radius:12px;border:2px solid var(--border)"></div>` : ''}
+        ${qr ? `<div style="font-size:0.7rem;font-family:'JetBrains Mono';color:var(--text-muted);text-align:center;word-break:break-all;margin-bottom:12px">${qr.qr_data}</div>` : ''}
+
+        ${codes.length > 0 ? `
+          <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+            <div style="font-weight:600;font-size:0.85rem;margin-bottom:8px">📱 QR Codes (${codes.length})</div>
+            <div style="max-height:200px;overflow-y:auto">
+              ${codes.map(c => `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.78rem">
+                  <div>
+                    <span style="font-family:'JetBrains Mono';font-size:0.7rem">${c.code?.substring(0, 20) || c.id?.substring(0, 12)}…</span>
+                    ${c.scan_count > 0 ? `<span class="badge valid" style="margin-left:6px;font-size:0.6rem">${c.scan_count} scans</span>` : ''}
+                    ${c.deleted_at ? '<span class="badge suspicious" style="margin-left:6px;font-size:0.6rem">Deleted</span>' : ''}
+                  </div>
+                  ${!c.deleted_at ? `
+                    <button class="btn btn-sm" onclick="deleteQrCode('${c.id}','${p.id}')" style="color:var(--rose);font-size:0.7rem" title="Delete QR code">🗑️</button>
+                  ` : ''}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+
         <button class="btn" onclick="State.modal=null;render()" style="margin-top:16px;width:100%">Close</button>
       </div>
     `;
     render();
   } catch (e) { showToast('Failed to load product', 'error'); }
 }
+
+async function deleteQrCode(codeId, productId) {
+  if (!confirm('Delete this QR code? This cannot be undone.')) return;
+  try {
+    await API.delete(`/products/codes/${codeId}`);
+    showToast('QR code deleted', 'info');
+    showProductDetail(productId); // Refresh detail
+  } catch (e) { showToast(e.message || 'Delete failed — code may have been scanned', 'error'); }
+}
+
+async function showDeletionHistory() {
+  try {
+    const res = await API.get('/products/codes/deletion-history');
+    const history = res.history || res.deletions || [];
+    State.modal = `
+      <div class="modal" style="max-width:700px">
+        <div class="modal-title">🗑️ QR Code Deletion History</div>
+        ${history.length ? `
+          <div class="table-container" style="max-height:400px;overflow-y:auto">
+            <table>
+              <tr><th>Code</th><th>Product</th><th>Deleted By</th><th>Date</th><th>Reason</th></tr>
+              ${history.map(h => `
+                <tr>
+                  <td style="font-family:'JetBrains Mono';font-size:0.7rem">${(h.code || h.qr_code_id || '').substring(0, 16)}…</td>
+                  <td>${h.product_name || '—'}</td>
+                  <td>${h.deleted_by_username || h.deleted_by || '—'}</td>
+                  <td style="font-size:0.72rem;color:var(--text-muted)">${h.deleted_at ? new Date(h.deleted_at).toLocaleString() : '—'}</td>
+                  <td style="font-size:0.78rem">${h.reason || '—'}</td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+        ` : '<div style="padding:30px;text-align:center;color:var(--text-muted)">No deletions recorded</div>'}
+        <button class="btn" onclick="State.modal=null;render()" style="margin-top:16px;width:100%">Close</button>
+      </div>
+    `;
+    render();
+  } catch (e) { showToast('Failed to load deletion history', 'error'); }
+}
+
 async function searchProducts(q) {
   try {
     const res = await API.get(`/products?search=${encodeURIComponent(q)}`);
@@ -105,8 +172,11 @@ async function searchProducts(q) {
   } catch (e) { }
 }
 
-// Window exports for onclick handlers
+// Window exports
 window.showAddProduct = showAddProduct;
 window.addProduct = addProduct;
 window.showProductDetail = showProductDetail;
 window.searchProducts = searchProducts;
+window.deleteQrCode = deleteQrCode;
+window.showDeletionHistory = showDeletionHistory;
+

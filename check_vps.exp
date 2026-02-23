@@ -1,0 +1,40 @@
+#!/usr/bin/expect -f
+set timeout 30
+set pw {Anhyeuem90@!#}
+set vps "root@34.92.229.72"
+set base "/var/www/html/trustchecker"
+
+# Upload updated fix-db.js
+spawn scp -o StrictHostKeyChecking=no /Users/dangtranhai/Downloads/TrustChecker/fix-db.js $vps:$base/fix-db.js
+expect "password:"
+send "$pw\r"
+expect eof
+
+# SSH: stop -> fix -> start
+spawn ssh -o StrictHostKeyChecking=no $vps
+expect "password:"
+send "$pw\r"
+expect "# "
+
+send "pm2 stop trustchecker && sleep 1 && echo STOPPED\r"
+expect "STOPPED"
+expect "# "
+
+send "cd /var/www/html/trustchecker && node fix-db.js\r"
+expect "Database saved"
+expect "# "
+sleep 2
+
+send "pm2 start trustchecker && sleep 5 && echo STARTED\r"
+expect "STARTED"
+expect "# "
+
+send "curl -s http://localhost:4000/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@trustchecker.io\",\"password\":\"TrustAdmin2026!@#\"}'\r"
+expect "# "
+sleep 4
+
+send "echo ALLDONE\r"
+expect "ALLDONE"
+expect "# "
+send "exit\r"
+expect eof

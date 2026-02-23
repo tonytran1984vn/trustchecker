@@ -5,15 +5,19 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const blockchainEngine = require('../engines/blockchain');
 const { eventBus, EVENT_TYPES } = require('../events');
 const { validate, schemas } = require('../middleware/validate');
 
 const router = express.Router();
 
+
+// GOV-1: All routes require authentication
+router.use(authMiddleware);
+
 // ─── POST /api/scm/events – Record EPCIS event ──────────────────────────────
-router.post('/events', authMiddleware, requireRole('operator'), validate(schemas.scmEvent), async (req, res) => {
+router.post('/events', authMiddleware, requirePermission('supply_chain:create'), validate(schemas.scmEvent), async (req, res) => {
     try {
         const { event_type, product_id, batch_id, uid, location, actor, partner_id, details } = req.body;
         const validTypes = ['commission', 'pack', 'ship', 'receive', 'sell', 'return', 'destroy'];
@@ -32,7 +36,20 @@ router.post('/events', authMiddleware, requireRole('operator'), validate(schemas
 
         eventBus.emitEvent('SCMEvent', { id, event_type, product_id, batch_id, location });
 
-        res.status(201).json({ id, event_type, blockchain_seal: seal });
+        // L-RGF: Process through governance flow (Steps 1-5)
+        let governance = null;
+        try {
+            const lrgf = require('../engines/lrgf-engine');
+            governance = lrgf.processEvent(
+                { event_type, product_id, batch_id, tenant_id: req.user.orgId, idempotency_key: `scm-${id}` },
+                { source: 'scm-tracking', ip: req.ip, user_agent: req.headers['user-agent'], latitude: details?.latitude, longitude: details?.longitude },
+                { velocity_anomaly: 0, geo_risk: 0, device_mismatch: 0, historical_batch: 0, distributor_trust: 0, duplicate_cluster: 0 }
+            );
+        } catch (lrgfErr) {
+            console.error('[L-RGF] Governance flow error (non-blocking):', lrgfErr.message);
+        }
+
+        res.status(201).json({ id, event_type, blockchain_seal: seal, governance });
     } catch (err) {
         console.error('SCM event error:', err);
         res.status(500).json({ error: 'Failed to record event' });
@@ -76,7 +93,7 @@ router.get('/events', authMiddleware, async (req, res) => {
         const params = [];
         if (event_type) { query += ' WHERE sce.event_type = ?'; params.push(event_type); }
         query += ' ORDER BY sce.created_at DESC LIMIT ?';
-        params.push(Number(limit));
+        params.push(Math.min(Number(limit) || 50, 200));
 
         res.json({ events: await db.prepare(query).all(...params) });
     } catch (err) {
@@ -123,7 +140,7 @@ router.get('/batches', authMiddleware, async (req, res) => {
         const params = [];
         if (product_id) { query += ' WHERE b.product_id = ?'; params.push(product_id); }
         query += ' ORDER BY b.created_at DESC LIMIT ?';
-        params.push(Number(limit));
+        params.push(Math.min(Number(limit) || 20, 100));
 
         res.json({ batches: await db.prepare(query).all(...params) });
     } catch (err) {

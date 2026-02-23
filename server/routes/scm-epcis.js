@@ -6,7 +6,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const epcisEngine = require('../engines/epcis-engine');
 const { cacheMiddleware } = require('../cache');
 
@@ -30,7 +30,7 @@ router.get('/events', async (req, res) => {
       LEFT JOIN partners pt ON sce.partner_id = pt.id
       LEFT JOIN batches b ON sce.batch_id = b.id
       ORDER BY sce.created_at DESC LIMIT ? OFFSET ?
-    `).all(parseInt(limit), parseInt(offset));
+    `).all(parseInt(limit), Math.max(parseInt(offset) || 0, 0));
 
         // Convert to EPCIS format
         const epcisEvents = events.map(e => epcisEngine.toEpcisEvent(e, {
@@ -107,7 +107,7 @@ router.get('/events/:id', async (req, res) => {
 });
 
 // ─── POST /api/scm/epcis/capture — Ingest external EPCIS events ─────────────
-router.post('/capture', requireRole('operator'), async (req, res) => {
+router.post('/capture', requirePermission('epcis:create'), async (req, res) => {
     try {
         const { epcisBody } = req.body;
         if (!epcisBody?.eventList) {

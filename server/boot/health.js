@@ -205,16 +205,36 @@ function setupHealth(app, { config, db, redis, wss, waf, apiGateway, metrics, sl
         }
     });
 
-    // ─── Centralized Error Handler ───────────────────────────────────
+    // ─── Centralized Error Handler (Node.js Best Practice) ────────
+    const { AppError } = require('../utils/AppError');
     app.use((err, req, res, next) => {
+        // CORS errors
         if (err.message === 'Not allowed by CORS') {
             return res.status(403).json({ error: 'Origin not allowed', request_id: req.requestId });
         }
-        console.error(`⚠️ Unhandled error [${req.requestId || 'no-id'}]:`, err);
+
+        // Operational errors (AppError subclasses) — expected, safe to show
+        if (err instanceof AppError && err.isOperational) {
+            console.warn(`⚠️ [${req.requestId || 'no-id'}] ${err.name}: ${err.message} (${req.method} ${req.path})`);
+            return res.status(err.statusCode).json({
+                error: err.message,
+                code: err.errorCode,
+                request_id: req.requestId,
+            });
+        }
+
+        // Programming errors — log full stack, hide from client
+        console.error(`❌ Unhandled error [${req.requestId || 'no-id'}] ${req.method} ${req.path}:`, err);
+        if (req.user) console.error(`   User: ${req.user.id} (${req.user.role})`);
+
         const message = process.env.NODE_ENV === 'production'
             ? 'Internal server error'
             : err.message || 'Internal server error';
-        res.status(err.status || 500).json({ error: message, request_id: req.requestId });
+        res.status(err.status || err.statusCode || 500).json({
+            error: message,
+            code: 'INTERNAL_ERROR',
+            request_id: req.requestId,
+        });
     });
 }
 

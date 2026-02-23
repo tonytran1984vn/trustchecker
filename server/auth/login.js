@@ -25,8 +25,8 @@ router.post('/register', validate(schemas.register), async (req, res) => {
     try {
         const { username, password, email, company } = req.body;
 
-        if (!username || !password || !email) {
-            return res.status(400).json({ error: 'Username, password, and email are required' });
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
         }
 
         if (password.length < 12) {
@@ -37,21 +37,22 @@ router.post('/register', validate(schemas.register), async (req, res) => {
             return res.status(400).json({ error: 'Password must contain uppercase, lowercase, number, and special character' });
         }
 
-        const existing = await db.prepare('SELECT id FROM users WHERE username = ? OR email = ?').get(username, email);
+        const existing = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
         if (existing) {
-            return res.status(409).json({ error: 'Username or email already exists' });
+            return res.status(409).json({ error: 'Email already exists' });
         }
 
         const id = uuidv4();
+        const displayName = email.split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 50) || 'User';
         const password_hash = await bcrypt.hash(password, 12);
 
         await db.prepare(`
       INSERT INTO users (id, username, email, password_hash, company)
       VALUES (?, ?, ?, ?, ?)
-    `).run(id, username, email, password_hash, company || '');
+    `).run(id, displayName, email, password_hash, company || '');
 
         const sessionId = await createSession(id, req);
-        const user = { id, username, role: 'operator' };
+        const user = { id, email, role: 'operator' };
         const { accessToken, refreshToken } = await generateTokenPair(user, sessionId);
 
         await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?, ?)`)
@@ -61,7 +62,7 @@ router.post('/register', validate(schemas.register), async (req, res) => {
             message: 'User registered successfully',
             token: accessToken,
             refresh_token: refreshToken,
-            user: { id, username, email, role: 'operator' }
+            user: { id, email, role: 'operator' }
         });
     } catch (err) {
         console.error('Register error:', err);
@@ -73,7 +74,7 @@ router.post('/register', validate(schemas.register), async (req, res) => {
 // SEC-12: Apply schema validation middleware
 router.post('/login', validate(schemas.login), async (req, res) => {
     try {
-        const { username, password, mfa_code, mfa_token } = req.body;
+        const { email, password, mfa_code, mfa_token } = req.body;
 
         // Step 2: MFA verification (if mfa_token provided)
         if (mfa_token) {
@@ -93,28 +94,28 @@ router.post('/login', validate(schemas.login), async (req, res) => {
                     return res.status(401).json({ error: 'Invalid MFA code' });
                 }
 
-                await db.prepare('UPDATE users SET last_login = datetime("now"), failed_attempts = 0 WHERE id = ?').run(user.id);
+                await db.prepare("UPDATE users SET last_login = datetime('now'), failed_attempts = 0 WHERE id = ?").run(user.id);
                 const sessionId = await createSession(user.id, req);
                 const { accessToken, refreshToken } = await generateTokenPair(user, sessionId);
 
-                eventBus.emitEvent(EVENT_TYPES.USER_LOGIN, { username: user.username, mfa: true });
+                eventBus.emitEvent(EVENT_TYPES.USER_LOGIN, { email: user.email, mfa: true });
 
                 return res.json({
                     token: accessToken,
                     refresh_token: refreshToken,
-                    user: { id: user.id, username: user.username, email: user.email, role: user.role }
+                    user: { id: user.id, email: user.email, role: user.role }
                 });
             } catch (e) {
                 return res.status(401).json({ error: 'Invalid or expired MFA token' });
             }
         }
 
-        // Step 1: Password verification
-        if (!username || !password) {
-            return res.status(400).json({ error: 'Username and password are required' });
+        // Step 1: Password verification (email only)
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
         }
 
-        const user = await db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+        const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email);
         if (!user) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
@@ -167,18 +168,32 @@ router.post('/login', validate(schemas.login), async (req, res) => {
             });
         }
 
-        // No MFA — issue tokens directly
-        await db.prepare('UPDATE users SET last_login = datetime("now"), failed_attempts = 0, locked_until = NULL WHERE id = ?').run(user.id);
+        // No MFA — check force password change
+        if (user.must_change_password) {
+            const changeToken = jwt.sign(
+                { user_id: user.id, type: 'password_change' },
+                JWT_SECRET,
+                { expiresIn: '10m', issuer: 'trustchecker', audience: 'trustchecker-users' }
+            );
+            return res.json({
+                must_change_password: true,
+                change_token: changeToken,
+                message: 'Password change required before first login'
+            });
+        }
+
+        // Issue tokens directly
+        await db.prepare("UPDATE users SET last_login = datetime('now'), failed_attempts = 0, locked_until = NULL WHERE id = ?").run(user.id);
         await enrichUserWithOrg(user);
         const sessionId = await createSession(user.id, req);
         const { accessToken, refreshToken } = await generateTokenPair(user, sessionId);
 
-        eventBus.emitEvent(EVENT_TYPES.USER_LOGIN, { username: user.username });
+        eventBus.emitEvent(EVENT_TYPES.USER_LOGIN, { email: user.email });
 
         res.json({
             token: accessToken,
             refresh_token: refreshToken,
-            user: { id: user.id, username: user.username, email: user.email, role: user.role, plan: user.plan || 'free' }
+            user: { id: user.id, email: user.email, role: user.role, plan: user.plan || 'free' }
         });
     } catch (err) {
         console.error('Login error:', err);
@@ -212,7 +227,7 @@ router.post('/refresh', async (req, res) => {
         // Revoke old token (rotation)
         await db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE id = ?').run(stored.id);
 
-        const user = await db.prepare('SELECT id, username, role FROM users WHERE id = ?').get(stored.user_id);
+        const user = await db.prepare('SELECT id, email, role FROM users WHERE id = ?').get(stored.user_id);
         if (!user) {
             return res.status(401).json({ error: 'User not found' });
         }

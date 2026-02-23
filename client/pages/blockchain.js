@@ -16,7 +16,7 @@ export function renderPage() {
         <div class="stat-label">Total Blocks</div>
       </div>
       <div class="stat-card ${b.stats?.chain_integrity?.valid ? 'emerald' : 'rose'}">
-        <div class="stat-icon">${b.stats?.chain_integrity?.valid ? '✅' : '❌'}</div>
+        <div class="stat-icon">${b.stats?.chain_integrity?.valid ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>' : '<span class="status-icon status-fail" aria-label="Fail">✗</span>'}</div>
         <div class="stat-value">${b.stats?.chain_integrity?.valid ? 'VALID' : 'BROKEN'}</div>
         <div class="stat-label">Chain Integrity</div>
       </div>

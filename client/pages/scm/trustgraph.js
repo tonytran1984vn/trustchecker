@@ -15,7 +15,7 @@ export function renderPage() {
     <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="stat-card cyan"><div class="stat-icon">🕸️</div><div class="stat-value">${g.total_nodes}</div><div class="stat-label">Nodes</div></div>
       <div class="stat-card violet"><div class="stat-icon">🔗</div><div class="stat-value">${g.total_edges}</div><div class="stat-label">Edges</div></div>
-      <div class="stat-card ${g.network_health === 'healthy' ? 'emerald' : 'rose'}"><div class="stat-icon">${g.network_health === 'healthy' ? '✅' : '⚠️'}</div><div class="stat-value">${g.network_health}</div><div class="stat-label">Network Health</div></div>
+      <div class="stat-card ${g.network_health === 'healthy' ? 'emerald' : 'rose'}"><div class="stat-icon">${g.network_health === 'healthy' ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>' : '<span class="status-icon status-warn" aria-label="Warning">!</span>'}</div><div class="stat-value">${g.network_health}</div><div class="stat-label">Network Health</div></div>
       <div class="stat-card ${toxic.length > 0 ? 'rose' : 'emerald'}"><div class="stat-icon">☠️</div><div class="stat-value">${g.toxic_count}</div><div class="stat-label">Toxic Nodes</div></div>
     </div>
 

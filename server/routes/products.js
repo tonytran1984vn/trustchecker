@@ -2,7 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { eventBus, EVENT_TYPES } = require('../events');
 const { validate, schemas } = require('../middleware/validate');
 
@@ -18,6 +18,12 @@ router.get('/', async (req, res) => {
         let query = 'SELECT * FROM products WHERE 1=1';
         const params = [];
 
+        // Tenant scoping: non-super_admin only sees their org's products
+        if (req.user.role !== 'super_admin' && req.user.orgId) {
+            query += ' AND org_id = ?';
+            params.push(req.user.orgId);
+        }
+
         if (search) {
             query += ' AND (name LIKE ? OR sku LIKE ? OR manufacturer LIKE ?)';
             params.push(`%${search}%`, `%${search}%`, `%${search}%`);
@@ -32,7 +38,7 @@ router.get('/', async (req, res) => {
         }
 
         query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-        params.push(Number(limit), Number(offset));
+        params.push(Number(limit), Math.max(Number(offset) || 0, 0));
 
         const products = await db.prepare(query).all(...params);
         const total = await db.prepare('SELECT COUNT(*) as count FROM products').get();
@@ -66,7 +72,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // ─── POST /api/products ─────────────────────────────────────────────────────
-router.post('/', requireRole('operator'), validate(schemas.createProduct), async (req, res) => {
+router.post('/', requirePermission('product:create'), validate(schemas.createProduct), async (req, res) => {
     try {
         const { name, sku, description, category, manufacturer, batch_number, origin_country } = req.body;
 
@@ -92,9 +98,9 @@ router.post('/', requireRole('operator'), validate(schemas.createProduct), async
 
         // Insert product
         await db.prepare(`
-      INSERT INTO products (id, name, sku, description, category, manufacturer, batch_number, origin_country, registered_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(productId, name, sku, description || '', category || '', manufacturer || '', batch_number || '', origin_country || '', req.user.id);
+      INSERT INTO products (id, name, sku, description, category, manufacturer, batch_number, origin_country, registered_by, org_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(productId, name, sku, description || '', category || '', manufacturer || '', batch_number || '', origin_country || '', req.user.id, req.user.orgId || null);
 
         // Insert QR code
         await db.prepare(`
@@ -124,7 +130,7 @@ router.post('/', requireRole('operator'), validate(schemas.createProduct), async
 });
 
 // ─── PUT /api/products/:id ───────────────────────────────────────────────────
-router.put('/:id', authMiddleware, requireRole('operator'), async (req, res) => {
+router.put('/:id', authMiddleware, requirePermission('product:update'), async (req, res) => {
     try {
         const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
         if (!product) return res.status(404).json({ error: 'Product not found' });
@@ -153,7 +159,7 @@ router.put('/:id', authMiddleware, requireRole('operator'), async (req, res) => 
 
 // ─── POST /api/products/generate-code ────────────────────────────────────────
 // Generate unique printable verification codes for products
-router.post('/generate-code', authMiddleware, requireRole('operator'), async (req, res) => {
+router.post('/generate-code', authMiddleware, requirePermission('product:create'), async (req, res) => {
     try {
         const { product_id, format = 'random', brand_prefix, quantity = 1 } = req.body;
 
@@ -211,9 +217,9 @@ router.post('/generate-code', authMiddleware, requireRole('operator'), async (re
 
             const qrId = uuidv4();
             await db.prepare(`
-                INSERT INTO qr_codes (id, product_id, qr_data, qr_image_base64)
-                VALUES (?, ?, ?, ?)
-            `).run(qrId, product_id, code, qrImageBase64);
+                INSERT INTO qr_codes (id, product_id, qr_data, qr_image_base64, org_id, generated_by)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `).run(qrId, product_id, code, qrImageBase64, req.user.orgId || null, req.user.id);
 
             generatedCodes.push({
                 id: qrId,
@@ -271,6 +277,89 @@ router.get('/:id/codes', authMiddleware, async (req, res) => {
     } catch (err) {
         console.error('Get product codes error:', err);
         res.status(500).json({ error: 'Failed to fetch product codes' });
+    }
+});
+
+// ─── DELETE /api/products/codes/:codeId — Soft-delete a code ─────────────────
+// Rules: Cannot delete a code that has been scanned. Records deletion in audit_log.
+router.delete('/codes/:codeId', authMiddleware, requirePermission('product:delete'), async (req, res) => {
+    try {
+        const codeId = req.params.codeId;
+
+        // Find the code
+        const code = await db.prepare('SELECT * FROM qr_codes WHERE id = ?').get(codeId);
+        if (!code) {
+            return res.status(404).json({ error: 'Mã không tồn tại' });
+        }
+
+        // Tenant check: admin can only delete their org's codes
+        if (req.user.role !== 'super_admin' && req.user.orgId && code.org_id && code.org_id !== req.user.orgId) {
+            return res.status(403).json({ error: 'Không có quyền xoá mã của tổ chức khác' });
+        }
+
+        // Already deleted?
+        if (code.status === 'deleted') {
+            return res.status(409).json({ error: 'Mã đã bị xoá trước đó' });
+        }
+
+        // Check if code has been scanned
+        const scanCount = await db.prepare('SELECT COUNT(*) as count FROM scan_events WHERE qr_code_id = ?').get(codeId);
+        if (scanCount && scanCount.count > 0) {
+            return res.status(409).json({
+                error: 'Không thể xoá mã đã được quét',
+                scan_count: scanCount.count,
+                message: 'Mã đã được quét ' + scanCount.count + ' lần. Mã đã quét không thể xoá để đảm bảo tính toàn vẹn dữ liệu.'
+            });
+        }
+
+        // Soft-delete
+        await db.prepare(
+            "UPDATE qr_codes SET status = 'deleted', deleted_at = datetime('now'), deleted_by = ? WHERE id = ?"
+        ).run(req.user.id, codeId);
+
+        // Audit log
+        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
+            .run(uuidv4(), req.user.id, 'CODE_DELETED', 'qr_code', codeId,
+                JSON.stringify({ code: code.qr_data, product_id: code.product_id }));
+
+        res.json({
+            message: 'Mã đã được xoá thành công',
+            code_id: codeId,
+            code: code.qr_data,
+            deleted_by: req.user.username
+        });
+    } catch (err) {
+        console.error('Delete code error:', err);
+        res.status(500).json({ error: 'Không thể xoá mã' });
+    }
+});
+
+// ─── GET /api/products/codes/deletion-history — Get deletion history ─────────
+router.get('/codes/deletion-history', authMiddleware, requirePermission('product:view'), async (req, res) => {
+    try {
+        const { limit = 50 } = req.query;
+        let query = `
+            SELECT al.*, u.username as deleted_by_username
+            FROM audit_log al
+            LEFT JOIN users u ON u.id = al.actor_id
+            WHERE al.action = 'CODE_DELETED'
+        `;
+        const params = [];
+
+        // Tenant scoping
+        if (req.user.role !== 'super_admin' && req.user.orgId) {
+            query += ` AND al.actor_id IN (SELECT id FROM users WHERE org_id = ?)`;
+            params.push(req.user.orgId);
+        }
+
+        query += ' ORDER BY al.timestamp DESC LIMIT ?';
+        params.push(Math.min(Number(limit) || 50, 200));
+
+        const history = await db.prepare(query).all(...params);
+        res.json({ deletion_history: history, total: history.length });
+    } catch (err) {
+        console.error('Deletion history error:', err);
+        res.status(500).json({ error: 'Failed to fetch deletion history' });
     }
 });
 

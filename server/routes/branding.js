@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 
 router.use(authMiddleware);
 
@@ -52,7 +52,7 @@ router.get('/', async (req, res) => {
 });
 
 // ─── PUT / — Update branding configuration ──────────────────
-router.put('/', requireRole('admin'), async (req, res) => {
+router.put('/', requirePermission('settings:update'), async (req, res) => {
     try {
         const {
             brand_name, tagline, logo_url, favicon_url,
@@ -137,34 +137,38 @@ ${theme.custom_css || ''}
 
 // ─── GET /presets — List available theme presets ─────────────
 router.get('/presets', async (req, res) => {
-    res.json({
-        presets: [
-            {
-                name: 'TrustChecker Default', id: 'default',
-                primary_color: '#00ffcc', secondary_color: '#0088ff', background_color: '#0a0a1a'
-            },
-            {
-                name: 'Corporate Blue', id: 'corporate',
-                primary_color: '#2563eb', secondary_color: '#1e40af', background_color: '#0f172a'
-            },
-            {
-                name: 'Emerald Green', id: 'emerald',
-                primary_color: '#10b981', secondary_color: '#059669', background_color: '#0a1a15'
-            },
-            {
-                name: 'Royal Purple', id: 'purple',
-                primary_color: '#8b5cf6', secondary_color: '#7c3aed', background_color: '#13091f'
-            },
-            {
-                name: 'Sunrise Orange', id: 'sunrise',
-                primary_color: '#f59e0b', secondary_color: '#d97706', background_color: '#1a1208'
-            },
-            {
-                name: 'Light Mode', id: 'light',
-                primary_color: '#0066cc', secondary_color: '#004499', background_color: '#ffffff', text_color: '#1a1a1a', surface_color: '#f5f5f5'
-            }
-        ]
-    });
+    try {
+        res.json({
+            presets: [
+                {
+                    name: 'TrustChecker Default', id: 'default',
+                    primary_color: '#00ffcc', secondary_color: '#0088ff', background_color: '#0a0a1a'
+                },
+                {
+                    name: 'Corporate Blue', id: 'corporate',
+                    primary_color: '#2563eb', secondary_color: '#1e40af', background_color: '#0f172a'
+                },
+                {
+                    name: 'Emerald Green', id: 'emerald',
+                    primary_color: '#10b981', secondary_color: '#059669', background_color: '#0a1a15'
+                },
+                {
+                    name: 'Royal Purple', id: 'purple',
+                    primary_color: '#8b5cf6', secondary_color: '#7c3aed', background_color: '#13091f'
+                },
+                {
+                    name: 'Sunrise Orange', id: 'sunrise',
+                    primary_color: '#f59e0b', secondary_color: '#d97706', background_color: '#1a1208'
+                },
+                {
+                    name: 'Light Mode', id: 'light',
+                    primary_color: '#0066cc', secondary_color: '#004499', background_color: '#ffffff', text_color: '#1a1a1a', surface_color: '#f5f5f5'
+                }
+            ]
+        });
+    } catch (e) {
+        safeError(res, 'Operation failed', e);
+    }
 });
 
 function generateCSSVariables(theme) {

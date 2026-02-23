@@ -1,9 +1,12 @@
 /**
- * TrustChecker Pricing Engine v2.0
+ * TrustChecker Pricing Engine v2.1
  * Hybrid pricing: Core Subscription + Usage-Based Add-ons + Freemium
+ * Now supports admin-configurable pricing overrides stored in system_settings.
  *
  * 2026 Model: Subscription tiers with metered overages
  */
+
+const db = require('../db');
 
 // ═══════════════════════════════════════════════════════════════════
 // PLAN DEFINITIONS
@@ -387,27 +390,113 @@ function generateEnterpriseQuote(estimatedUsage, requirements = {}) {
 }
 
 /**
- * Get public pricing data (no sensitive info).
+ * Load pricing overrides from system_settings table.
+ * Returns merged pricing (defaults + overrides).
  */
-function getPublicPricing() {
+async function loadPricingOverrides() {
+    try {
+        const planOverrides = await db.prepare(
+            "SELECT setting_value FROM system_settings WHERE category = 'pricing' AND setting_key = 'plan_overrides'"
+        ).get();
+
+        const usageOverrides = await db.prepare(
+            "SELECT setting_value FROM system_settings WHERE category = 'pricing' AND setting_key = 'usage_overrides'"
+        ).get();
+
+        const overrides = {
+            plans: planOverrides ? JSON.parse(planOverrides.setting_value) : {},
+            usage: usageOverrides ? JSON.parse(usageOverrides.setting_value) : {},
+        };
+        return overrides;
+    } catch (e) {
+        console.error('[pricing] Failed to load overrides:', e.message);
+        return { plans: {}, usage: {} };
+    }
+}
+
+/**
+ * Save pricing overrides to system_settings.
+ */
+async function updatePricingOverrides(type, data, userId) {
+    const { v4: uuidv4 } = require('uuid');
+    const key = type === 'plans' ? 'plan_overrides' : 'usage_overrides';
+    const existing = await db.prepare(
+        "SELECT id FROM system_settings WHERE category = 'pricing' AND setting_key = ?"
+    ).get(key);
+
+    if (existing) {
+        await db.prepare(
+            "UPDATE system_settings SET setting_value = ?, updated_by = ?, updated_at = datetime('now') WHERE category = 'pricing' AND setting_key = ?"
+        ).run(JSON.stringify(data), userId, key);
+    } else {
+        await db.prepare(
+            "INSERT INTO system_settings (id, category, setting_key, setting_value, updated_by) VALUES (?, 'pricing', ?, ?, ?)"
+        ).run(uuidv4(), key, JSON.stringify(data), userId);
+    }
+}
+
+/**
+ * Reset pricing to defaults by deleting overrides.
+ */
+async function resetPricingToDefaults() {
+    await db.prepare("DELETE FROM system_settings WHERE category = 'pricing'").run();
+    return { plans: PLANS, usage: USAGE_PRICING };
+}
+
+/**
+ * Safely serialize a value, converting Infinity to null.
+ */
+function safeSerialize(val) {
+    if (val === Infinity || val === -Infinity) return null;
+    return val;
+}
+
+/**
+ * Get public pricing data (no sensitive info).
+ * Merges admin overrides on top of defaults.
+ */
+async function getPublicPricing() {
+    const overrides = await loadPricingOverrides();
+
     const plans = {};
     for (const [slug, plan] of Object.entries(PLANS)) {
+        const overridePlan = overrides.plans?.[slug] || {};
+        const merged = { ...plan, ...overridePlan };
+        const limits = { ...(plan.limits || {}), ...(overridePlan.limits || {}) };
+
         plans[slug] = {
-            name: plan.name,
-            slug: plan.slug,
-            tagline: plan.tagline,
-            price_monthly: plan.price_monthly,
-            price_annual: plan.price_annual,
-            limits: plan.limits,
-            features: plan.features,
-            sla: plan.sla,
-            badge: plan.badge,
+            name: merged.name,
+            slug: merged.slug || slug,
+            tagline: merged.tagline,
+            price_monthly: merged.price_monthly,
+            price_annual: merged.price_annual,
+            limits,
+            features: merged.features || plan.features,
+            sla: merged.sla,
+            badge: merged.badge,
         };
+    }
+
+    // Safe-serialize usage pricing tiers (Infinity → null)
+    const usage = {};
+    for (const [key, val] of Object.entries(USAGE_PRICING)) {
+        const overrideUsage = overrides.usage?.[key] || {};
+        usage[key] = {
+            name: overrideUsage.name || val.name,
+            unit: overrideUsage.unit || val.unit,
+            tiers: (overrideUsage.tiers || val.tiers).map(t => ({
+                up_to: safeSerialize(t.up_to),
+                price: t.price,
+            })),
+        };
+        if (val.bundle || overrideUsage.bundle) {
+            usage[key].bundle = overrideUsage.bundle || val.bundle;
+        }
     }
 
     return {
         plans,
-        usage_pricing: USAGE_PRICING,
+        usage_pricing: usage,
         currency: 'USD',
         annual_discount_percent: 20,
         free_trial_days: 14,
@@ -449,4 +538,7 @@ module.exports = {
     generateEnterpriseQuote,
     getPublicPricing,
     checkLimit,
+    loadPricingOverrides,
+    updatePricingOverrides,
+    resetPricingToDefaults,
 };

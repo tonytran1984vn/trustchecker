@@ -10,7 +10,7 @@ export function renderPage() {
   return `
     <div class="stats-grid">
       <div class="stat-card violet"><div class="stat-icon">🎨</div><div class="stat-value">${d.total || (d.certificates || []).length}</div><div class="stat-label">Total NFTs</div></div>
-      <div class="stat-card emerald"><div class="stat-icon">✅</div><div class="stat-value">${(d.certificates || []).filter(c => c.status === 'active').length}</div><div class="stat-label">Active</div></div>
+      <div class="stat-card emerald"><div class="stat-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div><div class="stat-value">${(d.certificates || []).filter(c => c.status === 'active').length}</div><div class="stat-label">Active</div></div>
       <div class="stat-card cyan"><div class="stat-icon">🔗</div><div class="stat-value">${(d.certificates || []).filter(c => c.blockchain_seal_id).length}</div><div class="stat-label">On-Chain</div></div>
     </div>
     <div class="card" style="margin-top:20px">

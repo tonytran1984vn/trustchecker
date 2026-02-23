@@ -11,7 +11,7 @@ export function renderPage() {
     <div class="stats-grid">
       <div class="stat-card cyan"><div class="stat-icon">💰</div><div class="stat-value">${(d.wallets || []).length}</div><div class="stat-label">Wallets</div></div>
       <div class="stat-card violet"><div class="stat-icon">💸</div><div class="stat-value">${(d.transactions || []).length}</div><div class="stat-label">Transactions</div></div>
-      <div class="stat-card emerald"><div class="stat-icon">✅</div><div class="stat-value">${(d.transactions || []).filter(t => t.status === 'completed').length}</div><div class="stat-label">Completed</div></div>
+      <div class="stat-card emerald"><div class="stat-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div><div class="stat-value">${(d.transactions || []).filter(t => t.status === 'completed').length}</div><div class="stat-label">Completed</div></div>
     </div>
     <div class="card" style="margin-top:20px">
       <div class="card-header"><div class="card-title">💰 Wallets</div></div>

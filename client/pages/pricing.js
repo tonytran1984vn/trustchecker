@@ -124,7 +124,7 @@ export function renderPage() {
                 <div style="font-size:0.72rem">
                   ${up.tiers.map(t => `
                     <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-                      <span style="color:var(--text-muted)">${t.up_to === Infinity ? 'Volume' : 'First ' + t.up_to.toLocaleString()}</span>
+                      <span style="color:var(--text-muted)">${(t.up_to == null || t.up_to === Infinity) ? 'Volume' : 'First ' + t.up_to.toLocaleString()}</span>
                       <span style="font-weight:700;color:var(--emerald)">$${t.price}/${up.unit}</span>
                     </div>
                   `).join('')}
@@ -148,22 +148,22 @@ export function renderPage() {
             ${[
       ['SLA Guarantee', ...planOrder.map(s => plans[s]?.sla || '—')],
       ['Support Level', 'Community', 'Email', 'Priority', 'Dedicated', 'Dedicated+Slack'],
-      ['Fraud Detection', '—', '✓', '✓', '✓', '✓'],
-      ['AI Anomaly Detection', '—', '—', '✓', '✓', '✓'],
-      ['Digital Twin', '—', '—', '—', '✓', '✓'],
-      ['Carbon Tracking', '—', '—', '✓', '✓', '✓'],
-      ['NFT Certificates', '—', '✓', '✓', '✓', '✓'],
-      ['Custom Branding', '—', '—', '✓', '✓', '✓'],
-      ['SSO / SAML', '—', '—', '—', '✓', '✓'],
-      ['On-Premise', '—', '—', '—', '—', '✓'],
-      ['GS1 Certified Partner', '—', '✓', '✓', '✓', '✓'],
-      ['SOC 2 Type II', '—', '—', '—', '✓', '✓'],
-      ['ISO 27001:2022', '—', '—', '—', '✓', '✓'],
-      ['GDPR Compliant', '✓', '✓', '✓', '✓', '✓'],
+      ['Fraud Detection', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['AI Anomaly Detection', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Digital Twin', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Carbon Tracking', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['NFT Certificates', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Custom Branding', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['SSO / SAML', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['On-Premise', '—', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['GS1 Certified Partner', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['SOC 2 Type II', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['ISO 27001:2022', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['GDPR Compliant', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
     ].map(row => `
               <tr>
                 <td style="font-weight:600;font-size:0.8rem">${row[0]}</td>
-                ${row.slice(1).map(v => `<td style="text-align:center;font-size:0.75rem;${v === '✓' ? 'color:var(--emerald)' : v === '—' ? 'color:var(--text-muted)' : ''}">${v}</td>`).join('')}
+                ${row.slice(1).map(v => `<td style="text-align:center;font-size:0.75rem;${v === '<span class="status-icon status-pass" aria-label="Pass">✓</span>' ? 'color:var(--emerald)' : v === '—' ? 'color:var(--text-muted)' : ''}">${v}</td>`).join('')}
               </tr>
             `).join('')}
           </table>

@@ -32,7 +32,7 @@ export function renderPage() {
         <div class="stat-change up">↗ ${s.today_scans} today</div>
       </div>
       <div class="stat-card emerald">
-        <div class="stat-icon">✅</div>
+        <div class="stat-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div>
         <div class="stat-value">${s.verification_rate}%</div>
         <div class="stat-label">Verification Rate</div>
       </div>
@@ -80,7 +80,7 @@ export function renderPage() {
         <div style="position:relative;height:280px;padding:10px"><canvas id="publicTrustChart"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-header"><div class="card-title">⚠️ Alert Severity</div></div>
+        <div class="card-header"><div class="card-title"><span class="status-icon status-warn" aria-label="Warning">!</span> Alert Severity</div></div>
         <div style="position:relative;height:280px;padding:10px"><canvas id="publicAlertChart"></canvas></div>
       </div>
     </div>

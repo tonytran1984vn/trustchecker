@@ -4,28 +4,38 @@
  */
 const express = require('express');
 const router = express.Router();
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const emailTemplates = require('../engines/emailTemplates');
 
 router.use(authMiddleware);
 
 // ─── GET /templates — List all available email templates ────
 router.get('/templates', async (req, res) => {
-    res.json({ templates: emailTemplates.listTemplates() });
+    try {
+        res.json({ templates: emailTemplates.listTemplates() });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // ─── GET /templates/:name/preview — Preview a template ──────
-router.get('/templates/:name/preview', requireRole('admin'), async (req, res) => {
-    const html = emailTemplates.preview(req.params.name);
-    if (!html) return res.status(404).json({ error: `Template '${req.params.name}' not found` });
+router.get('/templates/:name/preview', requirePermission('notification:manage'), async (req, res) => {
+    try {
+        const html = emailTemplates.preview(req.params.name);
+        if (!html) return res.status(404).json({ error: 'Template not found' });
 
-    // Return as HTML for browser rendering
-    if (req.query.render === 'true') {
-        res.setHeader('Content-Type', 'text/html');
-        return res.send(html);
+        // Return as HTML for browser rendering
+        if (req.query.render === 'true') {
+            res.setHeader('Content-Type', 'text/html');
+            return res.send(html);
+        }
+
+        res.json({ template: req.params.name, html, preview: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Internal server error' });
     }
-
-    res.json({ template: req.params.name, html, preview: true });
 });
 
 // ─── POST /send — Send an email (simulated) ────────────────
@@ -64,12 +74,17 @@ router.post('/send', requireRole('admin'), async (req, res) => {
 
 // ─── GET /config — Get email configuration status ───────────
 router.get('/config', requireRole('admin'), async (req, res) => {
-    res.json({
-        provider: 'simulated',
-        smtp_configured: false,
-        supported_templates: emailTemplates.listTemplates().length,
-        note: 'Set up SMTP credentials in Admin → Integrations → Email/SMTP to enable real email delivery'
-    });
+    try {
+        res.json({
+            provider: 'simulated',
+            smtp_configured: false,
+            supported_templates: emailTemplates.listTemplates().length,
+            note: 'Set up SMTP credentials in Admin → Integrations → Email/SMTP to enable real email delivery'
+        });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 function getSubject(template) {

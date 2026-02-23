@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 
 router.use(authMiddleware);
 
@@ -58,7 +58,7 @@ router.get('/', async (req, res) => {
         if (category) { sql += ' AND st.category = ?'; params.push(category); }
 
         sql += ' ORDER BY CASE st.priority WHEN \'critical\' THEN 1 WHEN \'high\' THEN 2 WHEN \'medium\' THEN 3 ELSE 4 END, st.created_at DESC LIMIT ?';
-        params.push(Number(limit));
+        params.push(Math.min(Number(limit) || 50, 200));
 
         const tickets = await db.all(sql, params);
         const stats = {

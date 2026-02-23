@@ -29,6 +29,10 @@ function setupMiddleware(app, redis) {
     app.use(metrics.middleware);
     app.use(slo.sloMiddleware);
 
+    // L3→L4 Hardening: Real metrics collection
+    const { observabilityMiddleware } = require('../middleware/observability');
+    app.use(observabilityMiddleware);
+
     // API-scoped middleware
     app.use('/api/', apiVersionMiddleware);
     app.use('/api/', apiMeteringMiddleware);

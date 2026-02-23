@@ -8,7 +8,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 
 router.use(authMiddleware);
 
@@ -112,7 +112,7 @@ router.get('/ratings/:entity_type/:entity_id', async (req, res) => {
 });
 
 // ─── CERTIFICATIONS ─────────────────────────────────────────
-router.post('/certifications', requireRole('manager'), async (req, res) => {
+router.post('/certifications', requirePermission('stakeholder:manage'), async (req, res) => {
     try {
         const { entity_type, entity_id, cert_name, cert_body, cert_number, issued_date, expiry_date } = req.body;
         if (!entity_id || !cert_name) return res.status(400).json({ error: 'entity_id and cert_name required' });

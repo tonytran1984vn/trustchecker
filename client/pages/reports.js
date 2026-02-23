@@ -27,7 +27,7 @@ export function renderPage() {
     </div>`;
 }
 async function generateReport(templateId) {
-  try { showToast('📊 Generating report...', 'info'); const r = await API.get(`/reports/generate/${templateId}`); downloadJSON(r, `report_${templateId}.json`); showToast('✅ Report generated', 'success'); } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  try { showToast('📊 Generating report...', 'info'); const r = await API.get(`/reports/generate/${templateId}`); downloadJSON(r, `report_${templateId}.json`); showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Report generated', 'success'); } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 // Window exports for onclick handlers

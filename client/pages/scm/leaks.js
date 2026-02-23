@@ -13,7 +13,7 @@ export function renderPage() {
   return `
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
       <div class="stat-card rose"><div class="stat-icon">🔍</div><div class="stat-value">${stats.open}</div><div class="stat-label">Open Leaks</div></div>
-      <div class="stat-card emerald"><div class="stat-icon">✅</div><div class="stat-value">${stats.resolved}</div><div class="stat-label">Resolved</div></div>
+      <div class="stat-card emerald"><div class="stat-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div><div class="stat-value">${stats.resolved}</div><div class="stat-label">Resolved</div></div>
       <div class="stat-card cyan"><div class="stat-icon">📊</div><div class="stat-value">${stats.total}</div><div class="stat-label">Total Alerts</div></div>
     </div>
 

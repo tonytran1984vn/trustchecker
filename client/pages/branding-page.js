@@ -39,7 +39,7 @@ export function renderPage() {
     <div class="card" style="margin-top:20px">
       <div class="card-header"><div class="card-title">👁️ Preview</div></div>
       <div style="padding:20px;background:var(--bg-tertiary);border-radius:8px;display:flex;align-items:center;gap:16px">
-        ${d.logo_url ? `<img src="${d.logo_url}" style="height:48px;border-radius:8px"/>` : '<div style="width:48px;height:48px;background:var(--cyan);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem">🛡️</div>'}
+        ${d.logo_url ? `<img src="${d.logo_url}" alt="Organization logo" style="height:48px;border-radius:8px"/>` : '<div style="width:48px;height:48px;background:var(--cyan);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem">🛡️</div>'}
         <div>
           <div style="font-weight:700;font-size:1.2rem">${d.company_name || 'TrustChecker'}</div>
           <div style="font-size:0.8rem;color:var(--text-muted)">Enterprise Digital Trust Platform</div>
@@ -50,11 +50,11 @@ export function renderPage() {
 async function saveBranding() {
   try {
     await API.put('/branding', { company_name: document.getElementById('brand-name')?.value, primary_color: document.getElementById('brand-color')?.value, logo_url: document.getElementById('brand-logo')?.value, support_email: document.getElementById('brand-email')?.value });
-    showToast('✅ Branding saved', 'success');
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Branding saved', 'success');
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 async function resetBranding() {
-  try { await API.delete('/branding'); showToast('↩️ Branding reset', 'info'); loadPageData('branding'); } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  try { await API.delete('/branding'); showToast('↩️ Branding reset', 'info'); loadPageData('branding'); } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 // Window exports for onclick handlers

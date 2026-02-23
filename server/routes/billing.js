@@ -9,7 +9,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const pricing = require('../engines/pricing-engine');
 const { getDetailedUsage, getOverageCharges } = require('../middleware/usage-meter');
 
@@ -59,8 +59,12 @@ router.post('/webhook', async (req, res) => {
 });
 
 // ─── GET /pricing — Public pricing page data (no auth) ──────────
-router.get('/pricing', (req, res) => {
-    res.json(pricing.getPublicPricing());
+router.get('/pricing', async (req, res) => {
+    try {
+        res.json(await pricing.getPublicPricing());
+    } catch (e) {
+        safeError(res, 'Operation failed', e);
+    }
 });
 
 router.use(authMiddleware);
@@ -87,7 +91,7 @@ router.get('/plan', async (req, res) => {
         res.json({
             plan,
             plan_details: planDef,
-            available_plans: pricing.getPublicPricing().plans,
+            available_plans: (await pricing.getPublicPricing()).plans,
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -95,7 +99,7 @@ router.get('/plan', async (req, res) => {
 });
 
 // ─── POST /upgrade ──────────────────────────────────────────
-router.post('/upgrade', requireRole('admin'), async (req, res) => {
+router.post('/upgrade', requirePermission('billing:manage'), async (req, res) => {
     try {
         const { plan_name, billing_cycle } = req.body;
         if (!PLANS[plan_name]) return res.status(400).json({ error: 'Invalid plan. Choose: free, starter, pro, business, enterprise' });
@@ -153,8 +157,15 @@ router.get('/usage', async (req, res) => {
 
         // Calculate real usage from existing tables
         const period = new Date().toISOString().substring(0, 7); // YYYY-MM
+
+        // Use PG-compatible date functions
+        const isPG = !!process.env.DATABASE_URL;
+        const monthStart = isPG
+            ? "date_trunc('month', now())"
+            : "date('now', 'start of month')";
+
         const scans = await db.get(
-            "SELECT COUNT(*) as count FROM scan_events WHERE scanned_at >= date('now', 'start of month')"
+            `SELECT COUNT(*) as count FROM scan_events WHERE scanned_at >= ${monthStart}`
         ) || { count: 0 };
 
         const evidenceSize = await db.get(
@@ -162,7 +173,7 @@ router.get('/usage', async (req, res) => {
         ) || { size: 0 };
 
         const apiCalls = await db.get(
-            "SELECT COUNT(*) as count FROM audit_log WHERE timestamp >= date('now', 'start of month')"
+            `SELECT COUNT(*) as count FROM audit_log WHERE timestamp >= ${monthStart}`
         ) || { count: 0 };
 
         const usage = {
@@ -381,8 +392,16 @@ router.get('/usage/alerts', async (req, res) => {
         const planLimits = PLANS[plan?.plan_name || 'free'];
         const period = new Date().toISOString().substring(0, 7);
 
-        const scanCount = (await db.get("SELECT COUNT(*) as c FROM scan_events WHERE strftime('%Y-%m', scanned_at) = ?", [period]))?.c || 0;
-        const apiCount = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE strftime('%Y-%m', created_at) = ?", [period]))?.c || 0;
+        const isPG = !!process.env.DATABASE_URL;
+        const monthFilter = isPG
+            ? `to_char(scanned_at, 'YYYY-MM') = '${period}'`
+            : `strftime('%Y-%m', scanned_at) = '${period}'`;
+        const monthFilterAudit = isPG
+            ? `to_char(created_at, 'YYYY-MM') = '${period}'`
+            : `strftime('%Y-%m', created_at) = '${period}'`;
+
+        const scanCount = (await db.get(`SELECT COUNT(*) as c FROM scan_events WHERE ${monthFilter}`))?.c || 0;
+        const apiCount = (await db.get(`SELECT COUNT(*) as c FROM audit_log WHERE ${monthFilterAudit}`))?.c || 0;
         const storageSize = (await db.get("SELECT COALESCE(SUM(file_size), 0) as s FROM evidence_items"))?.s || 0;
         const storageMB = storageSize / (1024 * 1024);
 
@@ -528,5 +547,109 @@ curl -s -X POST '${baseUrl}/api/qr/verify' \\
     }
 });
 
-module.exports = router;
+// ═══════════════════════════════════════════════════════════════════
+// PRICING ADMIN (super_admin only)
+// ═══════════════════════════════════════════════════════════════════
+const requireSuperAdmin = require('../middleware/requireSuperAdmin');
 
+// ─── PUT /pricing — Update plan pricing (super_admin only) ───────────────────
+router.put('/pricing', requireSuperAdmin(), async (req, res) => {
+    try {
+        const { plans } = req.body;
+        if (!plans || typeof plans !== 'object') {
+            return res.status(400).json({ error: 'plans object is required' });
+        }
+
+        await pricing.updatePricingOverrides('plans', plans, req.user.id);
+
+        // Audit
+        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, details) VALUES (?, ?, ?, ?, ?)`)
+            .run(uuidv4(), req.user.id, 'PRICING_PLANS_UPDATED', 'system', JSON.stringify({ updated_plans: Object.keys(plans) }));
+
+        const updated = await pricing.getPublicPricing();
+        res.json({ message: 'Plan pricing updated', plans: updated.plans });
+    } catch (e) {
+        console.error('[billing] Pricing update error:', e);
+        safeError(res, 'Failed to update pricing', e);
+    }
+});
+
+// ─── PUT /usage-pricing — Update usage-based pricing (super_admin only) ──────
+router.put('/usage-pricing', requireSuperAdmin(), async (req, res) => {
+    try {
+        const { usage } = req.body;
+        if (!usage || typeof usage !== 'object') {
+            return res.status(400).json({ error: 'usage object is required' });
+        }
+
+        await pricing.updatePricingOverrides('usage', usage, req.user.id);
+
+        // Audit
+        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, details) VALUES (?, ?, ?, ?, ?)`)
+            .run(uuidv4(), req.user.id, 'PRICING_USAGE_UPDATED', 'system', JSON.stringify({ updated_types: Object.keys(usage) }));
+
+        const updated = await pricing.getPublicPricing();
+        res.json({ message: 'Usage pricing updated', usage_pricing: updated.usage_pricing });
+    } catch (e) {
+        console.error('[billing] Usage pricing update error:', e);
+        safeError(res, 'Failed to update usage pricing', e);
+    }
+});
+
+// ─── POST /pricing/reset — Reset pricing to defaults (super_admin only) ──────
+router.post('/pricing/reset', requireSuperAdmin(), async (req, res) => {
+    try {
+        const result = await pricing.resetPricingToDefaults();
+
+        // Audit
+        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, details) VALUES (?, ?, ?, ?, ?)`)
+            .run(uuidv4(), req.user.id, 'PRICING_RESET', 'system', JSON.stringify({ reset_at: new Date().toISOString() }));
+
+        res.json({ message: 'Pricing reset to defaults', plans: result.plans });
+    } catch (e) {
+        console.error('[billing] Pricing reset error:', e);
+        safeError(res, 'Failed to reset pricing', e);
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// TRANSACTION FEE INFRASTRUCTURE (per-transaction pricing)
+// ═══════════════════════════════════════════════════════════════════
+const txFeeEngine = require('../engines/transaction-fee-engine');
+
+// ─── GET /transaction-fees — Fee schedule ────────────────────────────
+router.get('/transaction-fees', (req, res) => {
+    res.json(txFeeEngine.getFeeSchedule());
+});
+
+// ─── GET /transaction-fees/calculate — Calculate fee for a volume ────
+router.get('/transaction-fees/calculate', (req, res) => {
+    const { type, volume } = req.query;
+    if (!type || !volume) return res.status(400).json({ error: 'type and volume query params required' });
+    const result = txFeeEngine.calculateFee(type, parseInt(volume));
+    if (result.error) return res.status(400).json(result);
+    res.json(result);
+});
+
+// ─── GET /revenue/report — Platform revenue report ──────────────────
+router.get('/revenue/report', requirePermission('admin:manage'), (req, res) => {
+    const period = req.query.period || new Date().toISOString().slice(0, 7);
+    res.json(txFeeEngine.generateRevenueReport(period));
+});
+
+// ─── GET /revenue/invoice — Tenant transaction invoice ──────────────
+router.get('/revenue/invoice', (req, res) => {
+    const period = req.query.period || new Date().toISOString().slice(0, 7);
+    const tenantId = req.user?.org_id || req.user?.id || 'default';
+    res.json(txFeeEngine.generateTenantInvoice(tenantId, period));
+});
+
+// ─── POST /transaction-fees/simulate — Pricing simulator ────────────
+router.post('/transaction-fees/simulate', (req, res) => {
+    const { usage } = req.body;
+    if (!usage || typeof usage !== 'object') return res.status(400).json({ error: 'usage object required' });
+    res.json(txFeeEngine.simulate(usage));
+});
+
+
+module.exports = router;

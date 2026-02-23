@@ -34,22 +34,21 @@ const fs = require('fs');
 let PUBLIC_KEY = null;
 let PRIVATE_KEY = null; // Only available on license generation server (dev/internal)
 
-function loadKeys() {
+async function loadKeys() {
     // Try loading from file first
     const keyDir = path.join(__dirname, '..', '..', 'certs');
+    const fsp = require('fs').promises;
 
     try {
         const pubKeyPath = process.env.LICENSE_PUBLIC_KEY_PATH || path.join(keyDir, 'license-public.pem');
-        if (fs.existsSync(pubKeyPath)) {
-            PUBLIC_KEY = crypto.createPublicKey(fs.readFileSync(pubKeyPath));
-        }
+        await fsp.access(pubKeyPath);
+        PUBLIC_KEY = crypto.createPublicKey(await fsp.readFile(pubKeyPath));
     } catch (_) { /* key not found — will auto-generate for dev */ }
 
     try {
         const privKeyPath = process.env.LICENSE_PRIVATE_KEY_PATH || path.join(keyDir, 'license-private.pem');
-        if (fs.existsSync(privKeyPath)) {
-            PRIVATE_KEY = crypto.createPrivateKey(fs.readFileSync(privKeyPath));
-        }
+        await fsp.access(privKeyPath);
+        PRIVATE_KEY = crypto.createPrivateKey(await fsp.readFile(privKeyPath));
     } catch (_) { /* private key not available — that's fine for customer deployments */ }
 
     // Auto-generate keypair for development/testing
@@ -61,7 +60,7 @@ function loadKeys() {
     }
 }
 
-loadKeys();
+loadKeys().catch(err => console.error('[license] Key loading failed:', err.message));
 
 
 // ─── Hardware Fingerprint ────────────────────────────────────────────────────
@@ -122,7 +121,7 @@ function validateLicense(licenseKey) {
 
         return validatePayload(envelope.payload);
     } catch (err) {
-        return { valid: false, error: 'Invalid license format: ' + err.message };
+        return { valid: false, error: 'Invalid license format' };
     }
 }
 

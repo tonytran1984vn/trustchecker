@@ -62,7 +62,7 @@ export async function loadSettingsData() {
     if (mfaEl) {
       mfaEl.innerHTML = me.user.mfa_enabled ? `
         <div class="mfa-enabled">
-          <div class="mfa-icon">✅</div>
+          <div class="mfa-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div>
           <div class="mfa-text">MFA is <strong>enabled</strong></div>
           <div style="margin-top:12px">
             <div class="input-group">
@@ -131,25 +131,25 @@ async function setupMfa() {
         </div>
       `;
     }
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 async function verifyMfa() {
   const code = document.getElementById('mfa-verify-code')?.value;
   if (!code || code.length !== 6) return;
   try {
     await API.post('/auth/mfa/verify', { code });
-    showToast('✅ MFA enabled successfully!', 'success');
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> MFA enabled successfully!', 'success');
     loadSettingsData();
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 async function disableMfa() {
   const pw = document.getElementById('mfa-disable-pw')?.value;
   if (!pw) return showToast('Password required', 'error');
   try {
     await API.post('/auth/mfa/disable', { password: pw });
-    showToast('✅ MFA disabled', 'success');
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> MFA disabled', 'success');
     loadSettingsData();
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 async function changePassword() {
   const cur = document.getElementById('pw-current')?.value;
@@ -171,16 +171,16 @@ async function changePassword() {
 async function revokeSession(id) {
   try {
     await API.post('/auth/revoke', { session_id: id });
-    showToast('✅ Session revoked', 'success');
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Session revoked', 'success');
     loadSettingsData();
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 async function revokeAllSessions() {
   try {
     await API.post('/auth/revoke', {});
-    showToast('✅ All other sessions revoked', 'success');
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> All other sessions revoked', 'success');
     loadSettingsData();
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 // Window exports for onclick handlers

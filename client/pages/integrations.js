@@ -110,7 +110,7 @@ async function saveIntegration(cat) {
       if (inp) payload[s.key] = inp.value;
     }
     const result = await API.put(`/integrations/${cat}`, payload);
-    showToast(`✅ ${result.message}`, 'success');
+    showToast(`<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> ${result.message}`, 'success');
     // Reload data
     State.integrationsData = await API.get('/integrations');
     render();
@@ -120,7 +120,7 @@ async function saveIntegration(cat) {
       const chev = document.getElementById('chevron-' + cat);
       if (body) { body.style.display = 'block'; chev.textContent = '▼'; }
     }, 100);
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 async function testIntegration(cat) {
   const resultEl = document.getElementById('integ-test-' + cat);
@@ -131,17 +131,17 @@ async function testIntegration(cat) {
   try {
     const result = await API.get(`/integrations/${cat}/test`);
     if (result.status === 'ok') {
-      resultEl.textContent = '✅ ' + (result.message || 'Connection successful');
+      resultEl.textContent = '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> ' + (result.message || 'Connection successful');
       resultEl.style.color = 'var(--success)';
     } else if (result.status === 'disabled') {
-      resultEl.textContent = '⚠️ ' + (result.message || 'Integration disabled');
+      resultEl.textContent = '<span class="status-icon status-warn" aria-label="Warning">!</span> ' + (result.message || 'Integration disabled');
       resultEl.style.color = 'var(--warning)';
     } else {
-      resultEl.textContent = '❌ ' + (result.message || 'Test failed');
+      resultEl.textContent = '<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + (result.message || 'Test failed');
       resultEl.style.color = 'var(--danger)';
     }
   } catch (e) {
-    resultEl.textContent = '❌ Test failed: ' + (e.message || 'Unknown error');
+    resultEl.textContent = '<span class="status-icon status-fail" aria-label="Fail">✗</span> Test failed: ' + (e.message || 'Unknown error');
     resultEl.style.color = 'var(--danger)';
   }
 }
@@ -152,7 +152,7 @@ async function clearIntegration(cat) {
     showToast('🗑️ Settings cleared', 'info');
     State.integrationsData = await API.get('/integrations');
     render();
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 // Window exports for onclick handlers

@@ -173,27 +173,31 @@ class QueryStore {
 
     async _buildDashboardStats(params) {
         const { orgId } = params;
-        const where = orgId ? `WHERE org_id = '${orgId}'` : '';
         try {
             const [products, scans, fraudAlerts, partners] = await Promise.all([
-                this._query(`SELECT COUNT(*) as count FROM products ${where}`),
-                this._query(`SELECT COUNT(*) as count FROM scan_events ${where}`),
-                this._query(`SELECT COUNT(*) as count, 
+                orgId ? this._queryParam('SELECT COUNT(*) as count FROM products WHERE org_id = ?', [orgId])
+                    : this._queryParam('SELECT COUNT(*) as count FROM products', []),
+                orgId ? this._queryParam('SELECT COUNT(*) as count FROM scan_events WHERE org_id = ?', [orgId])
+                    : this._queryParam('SELECT COUNT(*) as count FROM scan_events', []),
+                orgId ? this._queryParam(`SELECT COUNT(*) as count, 
                     SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open_count,
                     SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) as critical_count
-                    FROM fraud_alerts ${where}`),
-                this._query(`SELECT COUNT(*) as count FROM partners ${where}`),
+                    FROM fraud_alerts WHERE org_id = ?`, [orgId])
+                    : this._queryParam(`SELECT COUNT(*) as count, 
+                    SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open_count,
+                    SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) as critical_count
+                    FROM fraud_alerts`, []),
+                orgId ? this._queryParam('SELECT COUNT(*) as count FROM partners WHERE org_id = ?', [orgId])
+                    : this._queryParam('SELECT COUNT(*) as count FROM partners', []),
             ]);
 
             // Trend: scans in last 7 days vs previous 7 days
-            const recentScans = await this._query(
-                `SELECT COUNT(*) as count FROM scan_events ${where ? where + ' AND' : 'WHERE'}
-                 created_at > datetime('now', '-7 days')`
-            );
-            const previousScans = await this._query(
-                `SELECT COUNT(*) as count FROM scan_events ${where ? where + ' AND' : 'WHERE'}
-                 created_at > datetime('now', '-14 days') AND created_at <= datetime('now', '-7 days')`
-            );
+            const recentScans = orgId
+                ? await this._queryParam(`SELECT COUNT(*) as count FROM scan_events WHERE org_id = ? AND created_at > datetime('now', '-7 days')`, [orgId])
+                : await this._queryParam(`SELECT COUNT(*) as count FROM scan_events WHERE created_at > datetime('now', '-7 days')`, []);
+            const previousScans = orgId
+                ? await this._queryParam(`SELECT COUNT(*) as count FROM scan_events WHERE org_id = ? AND created_at > datetime('now', '-14 days') AND created_at <= datetime('now', '-7 days')`, [orgId])
+                : await this._queryParam(`SELECT COUNT(*) as count FROM scan_events WHERE created_at > datetime('now', '-14 days') AND created_at <= datetime('now', '-7 days')`, []);
 
             const recent = recentScans?.count || 0;
             const previous = previousScans?.count || 0;
@@ -211,21 +215,21 @@ class QueryStore {
                 generatedAt: new Date().toISOString(),
             };
         } catch (e) {
-            return { error: e.message, totalProducts: 0, totalScans: 0, generatedAt: new Date().toISOString() };
+            return { error: 'Query failed', totalProducts: 0, totalScans: 0, generatedAt: new Date().toISOString() };
         }
     }
 
     async _buildScanVerification(params) {
         const { productId } = params;
         try {
-            const product = await this._query(
+            const product = await this._queryParam(
                 `SELECT p.*, ts.score as trust_score, ts.level as trust_level
                  FROM products p LEFT JOIN trust_scores ts ON p.id = ts.product_id
-                 WHERE p.id = '${productId}' LIMIT 1`
+                 WHERE p.id = ? LIMIT 1`, [productId]
             );
-            const recentScans = await this._queryAll(
-                `SELECT * FROM scan_events WHERE product_id = '${productId}' 
-                 ORDER BY created_at DESC LIMIT 10`
+            const recentScans = await this._queryAllParam(
+                `SELECT * FROM scan_events WHERE product_id = ? 
+                 ORDER BY created_at DESC LIMIT 10`, [productId]
             );
             return { product: product || null, recentScans, generatedAt: new Date().toISOString() };
         } catch (e) {
@@ -236,14 +240,14 @@ class QueryStore {
     async _buildScmTimeline(params) {
         const { shipmentId } = params;
         try {
-            const shipment = await this._query(
+            const shipment = await this._queryParam(
                 `SELECT s.*, p.name as partner_name, p.trust_rating as partner_trust
                  FROM shipments s LEFT JOIN partners p ON s.partner_id = p.id
-                 WHERE s.id = '${shipmentId}' LIMIT 1`
+                 WHERE s.id = ? LIMIT 1`, [shipmentId]
             );
-            const checkpoints = await this._queryAll(
-                `SELECT * FROM shipment_checkpoints WHERE shipment_id = '${shipmentId}'
-                 ORDER BY timestamp ASC`
+            const checkpoints = await this._queryAllParam(
+                `SELECT * FROM shipment_checkpoints WHERE shipment_id = ?
+                 ORDER BY timestamp ASC`, [shipmentId]
             );
             return { shipment: shipment || null, checkpoints, generatedAt: new Date().toISOString() };
         } catch (e) {
@@ -253,16 +257,13 @@ class QueryStore {
 
     async _buildFraudOverview(params) {
         const { orgId } = params;
-        const where = orgId ? `WHERE org_id = '${orgId}'` : '';
         try {
-            const severityDist = await this._queryAll(
-                `SELECT severity, COUNT(*) as count FROM fraud_alerts ${where} GROUP BY severity`
-            );
-            const resolutionRate = await this._query(
-                `SELECT COUNT(*) as total,
-                 SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved
-                 FROM fraud_alerts ${where}`
-            );
+            const severityDist = orgId
+                ? await this._queryAllParam('SELECT severity, COUNT(*) as count FROM fraud_alerts WHERE org_id = ? GROUP BY severity', [orgId])
+                : await this._queryAllParam('SELECT severity, COUNT(*) as count FROM fraud_alerts GROUP BY severity', []);
+            const resolutionRate = orgId
+                ? await this._queryParam(`SELECT COUNT(*) as total, SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved FROM fraud_alerts WHERE org_id = ?`, [orgId])
+                : await this._queryParam(`SELECT COUNT(*) as total, SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved FROM fraud_alerts`, []);
             const rate = resolutionRate?.total > 0
                 ? Math.round((resolutionRate.resolved / resolutionRate.total) * 100) : 0;
 
@@ -278,25 +279,34 @@ class QueryStore {
         }
     }
 
-    // ─── DB Helpers ─────────────────────────────────────────────────
+    // ─── DB Helpers (FIX C-1/C-2: parameterized queries only) ────
 
-    async _query(sql) {
+    async _queryParam(sql, params = []) {
         if (this.db.prepare) {
-            try { return this.db.prepare(sql).get(); } catch (e) { return null; }
-        }
-        if (this.db.$queryRawUnsafe) {
-            const rows = await this.db.$queryRawUnsafe(sql);
-            return rows[0] || null;
+            try { return this.db.prepare(sql).get(...params); } catch (e) { return null; }
         }
         return null;
     }
 
+    async _queryAllParam(sql, params = []) {
+        if (this.db.prepare) {
+            try { return this.db.prepare(sql).all(...params); } catch (e) { return []; }
+        }
+        return [];
+    }
+
+    /** @deprecated Use _queryParam instead */
+    async _query(sql) {
+        if (this.db.prepare) {
+            try { return this.db.prepare(sql).get(); } catch (e) { return null; }
+        }
+        return null;
+    }
+
+    /** @deprecated Use _queryAllParam instead */
     async _queryAll(sql) {
         if (this.db.prepare) {
             try { return this.db.prepare(sql).all(); } catch (e) { return []; }
-        }
-        if (this.db.$queryRawUnsafe) {
-            return this.db.$queryRawUnsafe(sql);
         }
         return [];
     }

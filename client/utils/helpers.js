@@ -25,7 +25,7 @@ export function scoreColor(s) {
 export function eventIcon(type) {
     const icons = {
         'scan': '📱', 'fraud_alert': '🚨', 'product_registered': '📦',
-        'blockchain_seal': '🔗', 'kyc_verified': '✅', 'evidence_uploaded': '🔒',
+        'blockchain_seal': '🔗', 'kyc_verified': '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>', 'evidence_uploaded': '🔒',
         'scm_event': '🏭', 'user_login': '👤', 'system': '⚙️',
     };
     return icons[type] || '📌';

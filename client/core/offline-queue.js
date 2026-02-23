@@ -48,7 +48,7 @@ export function onStatusChange(listener) {
 function setOnlineStatus(status) {
     if (_isOnline === status) return;
     _isOnline = status;
-    console.log(`[OfflineQueue] Network status: ${status ? '🟢 Online' : '🔴 Offline'}`);
+    console.log(`[OfflineQueue] Network status: ${status ? '<span class="status-dot green"></span> Online' : '<span class="status-dot red"></span> Offline'}`);
     for (const listener of _statusListeners) {
         try { listener(status); } catch (e) { console.error('[OfflineQueue] Status listener error:', e); }
     }

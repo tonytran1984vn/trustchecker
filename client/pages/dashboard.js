@@ -69,12 +69,37 @@ export function renderPage() {
 
     <div class="grid-2">
       <div class="card">
-        <div class="card-header"><div class="card-title">📈 Scan Results Distribution</div></div>
-        <div style="position:relative;height:260px;padding:10px"><canvas id="scanDoughnutChart"></canvas></div>
+        <div class="card-header"><div class="card-title">Scan Results</div></div>
+        <div class="chart-donut-wrap" id="scanDonutWrap"></div>
       </div>
       <div class="card">
-        <div class="card-header"><div class="card-title">⚠️ Alert Severity</div></div>
-        <div style="position:relative;height:260px;padding:10px"><canvas id="alertPolarChart"></canvas></div>
+        <div class="card-header"><div class="card-title">Alert Severity</div></div>
+        <div class="chart-bars-wrap" id="alertBarsWrap"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;background:linear-gradient(135deg,rgba(16,185,129,0.06),rgba(59,130,246,0.04));border:1px solid rgba(16,185,129,0.2)">
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title" style="color:#10b981">🌱 Carbon Integrity Engine</div>
+        <a href="#" onclick="event.preventDefault();window.navigate&&window.navigate('scm/carbon-credit')" style="font-size:0.72rem;color:#3b82f6;text-decoration:none;font-weight:600">Open CIE →</a>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:4px 0">
+        <div style="text-align:center">
+          <div style="font-size:26px;font-weight:800;color:#10b981">87<span style="font-size:12px;color:var(--text-muted)">/100</span></div>
+          <div style="font-size:0.68rem;color:var(--text-muted)">Integrity Score</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:26px;font-weight:800;color:#f59e0b">3</div>
+          <div style="font-size:0.68rem;color:var(--text-muted)">Anomalies</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:26px;font-weight:800;color:#3b82f6">3</div>
+          <div style="font-size:0.68rem;color:var(--text-muted)">Sealed CIPs</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:26px;font-weight:800;color:#8b5cf6">5</div>
+          <div style="font-size:0.68rem;color:var(--text-muted)">Anchored Proofs</div>
+        </div>
       </div>
     </div>
   `;
@@ -94,43 +119,106 @@ function renderEventFeed() {
   `).join('');
 }
 
+/* ════════════════════════════════════════════════════════════════
+   PREMIUM CHART COMPONENTS
+   ════════════════════════════════════════════════════════════════ */
+
+const SCAN_COLORS = {
+  valid: { color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
+  suspicious: { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
+  counterfeit: { color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
+  warning: { color: '#f97316', bg: 'rgba(249,115,22,0.12)' },
+  pending: { color: '#6b7280', bg: 'rgba(107,114,128,0.12)' },
+};
+
+const SEV_COLORS = {
+  critical: { color: '#ef4444', bg: 'rgba(239,68,68,0.10)' },
+  high: { color: '#f97316', bg: 'rgba(249,115,22,0.10)' },
+  medium: { color: '#a855f7', bg: 'rgba(168,85,247,0.10)' },
+  low: { color: '#3b82f6', bg: 'rgba(59,130,246,0.10)' },
+};
+
+function buildDonut(data, total) {
+  const R = 54, C = 2 * Math.PI * R;
+  let offset = 0;
+  const arcs = data.map(d => {
+    const pct = total > 0 ? d.count / total : 0;
+    const len = pct * C;
+    const arc = `<circle cx="64" cy="64" r="${R}" fill="none"
+      stroke="${SCAN_COLORS[d.result]?.color || '#6b7280'}"
+      stroke-width="11" stroke-linecap="round"
+      stroke-dasharray="${len - 2} ${C - len + 2}"
+      stroke-dashoffset="-${offset}"
+      style="transition:stroke-dasharray .6s ease,stroke-dashoffset .6s ease"/>`;
+    offset += len;
+    return arc;
+  });
+
+  const legend = data.map(d => {
+    const pct = total > 0 ? ((d.count / total) * 100).toFixed(0) : 0;
+    const c = SCAN_COLORS[d.result] || { color: '#6b7280', bg: 'rgba(107,114,128,0.12)' };
+    return `<div class="cleg-item">
+      <span class="cleg-dot" style="background:${c.color}"></span>
+      <span class="cleg-label">${d.result}</span>
+      <span class="cleg-val">${d.count}</span>
+      <span class="cleg-pct">${pct}%</span>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="chart-donut">
+      <svg viewBox="0 0 128 128" class="donut-svg">
+        <circle cx="64" cy="64" r="${R}" fill="none" stroke="var(--border)" stroke-width="11" opacity=".25"/>
+        ${arcs.join('')}
+      </svg>
+      <div class="donut-center">
+        <span class="donut-total">${total}</span>
+        <span class="donut-label">scans</span>
+      </div>
+    </div>
+    <div class="chart-legend">${legend}</div>
+  `;
+}
+
+function buildBars(data) {
+  const maxVal = Math.max(...data.map(d => d.count), 1);
+  return data.map(d => {
+    const c = SEV_COLORS[d.severity] || { color: '#6b7280', bg: 'rgba(107,114,128,0.10)' };
+    const pct = ((d.count / maxVal) * 100).toFixed(0);
+    return `
+      <div class="sev-row">
+        <div class="sev-header">
+          <span class="sev-dot" style="background:${c.color}"></span>
+          <span class="sev-name">${d.severity}</span>
+          <span class="sev-count">${d.count}</span>
+        </div>
+        <div class="sev-track">
+          <div class="sev-fill" style="width:${pct}%;background:${c.color}"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 export function initDashboardCharts() {
   const s = State.dashboardStats;
   if (!s) return;
+
+  // Scan donut
+  const scanWrap = document.getElementById('scanDonutWrap');
   const scanData = s.scans_by_result || [];
-  const scanCanvas = document.getElementById('scanDoughnutChart');
-  if (scanCanvas && scanData.length) {
-    const colorMap = { valid: '#00d264', warning: '#ffa500', suspicious: '#ff6b6b', counterfeit: '#ff3366', pending: '#636e7b' };
-    new Chart(scanCanvas, {
-      type: 'doughnut',
-      data: {
-        labels: scanData.map(d => d.result),
-        datasets: [{ data: scanData.map(d => d.count), backgroundColor: scanData.map(d => colorMap[d.result] || '#00d2ff'), borderWidth: 0, borderRadius: 4 }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'bottom', labels: { color: '#c8d6e5', padding: 12, usePointStyle: true, font: { family: 'Inter', size: 11 } } } },
-        cutout: '65%'
-      }
-    });
+  if (scanWrap && scanData.length) {
+    const total = scanData.reduce((a, d) => a + d.count, 0);
+    scanWrap.innerHTML = buildDonut(scanData, total);
   }
+
+  // Alert severity bars
+  const alertWrap = document.getElementById('alertBarsWrap');
   const alertData = s.alerts_by_severity || [];
-  const alertCanvas = document.getElementById('alertPolarChart');
-  if (alertCanvas && alertData.length) {
-    const sevColors = { critical: '#ff3366', high: '#ffa500', medium: '#a855f7', low: '#00d2ff' };
-    new Chart(alertCanvas, {
-      type: 'polarArea',
-      data: {
-        labels: alertData.map(d => d.severity),
-        datasets: [{ data: alertData.map(d => d.count), backgroundColor: alertData.map(d => (sevColors[d.severity] || '#00d2ff') + '99'), borderWidth: 0 }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'bottom', labels: { color: '#c8d6e5', padding: 12, usePointStyle: true, font: { family: 'Inter', size: 11 } } } },
-        scales: { r: { ticks: { display: false }, grid: { color: 'rgba(255,255,255,0.06)' } } }
-      }
-    });
+  if (alertWrap && alertData.length) {
+    alertWrap.innerHTML = buildBars(alertData);
   }
 }
 
 window.initDashboardCharts = initDashboardCharts;
+

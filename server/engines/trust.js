@@ -95,7 +95,7 @@ class TrustEngine {
         );
 
         // Update product trust score
-        db.prepare('UPDATE products SET trust_score = ?, updated_at = datetime("now") WHERE id = ?')
+        db.prepare("UPDATE products SET trust_score = ?, updated_at = datetime('now') WHERE id = ?")
             .run(score, productId);
 
         // Broadcast

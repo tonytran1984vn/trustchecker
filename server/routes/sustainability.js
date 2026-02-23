@@ -7,12 +7,12 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 
 router.use(authMiddleware);
 
 // ─── POST /assess — Assess product sustainability ──────────
-router.post('/assess', requireRole('operator'), async (req, res) => {
+router.post('/assess', requirePermission('sustainability:create'), async (req, res) => {
     try {
         const { product_id, carbon_footprint, water_usage, recyclability, ethical_sourcing, packaging_score, transport_score } = req.body;
         if (!product_id) return res.status(400).json({ error: 'product_id required' });
@@ -87,7 +87,7 @@ router.get('/leaderboard', async (req, res) => {
       )
       ORDER BY ss.overall_score DESC
       LIMIT ?
-    `, [Number(limit)]);
+    `, [Math.min(Number(limit) || 50, 200)]);
 
         res.json({ leaderboard: leaders.map((l, i) => ({ rank: i + 1, ...l })), total: leaders.length });
     } catch (e) {
@@ -96,7 +96,7 @@ router.get('/leaderboard', async (req, res) => {
 });
 
 // ─── POST /green-cert — Issue green certification ───────────
-router.post('/green-cert', requireRole('manager'), async (req, res) => {
+router.post('/green-cert', requirePermission('sustainability:manage'), async (req, res) => {
     try {
         const { product_id, certification_name, standard, valid_days } = req.body;
         if (!product_id || !certification_name) return res.status(400).json({ error: 'product_id and certification_name required' });
@@ -112,6 +112,7 @@ router.post('/green-cert', requireRole('manager'), async (req, res) => {
 
         // Insert into existing certifications table
         const crypto = require('crypto');
+        const { safeParse } = require('../utils/safe-json');
         const certHash = crypto.createHash('sha256').update(JSON.stringify({ product_id, certification_name, standard, issued: new Date().toISOString() })).digest('hex');
 
         await db.prepare(`
@@ -120,7 +121,7 @@ router.post('/green-cert', requireRole('manager'), async (req, res) => {
     `).run(id, product_id, certification_name, standard || 'Custom Green Standard', expiresAt, certHash);
 
         // Update sustainability score with certification
-        const certs = JSON.parse(score.certifications || '[]');
+        const certs = safeParse(score.certifications, []);
         certs.push({ cert_id: id, name: certification_name, standard: standard || 'Custom', issued: new Date().toISOString() });
         await db.prepare('UPDATE sustainability_scores SET certifications = ? WHERE id = ?').run(JSON.stringify(certs), score.id);
 
@@ -145,13 +146,20 @@ router.post('/green-cert', requireRole('manager'), async (req, res) => {
 // ─── GET /stats — Sustainability platform stats ─────────────
 router.get('/stats', async (req, res) => {
     try {
-        const total = (await db.get('SELECT COUNT(DISTINCT product_id) as c FROM sustainability_scores'))?.c || 0;
-        const avgScore = (await db.get('SELECT AVG(overall_score) as a FROM sustainability_scores'))?.a || 0;
-        const avgCarbon = (await db.get('SELECT AVG(carbon_footprint) as a FROM sustainability_scores'))?.a || 0;
-        const byGrade = await db.all("SELECT grade, COUNT(*) as count FROM (SELECT product_id, grade FROM sustainability_scores WHERE id IN (SELECT MAX(id) FROM sustainability_scores GROUP BY product_id)) GROUP BY grade ORDER BY grade");
+        const total = (await db.get('SELECT COUNT(DISTINCT product_id)::int as c FROM sustainability_scores'))?.c || 0;
+        const avgScore = (await db.get('SELECT AVG(overall_score)::float as a FROM sustainability_scores'))?.a || 0;
+        const avgCarbon = (await db.get('SELECT AVG(carbon_footprint)::float as a FROM sustainability_scores'))?.a || 0;
+
+        let byGrade = [];
+        try {
+            byGrade = await db.all("SELECT grade, COUNT(*)::int as count FROM (SELECT DISTINCT ON (product_id) product_id, grade FROM sustainability_scores ORDER BY product_id, overall_score DESC) sub GROUP BY grade ORDER BY grade");
+        } catch (e) {
+            // Fallback: simple grade distribution without dedup
+            try { byGrade = await db.all("SELECT grade, COUNT(*)::int as count FROM sustainability_scores GROUP BY grade ORDER BY grade"); } catch (e2) { /* skip */ }
+        }
 
         let greenCerts = 0;
-        try { greenCerts = (await db.get("SELECT COUNT(*) as c FROM certifications WHERE status = 'active'"))?.c || 0; } catch (e) { /* table may not exist */ }
+        try { greenCerts = (await db.get("SELECT COUNT(*)::int as c FROM certifications WHERE status = 'active'"))?.c || 0; } catch (e) { /* table may not exist */ }
 
         res.json({
             products_assessed: total,
@@ -167,6 +175,7 @@ router.get('/stats', async (req, res) => {
         safeError(res, 'Operation failed', e);
     }
 });
+
 
 function getRecommendations(scores) {
     const recs = [];

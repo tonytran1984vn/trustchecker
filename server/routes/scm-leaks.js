@@ -5,15 +5,19 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { eventBus } = require('../events');
 
 const router = express.Router();
 
+
+// GOV-1: All routes require authentication
+router.use(authMiddleware);
+
 const PLATFORMS = ['Shopee', 'Lazada', 'Amazon', 'eBay', 'Alibaba'];
 
 // ─── POST /api/scm/leaks/scan – Trigger marketplace scan ────────────────────
-router.post('/scan', authMiddleware, requireRole('manager'), async (req, res) => {
+router.post('/scan', authMiddleware, requirePermission('leak_monitor:create'), async (req, res) => {
     try {
         const { product_id, platforms } = req.body;
         const scanPlatforms = platforms || PLATFORMS;
@@ -69,7 +73,7 @@ router.get('/alerts', async (req, res) => {
         const params = [status];
         if (platform) { query += ' AND la.platform = ?'; params.push(platform); }
         query += ' ORDER BY la.risk_score DESC, la.created_at DESC LIMIT ?';
-        params.push(Number(limit));
+        params.push(Math.min(Number(limit) || 50, 200));
 
         const alerts = await db.prepare(query).all(...params);
 

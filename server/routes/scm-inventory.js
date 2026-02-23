@@ -5,10 +5,14 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/engine-client');
 
 const router = express.Router();
+
+
+// GOV-1: All routes require authentication
+router.use(authMiddleware);
 
 // ─── GET /api/scm/inventory – Stock levels ───────────────────────────────────
 router.get('/', async (req, res) => {
@@ -34,7 +38,7 @@ router.get('/', async (req, res) => {
 });
 
 // ─── POST /api/scm/inventory/adjust – Stock adjustment ───────────────────────
-router.post('/adjust', authMiddleware, requireRole('operator'), async (req, res) => {
+router.post('/adjust', authMiddleware, requirePermission('inventory:create'), async (req, res) => {
     try {
         const { product_id, batch_id, partner_id, location, quantity_change, reason } = req.body;
         if (!product_id || quantity_change === undefined) return res.status(400).json({ error: 'product_id and quantity_change required' });
@@ -45,7 +49,7 @@ router.post('/adjust', authMiddleware, requireRole('operator'), async (req, res)
 
         if (inv) {
             const newQty = Math.max(0, inv.quantity + quantity_change);
-            await db.prepare('UPDATE inventory SET quantity = ?, updated_at = datetime("now") WHERE id = ?').run(newQty, inv.id);
+            await db.prepare("UPDATE inventory SET quantity = ?, updated_at = datetime('now') WHERE id = ?").run(newQty, inv.id);
             inv.quantity = newQty;
         } else {
             const id = uuidv4();

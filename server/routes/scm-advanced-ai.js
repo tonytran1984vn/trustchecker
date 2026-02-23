@@ -10,7 +10,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/engine-client');
 const { cacheMiddleware } = require('../cache');
 

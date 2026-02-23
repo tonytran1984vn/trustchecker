@@ -11,7 +11,7 @@ export function renderPage() {
   return `
     <div class="stats-grid">
       <div class="stat-card emerald"><div class="stat-icon">📜</div><div class="stat-value">${s.compliance_rate || 0}%</div><div class="stat-label">Compliance Rate</div></div>
-      <div class="stat-card rose"><div class="stat-icon">⚠️</div><div class="stat-value">${s.non_compliant || 0}</div><div class="stat-label">Non-Compliant</div></div>
+      <div class="stat-card rose"><div class="stat-icon"><span class="status-icon status-warn" aria-label="Warning">!</span></div><div class="stat-value">${s.non_compliant || 0}</div><div class="stat-label">Non-Compliant</div></div>
       <div class="stat-card cyan"><div class="stat-icon">📋</div><div class="stat-value">${s.total_records || 0}</div><div class="stat-label">Total Records</div></div>
       <div class="stat-card violet"><div class="stat-icon">🗂️</div><div class="stat-value">${(d.policies || []).length}</div><div class="stat-label">Retention Policies</div></div>
     </div>
@@ -24,7 +24,7 @@ export function renderPage() {
     <div class="card" style="margin-top:20px">
       <div class="card-header"><div class="card-title">🗂️ Data Retention Policies</div></div>
       <table class="data-table"><thead><tr><th>Table</th><th>Retention</th><th>Action</th><th>Active</th><th>Last Run</th></tr></thead><tbody>
-        ${(d.policies || []).map(p => `<tr><td><code>${p.table_name}</code></td><td>${p.retention_days} days</td><td>${p.action}</td><td>${p.is_active ? '✅' : '❌'}</td><td>${p.last_run ? timeAgo(p.last_run) : 'Never'}</td></tr>`).join('')}
+        ${(d.policies || []).map(p => `<tr><td><code>${p.table_name}</code></td><td>${p.retention_days} days</td><td>${p.action}</td><td>${p.is_active ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>' : '<span class="status-icon status-fail" aria-label="Fail">✗</span>'}</td><td>${p.last_run ? timeAgo(p.last_run) : 'Never'}</td></tr>`).join('')}
       </tbody></table>
     </div>`;
 }

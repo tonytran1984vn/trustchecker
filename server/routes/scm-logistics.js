@@ -5,15 +5,19 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const blockchainEngine = require('../engines/blockchain');
 const engineClient = require('../engines/engine-client');
 const { eventBus } = require('../events');
 
 const router = express.Router();
 
+
+// GOV-1: All routes require authentication
+router.use(authMiddleware);
+
 // ─── POST /api/scm/shipments – Create shipment ──────────────────────────────
-router.post('/shipments', authMiddleware, requireRole('operator'), async (req, res) => {
+router.post('/shipments', authMiddleware, requirePermission('logistics:create'), async (req, res) => {
     try {
         const { batch_id, from_partner_id, to_partner_id, carrier, tracking_number, estimated_delivery } = req.body;
         if (!batch_id) return res.status(400).json({ error: 'batch_id is required' });
@@ -54,7 +58,7 @@ router.get('/shipments', async (req, res) => {
         const params = [];
         if (status) { query += ' WHERE s.status = ?'; params.push(status); }
         query += ' ORDER BY s.created_at DESC LIMIT ?';
-        params.push(Number(limit));
+        params.push(Math.min(Number(limit) || 20, 100));
 
         res.json({ shipments: await db.prepare(query).all(...params) });
     } catch (err) {
@@ -140,7 +144,7 @@ router.get('/shipments/:id/iot-alerts', async (req, res) => {
 });
 
 // ─── POST /api/scm/sla – Define SLA ─────────────────────────────────────────
-router.post('/sla', authMiddleware, requireRole('manager'), async (req, res) => {
+router.post('/sla', authMiddleware, requirePermission('logistics:manage'), async (req, res) => {
     try {
         const { partner_id, sla_type, metric, threshold_value, threshold_unit, penalty_amount, penalty_currency } = req.body;
         if (!partner_id) return res.status(400).json({ error: 'partner_id required' });

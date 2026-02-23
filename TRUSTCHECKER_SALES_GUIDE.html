@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrustChecker — Sales Guide & Feature Description</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0e1a;--surface:#111827;--surface2:#1a2236;--surface3:#232d45;--border:#2a3550;--text:#e2e8f0;--text2:#94a3b8;--accent:#3b82f6;--accent2:#6366f1;--green:#10b981;--amber:#f59e0b;--red:#ef4444;--cyan:#06b6d4;--purple:#a855f7;--pink:#ec4899;--gradient:linear-gradient(135deg,#3b82f6,#6366f1,#a855f7)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);line-height:1.7;scroll-behavior:smooth}
+.container{max-width:1200px;margin:0 auto;padding:0 24px}
+
+/* Hero */
+.hero{background:linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#172554 100%);padding:80px 24px;text-align:center;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle at 30% 50%,rgba(99,102,241,0.1),transparent 50%),radial-gradient(circle at 70% 50%,rgba(59,130,246,0.08),transparent 50%);animation:pulse 8s ease-in-out infinite alternate}
+@keyframes pulse{0%{opacity:.5}100%{opacity:1}}
+.hero h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:900;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;position:relative;margin-bottom:12px}
+.hero .subtitle{font-size:1.1rem;color:var(--text2);position:relative}
+.hero .badges{display:flex;gap:12px;justify-content:center;margin-top:24px;flex-wrap:wrap;position:relative}
+.hero .badge{padding:6px 16px;border-radius:20px;font-size:.75rem;font-weight:600;border:1px solid var(--border);background:rgba(255,255,255,.05);backdrop-filter:blur(8px)}
+
+/* Section */
+.section{padding:60px 0}
+.section-title{font-size:1.8rem;font-weight:800;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+.section-title .num{background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:1rem;font-weight:700}
+.section-desc{color:var(--text2);margin-bottom:32px;font-size:.95rem}
+.divider{height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent);margin:0}
+
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:24px;transition:all .3s}
+.card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 32px rgba(59,130,246,.1)}
+.card h3{font-size:1.2rem;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:10px}
+.card h3 .icon{font-size:1.4rem}
+.card .sell-tip{background:linear-gradient(135deg,rgba(59,130,246,.1),rgba(99,102,241,.1));border:1px solid rgba(99,102,241,.2);border-radius:10px;padding:14px 18px;margin-top:16px;font-size:.88rem;color:var(--cyan)}
+.card .sell-tip::before{content:'💡 Cách bán: ';font-weight:700;color:var(--amber)}
+.card .hook{display:inline-block;margin-top:10px;padding:4px 12px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25);border-radius:6px;font-size:.8rem;color:var(--green);font-weight:500}
+
+/* Tables */
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.88rem}
+th{background:var(--surface2);color:var(--accent);font-weight:600;text-align:left;padding:12px 14px;border-bottom:2px solid var(--border);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:hover td{background:rgba(59,130,246,.03)}
+td:first-child{font-weight:500}
+
+/* Pricing */
+.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:20px;margin:32px 0}
+.price-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px 24px;text-align:center;position:relative;transition:all .3s}
+.price-card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(99,102,241,.15)}
+.price-card.popular{border-color:var(--accent2);background:linear-gradient(180deg,rgba(99,102,241,.08),var(--surface))}
+.price-card.popular::before{content:'⭐ POPULAR';position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--gradient);color:#fff;padding:4px 16px;border-radius:12px;font-size:.7rem;font-weight:700}
+.price-card .plan-name{font-size:1.1rem;font-weight:700;margin-bottom:4px}
+.price-card .plan-tag{font-size:.78rem;color:var(--text2);margin-bottom:16px}
+.price-card .price{font-size:2.2rem;font-weight:900;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.price-card .price-sub{font-size:.78rem;color:var(--text2)}
+.price-card ul{text-align:left;list-style:none;margin-top:20px;font-size:.82rem}
+.price-card li{padding:5px 0;color:var(--text2)}
+.price-card li::before{content:'✓ ';color:var(--green);font-weight:700}
+.price-card li.no::before{content:'✗ ';color:var(--red)}
+
+/* Feature comparison */
+.compare-table td.yes{color:var(--green);font-weight:600}
+.compare-table td.no{color:#475569}
+.compare-table td.val{color:var(--amber);font-weight:500}
+
+/* Objection */
+.obj-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
+.obj-card{background:var(--surface2);border-radius:12px;padding:20px;border-left:3px solid var(--red)}
+.obj-card .q{font-weight:600;color:var(--red);margin-bottom:8px;font-size:.9rem}
+.obj-card .a{color:var(--green);font-size:.88rem}
+.obj-card .a::before{content:'→ ';font-weight:700}
+
+/* Upsell */
+.funnel{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;margin:32px 0}
+.funnel-step{background:var(--surface2);border:1px solid var(--border);padding:14px 24px;font-weight:600;font-size:.9rem;position:relative}
+.funnel-step:first-child{border-radius:12px 0 0 12px}
+.funnel-step:last-child{border-radius:0 12px 12px 0}
+.funnel-arrow{color:var(--accent);font-size:1.2rem;padding:0 4px}
+
+/* Demo */
+.demo-steps{display:grid;gap:12px;counter-reset:demo}
+.demo-step{background:var(--surface2);border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:16px;counter-increment:demo;border:1px solid var(--border)}
+.demo-step::before{content:counter(demo);background:var(--gradient);color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0}
+.demo-step .time{color:var(--amber);font-size:.78rem;font-weight:600;margin-left:auto;white-space:nowrap}
+
+/* ROI */
+.roi-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:24px 0}
+.roi-card{border-radius:12px;padding:24px}
+.roi-card.bad{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2)}
+.roi-card.good{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2)}
+.roi-card h4{font-size:.9rem;font-weight:700;margin-bottom:12px}
+.roi-card.bad h4{color:var(--red)}
+.roi-card.good h4{color:var(--green)}
+.roi-card li{padding:4px 0;font-size:.85rem;list-style:none}
+.roi-result{text-align:center;padding:24px;background:linear-gradient(135deg,rgba(59,130,246,.1),rgba(168,85,247,.1));border-radius:12px;margin-top:16px}
+.roi-result .big{font-size:2rem;font-weight:900;background:var(--gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+/* Industry */
+.industry-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.ind-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;transition:all .3s}
+.ind-card:hover{border-color:var(--accent2);transform:translateY(-2px)}
+.ind-card .ind-icon{font-size:2rem;margin-bottom:8px}
+.ind-card h4{font-size:.95rem;font-weight:700;margin-bottom:6px}
+.ind-card .pain{font-size:.82rem;color:var(--red);margin-bottom:4px}
+.ind-card .solution{font-size:.82rem;color:var(--green);margin-bottom:8px}
+.ind-card .rec{display:inline-block;padding:3px 10px;background:rgba(99,102,241,.15);border-radius:6px;font-size:.75rem;color:var(--accent2);font-weight:600}
+
+/* TOC */
+.toc{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;margin:40px 0}
+.toc h3{font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--accent)}
+.toc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+.toc a{color:var(--text2);text-decoration:none;font-size:.85rem;padding:6px 12px;border-radius:8px;display:block;transition:all .2s}
+.toc a:hover{background:var(--surface2);color:var(--accent)}
+
+/* Responsive */
+@media(max-width:768px){.hero{padding:48px 16px}.section{padding:40px 0}.pricing-grid{grid-template-columns:1fr}.roi-grid{grid-template-columns:1fr}.obj-grid{grid-template-columns:1fr}.funnel{flex-direction:column}.funnel-step{border-radius:8px!important;width:100%}.funnel-arrow{transform:rotate(90deg)}}
+@media print{body{background:#fff;color:#111}th{background:#f1f5f9;color:#1e293b}td{border-color:#e2e8f0}.card,.price-card,.obj-card,.ind-card,.demo-step{border-color:#e2e8f0;box-shadow:none}.hero{background:#f8fafc!important}}
+</style>
+</head>
+<body>
+
+<div class="hero">
+<h1>TrustChecker</h1>
+<div class="subtitle">Mô Tả Chi Tiết Chức Năng Hệ Thống & Chiến Lược Bán Hàng</div>
+<div class="badges">
+<span class="badge">Enterprise v10.0</span>
+<span class="badge">SOC 2 Type II</span>
+<span class="badge">ISO 27001</span>
+<span class="badge">GDPR Ready</span>
+<span class="badge">100+ Pages</span>
+<span class="badge">125+ Permissions</span>
+</div>
+</div>
+
+<div class="container">
+
+<!-- TOC -->
+<div class="toc">
+<h3>📑 Mục Lục</h3>
+<div class="toc-grid">
+<a href="#overview">I. Tổng Quan Sản Phẩm</a>
+<a href="#features">II. 11 Nhóm Chức Năng Chi Tiết</a>
+<a href="#pricing">III. Bảng Giá & So Sánh Gói</a>
+<a href="#strategy">IV. Chiến Lược Bán Hàng</a>
+<a href="#industry">V. Targeting Theo Ngành</a>
+<a href="#objections">VI. Objection Handling</a>
+<a href="#roi">VII. ROI Calculator</a>
+<a href="#demo">VIII. Demo Script 5 Phút</a>
+</div>
+</div>
+
+<!-- I. OVERVIEW -->
+<div class="divider"></div>
+<section class="section" id="overview">
+<div class="section-title"><span class="num">I</span> Tổng Quan Sản Phẩm</div>
+<div class="section-desc">TrustChecker là nền tảng quản trị niềm tin số (Digital Trust Infrastructure) cấp doanh nghiệp.</div>
+
+<div class="card">
+<h3><span class="icon">🏗️</span> TrustChecker giải quyết gì?</h3>
+<table>
+<tr><td>🔍 <b>Xác thực hàng thật</b></td><td>QR scan + AI phát hiện hàng giả, hàng nhái</td></tr>
+<tr><td>🔗 <b>Truy xuất nguồn gốc</b></td><td>Chuỗi cung ứng minh bạch end-to-end</td></tr>
+<tr><td>🚨 <b>Phát hiện gian lận</b></td><td>AI + Rule engine phát hiện bất thường real-time</td></tr>
+<tr><td>🌱 <b>Quản lý carbon</b></td><td>Carbon Integrity Engine (CIE) cấp IPO-ready</td></tr>
+<tr><td>⛓️ <b>Blockchain seal</b></td><td>Bằng chứng bất biến cho mỗi giao dịch</td></tr>
+<tr><td>📊 <b>Quản trị rủi ro</b></td><td>Dashboard + heatmap + case management</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3><span class="icon">⚡</span> Điểm khác biệt (USP)</h3>
+<table>
+<thead><tr><th>Chỉ số</th><th>Giá trị</th></tr></thead>
+<tr><td>Chế độ giao diện</td><td><b>7 mode</b> (Control Plane → Business)</td></tr>
+<tr><td>Quyền hạn chi tiết</td><td><b>125+ atomic permissions</b></td></tr>
+<tr><td>RBAC đa tầng</td><td><b>18 vai trò × 5 cấp</b> (L1–L5)</td></tr>
+<tr><td>Trang chức năng</td><td><b>100+ pages</b></td></tr>
+<tr><td>SoD (Tách biệt quyền)</td><td><b>24 conflict pairs</b> — tự động chặn self-approval</td></tr>
+<tr><td>Audit trail</td><td><b>SHA-256 hash chain</b> — immutable, 7-year retention</td></tr>
+<tr><td>Tiêu chuẩn</td><td>SOC 2 · ISO 27001 · GDPR · GS1 EPCIS</td></tr>
+</table>
+</div>
+</section>
+
+<!-- II. FEATURES -->
+<div class="divider"></div>
+<section class="section" id="features">
+<div class="section-title"><span class="num">II</span> 11 Nhóm Chức Năng Chi Tiết</div>
+<div class="section-desc">Mỗi tính năng kèm theo cách bán và pricing hook.</div>
+
+<!-- Feature 1 -->
+<div class="card">
+<h3><span class="icon">🔐</span> 1. Authentication & Identity</h3>
+<table>
+<thead><tr><th>Tính năng</th><th>Mô tả</th><th>Giá trị</th></tr></thead>
+<tr><td>JWT + Refresh</td><td>Đăng nhập bảo mật, tự động gia hạn</td><td>Không bị logout giữa chừng</td></tr>
+<tr><td>MFA (TOTP)</td><td>Xác thực 2 lớp bắt buộc cho admin</td><td>Bảo vệ tài khoản đặc quyền</td></tr>
+<tr><td>Passkey/WebAuthn</td><td>Đăng nhập không mật khẩu</td><td>UX hiện đại, bảo mật cao</td></tr>
+<tr><td>OAuth2 + SSO/SAML</td><td>Google, Azure AD integration</td><td>Enterprise single sign-on</td></tr>
+</table>
+<div class="sell-tip">"Bạn có bao nhiêu nhân viên truy cập hệ thống? MFA + SSO đảm bảo 0 vụ xâm nhập tài khoản."</div>
+</div>
+
+<!-- Feature 2 -->
+<div class="card">
+<h3><span class="icon">📦</span> 2. Product Management & QR Verification</h3>
+<table>
+<thead><tr><th>Tính năng</th><th>Mô tả</th><th>Giá trị</th></tr></thead>
+<tr><td>Product Registry</td><td>SKU, category, manufacturer, origin</td><td>Quản lý danh mục sản phẩm toàn cầu</td></tr>
+<tr><td>QR Code Generation</td><td>Mã QR unique cho mỗi sản phẩm/batch</td><td>Người dùng quét = biết hàng thật/giả</td></tr>
+<tr><td>Trust Score</td><td>Điểm tin cậy 0–100</td><td>Đánh giá rủi ro tức thì</td></tr>
+<tr><td>Batch Management</td><td>Split, merge, recall lô hàng</td><td>Truy xuất chính xác đến batch</td></tr>
+</table>
+<div class="sell-tip">"Mỗi sản phẩm có QR + Trust Score. Người tiêu dùng quét = biết ngay hàng thật/giả."</div>
+<span class="hook">Free: 10 SP · Starter: 100 · Pro: 1,000 · Business: Unlimited</span>
+</div>
+
+<!-- Feature 3 -->
+<div class="card">
+<h3><span class="icon">📱</span> 3. Scan Analytics & Geo Intelligence</h3>
+<table>
+<thead><tr><th>Tính năng</th><th>Mô tả</th><th>Giá trị</th></tr></thead>
+<tr><td>Scan Event Log</td><td>Ai quét, ở đâu, khi nào, thiết bị gì</td><td>Hành vi người dùng chi tiết</td></tr>
+<tr><td>Geo Map</td><td>Bản đồ scan toàn cầu theo thành phố</td><td>Phát hiện thị trường chợ đen</td></tr>
+<tr><td>Fraud Score/Scan</td><td>AI tính điểm gian lận mỗi lần quét</td><td>Alert tức thì khi bất thường</td></tr>
+</table>
+<div class="sell-tip">"15% hàng luxury bị scan từ Nigeria nhưng chỉ bán ở EU — Geo Intelligence phát hiện ngay."</div>
+<span class="hook">Free: 500 scans/tháng · Overage: $0.05→$0.01/scan</span>
+</div>
+
+<!-- Feature 4 -->
+<div class="card">
+<h3><span class="icon">🚨</span> 4. Fraud Detection & AI Engine</h3>
+<table>
+<thead><tr><th>Tính năng</th><th>Mô tả</th><th>Giá trị</th></tr></thead>
+<tr><td>7 loại Alert</td><td>Velocity, geo, duplicate, counterfeit...</td><td>Phản ứng trong vài phút</td></tr>
+<tr><td>Rules Engine</td><td>Custom rule: duplicate, geo fence, velocity</td><td>Tùy chỉnh theo ngành</td></tr>
+<tr><td>AI Anomaly</td><td>ML phát hiện pattern bất thường 3σ+</td><td>Cover những gì rule không thấy</td></tr>
+<tr><td>Case Management</td><td>Open → Investigate → Escalate → Resolve</td><td>Workflow chuyên nghiệp</td></tr>
+<tr><td>Auto Response</td><td>Tự động block QR, alert, escalate</td><td>Phản ứng 24/7</td></tr>
+</table>
+<div class="sell-tip">"Mỗi giờ trì hoãn = mất $X doanh thu + thiệt hại thương hiệu. AI Engine phát hiện trong 45ms."</div>
+<span class="hook">Fraud Detection từ gói Starter ($49/tháng)</span>
+</div>
+
+<!-- Feature 5 -->
+<div class="card">
+<h3><span class="icon">⛓️</span> 5. Blockchain & NFT Certificates</h3>
+<table>
+<thead><tr><th>Tính năng</th><th>Mô tả</th><th>Giá trị</th></tr></thead>
+<tr><td>Blockchain Seal</td><td>SHA-256 hash-chain, merkle root</td><td>Bằng chứng bất biến</td></tr>
+<tr><td>NFT Certificate</td><td>Chứng chỉ số: authenticity, origin</td><td>Premium branding cho luxury</td></tr>
+<tr><td>On-chain Verify</td><td>Xác minh trên blockchain công khai</td><td>Minh bạch với investor</td></tr>
+</table>
+<div class="sell-tip">"Mỗi chai whisky $500 có NFT certificate. Khách scan QR → thấy chứng chỉ blockchain → tin tưởng 100%."</div>
+<span class="hook">NFT mint: Starter 10/tháng free · Overage $2→$0.50/mint</span>
+</div>
+
+<!-- Feature 6 -->
+<div class="card">
+<h3><span class="icon">🔗</span> 6. Supply Chain Management</h3>
+<table>
+<thead><tr><th>Tính năng</th><th>Mô tả</th><th>Giá trị</th></tr></thead>
+<tr><td>SCM Dashboard</td><td>Tổng quan: partners, shipments, incidents</td><td>Nhìn toàn bộ 1 màn hình</td></tr>
+<tr><td>Partner + KYC</td><td>Quản lý đối tác + trust score</td><td>Biết tin cậy từng partner</td></tr>
+<tr><td>Shipment + IoT</td><td>GPS tracking + sensor monitoring</td><td>Cold chain cho pharma/food</td></tr>
+<tr><td>TrustGraph</td><td>Bản đồ tin cậy network</td><td>Visualize rủi ro</td></tr>
+<tr><td>Digital Twin</td><td>Bản sao số + simulation</td><td>"What if" analysis</td></tr>
+<tr><td>EPCIS (GS1)</td><td>Chuẩn truy xuất quốc tế</td><td>Tuân thủ EU/US</td></tr>
+</table>
+<div class="sell-tip">"Supply chain bao nhiêu node? TrustGraph visualize + highlight rủi ro. Digital Twin simulate trước khi thay đổi."</div>
+<span class="hook">SCM từ Pro ($199) · Digital Twin từ Business ($499)</span>
+</div>
+
+<!-- Feature 7 -->
+<div class="card">
+<h3><span class="icon">🌱</span> 7. Carbon Integrity Engine (CIE)</h3>
+<table>
+<thead><tr><th>Tính năng</th><th>Mô tả</th><th>Giá trị</th></tr></thead>
+<tr><td>Carbon Passport</td><td>Hộ chiếu carbon cho sản phẩm</td><td>Tuân thủ CSRD/ESRS</td></tr>
+<tr><td>Emission Calculator</td><td>GHG Protocol calculation</td><td>Mandatory EU 2026+</td></tr>
+<tr><td>IVU Validation</td><td>Xác thực bởi bên thứ 3</td><td>Chống greenwashing</td></tr>
+<tr><td>Carbon Credit NFT</td><td>Tạo carbon credit mint</td><td>Tham gia thị trường carbon</td></tr>
+</table>
+<div class="sell-tip">"CSRD bắt buộc từ 2026. Carbon Passport cho mỗi sản phẩm xuất EU. TrustChecker CIE là solution IPO-grade duy nhất."</div>
+<span class="hook">Carbon Calcs: Starter 100/tháng · Overage $0.01/calc</span>
+</div>
+
+<!-- Feature 8-11 compact -->
+<div class="card">
+<h3><span class="icon">📊</span> 8. Analytics & Reporting</h3>
+<p style="color:var(--text2);font-size:.9rem">Executive Dashboard · Risk Radar Heatmap · Compliance Reports (GDPR, ISO, SOC 2) · GRI/ESG Reports · Custom Reports</p>
+<div class="sell-tip">"CEO cần dashboard 30 giây. Auditor cần immutable report. Investor cần ESG score. TrustChecker serve cả 3."</div>
+</div>
+
+<div class="card">
+<h3><span class="icon">🛡️</span> 9. RBAC & Governance Engine</h3>
+<p style="color:var(--text2);font-size:.9rem">18 Roles × 5 Layers · 125+ Permissions · SoD Engine (24 conflict pairs) · 4-Eyes/6-Eyes Approval · Role Bundles · Permission Matrix</p>
+<div class="sell-tip">"Auditor hỏi: 'Ai approve fraud case?' TrustChecker trả lời bằng permission matrix + audit trail. SOC 2 pass/fail."</div>
+</div>
+
+<div class="card">
+<h3><span class="icon">🏢</span> 10. Multi-tenant SaaS Platform</h3>
+<p style="color:var(--text2);font-size:.9rem">Tenant Isolation · Control Tower · Feature Flags · Custom Branding · Self-service Onboard</p>
+<div class="sell-tip">"Muốn bán TrustChecker white-label cho khách hàng? Control Tower quản lý tất cả tenant."</div>
+</div>
+
+<div class="card">
+<h3><span class="icon">🏢</span> 11. KYC/AML & Compliance</h3>
+<p style="color:var(--text2);font-size:.9rem">Business KYC · 4-Check Pipeline · Sanctions Screening · Risk Assessment auto low/medium/high</p>
+<div class="sell-tip">"Bao nhiêu đối tác mới/năm? Mỗi partner chưa KYC = 1 rủi ro pháp lý. TrustChecker automate toàn bộ."</div>
+</div>
+</section>
+
+<!-- III. PRICING -->
+<div class="divider"></div>
+<section class="section" id="pricing">
+<div class="section-title"><span class="num">III</span> Bảng Giá & So Sánh Gói</div>
+
+<div class="pricing-grid">
+<div class="price-card">
+<div class="plan-name">Free</div>
+<div class="plan-tag">Get started</div>
+<div class="price">$0</div>
+<div class="price-sub">/tháng</div>
+<ul>
+<li>10 sản phẩm</li>
+<li>500 scans/tháng</li>
+<li>1,000 API calls</li>
+<li>100MB storage</li>
+<li>1 user</li>
+<li class="no">Fraud Detection</li>
+<li class="no">NFT / Carbon</li>
+</ul>
+</div>
+<div class="price-card">
+<div class="plan-name">Starter</div>
+<div class="plan-tag">For growing brands</div>
+<div class="price">$49</div>
+<div class="price-sub">/tháng · $470/năm (−20%)</div>
+<ul>
+<li>100 sản phẩm</li>
+<li>5,000 scans/tháng</li>
+<li>10,000 API calls</li>
+<li>1GB storage</li>
+<li>3 users</li>
+<li>Fraud Detection</li>
+<li>10 NFT / 100 Carbon</li>
+</ul>
+</div>
+<div class="price-card popular">
+<div class="plan-name">Pro</div>
+<div class="plan-tag">Scale with intelligence</div>
+<div class="price">$199</div>
+<div class="price-sub">/tháng · $1,910/năm (−20%)</div>
+<ul>
+<li>1,000 sản phẩm</li>
+<li>25,000 scans/tháng</li>
+<li>100,000 API calls</li>
+<li>10GB storage</li>
+<li>10 users</li>
+<li>AI Anomaly + Risk Radar</li>
+<li>SCM + Carbon tracking</li>
+</ul>
+</div>
+<div class="price-card">
+<div class="plan-name">Business</div>
+<div class="plan-tag">Full-stack trust</div>
+<div class="price">$499</div>
+<div class="price-sub">/tháng · $4,790/năm (−20%)</div>
+<ul>
+<li>Unlimited sản phẩm</li>
+<li>100,000 scans/tháng</li>
+<li>500,000 API calls</li>
+<li>50GB storage</li>
+<li>50 users</li>
+<li>Digital Twin + Monte Carlo</li>
+<li>SSO/SAML + Dedicated AM</li>
+</ul>
+</div>
+<div class="price-card">
+<div class="plan-name">Enterprise</div>
+<div class="plan-tag">Custom deployment</div>
+<div class="price">Custom</div>
+<div class="price-sub">Liên hệ sales</div>
+<ul>
+<li>Unlimited everything</li>
+<li>On-premise option</li>
+<li>99.95% SLA</li>
+<li>Data residency</li>
+<li>SOC 2 + ISO 27001</li>
+<li>Dedicated Slack</li>
+<li>Quarterly reviews</li>
+</ul>
+</div>
+</div>
+
+<!-- Usage-based -->
+<div class="card">
+<h3><span class="icon">📊</span> Usage-Based Add-ons (Overage Pricing)</h3>
+<table>
+<thead><tr><th>Metric</th><th>Tier 1</th><th>Tier 2</th><th>Tier 3</th><th>Tier 4</th></tr></thead>
+<tr><td><b>QR Scans</b></td><td>$0.05 (&lt;1K)</td><td>$0.03 (1K–10K)</td><td>$0.02 (10K–50K)</td><td>$0.01 (50K+)</td></tr>
+<tr><td><b>NFT Mints</b></td><td>$2.00 (&lt;50)</td><td>$1.50 (50–200)</td><td>$0.50 (200+)</td><td>—</td></tr>
+<tr><td><b>Carbon Calcs</b></td><td>$0.01/calc</td><td colspan="3">hoặc $10/1,000 bundle</td></tr>
+<tr><td><b>API Calls</b></td><td colspan="4">$0.001/call ($1 per 1,000)</td></tr>
+</table>
+</div>
+</section>
+
+<!-- IV. STRATEGY -->
+<div class="divider"></div>
+<section class="section" id="strategy">
+<div class="section-title"><span class="num">IV</span> Chiến Lược Bán Hàng</div>
+
+<div class="card">
+<h3><span class="icon">🎯</span> Sales Funnel</h3>
+<div class="funnel">
+<div class="funnel-step" style="background:rgba(16,185,129,.1)">Free Trial 14 ngày</div>
+<span class="funnel-arrow">→</span>
+<div class="funnel-step" style="background:rgba(59,130,246,.1)">Starter $49</div>
+<span class="funnel-arrow">→</span>
+<div class="funnel-step" style="background:rgba(99,102,241,.15);border-color:var(--accent2)">Pro $199 ⭐</div>
+<span class="funnel-arrow">→</span>
+<div class="funnel-step" style="background:rgba(168,85,247,.1)">Business $499</div>
+<span class="funnel-arrow">→</span>
+<div class="funnel-step" style="background:rgba(236,72,153,.1)">Enterprise Custom</div>
+</div>
+</div>
+
+<div class="card">
+<h3><span class="icon">📈</span> Upsell Triggers</h3>
+<table>
+<thead><tr><th>Chuyển đổi</th><th>Trigger</th></tr></thead>
+<tr><td>Free → Starter</td><td>"Bạn đã hết 500 scans. Upgrade $49 = 5,000 scans + Fraud Detection."</td></tr>
+<tr><td>Starter → Pro</td><td>"AI Anomaly phát hiện 3 vụ counterfeit mà rule thường bỏ lỡ."</td></tr>
+<tr><td>Pro → Business</td><td>"Digital Twin simulate supply chain disruption trước 2 tuần."</td></tr>
+<tr><td>Business → Enterprise</td><td>"On-premise + custom SLA 99.95% cho regulated industry."</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3><span class="icon">🧮</span> Enterprise Quote Calculator</h3>
+<table>
+<thead><tr><th>Yếu tố</th><th>Hệ số</th></tr></thead>
+<tr><td>Base (Business $499)</td><td>×1.5 (Enterprise premium)</td></tr>
+<tr><td>&gt; 500K scans/tháng</td><td>+0.5</td></tr>
+<tr><td>&gt; 1M scans/tháng</td><td>+1.0</td></tr>
+<tr><td>On-premise deployment</td><td>+2.0</td></tr>
+<tr><td>Data residency</td><td>+0.5</td></tr>
+<tr><td>Custom SLA</td><td>+0.3</td></tr>
+<tr><td>Dedicated infrastructure</td><td>+1.5</td></tr>
+</table>
+<p style="margin-top:12px;padding:12px 16px;background:var(--surface2);border-radius:8px;font-size:.85rem"><b>Ví dụ:</b> Enterprise + 800K scans + on-premise + custom SLA = $499 × 4.3 = <b style="color:var(--amber)">~$2,146/tháng</b> (~$21,889/năm −15%)</p>
+</div>
+</section>
+
+<!-- V. INDUSTRY -->
+<div class="divider"></div>
+<section class="section" id="industry">
+<div class="section-title"><span class="num">V</span> Targeting Theo Ngành</div>
+<div class="industry-grid">
+<div class="ind-card"><div class="ind-icon">☕</div><h4>F&B / Coffee</h4><div class="pain">⚠ Hàng giả, truy xuất nguồn gốc</div><div class="solution">✓ QR + SCM + Trust Score</div><span class="rec">Pro $199</span></div>
+<div class="ind-card"><div class="ind-icon">👜</div><h4>Luxury / Fashion</h4><div class="pain">⚠ Hàng nhái, gray market</div><div class="solution">✓ QR + NFT + Leak Detection</div><span class="rec">Business $499</span></div>
+<div class="ind-card"><div class="ind-icon">💊</div><h4>Pharmaceuticals</h4><div class="pain">⚠ FDA compliance, cold chain</div><div class="solution">✓ IoT + Compliance + Evidence</div><span class="rec">Business $499</span></div>
+<div class="ind-card"><div class="ind-icon">🔌</div><h4>Electronics</h4><div class="pain">⚠ Counterfeit components</div><div class="solution">✓ AI Fraud + Risk Radar</div><span class="rec">Pro $199</span></div>
+<div class="ind-card"><div class="ind-icon">🌾</div><h4>Agriculture</h4><div class="pain">⚠ EUDR, sustainability</div><div class="solution">✓ Carbon + ESG + EPCIS</div><span class="rec">Business $499</span></div>
+<div class="ind-card"><div class="ind-icon">💄</div><h4>Cosmetics</h4><div class="pain">⚠ Cross-border counterfeits</div><div class="solution">✓ Geo Intel + KYC</div><span class="rec">Pro $199</span></div>
+<div class="ind-card"><div class="ind-icon">🔋</div><h4>Automotive (EV)</h4><div class="pain">⚠ Battery traceability</div><div class="solution">✓ Digital Twin + Blockchain</div><span class="rec">Enterprise</span></div>
+<div class="ind-card"><div class="ind-icon">🍷</div><h4>Wine & Spirits</h4><div class="pain">⚠ Premium counterfeits</div><div class="solution">✓ NFT + Blockchain Seal</div><span class="rec">Business $499</span></div>
+</div>
+</section>
+
+<!-- VI. OBJECTIONS -->
+<div class="divider"></div>
+<section class="section" id="objections">
+<div class="section-title"><span class="num">VI</span> Objection Handling</div>
+<div class="obj-grid">
+<div class="obj-card"><div class="q">❌ "Giá cao quá"</div><div class="a">"1 vụ hàng giả gây thiệt hại $500K+ thương hiệu. $199/tháng = bảo hiểm rẻ nhất."</div></div>
+<div class="obj-card"><div class="q">❌ "Chúng tôi đã có QR"</div><div class="a">"QR thường chỉ link website. TrustChecker QR = Trust Score + Fraud Detection + Blockchain Seal."</div></div>
+<div class="obj-card"><div class="q">❌ "Không cần blockchain"</div><div class="a">"Blockchain ≠ crypto. Đây là audit trail bất biến — SOC 2 yêu cầu."</div></div>
+<div class="obj-card"><div class="q">❌ "Đội IT nhỏ"</div><div class="a">"Role Bundles setup 5 phút. API-first, không cần devops."</div></div>
+<div class="obj-card"><div class="q">❌ "Dùng Excel quản lý SCM"</div><div class="a">"Excel không có real-time alert khi hàng đi sai route. TrustGraph detect trong 45ms."</div></div>
+<div class="obj-card"><div class="q">❌ "CSRD chưa áp dụng"</div><div class="a">"Deadline 2026. Chuẩn bị mất 6-12 tháng. Bắt đầu hôm nay với CIE."</div></div>
+</div>
+</section>
+
+<!-- VII. ROI -->
+<div class="divider"></div>
+<section class="section" id="roi">
+<div class="section-title"><span class="num">VII</span> ROI Calculator</div>
+<div class="roi-grid">
+<div class="roi-card bad">
+<h4>❌ Chi phí KHÔNG có TrustChecker</h4>
+<ul>
+<li>🔴 1 vụ hàng giả: <b>$500K</b> thiệt hại</li>
+<li>🔴 1 vụ recall: <b>$2M</b></li>
+<li>🔴 1 vụ phạt GDPR: <b>4% revenue</b></li>
+<li>🔴 Supply chain disruption: <b>$10M</b></li>
+<li>🔴 Brand reputation: <b>vô giá</b></li>
+</ul>
+</div>
+<div class="roi-card good">
+<h4>✅ Chi phí VỚI TrustChecker</h4>
+<ul>
+<li>🟢 Pro plan: <b>$2,388/năm</b></li>
+<li>🟢 Business plan: <b>$5,988/năm</b></li>
+<li>🟢 Compliance: <b>included</b></li>
+<li>🟢 Digital Twin: <b>simulate trước</b></li>
+<li>🟢 Trust Score: <b>rebuild trust</b></li>
+</ul>
+</div>
+</div>
+<div class="roi-result">
+<div style="color:var(--text2);font-size:.85rem;margin-bottom:4px">ROI = Cost of 1 incident avoided ÷ Annual subscription</div>
+<div class="big">200x – 500x ROI</div>
+</div>
+</section>
+
+<!-- VIII. DEMO -->
+<div class="divider"></div>
+<section class="section" id="demo">
+<div class="section-title"><span class="num">VIII</span> Demo Script (5 Phút)</div>
+<div class="demo-steps">
+<div class="demo-step"><div><b>Dashboard</b> — Tổng quan Tony is King: 15 products, 200 scans, trust score 95.2</div><span class="time">30s</span></div>
+<div class="demo-step"><div><b>Scan Map</b> — 18 thành phố. Red dot = suspicious scan từ Lagos</div><span class="time">45s</span></div>
+<div class="demo-step"><div><b>Fraud Alert</b> — QR quét 3 quốc gia/1 giờ. AI confidence 94.7%. Case tự tạo.</div><span class="time">60s</span></div>
+<div class="demo-step"><div><b>Supply Chain</b> — TrustGraph 12 partners. Red edge = high risk. Click detail.</div><span class="time">60s</span></div>
+<div class="demo-step"><div><b>Blockchain</b> — Mỗi event sealed on-chain. Hash chain bất biến. Click verify.</div><span class="time">45s</span></div>
+<div class="demo-step"><div><b>Carbon</b> — Carbon Passport. CSRD-ready. IVU validated.</div><span class="time">45s</span></div>
+<div class="demo-step"><div><b>Pricing</b> — Free 14 ngày. Upgrade bất cứ lúc nào. Bắt đầu ngay?</div><span class="time">30s</span></div>
+</div>
+</section>
+
+<!-- Footer -->
+<div class="divider" style="margin-top:60px"></div>
+<div style="text-align:center;padding:40px 0;color:var(--text2);font-size:.8rem">
+<p>TrustChecker Enterprise v10.0 — Sales Guide — Cập nhật: 2026-02-22</p>
+<p style="margin-top:4px">Tài liệu nội bộ cho đội sales. Cập nhật khi có thay đổi pricing hoặc feature mới.</p>
+</div>
+
+</div>
+</body>
+</html>

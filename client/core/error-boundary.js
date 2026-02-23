@@ -67,7 +67,7 @@ export function withErrorBoundary(renderFn, componentName = 'Unknown', options =
         if (compact) {
             return `
                 <div class="error-boundary-compact" role="alert" aria-label="Component error">
-                    <span class="error-boundary-icon">⚠️</span>
+                    <span class="error-boundary-icon"><span class="status-icon status-warn" aria-label="Warning">!</span></span>
                     <span class="error-boundary-msg">${componentName}: Failed to load</span>
                     ${showRetry ? `<button class="error-boundary-retry-sm" onclick="window.__retryComponent('${retryId}')" aria-label="Retry loading ${componentName}">${retryLabel}</button>` : ''}
                 </div>
@@ -77,7 +77,7 @@ export function withErrorBoundary(renderFn, componentName = 'Unknown', options =
         return `
             <div class="error-boundary" role="alert" aria-label="Component error in ${componentName}">
                 <div class="error-boundary-content">
-                    <div class="error-boundary-icon">⚠️</div>
+                    <div class="error-boundary-icon"><span class="status-icon status-warn" aria-label="Warning">!</span></div>
                     <h3 class="error-boundary-title">Something went wrong</h3>
                     <p class="error-boundary-detail">${componentName} failed to render</p>
                     <p class="error-boundary-msg">${escapeHtml(error.message)}</p>

@@ -31,6 +31,10 @@ function tenantMiddleware(req, res, next) {
         req.tenantPlan = req.user.orgPlan || 'free';
         req.tenantSchema = req.user.orgSchema || null; // null = shared schema
     }
+    // Set super_admin flag for downstream route convenience
+    if (req.user) {
+        req.isSuperAdmin = req.user.role === 'super_admin';
+    }
     // 2. From X-Tenant-ID header (service-to-service)
     else if (req.headers['x-tenant-id']) {
         // Validate format: UUID only (prevent injection)

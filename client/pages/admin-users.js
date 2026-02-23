@@ -8,7 +8,7 @@ import { timeAgo } from '../utils/helpers.js';
 import { escapeHTML } from '../utils/sanitize.js';
 
 export function renderPage() {
-  if (State.user?.role !== 'admin') {
+  if (!['admin', 'super_admin', 'company_admin'].includes(State.user?.role)) {
     return '<div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">Admin access required</div></div>';
   }
   return `
@@ -24,7 +24,7 @@ export function renderPage() {
 }
 export async function loadAdminUsers() {
   try {
-    const res = await API.get('/auth/users');
+    const res = await API.get('/admin/users');
     const el = document.getElementById('admin-users-list');
     if (!el) return;
 
@@ -42,7 +42,7 @@ export async function loadAdminUsers() {
                   ${['admin', 'manager', 'operator', 'viewer'].map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r}</option>`).join('')}
                 </select>
               </td>
-              <td>${u.mfa_enabled ? '✅' : '—'}</td>
+              <td>${u.mfa_enabled ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>' : '—'}</td>
               <td style="font-size:0.72rem;color:var(--text-muted)">${u.last_login ? timeAgo(u.last_login) : 'Never'}</td>
               <td>${u.id === State.user.id ? '<span class="badge valid">You</span>' : ''}</td>
             </tr>
@@ -54,9 +54,9 @@ export async function loadAdminUsers() {
 }
 async function changeUserRole(userId, role) {
   try {
-    await API.put(`/auth/users/${userId}/role`, { role });
-    showToast(`✅ Role updated to ${role}`, 'success');
-  } catch (e) { showToast('❌ ' + e.message, 'error'); loadAdminUsers(); }
+    await API.put(`/admin/users/${userId}/role`, { role });
+    showToast(`<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Role updated to ${role}`, 'success');
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); loadAdminUsers(); }
 }
 
 // Window exports for onclick handlers

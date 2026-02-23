@@ -47,7 +47,42 @@ function setupRoutes(app) {
     const scmAdvancedAIRoutes = require('../routes/scm-advanced-ai');
     const scmRiskRadarRoutes = require('../routes/scm-risk-radar');
     const scmCarbonRoutes = require('../routes/scm-carbon');
+    const scmCarbonCreditRoutes = require('../routes/scm-carbon-credit');
     const scmDigitalTwinRoutes = require('../routes/scm-digital-twin');
+    const scmSupplyRoutes = require('../routes/scm-supply-routes');
+    const scmRiskModelRoutes = require('../routes/scm-risk-model');
+    const scmForensicRoutes = require('../routes/scm-forensic');
+    const scmClassificationRoutes = require('../routes/scm-classification');
+    const scmMlEngineRoutes = require('../routes/scm-ml-engine');
+    const scmCodeGovRoutes = require('../routes/scm-code-governance');
+    const scmIntegrityRoutes = require('../routes/scm-integrity');
+    const platformRoutes = require('../routes/platform');
+    const tenantAdminRoutes = require('../routes/tenant-admin');
+    const identityRoutes = require('../routes/identity');
+    const riskGraphRoutes = require('../routes/risk-graph');
+    const complianceRegtechRoutes = require('../routes/compliance-regtech');
+    const apiEconomyRoutes = require('../routes/api-economy');
+    const greenFinanceRoutes = require('../routes/green-finance');
+    const reputationRoutes = require('../routes/reputation');
+    const governanceRoutes = require('../routes/governance');
+    const opsMonitoringRoutes = require('../routes/ops-monitoring');
+    const infraCustodyRoutes = require('../routes/infra-custody');
+    const hardeningRoutes = require('../routes/hardening');
+    const auditLogRoutes = require('../routes/audit-log');
+    const sodWaiverRoutes = require('../routes/sod-waiver');
+    const crisisRoutes = require('../routes/crisis');
+    const networkTopologyRoutes = require('../routes/network-topology');
+    const feeDistributionRoutes = require('../routes/fee-distribution');
+    const infraMaturityRoutes = require('../routes/infra-maturity');
+    const charterRoutes = require('../routes/charter');
+    const marketInfraRoutes = require('../routes/market-infra');
+    const ipoGradeRoutes = require('../routes/ipo-grade');
+    const criticalInfraRoutes = require('../routes/critical-infra');
+    const legitimacyRoutes = require('../routes/legitimacy');
+    const coherenceRoutes = require('../routes/coherence');
+    const infrastructureRoutes = require('../routes/infrastructure');
+    const gapCoverageRoutes = require('../routes/gap-coverage');
+    const cieRoutes = require('../routes/cie');
 
     // Declarative route table — each route is mounted on both /api and /api/v1
     const API_ROUTES = [
@@ -84,7 +119,42 @@ function setupRoutes(app) {
         ['/scm/ai', scmAdvancedAIRoutes],
         ['/scm/risk', scmRiskRadarRoutes],
         ['/scm/carbon', scmCarbonRoutes],
+        ['/scm/carbon-credit', scmCarbonCreditRoutes],
         ['/scm/twin', scmDigitalTwinRoutes],
+        ['/scm/supply', scmSupplyRoutes],
+        ['/scm/model', scmRiskModelRoutes],
+        ['/scm/forensic', scmForensicRoutes],
+        ['/scm/classify', scmClassificationRoutes],
+        ['/scm/ml', scmMlEngineRoutes],
+        ['/scm/code-gov', scmCodeGovRoutes],
+        ['/scm/integrity', scmIntegrityRoutes],
+        ['/platform', platformRoutes],
+        ['/tenant', tenantAdminRoutes],
+        ['/identity', identityRoutes],
+        ['/risk-graph', riskGraphRoutes],
+        ['/compliance-regtech', complianceRegtechRoutes],
+        ['/api-economy', apiEconomyRoutes],
+        ['/green-finance', greenFinanceRoutes],
+        ['/reputation', reputationRoutes],
+        ['/governance', governanceRoutes],
+        ['/ops', opsMonitoringRoutes],
+        ['/infra-custody', infraCustodyRoutes],
+        ['/hardening', hardeningRoutes],
+        ['/audit-log', auditLogRoutes],
+        ['/sod', sodWaiverRoutes],
+        ['/crisis', crisisRoutes],
+        ['/network', networkTopologyRoutes],
+        ['/distribution', feeDistributionRoutes],
+        ['', infraMaturityRoutes],   // mounts /economics, /reserves, /sovereignty, /regulatory, /sla
+        ['/charter', charterRoutes],
+        ['', marketInfraRoutes],    // mounts /capital, /incentive, /risklab
+        ['', ipoGradeRoutes],       // mounts /oversight, /car, /decentralization, /legal, /finance, /treasury, /regscenario, /narrative
+        ['', apiLimit, criticalInfraRoutes],  // mounts /revenue-gov, /jurisdiction, /killswitch, /superadmin, /model-risk, /integration, /stress, /econrisk, /contagion
+        ['', apiLimit, legitimacyRoutes],     // mounts /economic-logic, /forensic, /jurisdiction-logic
+        ['', apiLimit, coherenceRoutes],       // mounts /coherence, /playbook, /human-gov
+        ['', apiLimit, infrastructureRoutes],  // mounts /incentive-arch, /entity, /crypto-gov
+        ['', apiLimit, gapCoverageRoutes],     // mounts /data-ownership, /infra-metrics, /upgrade-gov
+        ['/cie', cieRoutes],                     // CIE v2.0 — Carbon Integrity Engine API
     ];
 
     // Mount on /api and /api/v1 (versioned alias)
@@ -94,9 +164,9 @@ function setupRoutes(app) {
     }
 
     // Admin-only integration settings
-    const { authMiddleware, requireRole } = require('../auth');
+    const { authMiddleware, requirePermission } = require('../auth');
     const db = require('../db');
-    app.use('/api/integrations', authMiddleware, requireRole('admin'), integrationsRouteFactory(db));
+    app.use('/api/integrations', authMiddleware, requirePermission('settings:update'), integrationsRouteFactory(db));
 
     // API version info
     const { versionInfoHandler } = require('../middleware/api-version');

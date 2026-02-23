@@ -5,7 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/engine-client');
 const { cacheMiddleware } = require('../cache');
 
@@ -15,14 +15,17 @@ router.use(authMiddleware);
 // Cache 60s — queries 8 full tables
 router.get('/radar', cacheMiddleware(60), async (req, res) => {
     try {
-        const partners = await db.prepare('SELECT * FROM partners').all();
-        const shipments = await db.prepare('SELECT * FROM shipments').all();
-        const violations = await db.prepare('SELECT * FROM sla_violations').all();
-        const leaks = await db.prepare('SELECT * FROM leak_alerts').all();
-        const alerts = await db.prepare('SELECT * FROM fraud_alerts').all();
-        const inventory = await db.prepare('SELECT * FROM inventory').all();
-        const certifications = await db.prepare('SELECT * FROM certifications').all();
-        const sustainability = await db.prepare('SELECT * FROM sustainability_scores').all();
+        // NODE-BP-1: Parallelize 8 independent table reads
+        const [partners, shipments, violations, leaks, alerts, inventory, certifications, sustainability] = await Promise.all([
+            db.prepare('SELECT * FROM partners').all(),
+            db.prepare('SELECT * FROM shipments').all(),
+            db.prepare('SELECT * FROM sla_violations').all(),
+            db.prepare('SELECT * FROM leak_alerts').all(),
+            db.prepare('SELECT * FROM fraud_alerts').all(),
+            db.prepare('SELECT * FROM inventory').all(),
+            db.prepare('SELECT * FROM certifications').all(),
+            db.prepare('SELECT * FROM sustainability_scores').all(),
+        ]);
 
         const radar = await engineClient.riskRadarCompute({
             partners, shipments, violations, leaks, alerts, inventory, certifications, sustainability
@@ -39,9 +42,12 @@ router.get('/radar', cacheMiddleware(60), async (req, res) => {
 // Cache 120s — relatively static data
 router.get('/heatmap', cacheMiddleware(120), async (req, res) => {
     try {
-        const partners = await db.prepare('SELECT * FROM partners').all();
-        const shipments = await db.prepare('SELECT * FROM shipments').all();
-        const leaks = await db.prepare('SELECT * FROM leak_alerts').all();
+        // NODE-BP-1: Parallelize 3 reads
+        const [partners, shipments, leaks] = await Promise.all([
+            db.prepare('SELECT * FROM partners').all(),
+            db.prepare('SELECT * FROM shipments').all(),
+            db.prepare('SELECT * FROM leak_alerts').all(),
+        ]);
 
         const heatmap = await engineClient.riskRadarHeatmap(partners, shipments, leaks);
 
@@ -64,10 +70,14 @@ router.get('/alerts', async (req, res) => {
         const { severity, limit = 50 } = req.query;
 
         // Aggregate alerts from multiple sources
-        const fraudAlerts = await db.prepare("SELECT id, 'fraud' as source, alert_type, severity, description, status, created_at FROM fraud_alerts WHERE status = 'open' ORDER BY created_at DESC LIMIT ?").all(parseInt(limit));
-        const leakAlerts = await db.prepare("SELECT id, 'leak' as source, leak_type as alert_type, CASE WHEN risk_score > 0.7 THEN 'high' WHEN risk_score > 0.4 THEN 'medium' ELSE 'low' END as severity, listing_title as description, status, created_at FROM leak_alerts WHERE status = 'open' ORDER BY created_at DESC LIMIT ?").all(parseInt(limit));
-        const slaAlerts = await db.prepare("SELECT id, 'sla' as source, violation_type as alert_type, CASE WHEN penalty_amount > 1000 THEN 'high' WHEN penalty_amount > 100 THEN 'medium' ELSE 'low' END as severity, violation_type as description, status, created_at FROM sla_violations WHERE status = 'open' ORDER BY created_at DESC LIMIT ?").all(parseInt(limit));
-        const anomalyAlerts = await db.prepare("SELECT id, 'anomaly' as source, anomaly_type as alert_type, severity, description, status, detected_at as created_at FROM anomaly_detections WHERE status = 'open' ORDER BY detected_at DESC LIMIT ?").all(parseInt(limit));
+        const cappedLimit = Math.min(parseInt(limit) || 50, 200);
+        // NODE-BP-1: Parallelize 4 alert queries
+        const [fraudAlerts, leakAlerts, slaAlerts, anomalyAlerts] = await Promise.all([
+            db.prepare("SELECT id, 'fraud' as source, alert_type, severity, description, status, created_at FROM fraud_alerts WHERE status = 'open' ORDER BY created_at DESC LIMIT ?").all(cappedLimit),
+            db.prepare("SELECT id, 'leak' as source, leak_type as alert_type, CASE WHEN risk_score > 0.7 THEN 'high' WHEN risk_score > 0.4 THEN 'medium' ELSE 'low' END as severity, listing_title as description, status, created_at FROM leak_alerts WHERE status = 'open' ORDER BY created_at DESC LIMIT ?").all(cappedLimit),
+            db.prepare("SELECT id, 'sla' as source, violation_type as alert_type, CASE WHEN penalty_amount > 1000 THEN 'high' WHEN penalty_amount > 100 THEN 'medium' ELSE 'low' END as severity, violation_type as description, status, created_at FROM sla_violations WHERE status = 'open' ORDER BY created_at DESC LIMIT ?").all(cappedLimit),
+            db.prepare("SELECT id, 'anomaly' as source, anomaly_type as alert_type, severity, description, status, detected_at as created_at FROM anomaly_detections WHERE status = 'open' ORDER BY detected_at DESC LIMIT ?").all(cappedLimit),
+        ]);
 
         let allAlerts = [...fraudAlerts, ...leakAlerts, ...slaAlerts, ...anomalyAlerts]
             .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -90,7 +100,7 @@ router.get('/alerts', async (req, res) => {
                 sla: slaAlerts.length,
                 anomaly: anomalyAlerts.length
             },
-            alerts: allAlerts.slice(0, parseInt(limit))
+            alerts: allAlerts.slice(0, cappedLimit)
         });
     } catch (err) {
         console.error('Risk alerts error:', err);
@@ -105,20 +115,12 @@ router.get('/trends', async (req, res) => {
         const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
         const since = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
 
-        const fraudTrend = await db.prepare(`
-      SELECT DATE(created_at) as day, COUNT(*) as count
-      FROM fraud_alerts WHERE created_at >= ? GROUP BY DATE(created_at)
-    `).all(since);
-
-        const leakTrend = await db.prepare(`
-      SELECT DATE(created_at) as day, COUNT(*) as count
-      FROM leak_alerts WHERE created_at >= ? GROUP BY DATE(created_at)
-    `).all(since);
-
-        const violationTrend = await db.prepare(`
-      SELECT DATE(created_at) as day, COUNT(*) as count
-      FROM sla_violations WHERE created_at >= ? GROUP BY DATE(created_at)
-    `).all(since);
+        // NODE-BP-1: Parallelize 3 trend queries
+        const [fraudTrend, leakTrend, violationTrend] = await Promise.all([
+            db.prepare('SELECT DATE(created_at) as day, COUNT(*) as count FROM fraud_alerts WHERE created_at >= ? GROUP BY DATE(created_at)').all(since),
+            db.prepare('SELECT DATE(created_at) as day, COUNT(*) as count FROM leak_alerts WHERE created_at >= ? GROUP BY DATE(created_at)').all(since),
+            db.prepare('SELECT DATE(created_at) as day, COUNT(*) as count FROM sla_violations WHERE created_at >= ? GROUP BY DATE(created_at)').all(since),
+        ]);
 
         res.json({
             period,

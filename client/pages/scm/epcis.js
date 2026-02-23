@@ -28,18 +28,18 @@ export function renderPage() {
         <button class="btn btn-sm" onclick="exportEpcisDoc()">📄 Export Document</button>
       </div>
       <table class="data-table"><thead><tr><th>Time</th><th>EPCIS Type</th><th>Biz Step</th><th>Location</th><th>Sealed</th></tr></thead><tbody>
-        ${(d.events || []).slice(0, 20).map(e => `<tr><td>${timeAgo(e.eventTime || e.created_at)}</td><td>${e.epcis_type || '—'}</td><td>${e.cbv_biz_step || '—'}</td><td>${e.readPointId || e.location || '—'}</td><td>${e.blockchain_seal_id ? '✅' : '—'}</td></tr>`).join('')}
+        ${(d.events || []).slice(0, 20).map(e => `<tr><td>${timeAgo(e.eventTime || e.created_at)}</td><td>${e.epcis_type || '—'}</td><td>${e.cbv_biz_step || '—'}</td><td>${e.readPointId || e.location || '—'}</td><td>${e.blockchain_seal_id ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>' : '—'}</td></tr>`).join('')}
       </tbody></table>
     </div>
     <div class="card" style="margin-top:20px">
-      <div class="card-header"><div class="card-title">✅ GS1 Compliance</div></div>
+      <div class="card-header"><div class="card-title"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> GS1 Compliance</div></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;padding:16px">
-        ${Object.entries(s.compliance || {}).map(([k, v]) => `<div style="padding:12px;background:var(--bg-tertiary);border-radius:8px"><div style="font-size:0.75rem;color:var(--text-muted)">${k.replace(/_/g, ' ')}</div><div style="font-size:1.1rem;font-weight:700;color:${v ? 'var(--emerald)' : 'var(--rose)'}">${v ? '✅ Yes' : '❌ No'}</div></div>`).join('')}
+        ${Object.entries(s.compliance || {}).map(([k, v]) => `<div style="padding:12px;background:var(--bg-tertiary);border-radius:8px"><div style="font-size:0.75rem;color:var(--text-muted)">${k.replace(/_/g, ' ')}</div><div style="font-size:1.1rem;font-weight:700;color:${v ? 'var(--emerald)' : 'var(--rose)'}">${v ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Yes' : '<span class="status-icon status-fail" aria-label="Fail">✗</span> No'}</div></div>`).join('')}
       </div>
     </div>`;
 }
 async function exportEpcisDoc() {
-  try { const doc = await API.get('/scm/epcis/document'); downloadJSON(doc, 'epcis_document.json'); showToast('📄 EPCIS Document exported', 'success'); } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  try { const doc = await API.get('/scm/epcis/document'); downloadJSON(doc, 'epcis_document.json'); showToast('📄 EPCIS Document exported', 'success'); } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 // Window exports for onclick handlers

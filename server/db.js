@@ -1,9 +1,8 @@
 /**
- * TrustChecker v9.0 — Database Layer (Dual-Mode)
+ * TrustChecker v9.0 — Database Layer (PostgreSQL ONLY)
  *
- * Auto-selects backend based on DATABASE_URL environment variable:
- *   - If DATABASE_URL set → PostgreSQL via Prisma
- *   - If not set → SQLite via sql.js (legacy mode)
+ * Enforces PostgreSQL via Prisma. No SQLite fallback.
+ * DATABASE_URL must be set (via .env or PM2 ecosystem).
  *
  * Both backends expose the same async API:
  *   db.get(sql, params)     → Promise<row|null>
@@ -13,7 +12,18 @@
  *   db._readyPromise        → Promise (await in boot sequence)
  */
 
-const USE_POSTGRES = !!process.env.DATABASE_URL;
+// Auto-load .env (ensures DATABASE_URL is available even when running scripts directly)
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
+if (!process.env.DATABASE_URL) {
+  console.error('\n❌ FATAL: DATABASE_URL is not set!');
+  console.error('   Set it in .env or PM2 ecosystem.config.js');
+  console.error('   Example: DATABASE_URL=postgresql://user:pass@localhost:5432/trustchecker\n');
+  process.exit(1);
+}
+
+const USE_POSTGRES = true; // PostgreSQL ONLY — no SQLite fallback
 
 // ═══════════════════════════════════════════════════════════════════
 // POSTGRESQL BACKEND (Prisma)
@@ -22,7 +32,15 @@ const USE_POSTGRES = !!process.env.DATABASE_URL;
 class PrismaBackend {
   constructor() {
     const { PrismaClient } = require('@prisma/client');
+    const { PrismaPg } = require('@prisma/adapter-pg');
+    const { Pool } = require('pg');
+
+    // Create pg Pool from DATABASE_URL
+    this._pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const adapter = new PrismaPg(this._pool);
+
     this.prisma = new PrismaClient({
+      adapter,
       log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error']
     });
     this.ready = false;
@@ -30,8 +48,10 @@ class PrismaBackend {
   }
 
   async _init() {
-    await this.prisma.$connect();
-    console.log('✅ PostgreSQL connected via Prisma');
+    // Test connection
+    const client = await this._pool.connect();
+    client.release();
+    console.log('✅ PostgreSQL connected via Prisma (adapter-pg)');
     this.ready = true;
     return this;
   }
@@ -83,15 +103,35 @@ class PrismaBackend {
     // IFNULL(a, b) → COALESCE(a, b)
     t = t.replace(/IFNULL\(/gi, 'COALESCE(');
 
+    // INSERT OR IGNORE → INSERT ... ON CONFLICT DO NOTHING
+    const hadOrIgnore = /INSERT\s+OR\s+IGNORE\s+INTO/i.test(t);
+    t = t.replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, 'INSERT INTO');
+
+    // INSERT OR REPLACE → use ON CONFLICT DO UPDATE (upsert)
+    t = t.replace(/INSERT\s+OR\s+REPLACE\s+INTO/gi, 'INSERT INTO');
+
     // Skip DDL — Prisma handles schema via migrations
     if (/^\s*CREATE\s+(TABLE|INDEX)/i.test(t)) {
       console.warn('[DB] ⚠️ DDL statement skipped in Prisma mode (use migrations):', t.slice(0, 80));
       return null;
     }
 
+    // Skip ALTER TABLE — Prisma manages schema
+    if (/^\s*ALTER\s+TABLE/i.test(t)) {
+      return null;
+    }
+
+    // Skip PRAGMA — PostgreSQL doesn't use them
+    if (/^\s*PRAGMA/i.test(t)) {
+      return null;
+    }
+
     // Convert ? → $1, $2, ...
     let idx = 0;
     t = t.replace(/\?/g, () => `$${++idx}`);
+
+    // Append ON CONFLICT DO NOTHING for INSERT OR IGNORE
+    if (hadOrIgnore) t += ' ON CONFLICT DO NOTHING';
 
     return t;
   }
@@ -173,6 +213,7 @@ class PrismaBackend {
 
   async disconnect() {
     await this.prisma.$disconnect();
+    await this._pool.end();
     console.log('🔌 PostgreSQL disconnected');
   }
 }
@@ -298,15 +339,24 @@ class SQLiteBackend {
 
   // ─── Schema (only used in SQLite mode) ───────────────────────
   _initSchema() {
+    // Organizations / Tenants (multi-tenancy)
+    this.db.run(`CREATE TABLE IF NOT EXISTS organizations (id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT UNIQUE NOT NULL, plan TEXT DEFAULT 'free', settings TEXT DEFAULT '{}', feature_flags TEXT DEFAULT '{}', schema_name TEXT, status TEXT DEFAULT 'active', created_by TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
+
     // Users & Auth
-    this.db.run(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT DEFAULT 'operator', company TEXT DEFAULT '', mfa_secret TEXT, mfa_enabled INTEGER DEFAULT 0, failed_attempts INTEGER DEFAULT 0, locked_until TEXT, created_at TEXT DEFAULT (datetime('now')), last_login TEXT)`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT DEFAULT 'operator', user_type TEXT DEFAULT 'tenant', company TEXT DEFAULT '', org_id TEXT, mfa_secret TEXT, mfa_enabled INTEGER DEFAULT 0, must_change_password INTEGER DEFAULT 0, password_changed_at TEXT, failed_attempts INTEGER DEFAULT 0, locked_until TEXT, created_at TEXT DEFAULT (datetime('now')), last_login TEXT)`);
     this.db.run(`CREATE TABLE IF NOT EXISTS refresh_tokens (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token_hash TEXT NOT NULL, expires_at TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')), revoked INTEGER DEFAULT 0)`);
     this.db.run(`CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, ip_address TEXT, user_agent TEXT, created_at TEXT DEFAULT (datetime('now')), last_active TEXT DEFAULT (datetime('now')), revoked INTEGER DEFAULT 0)`);
     this.db.run(`CREATE TABLE IF NOT EXISTS passkey_credentials (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, credential_id TEXT NOT NULL UNIQUE, public_key TEXT NOT NULL, nickname TEXT DEFAULT 'My Passkey', sign_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), last_used TEXT, FOREIGN KEY (user_id) REFERENCES users(id))`);
 
+    // RBAC (Hierarchical Multi-Tenant Permission Model)
+    this.db.run(`CREATE TABLE IF NOT EXISTS rbac_roles (id TEXT PRIMARY KEY, tenant_id TEXT, name TEXT NOT NULL, display_name TEXT DEFAULT '', type TEXT DEFAULT 'tenant', is_system INTEGER DEFAULT 0, mfa_policy TEXT DEFAULT 'optional', parent_role_id TEXT, description TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now')))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS rbac_permissions (id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, scope TEXT DEFAULT 'tenant', level TEXT DEFAULT 'business', description TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now')), UNIQUE(resource, action, scope))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS rbac_role_permissions (role_id TEXT NOT NULL, permission_id TEXT NOT NULL, PRIMARY KEY (role_id, permission_id))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS rbac_user_roles (user_id TEXT NOT NULL, role_id TEXT NOT NULL, assigned_by TEXT, assigned_at TEXT DEFAULT (datetime('now')), expires_at TEXT, PRIMARY KEY (user_id, role_id))`);
+
     // Products & QR
-    this.db.run(`CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, name TEXT NOT NULL, sku TEXT UNIQUE NOT NULL, description TEXT DEFAULT '', category TEXT DEFAULT '', manufacturer TEXT DEFAULT '', batch_number TEXT DEFAULT '', origin_country TEXT DEFAULT '', registered_by TEXT, trust_score REAL DEFAULT 100.0, status TEXT DEFAULT 'active', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
-    this.db.run(`CREATE TABLE IF NOT EXISTS qr_codes (id TEXT PRIMARY KEY, product_id TEXT NOT NULL, qr_data TEXT UNIQUE NOT NULL, qr_image_base64 TEXT, status TEXT DEFAULT 'active', generated_at TEXT DEFAULT (datetime('now')), expires_at TEXT)`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, name TEXT NOT NULL, sku TEXT UNIQUE NOT NULL, description TEXT DEFAULT '', category TEXT DEFAULT '', manufacturer TEXT DEFAULT '', batch_number TEXT DEFAULT '', origin_country TEXT DEFAULT '', registered_by TEXT, org_id TEXT, trust_score REAL DEFAULT 100.0, status TEXT DEFAULT 'active', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS qr_codes (id TEXT PRIMARY KEY, product_id TEXT NOT NULL, qr_data TEXT UNIQUE NOT NULL, qr_image_base64 TEXT, org_id TEXT, status TEXT DEFAULT 'active', generated_by TEXT, deleted_at TEXT, deleted_by TEXT, generated_at TEXT DEFAULT (datetime('now')), expires_at TEXT)`);
     this.db.run(`CREATE TABLE IF NOT EXISTS scan_events (id TEXT PRIMARY KEY, qr_code_id TEXT, product_id TEXT, scan_type TEXT DEFAULT 'validation', device_fingerprint TEXT DEFAULT '', ip_address TEXT DEFAULT '', latitude REAL, longitude REAL, geo_city TEXT DEFAULT '', geo_country TEXT DEFAULT '', user_agent TEXT DEFAULT '', result TEXT DEFAULT 'pending', fraud_score REAL DEFAULT 0.0, trust_score REAL DEFAULT 0.0, response_time_ms INTEGER DEFAULT 0, scanned_at TEXT DEFAULT (datetime('now')))`);
 
     // Security
@@ -328,8 +378,25 @@ class SQLiteBackend {
     this.db.run(`CREATE TABLE IF NOT EXISTS leak_alerts (id TEXT PRIMARY KEY, product_id TEXT, platform TEXT DEFAULT '', url TEXT DEFAULT '', listing_title TEXT DEFAULT '', listing_price REAL DEFAULT 0, authorized_price REAL DEFAULT 0, region_detected TEXT DEFAULT '', authorized_regions TEXT DEFAULT '[]', leak_type TEXT DEFAULT 'unauthorized_region', risk_score REAL DEFAULT 0.5, status TEXT DEFAULT 'open', created_at TEXT DEFAULT (datetime('now')))`);
     this.db.run(`CREATE TABLE IF NOT EXISTS supply_chain_graph (id TEXT PRIMARY KEY, from_node_id TEXT NOT NULL, from_node_type TEXT DEFAULT 'partner', to_node_id TEXT NOT NULL, to_node_type TEXT DEFAULT 'partner', relationship TEXT DEFAULT 'supplies', weight REAL DEFAULT 1.0, risk_score REAL DEFAULT 0.0, metadata TEXT DEFAULT '{}', created_at TEXT DEFAULT (datetime('now')))`);
 
+    // SCM Enterprise — Supply Routes, Risk Models, Forensic, Classification
+    this.db.run(`CREATE TABLE IF NOT EXISTS supply_routes (id TEXT PRIMARY KEY, name TEXT NOT NULL, chain TEXT DEFAULT '[]', products TEXT DEFAULT '[]', geo_fence TEXT DEFAULT '', status TEXT DEFAULT 'active', integrity TEXT DEFAULT 'clean', created_by TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS channel_rules (id TEXT PRIMARY KEY, name TEXT NOT NULL, logic TEXT DEFAULT '', severity TEXT DEFAULT 'medium', auto_action TEXT DEFAULT '', is_active INTEGER DEFAULT 1, triggers_30d INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS route_breaches (id TEXT PRIMARY KEY, route_id TEXT NOT NULL, rule_id TEXT, scan_event_id TEXT, code_data TEXT DEFAULT '', scanned_in TEXT DEFAULT '', severity TEXT DEFAULT 'medium', action TEXT DEFAULT '', details TEXT DEFAULT '{}', created_at TEXT DEFAULT (datetime('now')))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS risk_models (id TEXT PRIMARY KEY, version TEXT UNIQUE NOT NULL, status TEXT DEFAULT 'draft', weights TEXT DEFAULT '{}', factors INTEGER DEFAULT 12, fp_rate TEXT DEFAULT '', tp_rate TEXT DEFAULT '', deployed_at TEXT, approved_by TEXT, change_summary TEXT DEFAULT '', test_dataset TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now')))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS model_change_requests (id TEXT PRIMARY KEY, model_id TEXT, factor TEXT NOT NULL, current_value TEXT DEFAULT '', proposed_value TEXT DEFAULT '', reason TEXT DEFAULT '', impact TEXT DEFAULT '', requested_by TEXT DEFAULT '', status TEXT DEFAULT 'pending', reviewed_by TEXT, reviewed_at TEXT, created_at TEXT DEFAULT (datetime('now')))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS forensic_cases (id TEXT PRIMARY KEY, case_number TEXT UNIQUE NOT NULL, code_data TEXT DEFAULT '', product_id TEXT, batch_id TEXT, scan_chain TEXT DEFAULT '[]', device_compare TEXT DEFAULT '[]', factor_breakdown TEXT DEFAULT '[]', current_ers REAL DEFAULT 0, status TEXT DEFAULT 'open', assigned_to TEXT, frozen_at TEXT, closed_at TEXT, verdict TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS duplicate_classifications (id TEXT PRIMARY KEY, scan_event_id TEXT, code_data TEXT DEFAULT '', classification TEXT DEFAULT 'unclassified', confidence REAL DEFAULT 0, signals TEXT DEFAULT '[]', geo_data TEXT DEFAULT '{}', device_hash TEXT DEFAULT '', time_gap INTEGER DEFAULT 0, classified_by TEXT DEFAULT 'system', reviewed_by TEXT, created_at TEXT DEFAULT (datetime('now')))`);
+
+    // SCM Enterprise — ML Engine, Route Simulation, Code Governance
+    this.db.run(`CREATE TABLE IF NOT EXISTS feature_store (id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT DEFAULT 'behavioral', data_type TEXT DEFAULT 'float', source TEXT DEFAULT 'scan_events', extraction_logic TEXT DEFAULT '', config TEXT DEFAULT '{}', stats TEXT DEFAULT '{}', status TEXT DEFAULT 'active', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS model_performance (id TEXT PRIMARY KEY, model_version TEXT NOT NULL, auc_roc REAL DEFAULT 0, precision_score REAL DEFAULT 0, recall REAL DEFAULT 0, f1_score REAL DEFAULT 0, fp_rate TEXT DEFAULT '', tp_rate TEXT DEFAULT '', dataset_size INTEGER DEFAULT 0, dataset_date_range TEXT DEFAULT '', confusion_matrix TEXT DEFAULT '{}', roc_curve TEXT DEFAULT '[]', per_factor TEXT DEFAULT '[]', thresholds TEXT DEFAULT '[]', notes TEXT DEFAULT '', is_latest INTEGER DEFAULT 0, evaluated_at TEXT DEFAULT (datetime('now')))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS training_runs (id TEXT PRIMARY KEY, run_id TEXT UNIQUE NOT NULL, model_version TEXT DEFAULT '', status TEXT DEFAULT 'pending', dataset_size INTEGER DEFAULT 0, train_split INTEGER DEFAULT 70, val_split INTEGER DEFAULT 15, test_split INTEGER DEFAULT 15, hyperparams TEXT DEFAULT '{}', metrics TEXT DEFAULT '{}', triggered_by TEXT DEFAULT '', notes TEXT DEFAULT '', started_at TEXT DEFAULT (datetime('now')), completed_at TEXT)`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS route_simulations (id TEXT PRIMARY KEY, route_id TEXT NOT NULL, scenario TEXT DEFAULT 'what_if', input_data TEXT DEFAULT '{}', results TEXT DEFAULT '{}', breaches_predicted INTEGER DEFAULT 0, created_by TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now')))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS code_registry (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, hmac_hash TEXT UNIQUE NOT NULL, code_prefix TEXT DEFAULT '', collision_detected INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS generation_limits (id TEXT PRIMARY KEY, tenant_id TEXT UNIQUE NOT NULL, max_per_hour INTEGER DEFAULT 1000, max_per_day INTEGER DEFAULT 10000, max_per_month INTEGER DEFAULT 100000, max_batch_size INTEGER DEFAULT 5000, current_hour INTEGER DEFAULT 0, current_day INTEGER DEFAULT 0, current_month INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
+
     // KYC
-    this.db.run(`CREATE TABLE IF NOT EXISTS kyc_businesses (id TEXT PRIMARY KEY, name TEXT NOT NULL, registration_number TEXT UNIQUE, country TEXT DEFAULT '', address TEXT DEFAULT '', industry TEXT DEFAULT '', contact_email TEXT DEFAULT '', contact_phone TEXT DEFAULT '', risk_level TEXT DEFAULT 'medium', verification_status TEXT DEFAULT 'pending', verified_at TEXT, verified_by TEXT, notes TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
+    this.db.run(`CREATE TABLE IF NOT EXISTS kyc_businesses (id TEXT PRIMARY KEY, name TEXT NOT NULL, registration_number TEXT UNIQUE, country TEXT DEFAULT '', address TEXT DEFAULT '', industry TEXT DEFAULT '', contact_email TEXT DEFAULT '', contact_phone TEXT DEFAULT '', org_id TEXT, submitted_by TEXT, risk_level TEXT DEFAULT 'medium', verification_status TEXT DEFAULT 'pending', verified_at TEXT, verified_by TEXT, notes TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`);
     this.db.run(`CREATE TABLE IF NOT EXISTS kyc_checks (id TEXT PRIMARY KEY, business_id TEXT NOT NULL, check_type TEXT NOT NULL, provider TEXT DEFAULT 'internal', status TEXT DEFAULT 'pending', result TEXT DEFAULT '{}', score REAL DEFAULT 0.0, checked_by TEXT, created_at TEXT DEFAULT (datetime('now')))`);
     this.db.run(`CREATE TABLE IF NOT EXISTS sanction_hits (id TEXT PRIMARY KEY, business_id TEXT NOT NULL, list_name TEXT NOT NULL, match_score REAL DEFAULT 0.0, matched_entity TEXT DEFAULT '', details TEXT DEFAULT '{}', status TEXT DEFAULT 'pending_review', reviewed_by TEXT, reviewed_at TEXT, created_at TEXT DEFAULT (datetime('now')))`);
 
@@ -437,20 +504,41 @@ class SQLiteBackend {
     safeAddColumn('users', 'failed_attempts', 'INTEGER DEFAULT 0');
     safeAddColumn('users', 'locked_until', 'TEXT');
 
-    // ─── Seed default admin user if users table is empty ─────────
+    // ─── Org + User migrations ─────────────────────────────────
+    safeAddColumn('users', 'org_id', 'TEXT');
+    safeAddColumn('products', 'org_id', 'TEXT');
+    safeAddColumn('qr_codes', 'org_id', 'TEXT');
+    safeAddColumn('qr_codes', 'generated_by', 'TEXT');
+    safeAddColumn('qr_codes', 'deleted_at', 'TEXT');
+    safeAddColumn('qr_codes', 'deleted_by', 'TEXT');
+    safeAddColumn('kyc_businesses', 'org_id', 'TEXT');
+    safeAddColumn('kyc_businesses', 'submitted_by', 'TEXT');
+    safeAddColumn('billing_plans', 'org_id', 'TEXT');
+
+    // ─── Seed default org + super_admin user if users table is empty ─────────
     try {
       const userCount = this.db.exec('SELECT COUNT(*) as cnt FROM users');
       const count = userCount[0]?.values?.[0]?.[0] || 0;
       if (count === 0) {
         const bcrypt = require('bcryptjs');
         const { v4: uuidv4 } = require('uuid');
+
+        // Seed default organization
+        const orgId = uuidv4();
+        this.db.run(
+          `INSERT INTO organizations (id, name, slug, plan, status) VALUES (?, ?, ?, ?, ?)`,
+          [orgId, 'TrustChecker', 'trustchecker', 'enterprise', 'active']
+        );
+        console.log('  🏢 Seeded default organization (TrustChecker)');
+
+        // Seed super_admin user
         const hash = bcrypt.hashSync('Admin@123456!', 12);
         const id = uuidv4();
         this.db.run(
-          `INSERT INTO users (id, username, email, password_hash, role, company) VALUES (?, ?, ?, ?, ?, ?)`,
-          [id, 'admin', 'admin@trustchecker.io', hash, 'admin', 'TrustChecker']
+          `INSERT INTO users (id, username, email, password_hash, role, company, org_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [id, 'admin', 'admin@trustchecker.io', hash, 'super_admin', 'TrustChecker', orgId]
         );
-        console.log('  🌱 Seeded default admin user (admin / Admin@123456!)');
+        console.log('  🌱 Seeded super_admin user (admin / Admin@123456!)');
       }
     } catch (e) { console.error('Seed error:', e.message); }
   }
@@ -460,6 +548,6 @@ class SQLiteBackend {
 // EXPORT — Auto-select backend
 // ═══════════════════════════════════════════════════════════════════
 
-const db = USE_POSTGRES ? new PrismaBackend() : new SQLiteBackend();
+const db = new PrismaBackend(); // PostgreSQL ONLY
 
 module.exports = db;

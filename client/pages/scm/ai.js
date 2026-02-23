@@ -45,13 +45,13 @@ export function renderPage() {
     </div>`;
 }
 async function runMonteCarlo() {
-  try { showToast('🎲 Running Monte Carlo...', 'info'); const r = await API.post('/scm/ai/monte-carlo', {}); showAIResult('🎲 Monte Carlo Risk Simulation', r); } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  try { showToast('🎲 Running Monte Carlo...', 'info'); const r = await API.post('/scm/ai/monte-carlo', {}); showAIResult('🎲 Monte Carlo Risk Simulation', r); } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 async function runRootCause() {
-  try { showToast('🔍 Analyzing delays...', 'info'); const r = await API.get('/scm/ai/delay-root-cause'); showAIResult('🔍 Causal Delay Analysis', r); } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  try { showToast('🔍 Analyzing delays...', 'info'); const r = await API.get('/scm/ai/delay-root-cause'); showAIResult('🔍 Causal Delay Analysis', r); } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 async function runWhatIf() {
-  try { showToast('🔮 Simulating...', 'info'); const r = await API.post('/scm/ai/what-if', { type: 'partner_failure', severity: 0.3 }); showAIResult('🔮 What-If Simulation', r); } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  try { showToast('🔮 Simulating...', 'info'); const r = await API.post('/scm/ai/what-if', { type: 'partner_failure', severity: 0.3 }); showAIResult('🔮 What-If Simulation', r); } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 function showAIResult(title, data) {
   const el = document.getElementById('ai-result'); if (el) { el.style.display = 'block'; }

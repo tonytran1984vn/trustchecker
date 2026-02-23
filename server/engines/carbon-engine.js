@@ -1,6 +1,9 @@
 /**
- * TrustChecker Carbon & ESG Engine
- * Scope 1/2/3 emissions calculation, carbon passport, GRI reporting
+ * TrustChecker Carbon & ESG Engine v2.0
+ * Cross-Cutting ESG Governance Intelligence
+ * 
+ * Scope 1/2/3 emissions calculation, carbon passport, GRI reporting,
+ * Risk factor integration, regulatory alignment, maturity assessment
  * 
  * Emission factors based on DEFRA/GHG Protocol 2025 guidelines
  */
@@ -36,9 +39,38 @@ const MANUFACTURING_FACTORS = {
     'Energy': 25.0
 };
 
+// Carbon grade thresholds
+const GRADE_THRESHOLDS = [
+    { max: 5, grade: 'A+', label: 'Excellent — Net Zero ready', color: '#10b981' },
+    { max: 10, grade: 'A', label: 'Very Good', color: '#34d399' },
+    { max: 20, grade: 'B', label: 'Good — Improve transport', color: '#3b82f6' },
+    { max: 40, grade: 'C', label: 'Average — Reduce manufacturing + transport', color: '#f59e0b' },
+    { max: 70, grade: 'D', label: 'Poor — Energy transition needed', color: '#ef4444' },
+    { max: Infinity, grade: 'F', label: 'Fail — Restructure supply chain', color: '#991b1b' }
+];
+
+// Regulatory framework definitions
+const REGULATORY_FRAMEWORKS = [
+    { id: 'eu_cbam', name: 'EU CBAM', full: 'Carbon Border Adjustment Mechanism', region: 'EU', scopes_required: [1, 2, 3], data_type: 'Per-product', status: 'active', effective: '2026-01-01' },
+    { id: 'eu_csrd', name: 'EU CSRD', full: 'Corporate Sustainability Reporting Directive', region: 'EU', scopes_required: [1, 2, 3], data_type: 'Corporate', status: 'active', effective: '2025-01-01' },
+    { id: 'sec_climate', name: 'SEC Climate', full: 'SEC Climate Disclosure Rules', region: 'US', scopes_required: [1, 2], data_type: 'Corporate', status: 'phased', effective: '2026-01-01' },
+    { id: 'iso_14064', name: 'ISO 14064', full: 'GHG Quantification & Reporting', region: 'Global', scopes_required: [1, 2, 3], data_type: 'Corporate', status: 'voluntary' },
+    { id: 'paris', name: 'Paris Agreement', full: 'Paris Climate Accord Targets', region: 'Global', scopes_required: [1, 2, 3], data_type: 'National', status: 'active', targets: { 2030: 0.55, 2050: 0.10 } },
+    { id: 'vn_green', name: 'Vietnam Green Growth', full: 'Vietnam National Green Growth Strategy', region: 'Vietnam', scopes_required: [1, 2], data_type: 'National', status: 'active' }
+];
+
+// Maturity model
+const MATURITY_LEVELS = [
+    { level: 1, name: 'Carbon Calculator', description: 'Per-product footprint calculation', requirements: ['scope_calculation'], target: 'Baseline' },
+    { level: 2, name: 'ESG Governance Module', description: 'GRI reporting + offset + blockchain', requirements: ['gri_reporting', 'offset_recording', 'blockchain_anchor'], target: 'Enterprise Ready' },
+    { level: 3, name: 'Carbon Intelligence', description: 'Risk integration + cross-tenant benchmarks', requirements: ['risk_integration', 'cross_tenant_benchmark', 'partner_esg_scoring'], target: 'Regulated Industry' },
+    { level: 4, name: 'Industry Carbon Index', description: 'Moody\'s-style ESG rating platform', requirements: ['industry_index', 'real_time_monitoring', 'compliance_api'], target: 'Cross-border' },
+    { level: 5, name: 'Carbon Trading Platform', description: 'Offset marketplace + verification network', requirements: ['offset_marketplace', 'verification_network', 'carbon_credit_trading'], target: 'Market Leader' }
+];
+
 class CarbonEngine {
     /**
-     * Calculate product carbon footprint (cradle-to-gate)
+     * Calculate product carbon footprint (cradle-to-gate) — v2.0
      */
     calculateFootprint(product, shipments = [], events = [], partner = null) {
         const category = product.category || 'General';
@@ -55,8 +87,8 @@ class CarbonEngine {
         // Scope 2: Indirect emissions (energy for warehousing)
         let warehouseEmissions = 0;
         const warehouseType = category === 'Healthcare' || category === 'F&B' ? 'cold_storage' : 'ambient';
-        const storageDays = events.filter(e => e.event_type === 'store' || e.event_type === 'receive').length * 3; // est 3 days per event
-        warehouseEmissions = WAREHOUSE_FACTORS[warehouseType] * storageDays * 0.5; // 0.5 sq.m per unit
+        const storageDays = events.filter(e => e.event_type === 'store' || e.event_type === 'receive').length * 3;
+        warehouseEmissions = WAREHOUSE_FACTORS[warehouseType] * storageDays * 0.5;
 
         const scope2 = {
             type: 'scope_2',
@@ -78,7 +110,7 @@ class CarbonEngine {
             else if (carrier.includes('rail') || carrier.includes('train')) mode = 'rail';
 
             const distance = this._estimateDistance(s);
-            const weight = 0.05; // 50kg per unit estimated
+            const weight = 0.05;
             const emissions = TRANSPORT_EMISSION_FACTORS[mode] * distance * weight;
 
             transportEmissions += emissions;
@@ -100,12 +132,16 @@ class CarbonEngine {
         };
 
         const totalFootprint = scope1.value + scope2.value + scope3.value;
+        const gradeInfo = this._carbonGradeInfo(totalFootprint);
 
         return {
             product_id: product.id,
             product_name: product.name,
+            category,
             total_footprint_kgCO2e: Math.round(totalFootprint * 100) / 100,
-            grade: this._carbonGrade(totalFootprint),
+            grade: gradeInfo.grade,
+            grade_label: gradeInfo.label,
+            grade_color: gradeInfo.color,
             scopes: [scope1, scope2, scope3],
             scope_breakdown: {
                 scope_1_pct: totalFootprint > 0 ? Math.round(scope1.value / totalFootprint * 100) : 0,
@@ -113,11 +149,12 @@ class CarbonEngine {
                 scope_3_pct: totalFootprint > 0 ? Math.round(scope3.value / totalFootprint * 100) : 0
             },
             equivalent: {
-                trees_needed: Math.round(totalFootprint / 22 * 10) / 10, // 1 tree absorbs ~22kg/year
-                driving_km: Math.round(totalFootprint / 0.192 * 10) / 10, // avg car 0.192 kg/km
-                smartphone_charges: Math.round(totalFootprint / 0.008) // 8g per charge
+                trees_needed: Math.round(totalFootprint / 22 * 10) / 10,
+                driving_km: Math.round(totalFootprint / 0.192 * 10) / 10,
+                smartphone_charges: Math.round(totalFootprint / 0.008)
             },
             methodology: 'GHG Protocol Corporate Standard + DEFRA 2025 Factors',
+            eas_version: '3.0',
             assessed_at: new Date().toISOString()
         };
     }
@@ -146,7 +183,8 @@ class CarbonEngine {
                 name: product.name,
                 category: product.category,
                 total: fp.total_footprint_kgCO2e,
-                grade: fp.grade
+                grade: fp.grade,
+                grade_color: fp.grade_color
             });
         }
 
@@ -161,8 +199,8 @@ class CarbonEngine {
             products_assessed: productFootprints.length,
             product_rankings: productFootprints.sort((a, b) => b.total - a.total),
             reduction_targets: {
-                paris_aligned_2030: Math.round(total * 0.55 * 100) / 100, // 45% reduction target
-                net_zero_2050: Math.round(total * 0.1 * 100) / 100 // 90% reduction
+                paris_aligned_2030: Math.round(total * 0.55 * 100) / 100,
+                net_zero_2050: Math.round(total * 0.1 * 100) / 100
             }
         };
     }
@@ -177,7 +215,6 @@ class CarbonEngine {
                 new Date(s.actual_delivery) > new Date(s.estimated_delivery)).length;
             const violationCount = violations.filter(v => v.partner_id === p.id).length;
 
-            // Composite ESG score
             const trustWeight = (p.trust_score || 50) / 100 * 40;
             const reliabilityWeight = partnerShipments.length > 0 ? (1 - lateCount / partnerShipments.length) * 30 : 15;
             const complianceWeight = Math.max(0, 30 - violationCount * 10);
@@ -191,6 +228,7 @@ class CarbonEngine {
                 type: p.type,
                 esg_score: Math.min(100, esgScore),
                 grade: esgScore >= 80 ? 'A' : esgScore >= 60 ? 'B' : esgScore >= 40 ? 'C' : 'D',
+                grade_color: esgScore >= 80 ? '#10b981' : esgScore >= 60 ? '#3b82f6' : esgScore >= 40 ? '#f59e0b' : '#ef4444',
                 metrics: {
                     trust_score: p.trust_score || 50,
                     shipment_reliability: partnerShipments.length > 0 ? Math.round((1 - lateCount / partnerShipments.length) * 100) + '%' : 'N/A',
@@ -224,12 +262,200 @@ class CarbonEngine {
         };
     }
 
+    /**
+     * v2.0: ESG → Risk Factor mapping
+     */
+    calculateRiskFactors(scopeData, leaderboard) {
+        const risks = [];
+        const total = scopeData?.total_emissions_kgCO2e || 0;
+        const avgGrade = this._carbonGradeInfo(total / Math.max(1, scopeData?.products_assessed || 1));
+
+        // Supply chain carbon risk
+        if (avgGrade.grade === 'D' || avgGrade.grade === 'F') {
+            risks.push({
+                id: 'carbon_supply_risk',
+                name: 'Supply Chain Carbon Risk',
+                severity: 'high',
+                signal: `Average product grade: ${avgGrade.grade}`,
+                impact: 'Brand Risk Index (BRI)',
+                action: 'Restructure high-emission supply routes',
+                score_impact: avgGrade.grade === 'F' ? 25 : 15
+            });
+        }
+
+        // Scope 3 concentration risk
+        const scope3Pct = scopeData?.scope_3?.pct || 0;
+        if (scope3Pct > 70) {
+            risks.push({
+                id: 'logistics_dependency',
+                name: 'Logistics Dependency Risk',
+                severity: 'medium',
+                signal: `Scope 3 = ${scope3Pct}% of total emissions`,
+                impact: 'Channel Risk Score (CRS)',
+                action: 'Diversify transport modes — shift air → sea/rail',
+                score_impact: 10
+            });
+        }
+
+        // Partner ESG risk
+        const lowPartners = (leaderboard || []).filter(p => p.grade === 'C' || p.grade === 'D');
+        if (lowPartners.length > 0) {
+            risks.push({
+                id: 'partner_esg_risk',
+                name: 'Distributor ESG Risk',
+                severity: lowPartners.some(p => p.grade === 'D') ? 'high' : 'medium',
+                signal: `${lowPartners.length} partner(s) with grade C/D`,
+                impact: 'Event Risk Score (ERS)',
+                action: 'Require ESG improvement plan or replace',
+                score_impact: lowPartners.length * 5,
+                partners_at_risk: lowPartners.map(p => ({ name: p.name, grade: p.grade, esg_score: p.esg_score }))
+            });
+        }
+
+        // Emission spike detection
+        if (total > 500) {
+            risks.push({
+                id: 'emission_spike',
+                name: 'Emission Volume Alert',
+                severity: total > 2000 ? 'critical' : 'medium',
+                signal: `Total: ${total} kgCO2e across ${scopeData?.products_assessed || 0} products`,
+                impact: 'Anomaly Detection',
+                action: 'Investigate manufacturing process changes',
+                score_impact: total > 2000 ? 20 : 8
+            });
+        }
+
+        const totalRiskScore = risks.reduce((s, r) => s + r.score_impact, 0);
+
+        return {
+            title: 'Carbon → Risk Factor Mapping (v2.0)',
+            total_risk_factors: risks.length,
+            total_risk_score_impact: Math.min(100, totalRiskScore),
+            severity_summary: {
+                critical: risks.filter(r => r.severity === 'critical').length,
+                high: risks.filter(r => r.severity === 'high').length,
+                medium: risks.filter(r => r.severity === 'medium').length,
+                low: risks.filter(r => r.severity === 'low').length
+            },
+            risk_factors: risks,
+            affected_scores: ['BRI (Brand Risk Index)', 'CRS (Channel Risk Score)', 'ERS (Event Risk Score)'],
+            note: 'ESG risk trở thành thành phần trong Brand Risk — infrastructure-level positioning'
+        };
+    }
+
+    /**
+     * v2.0: Regulatory alignment assessment
+     */
+    assessRegulatory(scopeData, leaderboard, offsets) {
+        return REGULATORY_FRAMEWORKS.map(reg => {
+            const checks = [];
+            let ready = true;
+
+            // Check scope coverage
+            for (const scope of reg.scopes_required) {
+                const key = `scope_${scope}`;
+                const hasData = scopeData?.[key]?.total > 0 || scopeData?.products_assessed > 0;
+                checks.push({ check: `Scope ${scope} data`, status: hasData ? 'pass' : 'warn', detail: hasData ? `${scopeData?.[key]?.total || 0} kgCO2e` : 'No data yet' });
+                if (!hasData) ready = false;
+            }
+
+            // GRI check
+            if (reg.id === 'eu_csrd') {
+                checks.push({ check: 'GRI 305 disclosures', status: 'pass', detail: 'Auto-generated by Carbon Engine' });
+                checks.push({ check: 'Supplier assessment (GRI 308/414)', status: (leaderboard?.length || 0) > 0 ? 'pass' : 'warn', detail: `${leaderboard?.length || 0} partners assessed` });
+            }
+
+            // Offset verification
+            if (reg.id === 'paris' || reg.id === 'eu_cbam') {
+                const hasOffsets = (offsets || 0) > 0;
+                checks.push({ check: 'Carbon offset records', status: hasOffsets ? 'pass' : 'info', detail: hasOffsets ? `${offsets} offsets blockchain-anchored` : 'Optional' });
+            }
+
+            // Blockchain proof
+            checks.push({ check: 'Tamper-proof evidence', status: 'pass', detail: 'Blockchain seal + SHA-256 hash chain' });
+
+            return {
+                ...reg,
+                checks,
+                readiness: ready ? 'ready' : 'partial',
+                readiness_pct: Math.round(checks.filter(c => c.status === 'pass').length / checks.length * 100),
+                icon: ready ? '✅' : '⚠️'
+            };
+        });
+    }
+
+    /**
+     * v2.0: Carbon maturity level assessment
+     */
+    assessMaturity(features) {
+        let currentLevel = 0;
+
+        for (const level of MATURITY_LEVELS) {
+            const met = level.requirements.every(r => features.includes(r));
+            if (met) currentLevel = level.level;
+            else break;
+        }
+
+        return {
+            title: 'Carbon Passport Maturity Model',
+            current_level: currentLevel,
+            max_level: 5,
+            levels: MATURITY_LEVELS.map(l => ({
+                ...l,
+                achieved: l.level <= currentLevel,
+                current: l.level === currentLevel,
+                icon: l.level <= currentLevel ? '✅' : l.level === currentLevel + 1 ? '🎯' : '⬜'
+            })),
+            recommendation: currentLevel < 5 ? MATURITY_LEVELS[currentLevel]?.description || 'Continue development' : 'Maximum maturity achieved',
+            next_requirements: currentLevel < 5 ? MATURITY_LEVELS[currentLevel]?.requirements || [] : []
+        };
+    }
+
+    /**
+     * v2.0: Role × Carbon permission matrix
+     */
+    getRoleMatrix() {
+        return {
+            title: 'Role × Carbon Permission Matrix',
+            actions: [
+                'view_passport', 'view_scope_breakdown', 'view_transport_detail',
+                'view_esg_leaderboard', 'submit_offset', 'configure_factors',
+                'export_gri_report', 'cross_tenant_benchmark', 'view_esg_kpi'
+            ],
+            matrix: {
+                scm_ops: { view_passport: true, view_scope_breakdown: true, view_transport_detail: true, view_esg_leaderboard: false, submit_offset: false, configure_factors: false, export_gri_report: false, cross_tenant_benchmark: false, view_esg_kpi: false },
+                risk: { view_passport: true, view_scope_breakdown: true, view_transport_detail: true, view_esg_leaderboard: true, submit_offset: false, configure_factors: false, export_gri_report: false, cross_tenant_benchmark: false, view_esg_kpi: false },
+                compliance: { view_passport: true, view_scope_breakdown: true, view_transport_detail: 'read_only', view_esg_leaderboard: true, submit_offset: false, configure_factors: false, export_gri_report: true, cross_tenant_benchmark: false, view_esg_kpi: false },
+                company_admin: { view_passport: true, view_scope_breakdown: true, view_transport_detail: true, view_esg_leaderboard: true, submit_offset: true, configure_factors: true, export_gri_report: false, cross_tenant_benchmark: false, view_esg_kpi: false },
+                super_admin: { view_passport: true, view_scope_breakdown: true, view_transport_detail: true, view_esg_leaderboard: true, submit_offset: false, configure_factors: true, export_gri_report: true, cross_tenant_benchmark: true, view_esg_kpi: false },
+                ceo: { view_passport: 'aggregated', view_scope_breakdown: false, view_transport_detail: false, view_esg_leaderboard: 'top_5', submit_offset: false, configure_factors: false, export_gri_report: false, cross_tenant_benchmark: false, view_esg_kpi: true }
+            },
+            design_principle: 'CEO xem KPI, CA operate, SA benchmark, Compliance export, Risk analyze'
+        };
+    }
+
+    /**
+     * v2.0: Governance flow definition
+     */
+    getGovernanceFlow() {
+        return {
+            title: 'Carbon Governance Flow',
+            flow: [
+                { step: 1, layer: 'Layer 5 — Integration', name: 'SCM Data Collection', components: ['Supply Routes', 'Shipment Tracking', 'Partner Management', 'Warehouse Events'], icon: '📦' },
+                { step: 2, layer: 'Layer 3 — Intelligence', name: 'Carbon Engine Calculation', components: ['Scope 1 (Manufacturing)', 'Scope 2 (Warehousing)', 'Scope 3 (Transport)'], icon: '⚡' },
+                { step: 3, layer: 'Layer 3 — Intelligence', name: 'Risk Engine Integration', components: ['ESG → Risk Factor', 'Grade D/F → Supply Risk', 'Partner C/D → Distributor Risk'], icon: '🎯' },
+                { step: 4, layer: 'Layer 2 — Governance', name: 'Compliance & Reporting', components: ['GRI 305-1/2/3/5', 'EU CSRD / CBAM', 'SEC Climate Rules'], icon: '⚖️' },
+                { step: 5, layer: 'Layer 4 — Integrity', name: 'Blockchain Seal', components: ['SHA-256 Hash', 'Evidence Store', 'Public Verification Portal'], icon: '🔗' },
+                { step: 6, layer: 'Layer 1 — Presentation', name: 'CEO Dashboard', components: ['ESG Grade KPI', '2030 Target', 'Offset Proof', 'Board Narrative'], icon: '👔' }
+            ],
+            principle: 'Carbon nằm giữa: Data → Risk → Governance → Executive. Governance amplifier — không phải module đơn lẻ.'
+        };
+    }
+
     // ─── Internal Helpers ────────────────────────────────────────────────────
     _estimateDistance(shipment) {
-        // Rough distance estimation using lat/lng if available
         if (shipment.current_lat && shipment.current_lng) {
-            // Haversine approximation from origin (HCMC: 10.8, 106.6) to destination
-            const R = 6371; // Earth radius km
+            const R = 6371;
             const lat1 = 10.8 * Math.PI / 180;
             const lat2 = (shipment.current_lat || 10.8) * Math.PI / 180;
             const dLat = lat2 - lat1;
@@ -237,16 +463,18 @@ class CarbonEngine {
             const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
             return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
         }
-        return 500; // Default 500km
+        return 500;
     }
 
     _carbonGrade(kgCO2e) {
-        if (kgCO2e <= 5) return 'A+';
-        if (kgCO2e <= 10) return 'A';
-        if (kgCO2e <= 20) return 'B';
-        if (kgCO2e <= 40) return 'C';
-        if (kgCO2e <= 70) return 'D';
-        return 'F';
+        return this._carbonGradeInfo(kgCO2e).grade;
+    }
+
+    _carbonGradeInfo(kgCO2e) {
+        for (const t of GRADE_THRESHOLDS) {
+            if (kgCO2e <= t.max) return t;
+        }
+        return GRADE_THRESHOLDS[GRADE_THRESHOLDS.length - 1];
     }
 
     _overallESGGrade(scopeData, leaderboard) {

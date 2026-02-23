@@ -115,7 +115,7 @@ function renderScanResult(r) {
     <div style="margin-top:16px">
       <div style="font-weight:700;margin-bottom:8px">🔗 Blockchain Seal</div>
       <div style="font-size:0.75rem;color:var(--text-secondary)">
-        <span class="badge sealed">✓ Sealed</span> Block #${r.blockchain?.block_index || '—'}<br>
+        <span class="badge sealed"><span class="status-icon status-pass" aria-label="Pass">✓</span> Sealed</span> Block #${r.blockchain?.block_index || '—'}<br>
         <span style="font-family:'JetBrains Mono';font-size:0.68rem;color:var(--text-muted)">Hash: ${shortHash(r.blockchain?.data_hash)}</span>
       </div>
     </div>

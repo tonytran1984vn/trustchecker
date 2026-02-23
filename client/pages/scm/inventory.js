@@ -13,7 +13,7 @@ export function renderPage() {
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
       <div class="stat-card cyan"><div class="stat-icon">📋</div><div class="stat-value">${items.length}</div><div class="stat-label">Inventory Records</div></div>
       <div class="stat-card emerald"><div class="stat-icon">📦</div><div class="stat-value">${items.reduce((s, i) => s + i.quantity, 0)}</div><div class="stat-label">Total Units</div></div>
-      <div class="stat-card ${fc?.alert ? 'amber' : 'emerald'}"><div class="stat-icon">${fc?.alert ? '⚠️' : '📈'}</div><div class="stat-value">${fc?.trend || 'stable'}</div><div class="stat-label">Forecast Trend</div></div>
+      <div class="stat-card ${fc?.alert ? 'amber' : 'emerald'}"><div class="stat-icon">${fc?.alert ? '<span class="status-icon status-warn" aria-label="Warning">!</span>' : '📈'}</div><div class="stat-value">${fc?.trend || 'stable'}</div><div class="stat-label">Forecast Trend</div></div>
     </div>
 
     <div class="grid-2">
@@ -46,7 +46,7 @@ export function renderPage() {
               <span>Trend: <strong style="color:var(--cyan)">${fc.trend}</strong></span>
               <span>Confidence: <strong>${Math.round((fc.confidence || 0) * 100)}%</strong></span>
             </div>
-            ${fc.alert ? `<div class="forecast-alert">⚠️ ${fc.alert.message} (${fc.alert.severity})</div>` : ''}
+            ${fc.alert ? `<div class="forecast-alert"><span class="status-icon status-warn" aria-label="Warning">!</span> ${fc.alert.message} (${fc.alert.severity})</div>` : ''}
           </div>
           <div style="display:flex;flex-direction:column;gap:6px">
             ${(fc.forecast || []).map(f => `

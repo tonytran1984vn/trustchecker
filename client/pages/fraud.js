@@ -7,10 +7,10 @@ import { timeAgo } from '../utils/helpers.js';
 export function renderPage() {
   return `
     <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
-      <div class="stat-card rose"><div class="stat-icon">🔴</div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'critical').length}</div><div class="stat-label">Critical</div></div>
-      <div class="stat-card amber"><div class="stat-icon">🟡</div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'high').length}</div><div class="stat-label">High</div></div>
+      <div class="stat-card rose"><div class="stat-icon"><span class="status-dot red"></span></div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'critical').length}</div><div class="stat-label">Critical</div></div>
+      <div class="stat-card amber"><div class="stat-icon"><span class="status-dot amber"></span></div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'high').length}</div><div class="stat-label">High</div></div>
       <div class="stat-card violet"><div class="stat-icon">🟣</div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'medium').length}</div><div class="stat-label">Medium</div></div>
-      <div class="stat-card cyan"><div class="stat-icon">🔵</div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'low').length}</div><div class="stat-label">Low</div></div>
+      <div class="stat-card cyan"><div class="stat-icon"><span class="status-dot blue"></span></div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'low').length}</div><div class="stat-label">Low</div></div>
     </div>
     <div class="card">
       <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
@@ -31,7 +31,7 @@ export function renderPage() {
           `).join('')}
         </table>
       </div>
-      ${!State.fraudAlerts.length ? '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">No active fraud alerts</div></div>' : ''}
+      ${!State.fraudAlerts.length ? '<div class="empty-state"><div class="empty-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div><div class="empty-text">No active fraud alerts</div></div>' : ''}
     </div>
   `;
 }

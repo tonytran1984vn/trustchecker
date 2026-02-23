@@ -3,6 +3,17 @@
 
 <head>
   <meta charset="UTF-8">
+  <script>
+    // Dynamic base path for SPA sub-routes (e.g. /sa-tenant-detail/UUID)
+    (function() {
+      var p = window.location.pathname;
+      var base = '/';
+      if (p.indexOf('/trustchecker') === 0) base = '/trustchecker/';
+      var el = document.createElement('base');
+      el.href = base;
+      document.head.appendChild(el);
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>TrustChecker – Digital Trust Infrastructure</title>
   <meta name="description"
@@ -54,8 +65,7 @@
     style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:9999;padding:12px;background:var(--bg-card);color:var(--cyan);border-radius:8px;">Bỏ
     qua đến nội dung chính</a>
   <div id="app" role="main"></div>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
-    integrity="sha384-J45z9MYlLNwaFhBkPX1mNLAoGe4gQMp+0oQTnMy6bz0tGnysTOLdlznJEMp3xDF" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" crossorigin="anonymous"></script>
   <!-- v9.6: Modular architecture via ES6 modules -->
   <script type="module" src="main.js"></script>
   <!-- Legacy fallback (kept for reference, not loaded): <script src="app.js"></script> -->

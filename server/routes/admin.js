@@ -8,39 +8,39 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 
 router.use(authMiddleware);
-router.use(requireRole('admin'));
+router.use(requirePermission('tenant:user_create'));
 
 // ─── GET /overview — System-wide admin overview ─────────────
 router.get('/overview', async (req, res) => {
     try {
-        const users = (await db.get('SELECT COUNT(*) as c FROM users'))?.c || 0;
-        const products = (await db.get('SELECT COUNT(*) as c FROM products'))?.c || 0;
-        const scans = (await db.get('SELECT COUNT(*) as c FROM scan_events'))?.c || 0;
-        const todayScans = (await db.get("SELECT COUNT(*) as c FROM scan_events WHERE DATE(scanned_at) = DATE('now')"))?.c || 0;
-        const openAlerts = (await db.get("SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'open'"))?.c || 0;
-        const seals = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals'))?.c || 0;
-        const evidence = (await db.get('SELECT COUNT(*) as c FROM evidence_items'))?.c || 0;
-        const tickets = (await db.get("SELECT COUNT(*) as c FROM support_tickets WHERE status = 'open'"))?.c || 0;
-        const anomalies = (await db.get("SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'open'"))?.c || 0;
-        const nfts = (await db.get('SELECT COUNT(*) as c FROM nft_certificates'))?.c || 0;
+        // NODE-BP-1: Parallelize independent DB queries with Promise.all
+        const [users, products, scans, todayScans, openAlerts, seals, evidence, tickets, anomalies, nfts] = await Promise.all([
+            db.get('SELECT COUNT(*) as c FROM users'),
+            db.get('SELECT COUNT(*) as c FROM products'),
+            db.get('SELECT COUNT(*) as c FROM scan_events'),
+            db.get("SELECT COUNT(*) as c FROM scan_events WHERE DATE(scanned_at) = DATE('now')"),
+            db.get("SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'open'"),
+            db.get('SELECT COUNT(*) as c FROM blockchain_seals'),
+            db.get('SELECT COUNT(*) as c FROM evidence_items'),
+            db.get("SELECT COUNT(*) as c FROM support_tickets WHERE status = 'open'"),
+            db.get("SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'open'"),
+            db.get('SELECT COUNT(*) as c FROM nft_certificates'),
+        ]);
 
-        // User growth (last 30 days)
-        const userGrowth = await db.all("SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE created_at > datetime('now', '-30 days') GROUP BY date ORDER BY date");
+        const [userGrowth, scanTrend, activeUsersRow, paidPlans] = await Promise.all([
+            db.all("SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE created_at > datetime('now', '-30 days') GROUP BY date ORDER BY date"),
+            db.all("SELECT DATE(scanned_at) as date, COUNT(*) as count FROM scan_events WHERE scanned_at > datetime('now', '-14 days') GROUP BY date ORDER BY date"),
+            db.get("SELECT COUNT(DISTINCT actor_id) as c FROM audit_log WHERE timestamp > datetime('now', '-7 days')"),
+            db.all("SELECT plan_name, COUNT(*) as count FROM billing_plans WHERE status = 'active' AND plan_name != 'Free' GROUP BY plan_name"),
+        ]);
 
-        // Scan volume trend
-        const scanTrend = await db.all("SELECT DATE(scanned_at) as date, COUNT(*) as count FROM scan_events WHERE scanned_at > datetime('now', '-14 days') GROUP BY date ORDER BY date");
-
-        // Active users (scanned in last 7 days)
-        const activeUsers = (await db.get("SELECT COUNT(DISTINCT actor_id) as c FROM audit_log WHERE timestamp > datetime('now', '-7 days')"))?.c || 0;
-
-        // Revenue estimate (paid plans)
-        const paidPlans = await db.all("SELECT plan_name, COUNT(*) as count FROM billing_plans WHERE status = 'active' AND plan_name != 'Free' GROUP BY plan_name");
+        const activeUsers = activeUsersRow?.c || 0;
 
         res.json({
-            totals: { users, products, scans, today_scans: todayScans, open_alerts: openAlerts, blockchain_seals: seals, evidence_items: evidence, open_tickets: tickets, open_anomalies: anomalies, nft_certificates: nfts },
+            totals: { users: users?.c || 0, products: products?.c || 0, scans: scans?.c || 0, today_scans: todayScans?.c || 0, open_alerts: openAlerts?.c || 0, blockchain_seals: seals?.c || 0, evidence_items: evidence?.c || 0, open_tickets: tickets?.c || 0, open_anomalies: anomalies?.c || 0, nft_certificates: nfts?.c || 0 },
             active_users_7d: activeUsers,
             user_growth_30d: userGrowth,
             scan_trend_14d: scanTrend,
@@ -63,7 +63,7 @@ router.get('/users', async (req, res) => {
         if (search) { sql += ' AND (username LIKE ? OR email LIKE ? OR company LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
 
         sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-        params.push(Number(limit), Number(offset));
+        params.push(Math.min(Number(limit) || 50, 200), Math.max(Number(offset) || 0, 0)); // NODE-BP-2: cap
 
         const users = await db.all(sql, params);
         const total = (await db.get('SELECT COUNT(*) as c FROM users'))?.c || 0;
@@ -75,11 +75,63 @@ router.get('/users', async (req, res) => {
 });
 
 // ─── PUT /users/:id/role — Update user role ─────────────────
+// ─── Valid roles for the platform ────────────────────────────
+const VALID_ROLES = [
+    'super_admin', 'admin',                                // System roles
+    'executive', 'ops_manager', 'risk_officer',            // Tenant / Business roles
+    'compliance_officer', 'developer',                     // Tenant / Business roles
+    'manager', 'operator', 'viewer',                       // Legacy roles
+];
+
+// ─── POST /users — Create a new user with role ──────────────
+router.post('/users', async (req, res) => {
+    try {
+        const { username, email, password, role = 'operator', company = '' } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ error: 'email and password are required' });
+        }
+        if (password.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        }
+        if (!VALID_ROLES.includes(role)) {
+            return res.status(400).json({ error: `Invalid role. Choose: ${VALID_ROLES.join(', ')}` });
+        }
+        if (role === 'super_admin' && req.user.role !== 'super_admin') {
+            return res.status(403).json({ error: 'Only super_admin can assign super_admin role' });
+        }
+
+        const existing = await db.get('SELECT id FROM users WHERE email = ?', [email]);
+        if (existing) {
+            return res.status(409).json({ error: 'Email already exists' });
+        }
+
+        const id = uuidv4();
+        const displayName = username || email.split('@')[0];
+        const password_hash = await bcrypt.hash(password, 12);
+
+        await db.prepare(
+            'INSERT INTO users (id, username, email, password_hash, role, company, org_id, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?, 1)'
+        ).run(id, displayName, email, password_hash, role, company, req.user.org_id || null);
+
+        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
+            .run(uuidv4(), req.user.id, 'USER_CREATED', 'user', id, JSON.stringify({ email, role, created_by: req.user.email || req.user.username }));
+
+        res.status(201).json({ id, username: displayName, email, role, company, message: 'User created successfully' });
+    } catch (e) {
+        safeError(res, 'Failed to create user', e);
+    }
+});
+
+// ─── PUT /users/:id/role — Update user role ─────────────────
 router.put('/users/:id/role', async (req, res) => {
     try {
         const { role } = req.body;
-        const validRoles = ['admin', 'manager', 'operator', 'viewer'];
-        if (!validRoles.includes(role)) return res.status(400).json({ error: `Invalid role. Choose: ${validRoles.join(', ')}` });
+        if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: `Invalid role. Choose: ${VALID_ROLES.join(', ')}` });
+
+        if (role === 'super_admin' && req.user.role !== 'super_admin') {
+            return res.status(403).json({ error: 'Only super_admin can assign super_admin role' });
+        }
 
         if (req.params.id === req.user.id) {
             return res.status(400).json({ error: 'Cannot change your own role' });
@@ -120,8 +172,8 @@ router.put('/users/:id/status', async (req, res) => {
     }
 });
 
-// ─── POST /users/:id/reset-password — Force password reset ──
-router.post('/users/:id/reset-password', async (req, res) => {
+// SEC-3: Admin-only endpoint must require authentication
+router.post('/users/:id/reset-password', authMiddleware, requireRole('admin'), async (req, res) => {
     try {
         const { new_password } = req.body;
         if (!new_password || new_password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
@@ -155,7 +207,7 @@ router.get('/audit', async (req, res) => {
         if (to_date) { sql += ' AND a.timestamp <= ?'; params.push(to_date); }
 
         sql += ' ORDER BY a.timestamp DESC LIMIT ? OFFSET ?';
-        params.push(Number(limit), Number(offset));
+        params.push(Math.min(Number(limit) || 100, 500), Math.max(Number(offset) || 0, 0)); // NODE-BP-2: cap
 
         const logs = await db.all(sql, params);
         const total = (await db.get('SELECT COUNT(*) as c FROM audit_log'))?.c || 0;
@@ -186,12 +238,12 @@ router.get('/settings', async (req, res) => {
             enable_websocket: true,
             enable_push_notifications: false,
             maintenance_mode: false,
-            allowed_origins: ['*'],
+            allowed_origins: [], // SEC-2: No wildcard — use global CORS whitelist
             data_retention_days: 365,
             blockchain_difficulty: 2,
         };
 
-        res.json(settings ? { ...defaults, ...JSON.parse(settings.details) } : defaults);
+        res.json(settings ? { ...defaults, ...safeParse(settings.details) } : defaults);
     } catch (e) {
         safeError(res, 'Operation failed', e);
     }
@@ -270,6 +322,7 @@ function getDBSize() {
     try {
         const fs = require('fs');
         const path = require('path');
+const { safeParse } = require('../utils/safe-json');
         const dbPath = path.join(__dirname, '..', 'data', 'trustchecker.db');
         if (fs.existsSync(dbPath)) {
             return Math.round(fs.statSync(dbPath).size / 1024 / 1024 * 100) / 100;

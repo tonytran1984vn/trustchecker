@@ -12,7 +12,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 
 // Ensure evidence upload directory exists
 const EVIDENCE_DIR = path.join(__dirname, '..', '..', 'data', 'evidence');
@@ -57,18 +57,21 @@ function escapeHtml(str) {
 // ─── GET /stats ─────────────────────────────────────────────
 router.get('/stats', async (req, res) => {
     try {
-        const total = await db.get('SELECT COUNT(*) as count FROM evidence_items') || { count: 0 };
-        const anchored = await db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'anchored'") || { count: 0 };
-        const verified = await db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'verified'") || { count: 0 };
-        const tampered = await db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'tampered'") || { count: 0 };
-        const totalSize = await db.get('SELECT COALESCE(SUM(file_size), 0) as size FROM evidence_items') || { size: 0 };
+        // NODE-BP-1: Parallelize independent queries
+        const [total, anchored, verified, tampered, totalSize] = await Promise.all([
+            db.get('SELECT COUNT(*) as count FROM evidence_items'),
+            db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'anchored'"),
+            db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'verified'"),
+            db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'tampered'"),
+            db.get('SELECT COALESCE(SUM(file_size), 0) as size FROM evidence_items'),
+        ]).then(rows => rows.map(r => r || { count: 0, size: 0 }));
 
         res.json({
             total_items: total.count,
             anchored: anchored.count,
             verified: verified.count,
             tampered: tampered.count,
-            total_size_mb: Math.round(totalSize.size / (1024 * 1024) * 100) / 100,
+            total_size_mb: Math.round((totalSize.size || 0) / (1024 * 1024) * 100) / 100,
             integrity_rate: total.count > 0 ? Math.round(((anchored.count + verified.count) / total.count) * 100) : 100
         });
     } catch (e) {
@@ -148,7 +151,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // ─── POST /upload ───────────────────────────────────────────
-router.post('/upload', requireRole('operator'), async (req, res) => {
+router.post('/upload', requirePermission('evidence:upload'), async (req, res) => {
     try {
         const { title, description, file_name, file_type, file_data, entity_type, entity_id } = req.body;
         if (!title) return res.status(400).json({ error: 'Title required' });
@@ -513,7 +516,7 @@ router.delete('/:id/tag', requireRole('operator'), async (req, res) => {
 // NOTE: /search/tags moved above /:id catch-all (BUG-20 fix)
 
 // ─── POST /batch-verify — Verify multiple evidence items at once ────────────
-router.post('/batch-verify', requireRole('operator'), async (req, res) => {
+router.post('/batch-verify', requirePermission('evidence:verify'), async (req, res) => {
     try {
         const { evidence_ids } = req.body;
         if (!evidence_ids || !Array.isArray(evidence_ids)) return res.status(400).json({ error: 'evidence_ids array required' });

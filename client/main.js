@@ -141,7 +141,7 @@ async function boot() {
     }, 5000);
   }
 
-  console.log('[TrustChecker] Boot complete ✓');
+  console.log('[TrustChecker] Boot complete <span class="status-icon status-pass" aria-label="Pass">✓</span>');
 }
 
 // ─── Start ───────────────────────────────────────────────────

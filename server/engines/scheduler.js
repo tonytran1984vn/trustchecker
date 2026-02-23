@@ -100,10 +100,16 @@ class ScheduledTasks {
             const PLAN_LIMITS = { Free: 100, Starter: 1000, Professional: 10000, Enterprise: Infinity };
 
             for (const plan of plans) {
-                const scanResult = await this.db.get(
-                    "SELECT COUNT(*) as c FROM scan_events WHERE product_id IN (SELECT id FROM products WHERE owner_id = ?) AND scanned_at LIKE ?",
-                    [plan.user_id, period + '%']
-                );
+                const isPG = !!process.env.DATABASE_URL;
+                const scanResult = isPG
+                    ? await this.db.get(
+                        "SELECT COUNT(*) as c FROM scan_events WHERE product_id IN (SELECT id FROM products WHERE registered_by = $1) AND to_char(scanned_at, 'YYYY-MM') = $2",
+                        [plan.user_id, period]
+                    )
+                    : await this.db.get(
+                        "SELECT COUNT(*) as c FROM scan_events WHERE product_id IN (SELECT id FROM products WHERE registered_by = ?) AND scanned_at LIKE ?",
+                        [plan.user_id, period + '%']
+                    );
                 const scans = scanResult?.c || 0;
                 const limit = PLAN_LIMITS[plan.plan_name] || 100;
 
@@ -168,7 +174,12 @@ class ScheduledTasks {
 
     async sessionCleanup() {
         try {
-            await this.db.run("DELETE FROM sessions WHERE expires_at < datetime('now')");
+            // Sessions table has: id, user_id, ip_address, user_agent, created_at, last_active, revoked
+            // Clean sessions inactive for >7 days OR revoked >30 days ago
+            await this.db.run("DELETE FROM sessions WHERE last_active < datetime('now', '-7 days')");
+            await this.db.run("DELETE FROM sessions WHERE revoked = 1 AND last_active < datetime('now', '-30 days')");
+            // Clean expired refresh tokens
+            await this.db.run("DELETE FROM refresh_tokens WHERE expires_at < datetime('now')");
         } catch (e) { console.debug('[scheduler] sessionCleanup skip:', e.message); }
     }
 }

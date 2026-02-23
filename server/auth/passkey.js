@@ -78,10 +78,10 @@ router.post('/passkey/authenticate', async (req, res) => {
         const user = await db.get('SELECT id, username, email, role FROM users WHERE id = ?', [cred.user_id]);
         if (!user) return res.status(401).json({ error: 'User not found' });
 
-        await db.prepare('UPDATE passkey_credentials SET sign_count = sign_count + 1, last_used = datetime("now") WHERE id = ?')
+        await db.prepare("UPDATE passkey_credentials SET sign_count = sign_count + 1, last_used = datetime('now') WHERE id = ?")
             .run(cred.id);
 
-        await db.prepare('UPDATE users SET last_login = datetime("now"), failed_attempts = 0 WHERE id = ?').run(user.id);
+        await db.prepare("UPDATE users SET last_login = datetime('now'), failed_attempts = 0 WHERE id = ?").run(user.id);
         const sessionId = await createSession(user.id, req);
         const { accessToken, refreshToken } = await generateTokenPair(user, sessionId);
 

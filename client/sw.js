@@ -245,9 +245,9 @@ function offlineHTML() {
     <h1>You're Offline</h1>
     <p>TrustChecker is running in offline mode. Some features are limited.</p>
     <div class="status">
-      <p>✅ Cached product data available</p>
-      <p>✅ QR scans will be queued and synced</p>
-      <p>⚠️ Real-time features unavailable</p>
+      <p><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Cached product data available</p>
+      <p><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> QR scans will be queued and synced</p>
+      <p><span class="status-icon status-warn" aria-label="Warning">!</span> Real-time features unavailable</p>
     </div>
     <button onclick="location.reload()">Retry Connection</button>
   </div>

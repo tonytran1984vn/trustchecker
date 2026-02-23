@@ -4,6 +4,7 @@
  */
 
 const Redis = require('ioredis');
+const { safeParse } = require('./utils/safe-json');
 
 let redis = null;
 
@@ -48,7 +49,7 @@ async function setSession(sessionId, data) {
 async function getSession(sessionId) {
     const client = getRedisClient();
     const data = await client.get(`${SESSION_PREFIX}${sessionId}`);
-    return data ? JSON.parse(data) : null;
+    return data ? safeParse(data) : null;
 }
 
 async function deleteSession(sessionId) {
@@ -62,7 +63,7 @@ const CACHE_PREFIX = 'cache:';
 async function cacheGet(key) {
     const client = getRedisClient();
     const data = await client.get(`${CACHE_PREFIX}${key}`);
-    return data ? JSON.parse(data) : null;
+    return data ? safeParse(data) : null;
 }
 
 async function cacheSet(key, value, ttlSeconds = 300) {

@@ -12,7 +12,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { authMiddleware, requireRole, JWT_SECRET, ROLE_HIERARCHY } = require('./auth/core');
+const { authMiddleware, requireRole, requirePermission, requireConstitutional, requirePlatformAdmin, requireTenantAdmin, JWT_SECRET, ROLE_HIERARCHY } = require('./auth/core');
 
 // Mount sub-routers
 router.use('/', require('./auth/login'));
@@ -21,4 +21,4 @@ router.use('/', require('./auth/passkey'));
 router.use('/', require('./auth/oauth'));
 router.use('/', require('./auth/account'));
 
-module.exports = { router, authMiddleware, requireRole, JWT_SECRET, ROLE_HIERARCHY };
+module.exports = { router, authMiddleware, requireRole, requirePermission, requireConstitutional, requirePlatformAdmin, requireTenantAdmin, JWT_SECRET, ROLE_HIERARCHY };

@@ -7,37 +7,45 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 
 router.use(authMiddleware);
 
 // ─── GET /templates — List available report templates ───────
 router.get('/templates', async (req, res) => {
-    res.json({
-        templates: [
-            { id: 'scan-report', name: 'Scan Activity Report', description: 'Product scan volume, results, fraud scores', sections: ['scans', 'results', 'fraud_scores'] },
-            { id: 'fraud-report', name: 'Fraud Detection Report', description: 'Fraud alerts by severity, status, product', sections: ['alerts', 'severity', 'products'] },
-            { id: 'product-report', name: 'Product Trust Report', description: 'Product trust scores, compliance, QR activity', sections: ['trust', 'compliance', 'qr'] },
-            { id: 'compliance-report', name: 'Compliance & GDPR Report', description: 'GDPR exports, deletions, retention policies', sections: ['gdpr', 'retention', 'audit'] },
-            { id: 'supply-chain-report', name: 'Supply Chain Report', description: 'Partner performance, events, leak analysis', sections: ['partners', 'events', 'leaks'] },
-            { id: 'financial-report', name: 'Financial Report', description: 'Revenue, invoices, plan distribution', sections: ['revenue', 'invoices', 'plans'] },
-        ],
-        formats: ['json', 'csv'],
-        total: 6
-    });
+    try {
+        res.json({
+            templates: [
+                { id: 'scan-report', name: 'Scan Activity Report', description: 'Product scan volume, results, fraud scores', sections: ['scans', 'results', 'fraud_scores'] },
+                { id: 'fraud-report', name: 'Fraud Detection Report', description: 'Fraud alerts by severity, status, product', sections: ['alerts', 'severity', 'products'] },
+                { id: 'product-report', name: 'Product Trust Report', description: 'Product trust scores, compliance, QR activity', sections: ['trust', 'compliance', 'qr'] },
+                { id: 'compliance-report', name: 'Compliance & GDPR Report', description: 'GDPR exports, deletions, retention policies', sections: ['gdpr', 'retention', 'audit'] },
+                { id: 'supply-chain-report', name: 'Supply Chain Report', description: 'Partner performance, events, leak analysis', sections: ['partners', 'events', 'leaks'] },
+                { id: 'financial-report', name: 'Financial Report', description: 'Revenue, invoices, plan distribution', sections: ['revenue', 'invoices', 'plans'] },
+            ],
+            formats: ['json', 'csv'],
+            total: 6
+        });
+    } catch (e) {
+        safeError(res, 'Operation failed', e);
+    }
 });
 
 // ─── GET /generate/:id — Generate a specific report ─────────
 router.get('/generate/:id', async (req, res) => {
-    const reportId = req.params.id;
-    const validReports = ['scan-report', 'fraud-report', 'product-report', 'compliance-report', 'supply-chain-report', 'financial-report'];
-    if (!validReports.includes(reportId)) return res.status(404).json({ error: 'Report template not found' });
-    // Redirect to the actual report endpoint
-    res.redirect(`/api/reports/${reportId}?format=json`);
+    try {
+        const reportId = req.params.id;
+        const validReports = ['scan-report', 'fraud-report', 'product-report', 'compliance-report', 'supply-chain-report', 'financial-report'];
+        if (!validReports.includes(reportId)) return res.status(404).json({ error: 'Report template not found' });
+        // Redirect to the actual report endpoint
+        res.redirect(`/api/reports/${reportId}?format=json`);
+    } catch (e) {
+        safeError(res, 'Operation failed', e);
+    }
 });
 
 // ─── GET /scan-report — Generate scan activity report ───────
-router.get('/scan-report', requireRole('manager'), async (req, res) => {
+router.get('/scan-report', requirePermission('report:view'), async (req, res) => {
     try {
         const { from, to, format = 'json' } = req.query;
         const fromDate = from || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
@@ -76,7 +84,7 @@ router.get('/scan-report', requireRole('manager'), async (req, res) => {
 });
 
 // ─── GET /fraud-report — Fraud detection report ─────────────
-router.get('/fraud-report', requireRole('manager'), async (req, res) => {
+router.get('/fraud-report', requirePermission('report:view'), async (req, res) => {
     try {
         const { from, to, format = 'json' } = req.query;
         const fromDate = from || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
@@ -127,7 +135,7 @@ router.get('/fraud-report', requireRole('manager'), async (req, res) => {
 });
 
 // ─── GET /product-report — Product trust & compliance ───────
-router.get('/product-report', requireRole('manager'), async (req, res) => {
+router.get('/product-report', requirePermission('report:view'), async (req, res) => {
     try {
         const { format = 'json' } = req.query;
 
@@ -168,7 +176,7 @@ router.get('/product-report', requireRole('manager'), async (req, res) => {
 });
 
 // ─── GET /compliance-report — Compliance & GDPR report ──────
-router.get('/compliance-report', requireRole('admin'), async (req, res) => {
+router.get('/compliance-report', requirePermission('report:export'), async (req, res) => {
     try {
         const gdprExports = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE action = 'GDPR_EXPORT'"))?.c || 0;
         const gdprDeletions = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE action = 'GDPR_DELETION'"))?.c || 0;
@@ -205,7 +213,7 @@ router.get('/compliance-report', requireRole('admin'), async (req, res) => {
 });
 
 // ─── GET /supply-chain-report — SCM analytics ───────────────
-router.get('/supply-chain-report', requireRole('manager'), async (req, res) => {
+router.get('/supply-chain-report', requirePermission('report:view'), async (req, res) => {
     try {
         const { format = 'json' } = req.query;
 
@@ -240,7 +248,7 @@ router.get('/supply-chain-report', requireRole('manager'), async (req, res) => {
 });
 
 // ─── GET /financial-report — Financial & billing report ─────
-router.get('/financial-report', requireRole('admin'), async (req, res) => {
+router.get('/financial-report', requirePermission('report:export'), async (req, res) => {
     try {
         const invoices = await db.all('SELECT * FROM invoices ORDER BY period_start DESC LIMIT 100');
         const plans = await db.all("SELECT plan_name, COUNT(*) as count FROM billing_plans WHERE status = 'active' GROUP BY plan_name");
@@ -267,7 +275,7 @@ router.get('/financial-report', requireRole('admin'), async (req, res) => {
 });
 
 // ─── GET /export/:entity — Universal data export ────────────
-router.get('/export/:entity', requireRole('manager'), async (req, res) => {
+router.get('/export/:entity', requirePermission('report:export'), async (req, res) => {
     try {
         const { entity } = req.params;
         const { format = 'csv', limit = 1000 } = req.query;
@@ -289,7 +297,7 @@ router.get('/export/:entity', requireRole('manager'), async (req, res) => {
         const config = entityMap[entity];
         if (!config) return res.status(400).json({ error: `Invalid entity. Choose: ${Object.keys(entityMap).join(', ')}` });
 
-        const data = await db.all(`${config.sql} LIMIT ?`, [Number(limit)]);
+        const data = await db.all(`${config.sql} LIMIT ?`, [Math.min(Number(limit) || 100, 500)]);
 
         if (format === 'csv' && data.length > 0) {
             const csv = generateCSV(data, Object.keys(data[0]));

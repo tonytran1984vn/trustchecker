@@ -344,73 +344,83 @@ const API_SPEC = {
 };
 
 router.get('/', async (req, res) => {
-    res.json(API_SPEC);
+    try {
+        res.json(API_SPEC);
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // Human-readable docs page
 router.get('/html', async (req, res) => {
-    const tags = {};
-    for (const [path, methods] of Object.entries(API_SPEC.paths)) {
-        for (const [method, info] of Object.entries(methods)) {
-            const tag = (info.tags || ['Other'])[0];
-            if (!tags[tag]) tags[tag] = [];
-            tags[tag].push({ method: method.toUpperCase(), path, ...info });
+    try {
+        const tags = {};
+        for (const [path, methods] of Object.entries(API_SPEC.paths)) {
+            for (const [method, info] of Object.entries(methods)) {
+                const tag = (info.tags || ['Other'])[0];
+                if (!tags[tag]) tags[tag] = [];
+                tags[tag].push({ method: method.toUpperCase(), path, ...info });
+            }
         }
-    }
 
-    const html = `<!DOCTYPE html>
-<html><head>
-<title>TrustChecker API Documentation</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Inter',sans-serif; background:#0a0e1a; color:#c8d6e5; line-height:1.6; }
-  .container { max-width:1000px; margin:0 auto; padding:40px 20px; }
-  h1 { font-size:2rem; color:#00d2ff; margin-bottom:8px; }
-  .subtitle { color:#636e7b; margin-bottom:40px; }
-  .tag-group { margin-bottom:32px; }
-  .tag-title { font-size:1.1rem; font-weight:700; color:#e8ecf1; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.08); }
-  .endpoint { display:flex; align-items:center; gap:12px; padding:10px 16px; margin-bottom:4px; border-radius:8px; background:rgba(255,255,255,0.03); }
-  .endpoint:hover { background:rgba(0,210,255,0.05); }
-  .method { font-family:'JetBrains Mono',monospace; font-size:0.75rem; font-weight:600; padding:3px 8px; border-radius:4px; min-width:50px; text-align:center; }
-  .method.GET { background:rgba(0,210,100,0.15); color:#00d264; }
-  .method.POST { background:rgba(0,150,255,0.15); color:#0096ff; }
-  .method.PUT { background:rgba(255,165,0,0.15); color:#ffa500; }
-  .method.DELETE { background:rgba(255,50,50,0.15); color:#ff3232; }
-  .path { font-family:'JetBrains Mono',monospace; font-size:0.85rem; color:#e8ecf1; min-width:240px; }
-  .desc { font-size:0.85rem; color:#636e7b; }
-  .badge { display:inline-block; font-size:0.7rem; padding:2px 8px; border-radius:10px; background:rgba(255,255,255,0.06); color:#636e7b; margin-left:auto; }
-  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:40px; }
-  .stat { background:rgba(255,255,255,0.03); padding:16px; border-radius:10px; text-align:center; border:1px solid rgba(255,255,255,0.06); }
-  .stat-num { font-size:1.5rem; font-weight:700; color:#00d2ff; }
-  .stat-label { font-size:0.75rem; color:#636e7b; }
-</style>
-</head><body>
-<div class="container">
-  <h1>🛡️ TrustChecker API v${API_SPEC.info.version}</h1>
-  <p class="subtitle">${API_SPEC.info.description}</p>
-  <div class="stats">
-    <div class="stat"><div class="stat-num">${Object.keys(API_SPEC.paths).length}</div><div class="stat-label">Endpoints</div></div>
-    <div class="stat"><div class="stat-num">${Object.keys(tags).length}</div><div class="stat-label">Modules</div></div>
-    <div class="stat"><div class="stat-num">JWT</div><div class="stat-label">Auth</div></div>
-    <div class="stat"><div class="stat-num">REST</div><div class="stat-label">Protocol</div></div>
-  </div>
-  ${Object.entries(tags).map(([tag, endpoints]) => `
-    <div class="tag-group">
-      <div class="tag-title">${tag} (${endpoints.length})</div>
-      ${endpoints.map(e => `
-        <div class="endpoint">
-          <span class="method ${e.method}">${e.method}</span>
-          <span class="path">/api${e.path}</span>
-          <span class="desc">${e.description || e.summary}</span>
+        const html = `<!DOCTYPE html>
+    <html><head>
+    <title>TrustChecker API Documentation</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family:'Inter',sans-serif; background:#0a0e1a; color:#c8d6e5; line-height:1.6; }
+      .container { max-width:1000px; margin:0 auto; padding:40px 20px; }
+      h1 { font-size:2rem; color:#00d2ff; margin-bottom:8px; }
+      .subtitle { color:#636e7b; margin-bottom:40px; }
+      .tag-group { margin-bottom:32px; }
+      .tag-title { font-size:1.1rem; font-weight:700; color:#e8ecf1; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.08); }
+      .endpoint { display:flex; align-items:center; gap:12px; padding:10px 16px; margin-bottom:4px; border-radius:8px; background:rgba(255,255,255,0.03); }
+      .endpoint:hover { background:rgba(0,210,255,0.05); }
+      .method { font-family:'JetBrains Mono',monospace; font-size:0.75rem; font-weight:600; padding:3px 8px; border-radius:4px; min-width:50px; text-align:center; }
+      .method.GET { background:rgba(0,210,100,0.15); color:#00d264; }
+      .method.POST { background:rgba(0,150,255,0.15); color:#0096ff; }
+      .method.PUT { background:rgba(255,165,0,0.15); color:#ffa500; }
+      .method.DELETE { background:rgba(255,50,50,0.15); color:#ff3232; }
+      .path { font-family:'JetBrains Mono',monospace; font-size:0.85rem; color:#e8ecf1; min-width:240px; }
+      .desc { font-size:0.85rem; color:#636e7b; }
+      .badge { display:inline-block; font-size:0.7rem; padding:2px 8px; border-radius:10px; background:rgba(255,255,255,0.06); color:#636e7b; margin-left:auto; }
+      .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:40px; }
+      .stat { background:rgba(255,255,255,0.03); padding:16px; border-radius:10px; text-align:center; border:1px solid rgba(255,255,255,0.06); }
+      .stat-num { font-size:1.5rem; font-weight:700; color:#00d2ff; }
+      .stat-label { font-size:0.75rem; color:#636e7b; }
+    </style>
+    </head><body>
+    <div class="container">
+      <h1>🛡️ TrustChecker API v${API_SPEC.info.version}</h1>
+      <p class="subtitle">${API_SPEC.info.description}</p>
+      <div class="stats">
+        <div class="stat"><div class="stat-num">${Object.keys(API_SPEC.paths).length}</div><div class="stat-label">Endpoints</div></div>
+        <div class="stat"><div class="stat-num">${Object.keys(tags).length}</div><div class="stat-label">Modules</div></div>
+        <div class="stat"><div class="stat-num">JWT</div><div class="stat-label">Auth</div></div>
+        <div class="stat"><div class="stat-num">REST</div><div class="stat-label">Protocol</div></div>
+      </div>
+      ${Object.entries(tags).map(([tag, endpoints]) => `
+        <div class="tag-group">
+          <div class="tag-title">${tag} (${endpoints.length})</div>
+          ${endpoints.map(e => `
+            <div class="endpoint">
+              <span class="method ${e.method}">${e.method}</span>
+              <span class="path">/api${e.path}</span>
+              <span class="desc">${e.description || e.summary}</span>
+            </div>
+          `).join('')}
         </div>
       `).join('')}
     </div>
-  `).join('')}
-</div>
-</body></html>`;
-    res.send(html);
+    </body></html>`;
+        res.send(html);
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 module.exports = router;

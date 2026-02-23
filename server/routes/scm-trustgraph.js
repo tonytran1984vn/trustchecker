@@ -5,10 +5,14 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/engine-client');
 
 const router = express.Router();
+
+
+// GOV-1: All routes require authentication
+router.use(authMiddleware);
 
 // ─── GET /api/scm/graph/nodes – All supply chain nodes ───────────────────────
 router.get('/nodes', async (req, res) => {

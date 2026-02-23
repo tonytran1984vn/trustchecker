@@ -7,19 +7,21 @@ const db = require('../db');
 // GET /api/public/stats – aggregate platform statistics
 router.get('/stats', async (req, res) => {
     try {
-        const products = await db.get('SELECT COUNT(*) as count FROM products');
-        const scans = await db.get('SELECT COUNT(*) as count FROM scan_events');
-        const todayScans = await db.get(`SELECT COUNT(*) as count FROM scan_events WHERE scanned_at >= datetime('now', '-1 day')`);
-        const avgTrust = await db.get('SELECT ROUND(AVG(score), 1) as avg FROM trust_scores');
-        const seals = await db.get('SELECT COUNT(*) as count FROM blockchain_seals');
-        const alerts = await db.get(`SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'`);
-        const partners = await db.get('SELECT COUNT(*) as count FROM partners');
-        const batches = await db.get('SELECT COUNT(*) as count FROM batches');
-        const evidence = await db.get('SELECT COUNT(*) as count FROM evidence_items');
-        const certifications = await db.get(`SELECT COUNT(*) as count FROM certifications WHERE status = 'active'`);
+        // NODE-BP-1: Parallelize 11 independent queries
+        const [products, scans, todayScans, avgTrust, seals, alerts, partners, batches, evidence, certifications, validScans] = await Promise.all([
+            db.get('SELECT COUNT(*) as count FROM products'),
+            db.get('SELECT COUNT(*) as count FROM scan_events'),
+            db.get(`SELECT COUNT(*) as count FROM scan_events WHERE scanned_at >= datetime('now', '-1 day')`),
+            db.get('SELECT ROUND(AVG(score), 1) as avg FROM trust_scores'),
+            db.get('SELECT COUNT(*) as count FROM blockchain_seals'),
+            db.get(`SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'`),
+            db.get('SELECT COUNT(*) as count FROM partners'),
+            db.get('SELECT COUNT(*) as count FROM batches'),
+            db.get('SELECT COUNT(*) as count FROM evidence_items'),
+            db.get(`SELECT COUNT(*) as count FROM certifications WHERE status = 'active'`),
+            db.get(`SELECT COUNT(*) as count FROM scan_events WHERE result = 'valid'`),
+        ]);
 
-        // Verification rate
-        const validScans = await db.get(`SELECT COUNT(*) as count FROM scan_events WHERE result = 'valid'`);
         const verificationRate = scans.count > 0 ? Math.round((validScans.count / scans.count) * 100) : 0;
 
         res.json({
@@ -124,7 +126,8 @@ router.get('/alert-severity', async (req, res) => {
 // ─── Public API v1 (CORS-enabled, for researchers/partners) ──────────────
 // CORS middleware for API v1 routes
 const corsHeaders = async (req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // SEC-API-1: Removed Access-Control-Allow-Origin: * — global CORS whitelist in index.js applies.
+    // Only allow read-only methods on public API
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-API-Key');
     res.setHeader('X-RateLimit-Limit', '100');
@@ -136,15 +139,18 @@ const corsHeaders = async (req, res, next) => {
 // GET /api/public/api/v1/stats — Structured JSON API for researchers
 router.get('/api/v1/stats', corsHeaders, async (req, res) => {
     try {
-        const products = await db.get('SELECT COUNT(*) as count FROM products');
-        const scans = await db.get('SELECT COUNT(*) as count FROM scan_events');
-        const validScans = await db.get(`SELECT COUNT(*) as count FROM scan_events WHERE result = 'valid'`);
-        const avgTrust = await db.get('SELECT ROUND(AVG(score), 1) as avg FROM trust_scores');
-        const seals = await db.get('SELECT COUNT(*) as count FROM blockchain_seals');
-        const alerts = await db.get(`SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'`);
-        const criticalAlerts = await db.get(`SELECT COUNT(*) as count FROM fraud_alerts WHERE severity = 'critical'`);
-        const partners = await db.get('SELECT COUNT(*) as count FROM partners');
-        const evidence = await db.get('SELECT COUNT(*) as count FROM evidence_items');
+        // NODE-BP-1: Parallelize 9 queries
+        const [products, scans, validScans, avgTrust, seals, alerts, criticalAlerts, partners, evidence] = await Promise.all([
+            db.get('SELECT COUNT(*) as count FROM products'),
+            db.get('SELECT COUNT(*) as count FROM scan_events'),
+            db.get(`SELECT COUNT(*) as count FROM scan_events WHERE result = 'valid'`),
+            db.get('SELECT ROUND(AVG(score), 1) as avg FROM trust_scores'),
+            db.get('SELECT COUNT(*) as count FROM blockchain_seals'),
+            db.get(`SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'`),
+            db.get(`SELECT COUNT(*) as count FROM fraud_alerts WHERE severity = 'critical'`),
+            db.get('SELECT COUNT(*) as count FROM partners'),
+            db.get('SELECT COUNT(*) as count FROM evidence_items'),
+        ]);
 
         const verificationRate = scans.count > 0 ? Math.round((validScans.count / scans.count) * 100) : 0;
 
@@ -228,80 +234,91 @@ router.get('/api/v1/products/:id/trust', corsHeaders, async (req, res) => {
 
 // GET /api/public/embed/widget — Self-contained embeddable HTML/JS widget
 router.get('/embed/widget', async (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-.tc-widget{font-family:'Inter',system-ui,sans-serif;background:#0a0e1a;color:#e0e6ed;
-  border:1px solid rgba(0,240,255,0.15);border-radius:12px;padding:20px;max-width:380px;
-  box-shadow:0 4px 24px rgba(0,0,0,0.4)}
-.tc-header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
-.tc-logo{width:28px;height:28px;background:linear-gradient(135deg,#00f0ff,#8b5cf6);
-  border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px}
-.tc-title{font-size:14px;font-weight:600;color:#00f0ff}
-.tc-subtitle{font-size:11px;color:#64748b}
-.tc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.tc-stat{background:rgba(255,255,255,0.04);border-radius:8px;padding:12px;text-align:center}
-.tc-val{font-size:22px;font-weight:700;color:#00f0ff}
-.tc-label{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-top:4px}
-.tc-bar{height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;margin:4px 0}
-.tc-bar-fill{height:100%;border-radius:3px;transition:width 1s ease}
-.tc-footer{text-align:center;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)}
-.tc-footer a{color:#00f0ff;text-decoration:none;font-size:11px;font-weight:500}
-.tc-footer a:hover{text-decoration:underline}
-.tc-trust-row{display:flex;justify-content:space-between;align-items:center;font-size:11px;
-  color:#94a3b8;margin-bottom:8px}
-</style>
-</head>
-<body>
-<div class="tc-widget" id="tc-widget">
-  <div class="tc-header">
-    <div class="tc-logo">🛡</div>
-    <div><div class="tc-title">TrustChecker</div><div class="tc-subtitle">Digital Trust Infrastructure</div></div>
-  </div>
-  <div class="tc-grid">
-    <div class="tc-stat"><div class="tc-val" id="tc-products">–</div><div class="tc-label">Products</div></div>
-    <div class="tc-stat"><div class="tc-val" id="tc-scans">–</div><div class="tc-label">Scans</div></div>
-    <div class="tc-stat"><div class="tc-val" id="tc-trust">–</div><div class="tc-label">Avg Trust</div></div>
-    <div class="tc-stat"><div class="tc-val" id="tc-rate">–</div><div class="tc-label">Verif. Rate</div></div>
-  </div>
-  <div class="tc-trust-row"><span>Verification Rate</span><span id="tc-rate2">–%</span></div>
-  <div class="tc-bar"><div class="tc-bar-fill" id="tc-bar1" style="width:0%;background:linear-gradient(90deg,#00f0ff,#10b981)"></div></div>
-  <div class="tc-trust-row" style="margin-top:8px"><span>Blockchain Coverage</span><span id="tc-chain">–%</span></div>
-  <div class="tc-bar"><div class="tc-bar-fill" id="tc-bar2" style="width:0%;background:linear-gradient(90deg,#8b5cf6,#ec4899)"></div></div>
-  <div class="tc-footer"><a href="${baseUrl}" target="_blank">Powered by TrustChecker ↗</a></div>
-</div>
-<script>
-fetch('${baseUrl}/api/public/api/v1/stats')
-  .then(r=>r.json()).then(d=>{
-    const s=d.data;
-    document.getElementById('tc-products').textContent=s.products.total;
-    document.getElementById('tc-scans').textContent=s.verification.total_scans;
-    document.getElementById('tc-trust').textContent=s.products.avg_trust_score;
-    document.getElementById('tc-rate').textContent=s.verification.verification_rate_percent+'%';
-    document.getElementById('tc-rate2').textContent=s.verification.verification_rate_percent+'%';
-    document.getElementById('tc-bar1').style.width=s.verification.verification_rate_percent+'%';
-    const chainPct=s.products.total>0?Math.round(s.products.blockchain_sealed/s.products.total*100):0;
-    document.getElementById('tc-chain').textContent=chainPct+'%';
-    document.getElementById('tc-bar2').style.width=chainPct+'%';
-  }).catch(()=>{});
-</script>
-</body></html>`;
-    res.setHeader('Content-Type', 'text/html');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(html);
+    try {
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const html = `<!DOCTYPE html>
+    <html lang="en">
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    .tc-widget{font-family:'Inter',system-ui,sans-serif;background:#0a0e1a;color:#e0e6ed;
+      border:1px solid rgba(0,240,255,0.15);border-radius:12px;padding:20px;max-width:380px;
+      box-shadow:0 4px 24px rgba(0,0,0,0.4)}
+    .tc-header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+    .tc-logo{width:28px;height:28px;background:linear-gradient(135deg,#00f0ff,#8b5cf6);
+      border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px}
+    .tc-title{font-size:14px;font-weight:600;color:#00f0ff}
+    .tc-subtitle{font-size:11px;color:#64748b}
+    .tc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+    .tc-stat{background:rgba(255,255,255,0.04);border-radius:8px;padding:12px;text-align:center}
+    .tc-val{font-size:22px;font-weight:700;color:#00f0ff}
+    .tc-label{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-top:4px}
+    .tc-bar{height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;margin:4px 0}
+    .tc-bar-fill{height:100%;border-radius:3px;transition:width 1s ease}
+    .tc-footer{text-align:center;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06)}
+    .tc-footer a{color:#00f0ff;text-decoration:none;font-size:11px;font-weight:500}
+    .tc-footer a:hover{text-decoration:underline}
+    .tc-trust-row{display:flex;justify-content:space-between;align-items:center;font-size:11px;
+      color:#94a3b8;margin-bottom:8px}
+    </style>
+    </head>
+    <body>
+    <div class="tc-widget" id="tc-widget">
+      <div class="tc-header">
+        <div class="tc-logo">🛡</div>
+        <div><div class="tc-title">TrustChecker</div><div class="tc-subtitle">Digital Trust Infrastructure</div></div>
+      </div>
+      <div class="tc-grid">
+        <div class="tc-stat"><div class="tc-val" id="tc-products">–</div><div class="tc-label">Products</div></div>
+        <div class="tc-stat"><div class="tc-val" id="tc-scans">–</div><div class="tc-label">Scans</div></div>
+        <div class="tc-stat"><div class="tc-val" id="tc-trust">–</div><div class="tc-label">Avg Trust</div></div>
+        <div class="tc-stat"><div class="tc-val" id="tc-rate">–</div><div class="tc-label">Verif. Rate</div></div>
+      </div>
+      <div class="tc-trust-row"><span>Verification Rate</span><span id="tc-rate2">–%</span></div>
+      <div class="tc-bar"><div class="tc-bar-fill" id="tc-bar1" style="width:0%;background:linear-gradient(90deg,#00f0ff,#10b981)"></div></div>
+      <div class="tc-trust-row" style="margin-top:8px"><span>Blockchain Coverage</span><span id="tc-chain">–%</span></div>
+      <div class="tc-bar"><div class="tc-bar-fill" id="tc-bar2" style="width:0%;background:linear-gradient(90deg,#8b5cf6,#ec4899)"></div></div>
+      <div class="tc-footer"><a href="${baseUrl}" target="_blank">Powered by TrustChecker ↗</a></div>
+    </div>
+    <script>
+    fetch('${baseUrl}/api/public/api/v1/stats')
+      .then(r=>r.json()).then(d=>{
+        const s=d.data;
+        document.getElementById('tc-products').textContent=s.products.total;
+        document.getElementById('tc-scans').textContent=s.verification.total_scans;
+        document.getElementById('tc-trust').textContent=s.products.avg_trust_score;
+        document.getElementById('tc-rate').textContent=s.verification.verification_rate_percent+'%';
+        document.getElementById('tc-rate2').textContent=s.verification.verification_rate_percent+'%';
+        document.getElementById('tc-bar1').style.width=s.verification.verification_rate_percent+'%';
+        const chainPct=s.products.total>0?Math.round(s.products.blockchain_sealed/s.products.total*100):0;
+        document.getElementById('tc-chain').textContent=chainPct+'%';
+        document.getElementById('tc-bar2').style.width=chainPct+'%';
+      }).catch(()=>{});
+    </script>
+    </body></html>`;
+        res.setHeader('Content-Type', 'text/html');
+        // SEC-API-1: Widget is embeddable — restrict to GET via CSP frame-ancestors
+        res.setHeader('Content-Security-Policy', "frame-ancestors 'self' *");
+        res.send(html);
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // GET /api/public/embed/snippet — Returns embeddable iframe snippet code
 router.get('/embed/snippet', corsHeaders, async (req, res) => {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    res.json({
-        embed_code: `<iframe src="${baseUrl}/api/public/embed/widget" width="400" height="360" frameborder="0" style="border-radius:12px;overflow:hidden" title="TrustChecker Widget"></iframe>`,
-        script_tag: `<script src="${baseUrl}/api/public/embed/widget"></script>`,
-        documentation: '/api/docs'
-    });
+    try {
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        res.json({
+            embed_code: `<iframe src="${baseUrl}/api/public/embed/widget" width="400" height="360" frameborder="0" style="border-radius:12px;overflow:hidden" title="TrustChecker Widget"></iframe>`,
+            script_tag: `<script src="${baseUrl}/api/public/embed/widget"></script>`,
+            documentation: '/api/docs'
+        });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // GET /api/public/recently-verified — Recently verified products
@@ -316,7 +333,7 @@ router.get('/recently-verified', corsHeaders, async (req, res) => {
       WHERE p.trust_score IS NOT NULL AND p.status = 'active'
       ORDER BY last_scanned DESC
       LIMIT ?
-    `, [Number(limit)]);
+    `, [Math.min(Number(limit) || 10, 50)]); // SEC-API: cap limit to 50
 
         res.json({
             recently_verified: products,
@@ -343,7 +360,7 @@ router.get('/search', corsHeaders, async (req, res) => {
         if (brand) { sql += ` AND p.brand = ?`; params.push(brand); }
 
         sql += ` ORDER BY p.trust_score DESC LIMIT ?`;
-        params.push(Number(limit));
+        params.push(Math.min(Number(limit) || 20, 100)); // SEC-API: cap limit to 100
 
         const results = await db.all(sql, params);
 
@@ -362,12 +379,21 @@ router.get('/search', corsHeaders, async (req, res) => {
 // GET /api/public/health — Platform health report
 router.get('/health', corsHeaders, async (req, res) => {
     try {
-        const products = (await db.get('SELECT COUNT(*) as c FROM products'))?.c || 0;
-        const scans24h = (await db.get("SELECT COUNT(*) as c FROM scan_events WHERE scanned_at > datetime('now', '-1 day')"))?.c || 0;
-        const fraudAlerts = (await db.get("SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'active'"))?.c || 0;
-        const leakAlerts = (await db.get("SELECT COUNT(*) as c FROM leak_alerts WHERE status = 'open'"))?.c || 0;
-        const blockchainIntact = (await db.get("SELECT COUNT(*) as c FROM blockchain_seals"))?.c || 0;
-        const avgTrust = (await db.get("SELECT COALESCE(AVG(trust_score), 0) as a FROM products"))?.a || 0;
+        // NODE-BP-1: Parallelize 6 queries
+        const [productsRow, scans24hRow, fraudAlertsRow, leakAlertsRow, blockchainRow, avgTrustRow] = await Promise.all([
+            db.get('SELECT COUNT(*) as c FROM products'),
+            db.get("SELECT COUNT(*) as c FROM scan_events WHERE scanned_at > datetime('now', '-1 day')"),
+            db.get("SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'active'"),
+            db.get("SELECT COUNT(*) as c FROM leak_alerts WHERE status = 'open'"),
+            db.get('SELECT COUNT(*) as c FROM blockchain_seals'),
+            db.get('SELECT COALESCE(AVG(trust_score), 0) as a FROM products'),
+        ]);
+        const products = productsRow?.c || 0;
+        const scans24h = scans24hRow?.c || 0;
+        const fraudAlerts = fraudAlertsRow?.c || 0;
+        const leakAlerts = leakAlertsRow?.c || 0;
+        const blockchainIntact = blockchainRow?.c || 0;
+        const avgTrust = avgTrustRow?.a || 0;
 
         const systemStatus = fraudAlerts > 10 || leakAlerts > 20 ? 'degraded' : 'operational';
 

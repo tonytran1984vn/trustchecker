@@ -5,11 +5,11 @@ const { safeError } = require('../utils/safe-error');
  */
 const express = require('express');
 const router = express.Router();
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const webhookEngine = require('../engines/webhookEngine');
 
 router.use(authMiddleware);
-router.use(requireRole('admin'));
+router.use(requirePermission('webhook:manage'));
 
 // ─── GET / — List all webhook subscriptions ─────────────────
 router.get('/', async (req, res) => {
@@ -90,7 +90,7 @@ router.post('/test', async (req, res) => {
 router.get('/deliveries', async (req, res) => {
     try {
         const { limit = 50 } = req.query;
-        const deliveries = webhookEngine.getDeliveryLog(Number(limit));
+        const deliveries = webhookEngine.getDeliveryLog(Math.min(Number(limit) || 50, 200));
         const stats = webhookEngine.getStats();
         res.json({ deliveries, stats });
     } catch (e) {
@@ -100,19 +100,23 @@ router.get('/deliveries', async (req, res) => {
 
 // ─── GET /events — List available event types ───────────────
 router.get('/events', async (req, res) => {
-    const events = {
-        scan: ['scan.completed', 'scan.suspicious', 'scan.counterfeit'],
-        fraud: ['fraud.alert', 'fraud.resolved'],
-        product: ['product.created', 'product.updated'],
-        evidence: ['evidence.uploaded', 'evidence.verified'],
-        kyc: ['kyc.submitted', 'kyc.approved', 'kyc.rejected'],
-        support: ['ticket.created', 'ticket.resolved'],
-        anomaly: ['anomaly.detected'],
-        certification: ['cert.expired', 'cert.created'],
-        payment: ['payment.completed', 'payment.refunded'],
-        auth: ['user.registered', 'user.login'],
-    };
-    res.json({ event_types: events, total: Object.values(events).flat().length, wildcard: '*' });
+    try {
+        const events = {
+            scan: ['scan.completed', 'scan.suspicious', 'scan.counterfeit'],
+            fraud: ['fraud.alert', 'fraud.resolved'],
+            product: ['product.created', 'product.updated'],
+            evidence: ['evidence.uploaded', 'evidence.verified'],
+            kyc: ['kyc.submitted', 'kyc.approved', 'kyc.rejected'],
+            support: ['ticket.created', 'ticket.resolved'],
+            anomaly: ['anomaly.detected'],
+            certification: ['cert.expired', 'cert.created'],
+            payment: ['payment.completed', 'payment.refunded'],
+            auth: ['user.registered', 'user.login'],
+        };
+        res.json({ event_types: events, total: Object.values(events).flat().length, wildcard: '*' });
+    } catch (e) {
+        safeError(res, 'Operation failed', e);
+    }
 });
 
 module.exports = router;

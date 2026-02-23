@@ -100,17 +100,26 @@ router.get('/me', authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     let org = null;
+    let orgFlags = {};
     if (user.org_id) {
         try {
             org = await db.prepare(
-                'SELECT id, name, slug, plan, schema_name, settings FROM organizations WHERE id = ?'
+                'SELECT id, name, slug, plan, schema_name, settings, feature_flags FROM organizations WHERE id = ?'
             ).get(user.org_id);
+            if (org && org.feature_flags) {
+                try { orgFlags = typeof org.feature_flags === 'string' ? JSON.parse(org.feature_flags) : org.feature_flags; } catch (_) { }
+            }
         } catch (_) { /* org table may not exist */ }
     }
 
     const { getFeaturesForPlan } = require('../middleware/featureGate');
+    const { safeParse } = require('../utils/safe-json');
     const plan = org?.plan || user.plan || 'free';
     const features = getFeaturesForPlan(plan);
+    const planFlags = features.reduce((acc, f) => { acc[f] = true; return acc; }, {});
+
+    // Merge: plan-based features + org-level flags (org flags override)
+    const mergedFlags = { ...planFlags, ...orgFlags };
 
     res.json({
         user: {
@@ -119,7 +128,8 @@ router.get('/me', authMiddleware, async (req, res) => {
             org: org ? { id: org.id, name: org.name, slug: org.slug, plan: org.plan } : null,
         },
         features,
-        feature_flags: features.reduce((acc, f) => { acc[f] = true; return acc; }, {}),
+        feature_flags: mergedFlags,
+        org_feature_flags: orgFlags,
     });
 });
 
@@ -174,8 +184,9 @@ router.post('/forgot-password', async (req, res) => {
             .run(uuidv4(), user.id, 'PASSWORD_RESET_REQUESTED', 'user', user.id,
                 JSON.stringify({ token_hash: crypto.createHash('sha256').update(resetToken).digest('hex'), expires: resetExpiry }));
 
+        // SEC-1: Token removed from logs — use audit_log token_hash for debugging
         if (process.env.NODE_ENV !== 'production') {
-            console.log(`[DEV] Password reset token for ${user.username}: ${resetToken}`);
+            console.log(`[DEV] Password reset requested for ${user.username} (token hash in audit_log)`);
         }
 
         res.json({ message: 'If the email exists, a reset link has been sent' });
@@ -205,7 +216,7 @@ router.post('/reset-password', async (req, res) => {
 
         if (!resetLog) return res.status(400).json({ error: 'Invalid or expired reset token' });
 
-        const details = JSON.parse(resetLog.details || '{}');
+        const details = safeParse(resetLog.details, {});
         if (new Date(details.expires) < new Date()) {
             return res.status(400).json({ error: 'Reset token has expired' });
         }

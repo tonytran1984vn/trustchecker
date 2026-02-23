@@ -12,8 +12,8 @@ export function renderPage() {
 
   const plan = d.plan;
   const usage = d.usage;
-  const planColors = { free: 'var(--text-muted)', starter: 'var(--cyan)', pro: 'var(--violet)', enterprise: 'var(--amber)' };
-  const planIcons = { free: '🆓', starter: '🚀', pro: '⚡', enterprise: '🏢' };
+  const planColors = { free: 'var(--text-muted)', starter: 'var(--cyan)', pro: 'var(--violet)', business: 'var(--amber)', enterprise: 'var(--amber)' };
+  const planIcons = { free: '🆓', starter: '🚀', pro: '⚡', business: '🏗️', enterprise: '🏢' };
 
   const usageBar = (used, limit, label) => {
     const isUnlimited = limit === '∞' || limit < 0;
@@ -40,11 +40,11 @@ export function renderPage() {
           <div style="padding:var(--gap);text-align:center">
             <div style="font-size:2rem">${planIcons[key]}</div>
             <div style="font-size:1.1rem;font-weight:700;color:${planColors[key]};margin:8px 0">${p.name}</div>
-            <div style="font-size:1.5rem;font-weight:800">$${p.price}<span style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">/mo</span></div>
+            <div style="font-size:1.5rem;font-weight:800">${p.price_monthly != null ? '$' + p.price_monthly : 'Custom'}<span style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">/mo</span></div>
             <div style="font-size:0.72rem;color:var(--text-muted);margin-top:12px;text-align:left">
-              <div>📱 ${p.scan_limit < 0 ? 'Unlimited' : p.scan_limit.toLocaleString()} scans</div>
-              <div>🔌 ${p.api_limit < 0 ? 'Unlimited' : p.api_limit.toLocaleString()} API calls</div>
-              <div>💾 ${p.storage_mb < 0 ? 'Unlimited' : p.storage_mb.toLocaleString()} MB storage</div>
+              <div>📱 ${(p.limits?.scans ?? p.scan_limit ?? 0) < 0 ? 'Unlimited' : (p.limits?.scans ?? p.scan_limit ?? 0).toLocaleString()} scans</div>
+              <div>🔌 ${(p.limits?.api_calls ?? p.api_limit ?? 0) < 0 ? 'Unlimited' : (p.limits?.api_calls ?? p.api_limit ?? 0).toLocaleString()} API calls</div>
+              <div>💾 ${(p.limits?.storage_mb ?? p.storage_mb ?? 0) < 0 ? 'Unlimited' : (p.limits?.storage_mb ?? p.storage_mb ?? 0).toLocaleString()} MB storage</div>
             </div>
           </div>
         </div>

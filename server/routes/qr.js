@@ -231,7 +231,7 @@ router.get('/scan-history', authMiddleware, async (req, res) => {
         }
 
         query += ' ORDER BY se.scanned_at DESC LIMIT ?';
-        params.push(Number(limit));
+        params.push(Math.min(Number(limit) || 50, 200));
 
         const scans = await db.prepare(query).all(...params);
         res.json({ scans });
@@ -251,7 +251,7 @@ router.get('/fraud-alerts', authMiddleware, async (req, res) => {
       LEFT JOIN products p ON fa.product_id = p.id
       WHERE fa.status = ?
       ORDER BY fa.created_at DESC LIMIT ?
-    `).all(status, Number(limit));
+    `).all(status, Math.min(Number(limit) || 50, 200));
 
         res.json({ alerts });
     } catch (err) {
@@ -286,36 +286,25 @@ router.get('/blockchain/verify', authMiddleware, async (req, res) => {
 // ─── GET /api/qr/dashboard-stats ─────────────────────────────────────────────
 router.get('/dashboard-stats', authMiddleware, async (req, res) => {
     try {
-        const totalProducts = await db.prepare('SELECT COUNT(*) as count FROM products').get();
-        const totalScans = await db.prepare('SELECT COUNT(*) as count FROM scan_events').get();
-        const todayScans = await db.prepare(`SELECT COUNT(*) as count FROM scan_events WHERE DATE(scanned_at) = DATE('now')`).get();
-        const openAlerts = await db.prepare(`SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'`).get();
-        const avgTrustScore = await db.prepare('SELECT AVG(trust_score) as avg FROM products WHERE trust_score > 0').get();
-        const totalSeals = await db.prepare('SELECT COUNT(*) as count FROM blockchain_seals').get();
+        // NODE-BP-1: Parallelize independent DB queries
+        const [totalProducts, totalScans, todayScans, openAlerts, avgTrustScore, totalSeals] = await Promise.all([
+            db.prepare('SELECT COUNT(*) as count FROM products').get(),
+            db.prepare('SELECT COUNT(*) as count FROM scan_events').get(),
+            db.prepare(`SELECT COUNT(*) as count FROM scan_events WHERE DATE(scanned_at) = DATE('now')`).get(),
+            db.prepare(`SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'`).get(),
+            db.prepare('SELECT AVG(trust_score) as avg FROM products WHERE trust_score > 0').get(),
+            db.prepare('SELECT COUNT(*) as count FROM blockchain_seals').get(),
+        ]);
 
-        const scansByResult = await db.prepare(`
-      SELECT result, COUNT(*) as count FROM scan_events GROUP BY result
-    `).all();
-
-        const alertsBySeverity = await db.prepare(`
-      SELECT severity, COUNT(*) as count FROM fraud_alerts WHERE status = 'open' GROUP BY severity
-    `).all();
-
-        const recentActivity = await db.prepare(`
-      SELECT se.id, se.result, se.fraud_score, se.trust_score, se.scanned_at, p.name as product_name
-      FROM scan_events se
-      LEFT JOIN products p ON se.product_id = p.id
-      ORDER BY se.scanned_at DESC LIMIT 10
-    `).all();
-
-        // Scan trend (last 7 days)
-        const scanTrend = await db.prepare(`
-      SELECT DATE(scanned_at) as day, COUNT(*) as count
-      FROM scan_events
-      WHERE scanned_at > datetime('now', '-7 days')
-      GROUP BY DATE(scanned_at)
-      ORDER BY day ASC
-    `).all();
+        const [scansByResult, alertsBySeverity, recentActivity, scanTrend] = await Promise.all([
+            db.prepare('SELECT result, COUNT(*) as count FROM scan_events GROUP BY result').all(),
+            db.prepare(`SELECT severity, COUNT(*) as count FROM fraud_alerts WHERE status = 'open' GROUP BY severity`).all(),
+            db.prepare(`SELECT se.id, se.result, se.fraud_score, se.trust_score, se.scanned_at, p.name as product_name
+              FROM scan_events se LEFT JOIN products p ON se.product_id = p.id
+              ORDER BY se.scanned_at DESC LIMIT 10`).all(),
+            db.prepare(`SELECT DATE(scanned_at) as day, COUNT(*) as count FROM scan_events
+              WHERE scanned_at > datetime('now', '-7 days') GROUP BY DATE(scanned_at) ORDER BY day ASC`).all(),
+        ]);
 
         res.json({
             total_products: totalProducts.count,
@@ -337,43 +326,53 @@ router.get('/dashboard-stats', authMiddleware, async (req, res) => {
 
 // ─── GET /api/qr/events ─────────────────────────────────────────────────────
 router.get('/events', authMiddleware, async (req, res) => {
-    const events = eventBus.getRecentEvents(50);
-    res.json({ events });
+    try {
+        const events = eventBus.getRecentEvents(50);
+        res.json({ events });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // ─── GET /api/qr/camera-config — Mobile camera scanner config ───────────────
 router.get('/camera-config', async (req, res) => {
-    res.json({
-        scanner: {
-            type: 'getUserMedia',
-            constraints: {
-                video: {
-                    facingMode: 'environment',
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
+    try {
+        res.json({
+            scanner: {
+                type: 'getUserMedia',
+                constraints: {
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                },
+                decoder: {
+                    library: 'jsQR',
+                    cdn: 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
+                    interval_ms: 100
                 }
             },
-            decoder: {
-                library: 'jsQR',
-                cdn: 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
-                interval_ms: 100
-            }
-        },
-        supported_formats: ['QR_CODE', 'DATA_MATRIX', 'CODE_128', 'EAN_13'],
-        offline_capable: true,
-        instructions: {
-            step1: 'Grant camera permission when prompted',
-            step2: 'Point camera at the QR code',
-            step3: 'Hold steady for 1-2 seconds',
-            step4: 'Result appears automatically'
-        },
-        tips: [
-            'Ensure adequate lighting',
-            'Hold device 10-20cm from QR code',
-            'Keep QR code flat and visible',
-            'Works offline — scans are queued for sync'
-        ]
-    });
+            supported_formats: ['QR_CODE', 'DATA_MATRIX', 'CODE_128', 'EAN_13'],
+            offline_capable: true,
+            instructions: {
+                step1: 'Grant camera permission when prompted',
+                step2: 'Point camera at the QR code',
+                step3: 'Hold steady for 1-2 seconds',
+                step4: 'Result appears automatically'
+            },
+            tips: [
+                'Ensure adequate lighting',
+                'Hold device 10-20cm from QR code',
+                'Keep QR code flat and visible',
+                'Works offline — scans are queued for sync'
+            ]
+        });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // ─── POST /api/qr/mobile-scan — Mobile scan with image data ────────────────

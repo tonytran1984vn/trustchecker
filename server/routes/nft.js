@@ -8,13 +8,13 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const blockchainEngine = require('../engines/blockchain');
 
 router.use(authMiddleware);
 
 // ─── POST /mint — Mint a new NFT certificate ────────────────
-router.post('/mint', requireRole('operator'), async (req, res) => {
+router.post('/mint', requirePermission('nft:mint'), async (req, res) => {
     try {
         const { product_id, entity_type, entity_id, certificate_type, expires_in_days } = req.body;
         if (!product_id && !entity_id) return res.status(400).json({ error: 'product_id or entity_id required' });
@@ -80,7 +80,7 @@ router.get('/', async (req, res) => {
         if (status) { sql += ' AND nc.status = ?'; params.push(status); }
 
         sql += ' ORDER BY nc.minted_at DESC LIMIT ?';
-        params.push(Number(limit));
+        params.push(Math.min(Number(limit) || 20, 100));
 
         res.json({ certificates: await db.all(sql, params) });
     } catch (e) {

@@ -27,7 +27,7 @@ export function renderPage() {
               <div class="partner-name">${p.name}</div>
               <div class="partner-type">${p.type} • ${p.country || '—'}</div>
             </div>
-            <span class="badge ${p.kyc_status === 'verified' ? 'valid' : p.kyc_status === 'pending' ? 'warning' : 'suspicious'}">${p.kyc_status === 'verified' ? '✅ KYC' : p.kyc_status === 'pending' ? '⏳ Pending' : '❌ Failed'}</span>
+            <span class="badge ${p.kyc_status === 'verified' ? 'valid' : p.kyc_status === 'pending' ? 'warning' : 'suspicious'}">${p.kyc_status === 'verified' ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> KYC' : p.kyc_status === 'pending' ? '⏳ Pending' : '<span class="status-icon status-fail" aria-label="Fail">✗</span> Failed'}</span>
           </div>
           <div class="partner-meta">
             <div class="partner-trust">
@@ -82,7 +82,7 @@ async function verifyPartner(id) {
 async function syncConnectors() {
   try {
     const res = await API.post('/scm/partners/connectors/sync', { connector_type: 'SAP' });
-    showToast(`✅ Synced ${res.total_synced} records (${res.total_errors} errors) — Health: ${res.health}`, 'success');
+    showToast(`<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Synced ${res.total_synced} records (${res.total_errors} errors) — Health: ${res.health}`, 'success');
   } catch (e) { showToast('Sync failed: ' + e.message, 'error'); }
 }
 async function checkConnectorStatus() {

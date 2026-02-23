@@ -15,14 +15,17 @@ datasource db {
 // ═══════════════════════════════════════════════════════════════════
 
 model Organization {
-  id         String   @id @default(uuid())
-  name       String
-  slug       String   @unique
-  plan       String   @default("free")
-  schemaName String?  @map("schema_name")    // Enterprise: dedicated PG schema
-  settings   Json     @default("{}")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  plan         String   @default("free")
+  schemaName   String?  @map("schema_name")
+  settings     Json     @default("{}")
+  featureFlags Json     @default("{}") @map("feature_flags")
+  status       String   @default("active")
+  createdBy    String?  @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @map("updated_at")
 
   users      User[]
 
@@ -35,19 +38,23 @@ model Organization {
 // ═══════════════════════════════════════════════════════════════════
 
 model User {
-  id             String    @id @default(uuid())
-  username       String    @unique
-  email          String    @unique
-  passwordHash   String    @map("password_hash")
-  role           String    @default("operator")
-  company        String    @default("")
-  orgId          String?   @map("org_id")
-  mfaSecret      String?   @map("mfa_secret")
-  mfaEnabled     Boolean   @default(false) @map("mfa_enabled")
-  failedAttempts Int       @default(0) @map("failed_attempts")
-  lockedUntil    DateTime? @map("locked_until")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  lastLogin      DateTime? @map("last_login")
+  id                  String    @id @default(uuid())
+  username            String    @unique
+  email               String    @unique
+  passwordHash        String    @map("password_hash")
+  role                String    @default("operator")
+  userType            String    @default("tenant") @map("user_type")
+  company             String    @default("")
+  orgId               String?   @map("org_id")
+  mfaSecret           String?   @map("mfa_secret")
+  mfaEnabled          Boolean   @default(false) @map("mfa_enabled")
+  mfaBackupCodes      String?   @map("mfa_backup_codes")
+  mustChangePassword  Boolean   @default(false) @map("must_change_password")
+  passwordChangedAt   DateTime? @map("password_changed_at")
+  failedAttempts      Int       @default(0) @map("failed_attempts")
+  lockedUntil         DateTime? @map("locked_until")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  lastLogin           DateTime? @map("last_login")
 
   // Relations
   org              Organization? @relation(fields: [orgId], references: [id])
@@ -112,6 +119,67 @@ model PasskeyCredential {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// RBAC (Hierarchical Multi-Tenant Permission Model)
+// ═══════════════════════════════════════════════════════════════════
+
+model RbacRole {
+  id           String   @id @default(uuid())
+  tenantId     String?  @map("tenant_id")
+  name         String
+  displayName  String   @default("") @map("display_name")
+  type         String   @default("tenant")
+  isSystem     Boolean  @default(false) @map("is_system")
+  mfaPolicy    String   @default("optional") @map("mfa_policy")
+  parentRoleId String?  @map("parent_role_id")
+  description  String   @default("")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  permissions  RbacRolePermission[]
+  userRoles    RbacUserRole[]
+
+  @@map("rbac_roles")
+}
+
+model RbacPermission {
+  id          String   @id @default(uuid())
+  resource    String
+  action      String
+  scope       String   @default("tenant")
+  level       String   @default("business")
+  description String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  roles       RbacRolePermission[]
+
+  @@unique([resource, action, scope])
+  @@map("rbac_permissions")
+}
+
+model RbacRolePermission {
+  roleId       String @map("role_id")
+  permissionId String @map("permission_id")
+
+  role       RbacRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission RbacPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("rbac_role_permissions")
+}
+
+model RbacUserRole {
+  userId     String   @map("user_id")
+  roleId     String   @map("role_id")
+  assignedBy String?  @map("assigned_by")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  expiresAt  DateTime? @map("expires_at")
+
+  role RbacRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("rbac_user_roles")
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // PRODUCT & QR MODELS
 // ═══════════════════════════════════════════════════════════════════
 
@@ -128,7 +196,7 @@ model Product {
   trustScore     Float    @default(100.0) @map("trust_score")
   status         String   @default("active")
   createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  updatedAt      DateTime @default(now()) @map("updated_at")
 
   // Relations
   registeredByUser  User?               @relation("RegisteredBy", fields: [registeredBy], references: [id])
@@ -151,7 +219,11 @@ model QrCode {
   productId     String    @map("product_id")
   qrData        String    @unique @map("qr_data")
   qrImageBase64 String?   @map("qr_image_base64") @db.Text
+  orgId         String?   @map("org_id")
   status        String    @default("active")
+  generatedBy   String?   @map("generated_by")
+  deletedAt     DateTime? @map("deleted_at")
+  deletedBy     String?   @map("deleted_by")
   generatedAt   DateTime  @default(now()) @map("generated_at")
   expiresAt     DateTime? @map("expires_at")
 
@@ -350,7 +422,7 @@ model Inventory {
   minStock  Int      @default(10) @map("min_stock")
   maxStock  Int      @default(1000) @map("max_stock")
   lastSync  DateTime? @map("last_sync")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
 
   product Product  @relation(fields: [productId], references: [id])
   batch   Batch?   @relation(fields: [batchId], references: [id])
@@ -400,7 +472,7 @@ model Shipment {
   currentLng        Float?    @map("current_lng")
   gpsTrail          Json      @default("[]") @map("gps_trail")
   createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  updatedAt         DateTime  @default(now()) @map("updated_at")
 
   batch       Batch?       @relation(fields: [batchId], references: [id])
   fromPartner Partner?     @relation("ShipmentFrom", fields: [fromPartnerId], references: [id])
@@ -525,7 +597,7 @@ model KycBusiness {
   verifiedBy         String?   @map("verified_by")
   notes              String    @default("")
   createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  updatedAt          DateTime  @default(now()) @map("updated_at")
 
   kycChecks    KycCheck[]
   sanctionHits SanctionHit[]
@@ -769,7 +841,7 @@ model SupportTicket {
   assignedTo  String?   @map("assigned_to")
   resolution  String    @default("")
   createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  updatedAt   DateTime  @default(now()) @map("updated_at")
   resolvedAt  DateTime? @map("resolved_at")
 
   user     User            @relation(fields: [userId], references: [id])
@@ -829,3 +901,423 @@ model SustainabilityScore {
   @@index([productId])
   @@map("sustainability_scores")
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// SCM ENTERPRISE — Supply Route, Risk Model, Forensic, Classification
+// ═══════════════════════════════════════════════════════════════════
+
+model SupplyRoute {
+  id          String   @id @default(uuid())
+  name        String
+  chain       Json     @default("[]")       // Array of nodes: [{type, name, location}]
+  products    Json     @default("[]")       // Product IDs mapped to this route
+  geoFence    String   @default("") @map("geo_fence")
+  status      String   @default("active")
+  integrity   String   @default("clean")    // clean | warning | breach
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  breaches    RouteBreach[]
+
+  @@map("supply_routes")
+}
+
+model ChannelRule {
+  id          String   @id @default(uuid())
+  name        String
+  logic       String   @default("")
+  severity    String   @default("medium")   // low | medium | high | critical
+  autoAction  String   @default("") @map("auto_action")
+  isActive    Boolean  @default(true) @map("is_active")
+  triggers30d Int      @default(0) @map("triggers_30d")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  breaches    RouteBreach[]
+
+  @@map("channel_rules")
+}
+
+model RouteBreach {
+  id            String   @id @default(uuid())
+  routeId       String   @map("route_id")
+  ruleId        String?  @map("rule_id")
+  scanEventId   String?  @map("scan_event_id")
+  codeData      String   @default("") @map("code_data")
+  scannedIn     String   @default("") @map("scanned_in")
+  severity      String   @default("medium")
+  action        String   @default("")
+  details       Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  route         SupplyRoute  @relation(fields: [routeId], references: [id])
+  rule          ChannelRule? @relation(fields: [ruleId], references: [id])
+
+  @@index([routeId])
+  @@map("route_breaches")
+}
+
+model RiskModel {
+  id            String    @id @default(uuid())
+  version       String    @unique
+  status        String    @default("draft")   // draft | sandbox | production | archived | rejected
+  weights       Json      @default("{}")      // {factor: weight} map
+  factors       Int       @default(12)
+  fpRate        String    @default("") @map("fp_rate")
+  tpRate        String    @default("") @map("tp_rate")
+  deployedAt    DateTime? @map("deployed_at")
+  approvedBy    String?   @map("approved_by")
+  changeSummary String    @default("") @map("change_summary")
+  testDataset   String    @default("") @map("test_dataset")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  changeRequests ModelChangeRequest[]
+
+  @@map("risk_models")
+}
+
+model ModelChangeRequest {
+  id              String    @id @default(uuid())
+  modelId         String?   @map("model_id")
+  factor          String
+  currentValue    String    @default("") @map("current_value")
+  proposedValue   String    @default("") @map("proposed_value")
+  reason          String    @default("")
+  impact          String    @default("")
+  requestedBy     String    @default("") @map("requested_by")
+  status          String    @default("pending")  // pending | approved | rejected
+  reviewedBy      String?   @map("reviewed_by")
+  reviewedAt      DateTime? @map("reviewed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  model           RiskModel? @relation(fields: [modelId], references: [id])
+
+  @@index([modelId])
+  @@map("model_change_requests")
+}
+
+model ForensicCase {
+  id              String    @id @default(uuid())
+  caseNumber      String    @unique @map("case_number")
+  codeData        String    @default("") @map("code_data")
+  productId       String?   @map("product_id")
+  batchId         String?   @map("batch_id")
+  scanChain       Json      @default("[]") @map("scan_chain")  // Array of scan events
+  deviceCompare   Json      @default("[]") @map("device_compare")
+  factorBreakdown Json      @default("[]") @map("factor_breakdown")
+  currentErs      Float     @default(0) @map("current_ers")
+  status          String    @default("open")    // open | investigating | frozen | closed
+  assignedTo      String?   @map("assigned_to")
+  frozenAt        DateTime? @map("frozen_at")
+  closedAt        DateTime? @map("closed_at")
+  verdict         String?                        // confirmed | false_positive | inconclusive
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @map("updated_at")
+
+  @@index([productId])
+  @@map("forensic_cases")
+}
+
+model DuplicateClassification {
+  id              String   @id @default(uuid())
+  scanEventId     String?  @map("scan_event_id")
+  codeData        String   @default("") @map("code_data")
+  classification  String   @default("unclassified")  // curiosity | leakage | counterfeit | unclassified
+  confidence      Float    @default(0)
+  signals         Json     @default("[]")    // Array of signal strings
+  geoData         Json     @default("{}")    // {city, country, lat, lng}
+  deviceHash      String   @default("") @map("device_hash")
+  timeGap         Int      @default(0) @map("time_gap")    // seconds since previous scan
+  classifiedBy    String   @default("system") @map("classified_by")  // system | analyst
+  reviewedBy      String?  @map("reviewed_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([classification])
+  @@map("duplicate_classifications")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CRISIS GOVERNANCE — Kill-Switch + Crisis Events
+// ═══════════════════════════════════════════════════════════════════
+
+model CrisisEvent {
+  id            String   @id @default(uuid())
+  crisisLevel   String   @map("crisis_level")
+  eventType     String   @map("event_type")
+  target        String?
+  targetType    String?  @map("target_type")
+  activatedBy   String   @map("activated_by")
+  reason        String   @default("")
+  drillMode     Boolean  @default(false) @map("drill_mode")
+  details       Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([crisisLevel])
+  @@index([eventType])
+  @@map("crisis_events")
+}
+
+model KillSwitchLog {
+  id              String    @id @default(uuid())
+  killSwitchType  String    @map("kill_switch_type")
+  target          String
+  status          String    @default("active")
+  activatedBy     String    @map("activated_by")
+  activatedRole   String    @map("activated_role")
+  reason          String    @default("")
+  drillMode       Boolean   @default(false) @map("drill_mode")
+  deactivatedBy   String?   @map("deactivated_by")
+  deactivatedAt   DateTime? @map("deactivated_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([status])
+  @@map("kill_switch_logs")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TRANSACTION FEE — Revenue Engine
+// ═══════════════════════════════════════════════════════════════════
+
+model TransactionFee {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  type          String
+  volume        Int      @default(1)
+  unitFee       Float    @map("unit_fee")
+  totalFee      Float    @map("total_fee")
+  period        String
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([period])
+  @@index([type])
+  @@map("transaction_fees")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INCIDENT ESCALATION — Extended Ops Incidents
+// ═══════════════════════════════════════════════════════════════════
+
+model OpsIncident {
+  id              String    @id @default(uuid())
+  incidentId      String    @unique @map("incident_id")
+  title           String
+  description     String    @default("")
+  severity        String    @default("SEV3")
+  status          String    @default("open")
+  module          String?
+  affectedEntity  String?   @map("affected_entity")
+  assignedTo      String?   @map("assigned_to")
+  triggeredBy     String?   @map("triggered_by")
+  resolution      String?
+  rootCause       String?   @map("root_cause")
+  slaBreached     Boolean   @default(false) @map("sla_breached")
+  resolvedAt      DateTime? @map("resolved_at")
+  acknowledgedAt  DateTime? @map("acknowledged_at")
+  hash            String    @default("")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @map("updated_at")
+
+  @@index([severity])
+  @@index([status])
+  @@map("ops_incidents_v2")
+}
+
+model PostMortem {
+  id              String   @id @default(uuid())
+  incidentId      String   @unique @map("incident_id")
+  createdBy       String   @map("created_by")
+  template        String   @default("blameless")
+  status          String   @default("draft")
+  sections        Json     @default("{}")
+  resolutionMs    Int?     @map("resolution_ms")
+  slaBreached     Boolean  @default(false) @map("sla_breached")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("post_mortems")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// NETWORK TOPOLOGY — Validator Nodes + Consensus
+// ═══════════════════════════════════════════════════════════════════
+
+model ValidatorNode {
+  id              String    @id @default(uuid())
+  nodeId          String    @unique @map("node_id")
+  name            String
+  nodeType        String    @default("validator") @map("node_type")
+  region          String
+  endpoint        String
+  operatorId      String    @map("operator_id")
+  apiKeyHash      String    @map("api_key_hash")
+  status          String    @default("pending")
+  trustScore      Float     @default(100) @map("trust_score")
+  reputation      Float     @default(1000)
+  capabilities    Json      @default("[]")
+  metadata        Json      @default("{}")
+  lastHeartbeat   DateTime? @map("last_heartbeat")
+  uptimePct       Float     @default(100) @map("uptime_pct")
+  avgResponseMs   Float     @default(0) @map("avg_response_ms")
+  totalRounds     Int       @default(0) @map("total_rounds")
+  successfulRounds Int      @default(0) @map("successful_rounds")
+  activatedAt     DateTime? @map("activated_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([status])
+  @@index([region])
+  @@index([nodeType])
+  @@map("validator_nodes")
+}
+
+model ConsensusRound {
+  id                String   @id @default(uuid())
+  roundId           String   @unique @map("round_id")
+  productId         String?  @map("product_id")
+  verificationType  String   @map("verification_type")
+  initiator         String
+  validatorCount    Int      @map("validator_count")
+  quorumNeeded      Int      @map("quorum_needed")
+  approvals         Int      @default(0)
+  rejections        Int      @default(0)
+  consensusReached  Boolean  @default(false) @map("consensus_reached")
+  result            String   @default("PENDING")
+  votes             Json     @default("[]")
+  durationMs        Int?     @map("duration_ms")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([result])
+  @@map("consensus_rounds")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FEE DISTRIBUTION — Validator Rewards + Partner Revenue
+// ═══════════════════════════════════════════════════════════════════
+
+model FeeDistribution {
+  id            String   @id @default(uuid())
+  type          String
+  totalRevenue  Float    @map("total_revenue")
+  pool          Float
+  entityCount   Int      @map("entity_count")
+  distributions Json     @default("[]")
+  period        String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([period])
+  @@map("fee_distributions")
+}
+
+model PartnerRevenue {
+  id                String   @id @default(uuid())
+  partnerId         String   @map("partner_id")
+  tier              String   @default("bronze")
+  referralVolume    Int      @default(0) @map("referral_volume")
+  transactionRev    Float    @map("transaction_revenue")
+  baseShare         Float    @map("base_share")
+  bonus             Float    @default(0)
+  totalPayout       Float    @map("total_payout")
+  status            String   @default("pending")
+  processedAt       DateTime? @map("processed_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([partnerId])
+  @@index([tier])
+  @@map("partner_revenues")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CIE v2.0 — Carbon Integrity Engine
+// ═══════════════════════════════════════════════════════════════════
+
+model CiePassport {
+  id              String    @id @default(uuid())
+  cipId           String    @unique @map("cip_id")
+  tenantId        String    @map("tenant_id")
+  productName     String    @map("product_name")
+  batchId         String?   @map("batch_id")
+  scope1          Float     @default(0) @map("scope_1")
+  scope2          Float     @default(0) @map("scope_2")
+  scope3          Float     @default(0) @map("scope_3")
+  totalEmission   Float     @default(0) @map("total_emission")
+  unit            String    @default("kgCO2e")
+  benchmarkScore  Int       @default(0) @map("benchmark_score")
+  riskScore       Int       @default(0) @map("risk_score")
+  riskAction      String    @default("approved") @map("risk_action")
+  status          String    @default("draft")
+  methodology     String?
+  factorVersion   String?   @map("factor_version")
+  validatorId     String?   @map("validator_id")
+  anchorHash      String?   @map("anchor_hash")
+  sealedAt        DateTime? @map("sealed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @map("updated_at")
+
+  snapshot        CieSnapshot?
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("cie_passports")
+}
+
+model CieSnapshot {
+  id              String   @id @default(uuid())
+  cipId           String   @unique @map("cip_id")
+  tenantId        String   @map("tenant_id")
+  capsuleHash     String   @map("capsule_hash")
+  dataHash        String   @map("data_hash")
+  methodVersion   String?  @map("method_version")
+  methodHash      String?  @map("method_hash")
+  factorVersion   String?  @map("factor_version")
+  factorHash      String?  @map("factor_hash")
+  governanceChain String?  @map("governance_chain")
+  benchmarkRef    String?  @map("benchmark_ref")
+  scopeSnapshot   Json     @default("{}") @map("scope_snapshot")
+  riskThresholds  Json     @default("{}") @map("risk_thresholds")
+  storageClass    String   @default("WORM") @map("storage_class")
+  redundancy      String   @default("3-region")
+  integrity       String   @default("verified")
+  sealedAt        DateTime @default(now()) @map("sealed_at")
+
+  passport        CiePassport @relation(fields: [cipId], references: [cipId], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("cie_snapshots")
+}
+
+model CieAnchor {
+  id              String    @id @default(uuid())
+  tenantId        String    @map("tenant_id")
+  anchorType      String    @map("anchor_type")
+  targetId        String?   @map("target_id")
+  anchorHash      String    @map("anchor_hash")
+  payloadHash     String?   @map("payload_hash")
+  chain           String    @default("polygon")
+  blockNumber     String?   @map("block_number")
+  gasUsed         String?   @map("gas_used")
+  txHash          String?   @map("tx_hash")
+  status          String    @default("pending")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([targetId])
+  @@map("cie_anchors")
+}
+
+model CieTenantConfig {
+  tenantId        String   @id @map("tenant_id")
+  tier            String   @default("sme")
+  factorVersion   String   @default("EF-2024.12.01") @map("factor_version")
+  methodology     String   @default("GHG-v4.2-r3")
+  batchLimit      Int      @default(5000) @map("batch_limit")
+  modules         Json     @default("{}") 
+  riskThresholds  Json     @default("{}") @map("risk_thresholds")
+  mgbEnabled      Boolean  @default(false) @map("mgb_enabled")
+  rmeCountries    Json     @default("[\"EU\"]") @map("rme_countries")
+  snapshotEnabled Boolean  @default(true) @map("snapshot_enabled")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  @@map("cie_tenant_config")
+}
+

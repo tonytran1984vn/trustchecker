@@ -1,0 +1,27 @@
+{
+  "credits": [
+    {
+      "credit_id": "CC-VN-0C62EE43DE5E",
+      "project_id": "PJ-001",
+      "jurisdiction": "VN",
+      "tco2e": 100,
+      "methodology": "VCS",
+      "validator_1": "V1",
+      "validator_2": "V2",
+      "state": "S3_CREDIT_MINTED",
+      "version": 1,
+      "credit_hash": "2601b0ce70445561132d4d41162ca38a640ad759ae9432a00b51b210549e9f5f",
+      "mrv_hash": "pending",
+      "anchor_status": "pending",
+      "fee": {
+        "minting": 100,
+        "mrv": 50,
+        "anchor": 0.25
+      },
+      "minted_at": "2026-02-19T17:15:26.485Z"
+    }
+  ],
+  "transfers": [],
+  "retirements": [],
+  "saved_at": "2026-02-19T17:15:26.494Z"
+}

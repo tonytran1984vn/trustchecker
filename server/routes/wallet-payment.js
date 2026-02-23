@@ -8,7 +8,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const blockchainEngine = require('../engines/blockchain');
 
 router.use(authMiddleware);
@@ -271,7 +271,7 @@ router.post('/payment/refund', async (req, res) => {
 // ===========================================================
 
 // ─── GET /ipfs/stats — IPFS storage statistics ─────────────
-router.get('/ipfs/stats', requireRole('admin'), async (req, res) => {
+router.get('/ipfs/stats', requirePermission('wallet:manage'), async (req, res) => {
     try {
         // Simulate IPFS storage costs based on evidence and blockchain data
         const evidenceCount = (await db.get('SELECT COUNT(*) as c FROM evidence_items'))?.c || 0;

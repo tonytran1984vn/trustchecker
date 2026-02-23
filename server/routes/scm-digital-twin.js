@@ -5,7 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/engine-client');
 const { cacheMiddleware } = require('../cache');
 
@@ -74,7 +74,7 @@ router.get('/anomalies', cacheMiddleware(60), async (req, res) => {
 });
 
 // ─── POST /api/scm/twin/simulate — Run simulation scenario ──────────────────
-router.post('/simulate', requireRole('manager'), async (req, res) => {
+router.post('/simulate', requirePermission('digital_twin:simulate'), async (req, res) => {
     try {
         const scenario = req.body;
         if (!scenario.type) return res.status(400).json({ error: 'Scenario type required (node_offline, capacity_reduction)' });

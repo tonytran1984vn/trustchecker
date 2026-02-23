@@ -10,9 +10,9 @@ export function renderPage() {
   return `
     <div class="stats-grid">
       <div class="stat-card rose"><div class="stat-icon">⚡</div><div class="stat-value">${d.total || 0}</div><div class="stat-label">Total Anomalies</div></div>
-      <div class="stat-card amber"><div class="stat-icon">🔴</div><div class="stat-value">${d.by_severity?.critical || 0}</div><div class="stat-label">Critical</div></div>
-      <div class="stat-card violet"><div class="stat-icon">🟡</div><div class="stat-value">${d.by_severity?.high || 0}</div><div class="stat-label">High</div></div>
-      <div class="stat-card emerald"><div class="stat-icon">🟢</div><div class="stat-value">${d.by_severity?.medium || 0}</div><div class="stat-label">Medium</div></div>
+      <div class="stat-card amber"><div class="stat-icon"><span class="status-dot red"></span></div><div class="stat-value">${d.by_severity?.critical || 0}</div><div class="stat-label">Critical</div></div>
+      <div class="stat-card violet"><div class="stat-icon"><span class="status-dot amber"></span></div><div class="stat-value">${d.by_severity?.high || 0}</div><div class="stat-label">High</div></div>
+      <div class="stat-card emerald"><div class="stat-icon"><span class="status-dot green"></span></div><div class="stat-value">${d.by_severity?.medium || 0}</div><div class="stat-label">Medium</div></div>
     </div>
     <div class="card" style="margin-top:20px">
       <div class="card-header"><div class="card-title">⚡ Anomaly Detections</div></div>

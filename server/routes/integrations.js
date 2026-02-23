@@ -148,11 +148,15 @@ const INTEGRATION_SCHEMA = {
 module.exports = function (db) {
     // GET /api/integrations/schema — Return available integration categories
     router.get('/schema', async (req, res) => {
-        const schema = {};
-        for (const [cat, def] of Object.entries(INTEGRATION_SCHEMA)) {
-            schema[cat] = { ...def, settings: def.settings.map(s => ({ ...s })) };
-        }
-        res.json(schema);
+    try {
+            const schema = {};
+            for (const [cat, def] of Object.entries(INTEGRATION_SCHEMA)) {
+                schema[cat] = { ...def, settings: def.settings.map(s => ({ ...s })) };
+            }
+            res.json(schema);
+    } catch (e) {
+        safeError(res, 'Operation failed', e);
+    }
     });
 
     // GET /api/integrations — Get all settings (mask secrets)

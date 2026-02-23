@@ -32,8 +32,8 @@ export function renderLogin() {
           <button class="btn btn-primary" style="width:100%" onclick="doMfaVerify()">Verify MFA</button>
         ` : `
           <div class="input-group">
-            <label>Username</label>
-            <input type="text" id="login-user" class="input" placeholder="admin" autocomplete="username"
+            <label>Email</label>
+            <input type="email" id="login-user" class="input" placeholder="admin@company.com" autocomplete="email"
               onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
           </div>
           <div class="input-group">
@@ -53,12 +53,12 @@ export function renderLogin() {
 }
 
 export async function doLogin() {
-  const username = document.getElementById('login-user').value.trim();
+  const email = document.getElementById('login-user').value.trim();
   const password = document.getElementById('login-pass').value;
   const errEl = document.getElementById('login-error');
-  if (!username || !password) {
+  if (!email || !password) {
     errEl.style.display = 'block';
-    errEl.textContent = 'Please enter username and password';
+    errEl.textContent = 'Please enter email and password';
     return;
   }
 
@@ -67,12 +67,20 @@ export async function doLogin() {
   if (btn) { btn.classList.add('btn-loading'); btn.disabled = true; }
 
   try {
-    const res = await API.post('/auth/login', { username, password });
+    const res = await API.post('/auth/login', { email, password });
 
     if (res.mfa_required) {
       _mfaToken = res.mfa_token;
       render();
       setTimeout(() => document.getElementById('mfa-code')?.focus(), 100);
+      return;
+    }
+
+    // Force password change check
+    if (res.must_change_password) {
+      errEl.style.display = 'block';
+      errEl.textContent = '🔒 Password change required. Please contact your admin.';
+      if (btn) { btn.classList.remove('btn-loading'); btn.disabled = false; }
       return;
     }
 
@@ -86,7 +94,7 @@ export async function doLogin() {
 
     connectWS();
     navigate('dashboard');
-    showToast('✅ Welcome back, ' + escapeHTML(res.user.username), 'success');
+    showToast('✅ Welcome back, ' + escapeHTML(res.user.email), 'success');
   } catch (e) {
     errEl.style.display = 'block';
     errEl.textContent = e.message;
@@ -111,7 +119,7 @@ export async function doMfaVerify() {
 
     connectWS();
     navigate('dashboard');
-    showToast('✅ Welcome back, ' + escapeHTML(res.user.username) + ' (MFA verified)', 'success');
+    showToast('✅ Welcome back, ' + escapeHTML(res.user.email) + ' (MFA verified)', 'success');
   } catch (e) {
     errEl.style.display = 'block';
     errEl.textContent = e.message;

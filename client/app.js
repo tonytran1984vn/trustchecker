@@ -1,5 +1,5 @@
 /**
- * ⚠️  DEPRECATED — DO NOT USE OR MODIFY
+ * <span class="status-icon status-warn" aria-label="Warning">!</span>  DEPRECATED — DO NOT USE OR MODIFY
  * ══════════════════════════════════════════════════════════════
  * This monolithic file (3700+ lines) has been fully replaced by the
  * modular ES6 architecture loaded via main.js (see index.html line 33).
@@ -316,7 +316,7 @@ function showToast(msg, type = 'info') {
 function renderToasts() {
   let c = document.getElementById('toast-container');
   if (!c) { c = document.createElement('div'); c.id = 'toast-container'; c.className = 'toast-container'; document.body.appendChild(c); }
-  c.innerHTML = State.toasts.map(t => `<div class="toast ${escapeHTML(t.type)}">${escapeHTML(t.msg)}</div>`).join('');
+  c.innerHTML = State.toasts.map(t => `<div class="toast ${escapeHTML(t.type)}">${t.msg}</div>`).join('');
 }
 
 // ─── Notification Center ─────────────────────────────────────
@@ -591,9 +591,35 @@ async function loadPageData(page) {
         API.get('/billing/invoices'),
       ]);
       State.billingData = { plan: planRes.plan, available: planRes.available_plans, period: usageRes.period, usage: usageRes.usage, invoices: invoiceRes.invoices };
+      render();
     } else if (page === 'pricing') {
-      const pricingRes = await fetch(API.base + '/billing/pricing').then(r => r.json());
-      State.pricingData = pricingRes;
+      try {
+        const res = await fetch(API.base + '/billing/pricing');
+        if (res.ok) {
+          State.pricingData = await res.json();
+        } else {
+          throw new Error('HTTP ' + res.status);
+        }
+      } catch (e) {
+        console.warn('[app] Pricing fetch failed, using static fallback:', e.message);
+        State.pricingData = {
+          plans: {
+            free: { name: 'Free', slug: 'free', tagline: 'Get started with product verification', price_monthly: 0, price_annual: 0, limits: { scans: 500, api_calls: 1000, storage_mb: 100, nft_mints: 0, carbon_calcs: 0 }, features: ['Basic QR verification', 'Public trust check page'], sla: null, badge: null },
+            starter: { name: 'Starter', slug: 'starter', tagline: 'For growing brands building trust', price_monthly: 49, price_annual: 470, limits: { scans: 5000, api_calls: 10000, storage_mb: 1024, nft_mints: 10, carbon_calcs: 100 }, features: ['Everything in Free', 'Fraud detection alerts'], sla: '99%', badge: null },
+            pro: { name: 'Pro', slug: 'pro', tagline: 'Advanced trust infrastructure for scale', price_monthly: 199, price_annual: 1910, limits: { scans: 25000, api_calls: 100000, storage_mb: 10240, nft_mints: 100, carbon_calcs: 1000 }, features: ['Everything in Starter', 'AI anomaly detection'], sla: '99.5%', badge: 'POPULAR' },
+            business: { name: 'Business', slug: 'business', tagline: 'Full-stack trust for enterprise brands', price_monthly: 499, price_annual: 4790, limits: { scans: 100000, api_calls: 500000, storage_mb: 51200, nft_mints: 500, carbon_calcs: 5000 }, features: ['Everything in Pro', 'Digital twin simulation'], sla: '99.9%', badge: null },
+            enterprise: { name: 'Enterprise', slug: 'enterprise', tagline: 'Custom deployment with white-glove service', price_monthly: null, price_annual: null, limits: { scans: -1, api_calls: -1, storage_mb: -1, nft_mints: -1, carbon_calcs: -1 }, features: ['Everything in Business', 'On-premise deployment'], sla: '99.95%', badge: null },
+          },
+          usage_pricing: {
+            scans: { name: 'QR Scans', unit: 'scan', tiers: [{ up_to: 1000, price: 0.05 }, { up_to: 10000, price: 0.03 }, { up_to: 50000, price: 0.02 }, { up_to: null, price: 0.01 }] },
+            nft_mints: { name: 'NFT Certificate Mints', unit: 'mint', tiers: [{ up_to: 50, price: 2.00 }, { up_to: 200, price: 1.50 }, { up_to: null, price: 0.50 }] },
+            carbon_calcs: { name: 'Carbon Calculations', unit: 'calculation', tiers: [{ up_to: null, price: 0.01 }], bundle: { size: 1000, price: 10.00 } },
+            api_calls: { name: 'API Calls', unit: 'call', tiers: [{ up_to: null, price: 0.001 }] },
+          },
+          currency: 'USD', annual_discount_percent: 20, free_trial_days: 14,
+        };
+      }
+      render();
     } else if (page === 'public-dashboard') {
       const [stats, trends, trustDist, scanResults, alertSev] = await Promise.all([
         fetch('/api/public/stats').then(r => r.json()),
@@ -707,7 +733,7 @@ function scoreColor(s) {
 
 function eventIcon(type) {
   const icons = {
-    'QRScanned': '📱', 'QRValidated': '✅', 'QRInvalid': '❌',
+    'QRScanned': '📱', 'QRValidated': '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>', 'QRInvalid': '<span class="status-icon status-fail" aria-label="Fail">✗</span>',
     'FraudFlagged': '🚨', 'FraudResolved': '✔️', 'TrustScoreUpdated': '📊',
     'ProductRegistered': '📦', 'BlockchainSealed': '🔗', 'UserLogin': '👤',
     'CONNECTED': '🔌', 'SystemAlert': '⚡'
@@ -757,7 +783,7 @@ function renderLogin() {
             <input class="input mfa-code-input" id="mfa-code" type="text" maxlength="6" placeholder="000000" autocomplete="one-time-code" autofocus
               oninput="if(this.value.length===6) doMfaVerify()" onkeydown="if(event.key==='Enter') doMfaVerify()">
           </div>
-          <button class="btn btn-primary" style="width:100%;padding:12px;margin-top:8px" onclick="doMfaVerify()">✅ Verify</button>
+          <button class="btn btn-primary" style="width:100%;padding:12px;margin-top:8px" onclick="doMfaVerify()"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Verify</button>
           <button class="btn btn-sm" style="width:100%;margin-top:8px;opacity:0.7" onclick="_mfaToken=null;render()">← Back to Login</button>
         </div>
       </div>
@@ -772,33 +798,40 @@ function renderLogin() {
         <div class="login-subtitle">Digital Trust Infrastructure v9.0.0</div>
         <div id="login-error" class="login-error" style="display:none"></div>
         <div class="input-group">
-          <label>Username</label>
-          <input class="input" id="login-user" type="text" placeholder="Enter username" value="admin">
+          <label>Email</label>
+          <input class="input" id="login-user" type="email" placeholder="admin@company.com" autocomplete="email">
         </div>
         <div class="input-group">
           <label>Password</label>
-          <input class="input" id="login-pass" type="password" placeholder="Enter password" value="admin123"
+          <input class="input" id="login-pass" type="password" placeholder="Enter password"
             onkeydown="if(event.key==='Enter') doLogin()">
         </div>
         <button class="btn btn-primary" style="width:100%;padding:12px;margin-top:8px" onclick="doLogin()">🔐 Sign In</button>
-        <div style="margin-top:16px;font-size:0.7rem;color:var(--text-muted)">Demo: admin / admin123</div>
+        <div style="margin-top:16px;font-size:0.7rem;color:var(--text-muted)">Enterprise Identity System</div>
       </div>
     </div>
   `;
 }
 
 async function doLogin() {
-  const username = document.getElementById('login-user').value;
+  const email = document.getElementById('login-user').value;
   const password = document.getElementById('login-pass').value;
   const errEl = document.getElementById('login-error');
   try {
-    const res = await API.post('/auth/login', { username, password });
+    const res = await API.post('/auth/login', { email, password });
 
     // MFA required — show code input
     if (res.mfa_required) {
       _mfaToken = res.mfa_token;
       render();
       setTimeout(() => document.getElementById('mfa-code')?.focus(), 100);
+      return;
+    }
+
+    // Force password change
+    if (res.must_change_password) {
+      errEl.style.display = 'block';
+      errEl.textContent = '🔒 Password change required. Please contact your admin.';
       return;
     }
 
@@ -812,7 +845,7 @@ async function doLogin() {
 
     connectWS();
     navigate('dashboard');
-    showToast('✅ Welcome back, ' + res.user.username, 'success');
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Welcome back, ' + escapeHTML(res.user.email), 'success');
   } catch (e) {
     errEl.style.display = 'block';
     errEl.textContent = e.message;
@@ -831,7 +864,7 @@ async function doMfaVerify() {
     localStorage.setItem('tc_user', JSON.stringify(res.user));
     connectWS();
     navigate('dashboard');
-    showToast('✅ Welcome back, ' + res.user.username + ' (MFA verified)', 'success');
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Welcome back, ' + escapeHTML(res.user.email) + ' (MFA verified)', 'success');
   } catch (e) {
     errEl.style.display = 'block';
     errEl.textContent = e.message;
@@ -913,7 +946,113 @@ function renderNavItem(n) {
 }
 
 function renderSidebar() {
-  const navItems = [
+
+  // ── Role-Based Sidebar Configuration (v2.0) ──────────────────────
+  // Each role maps to an array of page IDs they can see in the sidebar
+  const ROLE_SIDEBAR_CONFIG = {
+    // L5: Platform
+    super_admin: '*', // sees everything
+    platform_security: [
+      'dashboard', 'fraud', 'kyc', 'evidence',
+      'scm-leaks', 'scm-trustgraph',
+      'compliance', 'anomaly', 'reports',
+    ],
+    data_gov_officer: [
+      'dashboard',
+      'sustainability', 'compliance', 'reports',
+      'scm-carbon',
+    ],
+    // L4: Global Governance
+    ggc_member: [
+      'dashboard', 'scm-trustgraph',
+      'sustainability', 'compliance', 'reports',
+    ],
+    risk_committee: [
+      'dashboard', 'fraud', 'kyc', 'evidence',
+      'scm-trustgraph', 'scm-risk-radar',
+      'scm-ai',
+      'compliance', 'anomaly', 'reports',
+    ],
+    compliance_officer: [
+      'dashboard', 'evidence',
+      'scm-carbon',
+      'sustainability', 'compliance', 'anomaly', 'reports',
+    ],
+    ivu_validator: [
+      'dashboard',
+      'scm-trustgraph', 'scm-risk-radar',
+      'scm-ai',
+      'compliance', 'anomaly', 'reports',
+    ],
+    // L3: Tenant Governance
+    admin: '*', // company admin sees everything within tenant
+    executive: [
+      'dashboard', 'stakeholder',
+      'scm-dashboard',
+      'scm-risk-radar',
+      'sustainability', 'compliance', 'reports',
+    ],
+    carbon_officer: [
+      'dashboard',
+      'scm-carbon',
+      'sustainability', 'reports',
+    ],
+    // L2: Operational
+    ops_manager: [
+      'dashboard', 'scanner', 'products', 'scans', 'fraud', 'blockchain', 'kyc', 'evidence', 'stakeholder',
+      'scm-dashboard', 'scm-inventory', 'scm-logistics', 'scm-partners', 'scm-leaks', 'scm-trustgraph',
+      'scm-epcis', 'scm-ai', 'scm-risk-radar', 'scm-carbon', 'scm-twin',
+      'sustainability', 'compliance', 'anomaly', 'reports',
+      'nft', 'wallet', 'branding',
+    ],
+    risk_officer: [
+      'dashboard', 'fraud', 'kyc', 'evidence',
+      'scm-leaks', 'scm-trustgraph',
+      'scm-ai', 'scm-risk-radar',
+      'compliance', 'anomaly', 'reports',
+    ],
+    scm_analyst: [
+      'dashboard', 'products', 'stakeholder',
+      'scm-dashboard', 'scm-inventory', 'scm-logistics', 'scm-partners', 'scm-leaks', 'scm-trustgraph',
+      'scm-epcis', 'scm-ai', 'scm-risk-radar', 'scm-carbon', 'scm-twin',
+      'sustainability', 'reports',
+    ],
+    // L1: Technical Execution
+    developer: [
+      'dashboard', 'blockchain',
+      'scm-epcis',
+      'reports',
+    ],
+    blockchain_operator: [
+      'dashboard', 'blockchain',
+      'scm-carbon',
+      'nft',
+    ],
+    operator: [
+      'dashboard', 'scanner', 'products', 'scans', 'evidence',
+      'scm-dashboard', 'scm-inventory', 'scm-logistics',
+      'reports',
+    ],
+    auditor: [
+      'dashboard',
+      'compliance', 'reports',
+    ],
+    viewer: [
+      'dashboard', 'products', 'scans',
+      'reports',
+    ],
+  };
+
+  // Get allowed pages for current role
+  const role = State.user?.role || 'viewer';
+  const allowedPages = ROLE_SIDEBAR_CONFIG[role] || ROLE_SIDEBAR_CONFIG.viewer;
+  const isFullAccess = allowedPages === '*';
+  const allowedSet = isFullAccess ? null : new Set(allowedPages);
+
+  // Filter helper — show item only if role has access
+  const filterItems = (items) => isFullAccess ? items : items.filter(n => allowedSet.has(n.id));
+
+  const navItems = filterItems([
     { id: 'dashboard', icon: _i('dashboard'), label: 'Dashboard' },
     { id: 'scanner', icon: _i('scanner'), label: 'QR Scanner' },
     { id: 'products', icon: _i('products'), label: 'Products' },
@@ -923,37 +1062,37 @@ function renderSidebar() {
     { id: 'kyc', icon: _i('building'), label: 'KYC Business' },
     { id: 'evidence', icon: _i('lock'), label: 'Evidence Vault' },
     { id: 'stakeholder', icon: _i('star'), label: 'Trust & Ratings' },
-  ];
+  ]);
 
-  const scmItems = [
+  const scmItems = filterItems([
     { id: 'scm-dashboard', icon: _i('factory'), label: 'Supply Chain' },
     { id: 'scm-inventory', icon: _i('clipboard'), label: 'Inventory' },
     { id: 'scm-logistics', icon: _i('truck'), label: 'Logistics' },
     { id: 'scm-partners', icon: _i('handshake'), label: 'Partners' },
     { id: 'scm-leaks', icon: _i('search'), label: 'Leak Monitor' },
     { id: 'scm-trustgraph', icon: _i('network'), label: 'TrustGraph' },
-  ];
+  ]);
 
-  const scmIntelItems = [
+  const scmIntelItems = filterItems([
     { id: 'scm-epcis', icon: _i('satellite'), label: 'EPCIS 2.0' },
     { id: 'scm-ai', icon: _i('brain'), label: 'AI Analytics' },
     { id: 'scm-risk-radar', icon: _i('target'), label: 'Risk Radar' },
     { id: 'scm-carbon', icon: _i('leaf'), label: 'Carbon / ESG' },
     { id: 'scm-twin', icon: _i('mirror'), label: 'Digital Twin' },
-  ];
+  ]);
 
-  const complianceItems = [
+  const complianceItems = filterItems([
     { id: 'sustainability', icon: _i('recycle'), label: 'Sustainability' },
     { id: 'compliance', icon: _i('scroll'), label: 'GDPR Compliance' },
     { id: 'anomaly', icon: _i('zap'), label: 'Anomaly Monitor' },
     { id: 'reports', icon: _i('barChart'), label: 'Reports' },
-  ];
+  ]);
 
-  const commerceItems = [
+  const commerceItems = filterItems([
     { id: 'nft', icon: _i('palette'), label: 'NFT Certificates' },
     { id: 'wallet', icon: _i('wallet'), label: 'Wallet / Payment' },
     { id: 'branding', icon: _i('palette'), label: 'White-Label' },
-  ];
+  ]);
 
   // Org + plan info for sidebar
   const orgName = State.org?.name || '';
@@ -976,57 +1115,60 @@ function renderSidebar() {
         </div>` : ''}
       </div>
       <div class="sidebar-nav">
-        <div class="nav-section">
+        ${navItems.length ? `<div class="nav-section">
           <div class="nav-section-label">Main</div>
           ${navItems.map(n => renderNavItem(n)).join('')}
-        </div>
-        <div class="nav-section">
+        </div>` : ''}
+        ${scmItems.length ? `<div class="nav-section">
           <div class="nav-section-label">Supply Chain</div>
           ${scmItems.map(n => renderNavItem(n)).join('')}
-        </div>
-        <div class="nav-section">
+        </div>` : ''}
+        ${scmIntelItems.length ? `<div class="nav-section">
           <div class="nav-section-label">SCM Intelligence</div>
           ${scmIntelItems.map(n => renderNavItem(n)).join('')}
-        </div>
-        <div class="nav-section">
+        </div>` : ''}
+        ${complianceItems.length ? `<div class="nav-section">
           <div class="nav-section-label">Compliance & Reports</div>
           ${complianceItems.map(n => renderNavItem(n)).join('')}
-        </div>
-        <div class="nav-section">
+        </div>` : ''}
+        ${commerceItems.length ? `<div class="nav-section">
           <div class="nav-section-label">Commerce</div>
           ${commerceItems.map(n => renderNavItem(n)).join('')}
-        </div>
-        <div class="nav-section">
+        </div>` : ''}
+        ${isFullAccess || ['ops_manager', 'executive', 'developer'].includes(role) ? `<div class="nav-section">
           <div class="nav-section-label">System</div>
+          ${isFullAccess || role === 'ops_manager' ? `
           <div class="nav-item ${State.page === 'events' ? 'active' : ''}" onclick="navigate('events')">
             <span class="nav-icon">${_i('radio')}</span><span>Event Stream</span>
-          </div>
+          </div>` : ''}
           <div class="nav-item ${State.page === 'billing' ? 'active' : ''}" onclick="navigate('billing')">
             <span class="nav-icon">${_i('creditCard')}</span><span>Billing</span>
           </div>
           <div class="nav-item ${State.page === 'pricing' ? 'active' : ''}" onclick="navigate('pricing')">
             <span class="nav-icon">${_i('tag')}</span><span>Pricing</span>
           </div>
+          ${isFullAccess ? `
           <div class="nav-item ${State.page === 'public-dashboard' ? 'active' : ''}" onclick="navigate('public-dashboard')">
             <span class="nav-icon">${_i('globe')}</span><span>Public Insights</span>
-          </div>
+          </div>` : ''}
+          ${isFullAccess || role === 'developer' ? `
           <div class="nav-item ${State.page === 'api-docs' ? 'active' : ''}" onclick="navigate('api-docs')">
             <span class="nav-icon">${_i('book')}</span><span>API Docs</span>
-          </div>
+          </div>` : ''}
           <div class="nav-item ${State.page === 'settings' ? 'active' : ''}" onclick="navigate('settings')">
             <span class="nav-icon">${_i('settings')}</span><span>Settings</span>
           </div>
-          ${State.user?.role === 'admin' ? `
+          ${role === 'admin' || role === 'super_admin' ? `
           <div class="nav-item ${State.page === 'admin-users' ? 'active' : ''}" onclick="navigate('admin-users')">
             <span class="nav-icon">${_i('users')}</span><span>User Management</span>
           </div>
           ${renderNavItem({ id: 'integrations', icon: _i('plug'), label: 'Integrations' })}` : ''}
-        </div>
+        </div>` : ''}
       </div>
       <div class="sidebar-footer">
-        <div class="user-avatar role-${State.user?.role || 'operator'}">${(State.user?.username || 'U')[0].toUpperCase()}</div>
+        <div class="user-avatar role-${State.user?.role || 'operator'}">${(State.user?.email || 'U')[0].toUpperCase()}</div>
         <div class="user-info">
-          <div class="user-name">${State.user?.username || 'User'}</div>
+          <div class="user-name">${State.user?.email || 'User'}</div>
           <div class="user-role"><span class="role-badge role-${State.user?.role || 'operator'}">${State.user?.role || 'operator'}</span></div>
         </div>
         <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${_i('logout', 18)}</button>
@@ -1220,7 +1362,7 @@ function renderDashboard() {
         <div style="position:relative;height:260px;padding:10px"><canvas id="scanDoughnutChart"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-header"><div class="card-title">⚠️ Alert Severity</div></div>
+        <div class="card-header"><div class="card-title"><span class="status-icon status-warn" aria-label="Warning">!</span> Alert Severity</div></div>
         <div style="position:relative;height:260px;padding:10px"><canvas id="alertPolarChart"></canvas></div>
       </div>
     </div>
@@ -1287,7 +1429,7 @@ function renderScanDistribution(data) {
 }
 
 function renderAlertSeverity(data) {
-  if (!data || !data.length) return '<div class="empty-state"><div class="empty-text">No alerts — system clean 🟢</div></div>';
+  if (!data || !data.length) return '<div class="empty-state"><div class="empty-text">No alerts — system clean <span class="status-dot green"></span></div></div>';
   const colors = { critical: 'var(--rose)', high: 'var(--amber)', medium: 'var(--violet)', low: 'var(--cyan)' };
   const total = data.reduce((s, d) => s + d.count, 0);
   return `<div style="display:flex;flex-direction:column;gap:10px">${data.map(d => `
@@ -1430,7 +1572,7 @@ function renderScanResult(r) {
     <div style="margin-top:16px">
       <div style="font-weight:700;margin-bottom:8px">🔗 Blockchain Seal</div>
       <div style="font-size:0.75rem;color:var(--text-secondary)">
-        <span class="badge sealed">✓ Sealed</span> Block #${r.blockchain?.block_index || '—'}<br>
+        <span class="badge sealed"><span class="status-icon status-pass" aria-label="Pass">✓</span> Sealed</span> Block #${r.blockchain?.block_index || '—'}<br>
         <span style="font-family:'JetBrains Mono';font-size:0.68rem;color:var(--text-muted)">Hash: ${shortHash(r.blockchain?.data_hash)}</span>
       </div>
     </div>
@@ -1501,7 +1643,7 @@ async function addProduct() {
       origin_country: document.getElementById('np-origin').value
     });
     State.modal = null;
-    showToast('✅ Product registered! QR code generated.', 'success');
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Product registered! QR code generated.', 'success');
     navigate('products');
   } catch (e) {
     showToast('Failed: ' + e.message, 'error');
@@ -1524,7 +1666,7 @@ async function showProductDetail(id) {
           <div><span style="color:var(--text-muted)">Origin:</span> ${p.origin_country || '—'}</div>
           <div><span style="color:var(--text-muted)">Trust Score:</span> <span style="font-weight:800;color:${scoreColor(p.trust_score)}">${Math.round(p.trust_score)}</span></div>
         </div>
-        ${qr?.qr_image_base64 ? `<div style="text-align:center;margin:16px 0"><img src="${qr.qr_image_base64}" style="width:180px;border-radius:12px;border:2px solid var(--border)"></div>` : ''}
+        ${qr?.qr_image_base64 ? `<div style="text-align:center;margin:16px 0"><img src="${qr.qr_image_base64}" alt="Product QR code" style="width:180px;border-radius:12px;border:2px solid var(--border)"></div>` : ''}
         ${qr ? `<div style="font-size:0.7rem;font-family:'JetBrains Mono';color:var(--text-muted);text-align:center;word-break:break-all">${qr.qr_data}</div>` : ''}
         <button class="btn" onclick="State.modal=null;render()" style="margin-top:16px;width:100%">Close</button>
       </div>
@@ -1578,10 +1720,10 @@ function renderScans() {
 function renderFraud() {
   return `
     <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
-      <div class="stat-card rose"><div class="stat-icon">🔴</div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'critical').length}</div><div class="stat-label">Critical</div></div>
-      <div class="stat-card amber"><div class="stat-icon">🟡</div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'high').length}</div><div class="stat-label">High</div></div>
+      <div class="stat-card rose"><div class="stat-icon"><span class="status-dot red"></span></div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'critical').length}</div><div class="stat-label">Critical</div></div>
+      <div class="stat-card amber"><div class="stat-icon"><span class="status-dot amber"></span></div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'high').length}</div><div class="stat-label">High</div></div>
       <div class="stat-card violet"><div class="stat-icon">🟣</div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'medium').length}</div><div class="stat-label">Medium</div></div>
-      <div class="stat-card cyan"><div class="stat-icon">🔵</div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'low').length}</div><div class="stat-label">Low</div></div>
+      <div class="stat-card cyan"><div class="stat-icon"><span class="status-dot blue"></span></div><div class="stat-value">${State.fraudAlerts.filter(a => a.severity === 'low').length}</div><div class="stat-label">Low</div></div>
     </div>
     <div class="card">
       <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
@@ -1602,7 +1744,7 @@ function renderFraud() {
           `).join('')}
         </table>
       </div>
-      ${!State.fraudAlerts.length ? '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">No active fraud alerts</div></div>' : ''}
+      ${!State.fraudAlerts.length ? '<div class="empty-state"><div class="empty-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div><div class="empty-text">No active fraud alerts</div></div>' : ''}
     </div>
   `;
 }
@@ -1622,7 +1764,7 @@ function renderBlockchain() {
         <div class="stat-label">Total Blocks</div>
       </div>
       <div class="stat-card ${b.stats?.chain_integrity?.valid ? 'emerald' : 'rose'}">
-        <div class="stat-icon">${b.stats?.chain_integrity?.valid ? '✅' : '❌'}</div>
+        <div class="stat-icon">${b.stats?.chain_integrity?.valid ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>' : '<span class="status-icon status-fail" aria-label="Fail">✗</span>'}</div>
         <div class="stat-value">${b.stats?.chain_integrity?.valid ? 'VALID' : 'BROKEN'}</div>
         <div class="stat-label">Chain Integrity</div>
       </div>
@@ -1697,7 +1839,7 @@ function renderSCMDashboard() {
       <div class="stat-card emerald"><div class="stat-icon">🤝</div><div class="stat-value">${d.total_partners}</div><div class="stat-label">Partners</div></div>
       <div class="stat-card amber"><div class="stat-icon">🚚</div><div class="stat-value">${d.active_shipments}</div><div class="stat-label">Active Shipments</div></div>
       <div class="stat-card ${d.open_leaks > 0 ? 'rose' : 'emerald'}"><div class="stat-icon">🔍</div><div class="stat-value">${d.open_leaks}</div><div class="stat-label">Open Leaks</div></div>
-      <div class="stat-card ${d.sla_violations > 0 ? 'amber' : 'emerald'}"><div class="stat-icon">⚠️</div><div class="stat-value">${d.sla_violations}</div><div class="stat-label">SLA Violations</div></div>
+      <div class="stat-card ${d.sla_violations > 0 ? 'amber' : 'emerald'}"><div class="stat-icon"><span class="status-icon status-warn" aria-label="Warning">!</span></div><div class="stat-value">${d.sla_violations}</div><div class="stat-label">SLA Violations</div></div>
     </div>
 
     <div class="grid-2">
@@ -1741,7 +1883,7 @@ function renderSCMDashboard() {
           <div class="scm-health-label">Total Shipments</div>
         </div>
         <div class="scm-health-item">
-          <div class="scm-health-value" style="color:${d.open_leaks > 5 ? 'var(--rose)' : 'var(--emerald)'}">${d.open_leaks > 0 ? '⚠' : '✅'}</div>
+          <div class="scm-health-value" style="color:${d.open_leaks > 5 ? 'var(--rose)' : 'var(--emerald)'}">${d.open_leaks > 0 ? '<span class="status-icon status-warn" aria-label="Warning">!</span>' : '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>'}</div>
           <div class="scm-health-label">${d.open_leaks > 0 ? 'Leaks Detected' : 'No Leaks'}</div>
         </div>
       </div>
@@ -1762,7 +1904,7 @@ function renderSCMInventory() {
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
       <div class="stat-card cyan"><div class="stat-icon">📋</div><div class="stat-value">${items.length}</div><div class="stat-label">Inventory Records</div></div>
       <div class="stat-card emerald"><div class="stat-icon">📦</div><div class="stat-value">${items.reduce((s, i) => s + i.quantity, 0)}</div><div class="stat-label">Total Units</div></div>
-      <div class="stat-card ${fc?.alert ? 'amber' : 'emerald'}"><div class="stat-icon">${fc?.alert ? '⚠️' : '📈'}</div><div class="stat-value">${fc?.trend || 'stable'}</div><div class="stat-label">Forecast Trend</div></div>
+      <div class="stat-card ${fc?.alert ? 'amber' : 'emerald'}"><div class="stat-icon">${fc?.alert ? '<span class="status-icon status-warn" aria-label="Warning">!</span>' : '📈'}</div><div class="stat-value">${fc?.trend || 'stable'}</div><div class="stat-label">Forecast Trend</div></div>
     </div>
 
     <div class="grid-2">
@@ -1795,7 +1937,7 @@ function renderSCMInventory() {
               <span>Trend: <strong style="color:var(--cyan)">${fc.trend}</strong></span>
               <span>Confidence: <strong>${Math.round((fc.confidence || 0) * 100)}%</strong></span>
             </div>
-            ${fc.alert ? `<div class="forecast-alert">⚠️ ${fc.alert.message} (${fc.alert.severity})</div>` : ''}
+            ${fc.alert ? `<div class="forecast-alert"><span class="status-icon status-warn" aria-label="Warning">!</span> ${fc.alert.message} (${fc.alert.severity})</div>` : ''}
           </div>
           <div style="display:flex;flex-direction:column;gap:6px">
             ${(fc.forecast || []).map(f => `
@@ -1825,9 +1967,9 @@ function renderSCMLogistics() {
   return `
     <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="stat-card cyan"><div class="stat-icon">🚚</div><div class="stat-value">${list.length}</div><div class="stat-label">Shipments</div></div>
-      <div class="stat-card emerald"><div class="stat-icon">✅</div><div class="stat-value">${list.filter(s => s.status === 'delivered').length}</div><div class="stat-label">Delivered</div></div>
+      <div class="stat-card emerald"><div class="stat-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div><div class="stat-value">${list.filter(s => s.status === 'delivered').length}</div><div class="stat-label">Delivered</div></div>
       <div class="stat-card amber"><div class="stat-icon">🚛</div><div class="stat-value">${list.filter(s => s.status === 'in_transit').length}</div><div class="stat-label">In Transit</div></div>
-      <div class="stat-card ${violations.length > 0 ? 'rose' : 'emerald'}"><div class="stat-icon">⚠️</div><div class="stat-value">${violations.length}</div><div class="stat-label">SLA Breaches</div></div>
+      <div class="stat-card ${violations.length > 0 ? 'rose' : 'emerald'}"><div class="stat-icon"><span class="status-icon status-warn" aria-label="Warning">!</span></div><div class="stat-value">${violations.length}</div><div class="stat-label">SLA Breaches</div></div>
     </div>
 
     <div class="card" style="margin-bottom:20px">
@@ -1851,7 +1993,7 @@ function renderSCMLogistics() {
 
     <div class="grid-2">
       <div class="card">
-        <div class="card-header"><div class="card-title">⚠️ SLA Violations</div></div>
+        <div class="card-header"><div class="card-title"><span class="status-icon status-warn" aria-label="Warning">!</span> SLA Violations</div></div>
         ${violations.length ? `
           <div class="table-container">
             <table>
@@ -1867,7 +2009,7 @@ function renderSCMLogistics() {
               `).join('')}
             </table>
           </div>
-        ` : '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">No SLA violations</div></div>'}
+        ` : '<div class="empty-state"><div class="empty-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div><div class="empty-text">No SLA violations</div></div>'}
       </div>
 
       <div class="card">
@@ -1918,7 +2060,7 @@ function renderSCMPartners() {
               <div class="partner-name">${p.name}</div>
               <div class="partner-type">${p.type} • ${p.country || '—'}</div>
             </div>
-            <span class="badge ${p.kyc_status === 'verified' ? 'valid' : p.kyc_status === 'pending' ? 'warning' : 'suspicious'}">${p.kyc_status === 'verified' ? '✅ KYC' : p.kyc_status === 'pending' ? '⏳ Pending' : '❌ Failed'}</span>
+            <span class="badge ${p.kyc_status === 'verified' ? 'valid' : p.kyc_status === 'pending' ? 'warning' : 'suspicious'}">${p.kyc_status === 'verified' ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> KYC' : p.kyc_status === 'pending' ? '⏳ Pending' : '<span class="status-icon status-fail" aria-label="Fail">✗</span> Failed'}</span>
           </div>
           <div class="partner-meta">
             <div class="partner-trust">
@@ -1976,7 +2118,7 @@ async function verifyPartner(id) {
 async function syncConnectors() {
   try {
     const res = await API.post('/scm/partners/connectors/sync', { connector_type: 'SAP' });
-    showToast(`✅ Synced ${res.total_synced} records (${res.total_errors} errors) — Health: ${res.health}`, 'success');
+    showToast(`<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Synced ${res.total_synced} records (${res.total_errors} errors) — Health: ${res.health}`, 'success');
   } catch (e) { showToast('Sync failed: ' + e.message, 'error'); }
 }
 
@@ -2013,7 +2155,7 @@ function renderSCMLeaks() {
   return `
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
       <div class="stat-card rose"><div class="stat-icon">🔍</div><div class="stat-value">${stats.open}</div><div class="stat-label">Open Leaks</div></div>
-      <div class="stat-card emerald"><div class="stat-icon">✅</div><div class="stat-value">${stats.resolved}</div><div class="stat-label">Resolved</div></div>
+      <div class="stat-card emerald"><div class="stat-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div><div class="stat-value">${stats.resolved}</div><div class="stat-label">Resolved</div></div>
       <div class="stat-card cyan"><div class="stat-icon">📊</div><div class="stat-value">${stats.total}</div><div class="stat-label">Total Alerts</div></div>
     </div>
 
@@ -2097,7 +2239,7 @@ function renderSCMTrustGraph() {
     <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="stat-card cyan"><div class="stat-icon">🕸️</div><div class="stat-value">${g.total_nodes}</div><div class="stat-label">Nodes</div></div>
       <div class="stat-card violet"><div class="stat-icon">🔗</div><div class="stat-value">${g.total_edges}</div><div class="stat-label">Edges</div></div>
-      <div class="stat-card ${g.network_health === 'healthy' ? 'emerald' : 'rose'}"><div class="stat-icon">${g.network_health === 'healthy' ? '✅' : '⚠️'}</div><div class="stat-value">${g.network_health}</div><div class="stat-label">Network Health</div></div>
+      <div class="stat-card ${g.network_health === 'healthy' ? 'emerald' : 'rose'}"><div class="stat-icon">${g.network_health === 'healthy' ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>' : '<span class="status-icon status-warn" aria-label="Warning">!</span>'}</div><div class="stat-value">${g.network_health}</div><div class="stat-label">Network Health</div></div>
       <div class="stat-card ${toxic.length > 0 ? 'rose' : 'emerald'}"><div class="stat-icon">☠️</div><div class="stat-value">${g.toxic_count}</div><div class="stat-label">Toxic Nodes</div></div>
     </div>
 
@@ -2174,8 +2316,8 @@ function renderKYC() {
               <td style="text-align:center;color:${b.pending_sanctions > 0 ? 'var(--rose)' : 'var(--text-muted)'}">${b.pending_sanctions || 0}</td>
               <td>
                 ${b.verification_status === 'pending' ? `
-                  <button class="btn btn-sm" onclick="kycApprove('${b.id}')">✅ Approve</button>
-                  <button class="btn btn-sm" onclick="kycReject('${b.id}')" style="margin-left:4px">❌ Reject</button>
+                  <button class="btn btn-sm" onclick="kycApprove('${b.id}')"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Approve</button>
+                  <button class="btn btn-sm" onclick="kycReject('${b.id}')" style="margin-left:4px"><span class="status-icon status-fail" aria-label="Fail">✗</span> Reject</button>
                 ` : '—'}
               </td>
             </tr>
@@ -2240,7 +2382,7 @@ async function kycReject(id) {
 async function kycSanctionCheck(id) {
   try {
     const res = await API.post('/kyc/sanction-check', { business_id: id });
-    showToast(res.clean ? 'No sanctions found ✅' : `⚠️ ${res.hits.length} sanction hit(s)`, res.clean ? 'success' : 'warning');
+    showToast(res.clean ? 'No sanctions found <span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>' : `<span class="status-icon status-warn" aria-label="Warning">!</span> ${res.hits.length} sanction hit(s)`, res.clean ? 'success' : 'warning');
     navigate('kyc');
   } catch (e) { showToast('Sanction check failed', 'error'); }
 }
@@ -2647,7 +2789,7 @@ function renderPricingPage() {
                 <div style="font-size:0.72rem">
                   ${up.tiers.map(t => `
                     <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-                      <span style="color:var(--text-muted)">${t.up_to === Infinity ? 'Volume' : 'First ' + t.up_to.toLocaleString()}</span>
+                      <span style="color:var(--text-muted)">${(t.up_to == null || t.up_to === Infinity) ? 'Volume' : 'First ' + t.up_to.toLocaleString()}</span>
                       <span style="font-weight:700;color:var(--emerald)">$${t.price}/${up.unit}</span>
                     </div>
                   `).join('')}
@@ -2671,22 +2813,22 @@ function renderPricingPage() {
             ${[
       ['SLA Guarantee', ...planOrder.map(s => plans[s]?.sla || '—')],
       ['Support Level', 'Community', 'Email', 'Priority', 'Dedicated', 'Dedicated+Slack'],
-      ['Fraud Detection', '—', '✓', '✓', '✓', '✓'],
-      ['AI Anomaly Detection', '—', '—', '✓', '✓', '✓'],
-      ['Digital Twin', '—', '—', '—', '✓', '✓'],
-      ['Carbon Tracking', '—', '—', '✓', '✓', '✓'],
-      ['NFT Certificates', '—', '✓', '✓', '✓', '✓'],
-      ['Custom Branding', '—', '—', '✓', '✓', '✓'],
-      ['SSO / SAML', '—', '—', '—', '✓', '✓'],
-      ['On-Premise', '—', '—', '—', '—', '✓'],
-      ['GS1 Certified Partner', '—', '✓', '✓', '✓', '✓'],
-      ['SOC 2 Type II', '—', '—', '—', '✓', '✓'],
-      ['ISO 27001:2022', '—', '—', '—', '✓', '✓'],
-      ['GDPR Compliant', '✓', '✓', '✓', '✓', '✓'],
+      ['Fraud Detection', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['AI Anomaly Detection', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Digital Twin', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Carbon Tracking', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['NFT Certificates', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Custom Branding', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['SSO / SAML', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['On-Premise', '—', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['GS1 Certified Partner', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['SOC 2 Type II', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['ISO 27001:2022', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['GDPR Compliant', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
     ].map(row => `
               <tr>
                 <td style="font-weight:600;font-size:0.8rem">${row[0]}</td>
-                ${row.slice(1).map(v => `<td style="text-align:center;font-size:0.75rem;${v === '✓' ? 'color:var(--emerald)' : v === '—' ? 'color:var(--text-muted)' : ''}">${v}</td>`).join('')}
+                ${row.slice(1).map(v => `<td style="text-align:center;font-size:0.75rem;${v === '<span class="status-icon status-pass" aria-label="Pass">✓</span>' ? 'color:var(--emerald)' : v === '—' ? 'color:var(--text-muted)' : ''}">${v}</td>`).join('')}
               </tr>
             `).join('')}
           </table>
@@ -2766,7 +2908,7 @@ function renderPublicDashboard() {
         <div class="stat-change up">↗ ${s.today_scans} today</div>
       </div>
       <div class="stat-card emerald">
-        <div class="stat-icon">✅</div>
+        <div class="stat-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div>
         <div class="stat-value">${s.verification_rate}%</div>
         <div class="stat-label">Verification Rate</div>
       </div>
@@ -2814,7 +2956,7 @@ function renderPublicDashboard() {
         <div style="position:relative;height:280px;padding:10px"><canvas id="publicTrustChart"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-header"><div class="card-title">⚠️ Alert Severity</div></div>
+        <div class="card-header"><div class="card-title"><span class="status-icon status-warn" aria-label="Warning">!</span> Alert Severity</div></div>
         <div style="position:relative;height:280px;padding:10px"><canvas id="publicAlertChart"></canvas></div>
       </div>
     </div>
@@ -3030,7 +3172,7 @@ async function loadSettingsData() {
     if (mfaEl) {
       mfaEl.innerHTML = me.user.mfa_enabled ? `
         <div class="mfa-enabled">
-          <div class="mfa-icon">✅</div>
+          <div class="mfa-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div>
           <div class="mfa-text">MFA is <strong>enabled</strong></div>
           <div style="margin-top:12px">
             <div class="input-group">
@@ -3101,7 +3243,7 @@ async function setupMfa() {
         </div>
       `;
     }
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 async function verifyMfa() {
@@ -3109,9 +3251,9 @@ async function verifyMfa() {
   if (!code || code.length !== 6) return;
   try {
     await API.post('/auth/mfa/verify', { code });
-    showToast('✅ MFA enabled successfully!', 'success');
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> MFA enabled successfully!', 'success');
     loadSettingsData();
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 async function disableMfa() {
@@ -3119,9 +3261,9 @@ async function disableMfa() {
   if (!pw) return showToast('Password required', 'error');
   try {
     await API.post('/auth/mfa/disable', { password: pw });
-    showToast('✅ MFA disabled', 'success');
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> MFA disabled', 'success');
     loadSettingsData();
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 async function changePassword() {
@@ -3145,17 +3287,17 @@ async function changePassword() {
 async function revokeSession(id) {
   try {
     await API.post('/auth/revoke', { session_id: id });
-    showToast('✅ Session revoked', 'success');
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Session revoked', 'success');
     loadSettingsData();
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 async function revokeAllSessions() {
   try {
     await API.post('/auth/revoke', {});
-    showToast('✅ All other sessions revoked', 'success');
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> All other sessions revoked', 'success');
     loadSettingsData();
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3190,7 +3332,7 @@ async function loadAdminUsers() {
         <tbody>
           ${res.users.map(u => `
             <tr>
-              <td style="font-weight:600">${escapeHTML(u.username)}</td>
+              <td style="font-weight:600">${escapeHTML(u.email)}</td>
               <td style="font-family:'JetBrains Mono';font-size:0.72rem">${escapeHTML(u.email)}</td>
               <td>
                 <select class="input" style="width:120px;padding:4px 8px;font-size:0.72rem"
@@ -3198,7 +3340,7 @@ async function loadAdminUsers() {
                   ${['admin', 'manager', 'operator', 'viewer'].map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r}</option>`).join('')}
                 </select>
               </td>
-              <td>${u.mfa_enabled ? '✅' : '—'}</td>
+              <td>${u.mfa_enabled ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>' : '—'}</td>
               <td style="font-size:0.72rem;color:var(--text-muted)">${u.last_login ? timeAgo(u.last_login) : 'Never'}</td>
               <td>${u.id === State.user.id ? '<span class="badge valid">You</span>' : ''}</td>
             </tr>
@@ -3212,8 +3354,8 @@ async function loadAdminUsers() {
 async function changeUserRole(userId, role) {
   try {
     await API.put(`/auth/users/${userId}/role`, { role });
-    showToast(`✅ Role updated to ${role}`, 'success');
-  } catch (e) { showToast('❌ ' + e.message, 'error'); loadAdminUsers(); }
+    showToast(`<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Role updated to ${role}`, 'success');
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); loadAdminUsers(); }
 }
 
 // ─── INTEGRATIONS PAGE ──────────────────────────────────────
@@ -3325,7 +3467,7 @@ async function saveIntegration(cat) {
       if (inp) payload[s.key] = inp.value;
     }
     const result = await API.put(`/integrations/${cat}`, payload);
-    showToast(`✅ ${result.message}`, 'success');
+    showToast(`<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> ${result.message}`, 'success');
     // Reload data
     State.integrationsData = await API.get('/integrations');
     render();
@@ -3335,7 +3477,7 @@ async function saveIntegration(cat) {
       const chev = document.getElementById('chevron-' + cat);
       if (body) { body.style.display = 'block'; chev.textContent = '▼'; }
     }, 100);
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 async function testIntegration(cat) {
@@ -3346,14 +3488,14 @@ async function testIntegration(cat) {
   try {
     const result = await API.get(`/integrations/${cat}/test`);
     if (result.status === 'ok') {
-      resultEl.innerHTML = `<span style="color:var(--success)">✅ ${escapeHTML(result.message)}</span>`;
+      resultEl.innerHTML = `<span style="color:var(--success)"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> ${escapeHTML(result.message)}</span>`;
     } else if (result.status === 'disabled') {
-      resultEl.innerHTML = `<span style="color:var(--warning)">⚠️ ${escapeHTML(result.message)}</span>`;
+      resultEl.innerHTML = `<span style="color:var(--warning)"><span class="status-icon status-warn" aria-label="Warning">!</span> ${escapeHTML(result.message)}</span>`;
     } else {
-      resultEl.innerHTML = `<span style="color:var(--danger)">❌ ${escapeHTML(result.message)}</span>`;
+      resultEl.innerHTML = `<span style="color:var(--danger)"><span class="status-icon status-fail" aria-label="Fail">✗</span> ${escapeHTML(result.message)}</span>`;
     }
   } catch (e) {
-    resultEl.innerHTML = `<span style="color:var(--danger)">❌ Test failed: ${escapeHTML(e.message)}</span>`;
+    resultEl.innerHTML = `<span style="color:var(--danger)"><span class="status-icon status-fail" aria-label="Fail">✗</span> Test failed: ${escapeHTML(e.message)}</span>`;
   }
 }
 
@@ -3364,7 +3506,7 @@ async function clearIntegration(cat) {
     showToast('🗑️ Settings cleared', 'info');
     State.integrationsData = await API.get('/integrations');
     render();
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3392,18 +3534,18 @@ function renderSCMEpcis() {
         <button class="btn btn-sm" onclick="exportEpcisDoc()">📄 Export Document</button>
       </div>
       <table class="data-table"><thead><tr><th>Time</th><th>EPCIS Type</th><th>Biz Step</th><th>Location</th><th>Sealed</th></tr></thead><tbody>
-        ${(d.events || []).slice(0, 20).map(e => `<tr><td>${timeAgo(e.eventTime || e.created_at)}</td><td>${e.epcis_type || '—'}</td><td>${e.cbv_biz_step || '—'}</td><td>${e.readPointId || e.location || '—'}</td><td>${e.blockchain_seal_id ? '✅' : '—'}</td></tr>`).join('')}
+        ${(d.events || []).slice(0, 20).map(e => `<tr><td>${timeAgo(e.eventTime || e.created_at)}</td><td>${e.epcis_type || '—'}</td><td>${e.cbv_biz_step || '—'}</td><td>${e.readPointId || e.location || '—'}</td><td>${e.blockchain_seal_id ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>' : '—'}</td></tr>`).join('')}
       </tbody></table>
     </div>
     <div class="card" style="margin-top:20px">
-      <div class="card-header"><div class="card-title">✅ GS1 Compliance</div></div>
+      <div class="card-header"><div class="card-title"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> GS1 Compliance</div></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;padding:16px">
-        ${Object.entries(s.compliance || {}).map(([k, v]) => `<div style="padding:12px;background:var(--bg-tertiary);border-radius:8px"><div style="font-size:0.75rem;color:var(--text-muted)">${k.replace(/_/g, ' ')}</div><div style="font-size:1.1rem;font-weight:700;color:${v ? 'var(--emerald)' : 'var(--rose)'}">${v ? '✅ Yes' : '❌ No'}</div></div>`).join('')}
+        ${Object.entries(s.compliance || {}).map(([k, v]) => `<div style="padding:12px;background:var(--bg-tertiary);border-radius:8px"><div style="font-size:0.75rem;color:var(--text-muted)">${k.replace(/_/g, ' ')}</div><div style="font-size:1.1rem;font-weight:700;color:${v ? 'var(--emerald)' : 'var(--rose)'}">${v ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Yes' : '<span class="status-icon status-fail" aria-label="Fail">✗</span> No'}</div></div>`).join('')}
       </div>
     </div>`;
 }
 async function exportEpcisDoc() {
-  try { const doc = await API.get('/scm/epcis/document'); downloadJSON(doc, 'epcis_document.json'); showToast('📄 EPCIS Document exported', 'success'); } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  try { const doc = await API.get('/scm/epcis/document'); downloadJSON(doc, 'epcis_document.json'); showToast('📄 EPCIS Document exported', 'success'); } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 function downloadJSON(data, filename) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -3453,13 +3595,13 @@ function renderSCMAI() {
     </div>`;
 }
 async function runMonteCarlo() {
-  try { showToast('🎲 Running Monte Carlo...', 'info'); const r = await API.post('/scm/ai/monte-carlo', {}); showAIResult('🎲 Monte Carlo Risk Simulation', r); } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  try { showToast('🎲 Running Monte Carlo...', 'info'); const r = await API.post('/scm/ai/monte-carlo', {}); showAIResult('🎲 Monte Carlo Risk Simulation', r); } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 async function runRootCause() {
-  try { showToast('🔍 Analyzing delays...', 'info'); const r = await API.get('/scm/ai/delay-root-cause'); showAIResult('🔍 Causal Delay Analysis', r); } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  try { showToast('🔍 Analyzing delays...', 'info'); const r = await API.get('/scm/ai/delay-root-cause'); showAIResult('🔍 Causal Delay Analysis', r); } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 async function runWhatIf() {
-  try { showToast('🔮 Simulating...', 'info'); const r = await API.post('/scm/ai/what-if', { type: 'partner_failure', severity: 0.3 }); showAIResult('🔮 What-If Simulation', r); } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  try { showToast('🔮 Simulating...', 'info'); const r = await API.post('/scm/ai/what-if', { type: 'partner_failure', severity: 0.3 }); showAIResult('🔮 What-If Simulation', r); } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 function showAIResult(title, data) {
   const el = document.getElementById('ai-result'); if (el) { el.style.display = 'block'; }
@@ -3630,7 +3772,7 @@ function renderCompliance() {
   return `
     <div class="stats-grid">
       <div class="stat-card emerald"><div class="stat-icon">📜</div><div class="stat-value">${s.compliance_rate || 0}%</div><div class="stat-label">Compliance Rate</div></div>
-      <div class="stat-card rose"><div class="stat-icon">⚠️</div><div class="stat-value">${s.non_compliant || 0}</div><div class="stat-label">Non-Compliant</div></div>
+      <div class="stat-card rose"><div class="stat-icon"><span class="status-icon status-warn" aria-label="Warning">!</span></div><div class="stat-value">${s.non_compliant || 0}</div><div class="stat-label">Non-Compliant</div></div>
       <div class="stat-card cyan"><div class="stat-icon">📋</div><div class="stat-value">${s.total_records || 0}</div><div class="stat-label">Total Records</div></div>
       <div class="stat-card violet"><div class="stat-icon">🗂️</div><div class="stat-value">${(d.policies || []).length}</div><div class="stat-label">Retention Policies</div></div>
     </div>
@@ -3643,7 +3785,7 @@ function renderCompliance() {
     <div class="card" style="margin-top:20px">
       <div class="card-header"><div class="card-title">🗂️ Data Retention Policies</div></div>
       <table class="data-table"><thead><tr><th>Table</th><th>Retention</th><th>Action</th><th>Active</th><th>Last Run</th></tr></thead><tbody>
-        ${(d.policies || []).map(p => `<tr><td><code>${p.table_name}</code></td><td>${p.retention_days} days</td><td>${p.action}</td><td>${p.is_active ? '✅' : '❌'}</td><td>${p.last_run ? timeAgo(p.last_run) : 'Never'}</td></tr>`).join('')}
+        ${(d.policies || []).map(p => `<tr><td><code>${p.table_name}</code></td><td>${p.retention_days} days</td><td>${p.action}</td><td>${p.is_active ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>' : '<span class="status-icon status-fail" aria-label="Fail">✗</span>'}</td><td>${p.last_run ? timeAgo(p.last_run) : 'Never'}</td></tr>`).join('')}
       </tbody></table>
     </div>`;
 }
@@ -3657,9 +3799,9 @@ function renderAnomaly() {
   return `
     <div class="stats-grid">
       <div class="stat-card rose"><div class="stat-icon">⚡</div><div class="stat-value">${d.total || 0}</div><div class="stat-label">Total Anomalies</div></div>
-      <div class="stat-card amber"><div class="stat-icon">🔴</div><div class="stat-value">${d.by_severity?.critical || 0}</div><div class="stat-label">Critical</div></div>
-      <div class="stat-card violet"><div class="stat-icon">🟡</div><div class="stat-value">${d.by_severity?.high || 0}</div><div class="stat-label">High</div></div>
-      <div class="stat-card emerald"><div class="stat-icon">🟢</div><div class="stat-value">${d.by_severity?.medium || 0}</div><div class="stat-label">Medium</div></div>
+      <div class="stat-card amber"><div class="stat-icon"><span class="status-dot red"></span></div><div class="stat-value">${d.by_severity?.critical || 0}</div><div class="stat-label">Critical</div></div>
+      <div class="stat-card violet"><div class="stat-icon"><span class="status-dot amber"></span></div><div class="stat-value">${d.by_severity?.high || 0}</div><div class="stat-label">High</div></div>
+      <div class="stat-card emerald"><div class="stat-icon"><span class="status-dot green"></span></div><div class="stat-value">${d.by_severity?.medium || 0}</div><div class="stat-label">Medium</div></div>
     </div>
     <div class="card" style="margin-top:20px">
       <div class="card-header"><div class="card-title">⚡ Anomaly Detections</div></div>
@@ -3694,7 +3836,7 @@ function renderReports() {
     </div>`;
 }
 async function generateReport(templateId) {
-  try { showToast('📊 Generating report...', 'info'); const r = await API.get(`/reports/generate/${templateId}`); downloadJSON(r, `report_${templateId}.json`); showToast('✅ Report generated', 'success'); } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  try { showToast('📊 Generating report...', 'info'); const r = await API.get(`/reports/generate/${templateId}`); downloadJSON(r, `report_${templateId}.json`); showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Report generated', 'success'); } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3706,7 +3848,7 @@ function renderNFT() {
   return `
     <div class="stats-grid">
       <div class="stat-card violet"><div class="stat-icon">🎨</div><div class="stat-value">${d.total || (d.certificates || []).length}</div><div class="stat-label">Total NFTs</div></div>
-      <div class="stat-card emerald"><div class="stat-icon">✅</div><div class="stat-value">${(d.certificates || []).filter(c => c.status === 'active').length}</div><div class="stat-label">Active</div></div>
+      <div class="stat-card emerald"><div class="stat-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div><div class="stat-value">${(d.certificates || []).filter(c => c.status === 'active').length}</div><div class="stat-label">Active</div></div>
       <div class="stat-card cyan"><div class="stat-icon">🔗</div><div class="stat-value">${(d.certificates || []).filter(c => c.blockchain_seal_id).length}</div><div class="stat-label">On-Chain</div></div>
     </div>
     <div class="card" style="margin-top:20px">
@@ -3727,7 +3869,7 @@ function renderWallet() {
     <div class="stats-grid">
       <div class="stat-card cyan"><div class="stat-icon">💰</div><div class="stat-value">${(d.wallets || []).length}</div><div class="stat-label">Wallets</div></div>
       <div class="stat-card violet"><div class="stat-icon">💸</div><div class="stat-value">${(d.transactions || []).length}</div><div class="stat-label">Transactions</div></div>
-      <div class="stat-card emerald"><div class="stat-icon">✅</div><div class="stat-value">${(d.transactions || []).filter(t => t.status === 'completed').length}</div><div class="stat-label">Completed</div></div>
+      <div class="stat-card emerald"><div class="stat-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div><div class="stat-value">${(d.transactions || []).filter(t => t.status === 'completed').length}</div><div class="stat-label">Completed</div></div>
     </div>
     <div class="card" style="margin-top:20px">
       <div class="card-header"><div class="card-title">💰 Wallets</div></div>
@@ -3780,7 +3922,7 @@ function renderBranding() {
     <div class="card" style="margin-top:20px">
       <div class="card-header"><div class="card-title">👁️ Preview</div></div>
       <div style="padding:20px;background:var(--bg-tertiary);border-radius:8px;display:flex;align-items:center;gap:16px">
-        ${d.logo_url ? `<img src="${d.logo_url}" style="height:48px;border-radius:8px"/>` : '<div style="width:48px;height:48px;background:var(--cyan);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem">🛡️</div>'}
+        ${d.logo_url ? `<img src="${d.logo_url}" alt="Organization logo" style="height:48px;border-radius:8px"/>` : '<div style="width:48px;height:48px;background:var(--cyan);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem">🛡️</div>'}
         <div>
           <div style="font-weight:700;font-size:1.2rem">${d.company_name || 'TrustChecker'}</div>
           <div style="font-size:0.8rem;color:var(--text-muted)">Enterprise Digital Trust Platform</div>
@@ -3791,11 +3933,11 @@ function renderBranding() {
 async function saveBranding() {
   try {
     await API.put('/branding', { company_name: document.getElementById('brand-name')?.value, primary_color: document.getElementById('brand-color')?.value, logo_url: document.getElementById('brand-logo')?.value, support_email: document.getElementById('brand-email')?.value });
-    showToast('✅ Branding saved', 'success');
-  } catch (e) { showToast('❌ ' + e.message, 'error'); }
+    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Branding saved', 'success');
+  } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 async function resetBranding() {
-  try { await API.delete('/branding'); showToast('↩️ Branding reset', 'info'); loadPageData('branding'); } catch (e) { showToast('❌ ' + e.message, 'error'); }
+  try { await API.delete('/branding'); showToast('↩️ Branding reset', 'info'); loadPageData('branding'); } catch (e) { showToast('<span class="status-icon status-fail" aria-label="Fail">✗</span> ' + e.message, 'error'); }
 }
 
 // ─── INIT ────────────────────────────────────────────────────

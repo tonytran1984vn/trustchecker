@@ -8,7 +8,8 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const requireSuperAdmin = require('../middleware/requireSuperAdmin');
 const crypto = require('crypto');
 
 // All KYC routes require auth
@@ -72,7 +73,7 @@ router.get('/businesses/:id', async (req, res) => {
 });
 
 // ─── POST /verify ───────────────────────────────────────────
-router.post('/verify', requireRole('operator'), async (req, res) => {
+router.post('/verify', requirePermission('kyc:create'), async (req, res) => {
     try {
         const { name, registration_number, country, address, industry, contact_email, contact_phone } = req.body;
         if (!name) return res.status(400).json({ error: 'Business name required' });
@@ -81,7 +82,7 @@ router.post('/verify', requireRole('operator'), async (req, res) => {
         await db.prepare(`
       INSERT INTO kyc_businesses (id, name, registration_number, country, address, industry, contact_email, contact_phone)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, name, registration_number || '', country || '', address || '', industry || '', contact_email || '', contact_phone || '');
+    `).run(id, name, registration_number || null, country || '', address || '', industry || '', contact_email || '', contact_phone || '');
 
         // Auto-run registry check
         const checkId = uuidv4();
@@ -123,8 +124,34 @@ router.post('/verify', requireRole('operator'), async (req, res) => {
     }
 });
 
+// ─── POST /businesses/submit — User submits business for verification ───────
+router.post('/businesses/submit', async (req, res) => {
+    try {
+        const { name, registration_number, country, address, industry, contact_email, contact_phone } = req.body;
+        if (!name) return res.status(400).json({ error: 'Tên doanh nghiệp là bắt buộc' });
+
+        const id = uuidv4();
+        await db.prepare(`
+          INSERT INTO kyc_businesses (id, name, registration_number, country, address, industry, contact_email, contact_phone, org_id, submitted_by, verification_status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+        `).run(id, name, registration_number || '', country || '', address || '', industry || '', contact_email || '', contact_phone || '', req.user.orgId || null, req.user.id);
+
+        // Audit
+        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
+            .run(uuidv4(), req.user.id, 'KYC_BUSINESS_SUBMITTED', 'kyc_business', id, JSON.stringify({ name, country }));
+
+        res.status(201).json({
+            business_id: id,
+            status: 'pending',
+            message: 'Thông tin doanh nghiệp đã được gửi. Vui lòng chờ duyệt.',
+        });
+    } catch (e) {
+        safeError(res, 'Operation failed', e);
+    }
+});
+
 // ─── POST /sanction-check ───────────────────────────────────
-router.post('/sanction-check', requireRole('manager'), async (req, res) => {
+router.post('/sanction-check', requirePermission('kyc:verify'), async (req, res) => {
     try {
         const { business_id } = req.body;
         if (!business_id) return res.status(400).json({ error: 'business_id required' });
@@ -169,15 +196,26 @@ router.post('/sanction-check', requireRole('manager'), async (req, res) => {
     }
 });
 
-// ─── POST /businesses/:id/approve ───────────────────────────
-router.post('/businesses/:id/approve', requireRole('manager'), async (req, res) => {
+// ─── POST /businesses/:id/approve — Approve by super_admin or delegated approver ──
+router.post('/businesses/:id/approve', async (req, res) => {
     try {
+        // Check: must be super_admin or designated approver
+        const canApprove = await checkApproverPermission(req.user);
+        if (!canApprove) {
+            return res.status(403).json({ error: 'Không có quyền duyệt KYC. Liên hệ super admin.' });
+        }
+
         const biz = await db.get('SELECT * FROM kyc_businesses WHERE id = ?', [req.params.id]);
         if (!biz) return res.status(404).json({ error: 'Business not found' });
 
         await db.prepare(`
-      UPDATE kyc_businesses SET verification_status = 'verified', verified_at = datetime('now'), verified_by = ? WHERE id = ?
-    `).run(req.user.id, req.params.id);
+          UPDATE kyc_businesses SET verification_status = 'verified', verified_at = datetime('now'), verified_by = ? WHERE id = ?
+        `).run(req.user.id, req.params.id);
+
+        // Audit
+        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
+            .run(uuidv4(), req.user.id, 'KYC_BUSINESS_APPROVED', 'kyc_business', req.params.id,
+                JSON.stringify({ business_name: biz.name, approved_by: req.user.username }));
 
         res.json({ status: 'verified', business_id: req.params.id });
     } catch (e) {
@@ -185,12 +223,24 @@ router.post('/businesses/:id/approve', requireRole('manager'), async (req, res) 
     }
 });
 
-// ─── POST /businesses/:id/reject ────────────────────────────
-router.post('/businesses/:id/reject', requireRole('manager'), async (req, res) => {
+// ─── POST /businesses/:id/reject — Reject by super_admin or delegated approver ──
+router.post('/businesses/:id/reject', async (req, res) => {
     try {
+        const canApprove = await checkApproverPermission(req.user);
+        if (!canApprove) {
+            return res.status(403).json({ error: 'Không có quyền từ chối KYC. Liên hệ super admin.' });
+        }
+
+        const { reason } = req.body;
         await db.prepare(`
-      UPDATE kyc_businesses SET verification_status = 'rejected', verified_at = datetime('now'), verified_by = ? WHERE id = ?
-    `).run(req.user.id, req.params.id);
+          UPDATE kyc_businesses SET verification_status = 'rejected', verified_at = datetime('now'), verified_by = ?, notes = ? WHERE id = ?
+        `).run(req.user.id, reason || '', req.params.id);
+
+        // Audit
+        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
+            .run(uuidv4(), req.user.id, 'KYC_BUSINESS_REJECTED', 'kyc_business', req.params.id,
+                JSON.stringify({ reason: reason || 'No reason provided' }));
+
         res.json({ status: 'rejected', business_id: req.params.id });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -204,7 +254,7 @@ router.get('/gdpr/export/:userId', requireRole('operator'), async (req, res) => 
         const userData = {
             user: await db.get('SELECT id, username, email, role, company, created_at FROM users WHERE id = ?', [userId]),
             sessions: await db.all('SELECT id, ip_address, created_at, last_active FROM sessions WHERE user_id = ?', [userId]),
-            scan_events: await db.all('SELECT id, scan_type, scanned_at FROM scan_events WHERE ip_address LIKE ?', [`%${userId}%`]),
+            scan_events: await db.all('SELECT id, scan_type, scanned_at FROM scan_events WHERE org_id IN (SELECT org_id FROM users WHERE id = ?) LIMIT 100', [userId]),
             audit_logs: await db.all('SELECT * FROM audit_log WHERE actor_id = ?', [userId]),
         };
         res.json({ exported_at: new Date().toISOString(), data: userData });
@@ -350,5 +400,119 @@ router.get('/businesses/:id/audit', async (req, res) => {
     }
 });
 
-module.exports = router;
+// ═════════════════════════════════════════════════════════════════
+// KYC APPROVER MANAGEMENT (super_admin only)
+// ═════════════════════════════════════════════════════════════════
 
+/**
+ * Check if a user has KYC approval permission.
+ * Returns true if user is super_admin or is a designated approver.
+ */
+async function checkApproverPermission(user) {
+    if (user.role === 'super_admin') return true;
+
+    try {
+        const setting = await db.prepare(
+            "SELECT setting_value FROM system_settings WHERE category = 'kyc' AND setting_key = 'approvers'"
+        ).get();
+
+        if (!setting) return false;
+        const approvers = JSON.parse(setting.setting_value);
+        return Array.isArray(approvers) && approvers.includes(user.id);
+    } catch {
+        return false;
+    }
+}
+
+// ─── POST /approvers — Designate KYC approver (super_admin only) ────────────
+router.post('/approvers', requireSuperAdmin(), async (req, res) => {
+    try {
+        const { user_id } = req.body;
+        if (!user_id) return res.status(400).json({ error: 'user_id is required' });
+
+        const user = await db.prepare('SELECT id, username, email FROM users WHERE id = ?').get(user_id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Get current approvers
+        const setting = await db.prepare(
+            "SELECT setting_value FROM system_settings WHERE category = 'kyc' AND setting_key = 'approvers'"
+        ).get();
+
+        let approvers = setting ? JSON.parse(setting.setting_value) : [];
+        if (approvers.includes(user_id)) {
+            return res.status(409).json({ error: 'User is already a designated approver' });
+        }
+
+        approvers.push(user_id);
+
+        if (setting) {
+            await db.prepare(
+                "UPDATE system_settings SET setting_value = ?, updated_by = ?, updated_at = datetime('now') WHERE category = 'kyc' AND setting_key = 'approvers'"
+            ).run(JSON.stringify(approvers), req.user.id);
+        } else {
+            await db.prepare(
+                "INSERT INTO system_settings (id, category, setting_key, setting_value, updated_by) VALUES (?, 'kyc', 'approvers', ?, ?)"
+            ).run(uuidv4(), JSON.stringify(approvers), req.user.id);
+        }
+
+        // Audit
+        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
+            .run(uuidv4(), req.user.id, 'KYC_APPROVER_ADDED', 'user', user_id,
+                JSON.stringify({ username: user.username, email: user.email }));
+
+        res.status(201).json({ message: 'Approver designated', user: { id: user.id, username: user.username, email: user.email } });
+    } catch (e) {
+        safeError(res, 'Failed to add approver', e);
+    }
+});
+
+// ─── GET /approvers — List designated approvers (super_admin only) ───────────
+router.get('/approvers', requireSuperAdmin(), async (req, res) => {
+    try {
+        const setting = await db.prepare(
+            "SELECT setting_value FROM system_settings WHERE category = 'kyc' AND setting_key = 'approvers'"
+        ).get();
+
+        const approverIds = setting ? JSON.parse(setting.setting_value) : [];
+        const approvers = [];
+
+        for (const id of approverIds) {
+            const user = await db.prepare('SELECT id, username, email, role FROM users WHERE id = ?').get(id);
+            if (user) approvers.push(user);
+        }
+
+        res.json({ approvers, total: approvers.length });
+    } catch (e) {
+        safeError(res, 'Failed to list approvers', e);
+    }
+});
+
+// ─── DELETE /approvers/:userId — Revoke approver permission (super_admin only) ─
+router.delete('/approvers/:userId', requireSuperAdmin(), async (req, res) => {
+    try {
+        const setting = await db.prepare(
+            "SELECT setting_value FROM system_settings WHERE category = 'kyc' AND setting_key = 'approvers'"
+        ).get();
+
+        if (!setting) return res.status(404).json({ error: 'No approvers configured' });
+
+        let approvers = JSON.parse(setting.setting_value);
+        const idx = approvers.indexOf(req.params.userId);
+        if (idx === -1) return res.status(404).json({ error: 'User is not a designated approver' });
+
+        approvers.splice(idx, 1);
+        await db.prepare(
+            "UPDATE system_settings SET setting_value = ?, updated_by = ?, updated_at = datetime('now') WHERE category = 'kyc' AND setting_key = 'approvers'"
+        ).run(JSON.stringify(approvers), req.user.id);
+
+        // Audit
+        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
+            .run(uuidv4(), req.user.id, 'KYC_APPROVER_REMOVED', 'user', req.params.userId, '{}');
+
+        res.json({ message: 'Approver permission revoked', removed_user: req.params.userId });
+    } catch (e) {
+        safeError(res, 'Failed to remove approver', e);
+    }
+});
+
+module.exports = router;

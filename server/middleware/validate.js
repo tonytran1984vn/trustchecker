@@ -201,15 +201,15 @@ const schemas = {
 
     login: {
         body: {
-            username: { type: 'string', required: true, minLength: 1, maxLength: 50 },
+            email: { type: 'string', required: true, minLength: 1, maxLength: 100 },
             password: { type: 'string', required: true, minLength: 1, maxLength: 128 },
-            mfa_code: { type: 'string', maxLength: 6 },
+            mfa_code: { type: 'string', maxLength: 6, pattern: /^\d{6}$/ },
         }
     },
 
     register: {
         body: {
-            username: { type: 'string', required: true, minLength: 2, maxLength: 50, pattern: /^[a-zA-Z0-9_.-]+$/ },
+            username: { type: 'string', minLength: 2, maxLength: 50, pattern: /^[a-zA-Z0-9_.-]+$/ },
             email: { type: 'email', required: true },
             password: { type: 'string', required: true, minLength: 12, maxLength: 128 },
         }

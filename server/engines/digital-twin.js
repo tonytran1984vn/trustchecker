@@ -1,3 +1,4 @@
+const { safeParse } = require('../utils/safe-json');
 /**
  * TrustChecker Digital Twin Engine
  * Virtual supply chain model with real-time state, KPI computation,
@@ -228,7 +229,7 @@ class DigitalTwin {
      */
     simulateDisruption(model, scenario) {
         const { type, target_id, duration_days = 7 } = scenario;
-        const clone = JSON.parse(JSON.stringify(model));
+        const clone = safeParse(JSON.stringify(model));
 
         switch (type) {
             case 'node_offline': {

@@ -7,12 +7,12 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 
 router.use(authMiddleware);
 
 // ─── GET /policies — List data retention policies ───────────
-router.get('/policies', requireRole('admin'), async (req, res) => {
+router.get('/policies', requirePermission('compliance:manage'), async (req, res) => {
     try {
         const policies = await db.all('SELECT * FROM data_retention_policies ORDER BY created_at DESC');
 
@@ -36,7 +36,7 @@ router.get('/policies', requireRole('admin'), async (req, res) => {
 });
 
 // ─── POST /policies — Create/update a retention policy ──────
-router.post('/policies', requireRole('admin'), async (req, res) => {
+router.post('/policies', requirePermission('compliance:manage'), async (req, res) => {
     try {
         const { table_name, retention_days, action } = req.body;
         if (!table_name || !retention_days) return res.status(400).json({ error: 'table_name and retention_days required' });
@@ -66,7 +66,7 @@ router.post('/policies', requireRole('admin'), async (req, res) => {
 });
 
 // ─── POST /policies/execute — Run retention cleanup ─────────
-router.post('/policies/execute', requireRole('admin'), async (req, res) => {
+router.post('/policies/execute', requirePermission('compliance:manage'), async (req, res) => {
     try {
         const policies = await db.all("SELECT * FROM data_retention_policies WHERE is_active = 1");
         const results = [];
@@ -126,7 +126,7 @@ router.post('/policies/execute', requireRole('admin'), async (req, res) => {
 
                 results.push({ table: policy.table_name, action: policy.action, affected, status: 'success' });
             } catch (err) {
-                results.push({ table: policy.table_name, action: policy.action, affected: 0, status: 'error', error: err.message });
+                results.push({ table: policy.table_name, action: policy.action, affected: 0, status: 'error', error: 'Execution failed' });
             }
         }
 
@@ -265,7 +265,7 @@ router.post('/gdpr/consent', async (req, res) => {
 });
 
 // ─── GET /report — Compliance report ────────────────────────
-router.get('/report', requireRole('admin'), async (req, res) => {
+router.get('/report', requirePermission('compliance:manage'), async (req, res) => {
     try {
         const totalUsers = (await db.get('SELECT COUNT(*) as c FROM users'))?.c || 0;
         const consented = (await db.get("SELECT COUNT(DISTINCT actor_id) as c FROM audit_log WHERE action = 'CONSENT_GIVEN'"))?.c || 0;

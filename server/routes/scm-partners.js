@@ -5,11 +5,15 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/engine-client');
 const { eventBus } = require('../events');
 
 const router = express.Router();
+
+
+// GOV-1: All routes require authentication
+router.use(authMiddleware);
 
 // ─── GET /api/scm/partners – List partners ───────────────────────────────────
 router.get('/', async (req, res) => {
@@ -29,7 +33,7 @@ router.get('/', async (req, res) => {
 });
 
 // ─── POST /api/scm/partners – Onboard partner ───────────────────────────────
-router.post('/', authMiddleware, requireRole('operator'), async (req, res) => {
+router.post('/', authMiddleware, requirePermission('partner:create'), async (req, res) => {
     try {
         const { name, type, country, region, contact_email } = req.body;
         if (!name) return res.status(400).json({ error: 'Name is required' });
@@ -85,7 +89,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // ─── POST /api/scm/partners/:id/verify – KYC-Business verify ────────────────
-router.post('/:id/verify', authMiddleware, requireRole('manager'), async (req, res) => {
+router.post('/:id/verify', authMiddleware, requirePermission('partner:verify'), async (req, res) => {
     try {
         const partner = await db.prepare('SELECT * FROM partners WHERE id = ?').get(req.params.id);
         if (!partner) return res.status(404).json({ error: 'Partner not found' });
@@ -100,7 +104,7 @@ router.post('/:id/verify', authMiddleware, requireRole('manager'), async (req, r
 
         const allPassed = Object.values(checks).every(c => c.status === 'passed' || c.status === 'not_applicable');
 
-        await db.prepare('UPDATE partners SET kyc_status = ?, kyc_verified_at = datetime("now") WHERE id = ?')
+        await db.prepare("UPDATE partners SET kyc_status = ?, kyc_verified_at = datetime('now') WHERE id = ?")
             .run(allPassed ? 'verified' : 'failed', req.params.id);
 
         eventBus.emitEvent('KYCVerification', { partner_id: req.params.id, result: allPassed ? 'verified' : 'failed' });

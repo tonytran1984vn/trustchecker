@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 
 router.use(authMiddleware);
 
@@ -22,7 +22,7 @@ router.get('/', async (req, res) => {
         if (status === 'read') { sql += " AND details LIKE '%\"read\":true%'"; }
 
         sql += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
-        params.push(Number(limit), Number(offset));
+        params.push(Number(limit), Math.max(Number(offset) || 0, 0));
 
         const rows = await db.all(sql, params);
 
@@ -48,7 +48,7 @@ router.get('/', async (req, res) => {
 });
 
 // ─── POST / — Create notification (system/admin) ────────────
-router.post('/', requireRole('admin'), async (req, res) => {
+router.post('/', requirePermission('notification:manage'), async (req, res) => {
     try {
         const { user_id, title, message, type, link } = req.body;
         if (!user_id || !message) return res.status(400).json({ error: 'user_id and message required' });
@@ -160,7 +160,7 @@ router.get('/activity', async (req, res) => {
       FROM audit_log
       WHERE actor_id = ? AND action NOT LIKE 'NOTIFY_%'
       ORDER BY timestamp DESC LIMIT ?
-    `, [req.user.id, Number(limit)]);
+    `, [req.user.id, Math.min(Number(limit) || 50, 200)]);
 
         const feed = activities.map(a => {
             const d = JSON.parse(a.details || '{}');

@@ -33,7 +33,7 @@ const server = http.createServer(app);
 // CORS — restrict to known origins
 const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',')
-    : ['http://localhost:4000', 'http://localhost:3000', 'http://127.0.0.1:4000'];
+    : ['http://localhost:4000', 'http://localhost:3000', 'http://127.0.0.1:4000', 'https://tonytran.work', 'http://tonytran.work', 'http://34.92.229.72'];
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin || ALLOWED_ORIGINS.includes(origin)) {
@@ -67,7 +67,7 @@ app.use(helmet({
     hsts: { maxAge: 31536000, includeSubDomains: true, preload: true }
 }));
 app.use(compression());
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '2mb' })); // SEC-API-2: reduced from 5mb
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
 // Prometheus Metrics
@@ -81,7 +81,7 @@ const isTest = process.env.NODE_ENV === 'test';
 
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: isTest ? 10000 : 1000,
+    max: isTest ? 10000 : 5000,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many requests, please try again later' }
@@ -99,6 +99,8 @@ const authLimiter = rateLimit({
 });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/change-password', authLimiter); // SEC-API-2: rate limit password changes
+app.use('/api/auth/reset-password', authLimiter);  // SEC-API-2: rate limit password resets
 
 // ─── Boot Sequence ───────────────────────────────────────────────────────────
 async function boot() {
@@ -120,7 +122,7 @@ async function boot() {
     }
 
     // 3. WebSocket Server (with JWT auth)
-    const wss = new WebSocketServer({ server, path: '/ws' });
+    const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 64 * 1024 }); // SEC-API-2: 64KB max message
     const { eventBus } = require('./events');
     const jwt = require('jsonwebtoken');
     const { JWT_SECRET } = require('./auth');

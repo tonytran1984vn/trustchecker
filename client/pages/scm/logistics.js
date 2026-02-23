@@ -15,9 +15,9 @@ export function renderPage() {
   return `
     <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
       <div class="stat-card cyan"><div class="stat-icon">🚚</div><div class="stat-value">${list.length}</div><div class="stat-label">Shipments</div></div>
-      <div class="stat-card emerald"><div class="stat-icon">✅</div><div class="stat-value">${list.filter(s => s.status === 'delivered').length}</div><div class="stat-label">Delivered</div></div>
+      <div class="stat-card emerald"><div class="stat-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div><div class="stat-value">${list.filter(s => s.status === 'delivered').length}</div><div class="stat-label">Delivered</div></div>
       <div class="stat-card amber"><div class="stat-icon">🚛</div><div class="stat-value">${list.filter(s => s.status === 'in_transit').length}</div><div class="stat-label">In Transit</div></div>
-      <div class="stat-card ${violations.length > 0 ? 'rose' : 'emerald'}"><div class="stat-icon">⚠️</div><div class="stat-value">${violations.length}</div><div class="stat-label">SLA Breaches</div></div>
+      <div class="stat-card ${violations.length > 0 ? 'rose' : 'emerald'}"><div class="stat-icon"><span class="status-icon status-warn" aria-label="Warning">!</span></div><div class="stat-value">${violations.length}</div><div class="stat-label">SLA Breaches</div></div>
     </div>
 
     <div class="card" style="margin-bottom:20px">
@@ -41,7 +41,7 @@ export function renderPage() {
 
     <div class="grid-2">
       <div class="card">
-        <div class="card-header"><div class="card-title">⚠️ SLA Violations</div></div>
+        <div class="card-header"><div class="card-title"><span class="status-icon status-warn" aria-label="Warning">!</span> SLA Violations</div></div>
         ${violations.length ? `
           <div class="table-container">
             <table>
@@ -57,7 +57,7 @@ export function renderPage() {
               `).join('')}
             </table>
           </div>
-        ` : '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">No SLA violations</div></div>'}
+        ` : '<div class="empty-state"><div class="empty-icon"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div><div class="empty-text">No SLA violations</div></div>'}
       </div>
 
       <div class="card">
