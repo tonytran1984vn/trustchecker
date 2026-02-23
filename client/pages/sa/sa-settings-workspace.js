@@ -295,10 +295,22 @@ function renderSlackPanel(ist, ps) {
             </div>`;
     }).join('')}
             ${!webhooks.length ? '<div style="font-size:0.75rem;color:var(--text-muted);padding:6px">No webhooks. Create one at <a href="https://api.slack.com/apps" target="_blank" style="color:#3b82f6">api.slack.com</a></div>' : ''}
-            <div style="display:flex;gap:6px;margin-top:6px">
-                <input id="new_slack_name" placeholder="Channel name" style="${ist};width:120px">
-                <input id="new_slack_url" placeholder="https://hooks.slack.com/services/..." style="${ist};flex:1">
-                <button onclick="addSlackWebhook()" style="padding:6px 12px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.75rem;font-weight:600;white-space:nowrap">+ Add</button>
+            <div style="margin-top:8px;padding:10px;background:var(--bg-primary);border-radius:8px;border:1px dashed var(--border)">
+                <div style="font-size:0.7rem;font-weight:600;color:var(--text-muted);margin-bottom:6px">➕ Add New Webhook</div>
+                <div style="display:flex;gap:6px;margin-bottom:8px">
+                    <input id="new_slack_name" placeholder="Channel name (e.g. #security)" style="${ist};width:140px">
+                    <input id="new_slack_url" placeholder="https://hooks.slack.com/services/..." style="${ist};flex:1">
+                </div>
+                <div style="font-size:0.68rem;color:var(--text-muted);font-weight:600;margin-bottom:4px">Select events for this channel:</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-bottom:8px">
+                    ${EVENT_TYPES.map(et => `<label style="display:flex;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;cursor:pointer;font-size:0.7rem">
+                        <input type="checkbox" class="new-slack-evt" value="${et.key}" style="accent-color:${et.color};width:13px;height:13px">
+                        ${et.label}
+                    </label>`).join('')}
+                </div>
+                <div style="display:flex;justify-content:flex-end">
+                    <button onclick="addSlackWebhook()" style="padding:6px 16px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.75rem;font-weight:600">+ Add Channel</button>
+                </div>
             </div>
         </div>
         ${renderPanelActions("testChannel('slack')", "saveSlackConfig()", "💬")}
@@ -459,10 +471,13 @@ window.addSlackWebhook = async function () {
     const name = document.getElementById('new_slack_name')?.value?.trim() || 'General';
     const url = document.getElementById('new_slack_url')?.value?.trim();
     if (!url || !url.startsWith('https://')) return showToast('Enter valid webhook URL', 'error');
+    // Read selected events from checkboxes
+    const selectedEvents = [...document.querySelectorAll('.new-slack-evt:checked')].map(cb => cb.value);
+    if (!selectedEvents.length) return showToast('Select at least 1 event for this channel', 'error');
     const cfg = _channelConfigs.slack || {};
     const webhooks = cfg.config?.webhooks || [];
-    webhooks.push({ name, url, enabled: true, events: [] });
-    try { await API.put('/platform/channel-settings/slack', { config: { webhooks } }); _channelConfigs.slack = { ...cfg, config: { webhooks } }; window.render(); showToast('✅ Webhook added', 'success'); } catch (e) { showToast('Failed: ' + e.message, 'error'); }
+    webhooks.push({ name, url, enabled: true, events: selectedEvents });
+    try { await API.put('/platform/channel-settings/slack', { config: { webhooks } }); _channelConfigs.slack = { ...cfg, config: { webhooks } }; window.render(); showToast('✅ ' + name + ' added with ' + selectedEvents.length + ' events', 'success'); } catch (e) { showToast('Failed: ' + e.message, 'error'); }
 };
 window.removeSlackWebhook = async function (idx) {
     const cfg = _channelConfigs.slack || {};
