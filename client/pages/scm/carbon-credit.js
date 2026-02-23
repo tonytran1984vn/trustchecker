@@ -1398,7 +1398,6 @@ export function render() {
             <h1>${icon('globe')} Carbon Integrity Engine <span style="font-size:0.6em;color:#64748b;font-weight:400">v2.0</span></h1>
             <div style="display:flex;align-items:center;gap:8px;margin:4px 0 16px">
                 <p style="color:#94a3b8;margin:0">Institutional Carbon Integrity Infrastructure — SoD-enforced, role-gated access.</p>
-                <span style="padding:2px 8px;border-radius:4px;background:#3b82f618;color:#3b82f6;font-size:0.68rem;font-weight:700;white-space:nowrap">${roleDisplay}</span>
             </div>
         </div>
         <div style="display:flex;gap:5px;margin-bottom:16px;flex-wrap:wrap">
