@@ -268,30 +268,30 @@ function renderSlackPanel(ist, ps) {
             ${webhooks.map((wh, i) => {
         const evts = wh.events || [];
         const allEvts = evts.length === 0;
-        return `<div style="margin-bottom:6px;background:var(--bg-primary);border-radius:8px;border:1px solid var(--border);overflow:hidden">
-                <div style="display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer" onclick="toggleSlackEvents(${i})">
+        return `<div style="margin-bottom:8px;background:var(--bg-primary);border-radius:8px;border:1px solid var(--border);overflow:hidden">
+                <div style="display:flex;align-items:center;gap:6px;padding:8px 10px">
                     <span style="font-size:0.7rem;color:var(--text-muted)">#${i + 1}</span>
                     <span style="flex:1;font-size:0.78rem;font-weight:600">${wh.name || 'Webhook'}</span>
                     <span style="font-size:0.65rem;padding:2px 6px;border-radius:6px;background:#3b82f622;color:#3b82f6;font-weight:600">${allEvts ? 'All Events' : evts.length + ' event' + (evts.length !== 1 ? 's' : '')}</span>
                     <span style="font-size:0.68rem;padding:2px 6px;border-radius:6px;background:${wh.enabled ? '#10b98122' : '#94a3b822'};color:${wh.enabled ? '#10b981' : '#94a3b8'}">${wh.enabled ? 'Active' : 'Off'}</span>
-                    <span onclick="event.stopPropagation();removeSlackWebhook(${i})" style="cursor:pointer;color:#ef4444;font-size:0.8rem">&times;</span>
+                    <span onclick="removeSlackWebhook(${i})" style="cursor:pointer;color:#ef4444;font-size:0.8rem">&times;</span>
                 </div>
-                ${wh._showEvents ? `<div style="padding:6px 10px 10px;border-top:1px solid var(--border)">
-                    <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:6px;font-weight:600">Route events to this channel:</div>
-                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--border)">
-                        <input type="checkbox" ${allEvts ? 'checked' : ''} onchange="toggleSlackAllEvents(${i}, this.checked)" style="accent-color:#10b981">
+                <div style="padding:6px 10px 10px;border-top:1px solid var(--border)">
+                    <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px;font-weight:600">Route events to this channel:</div>
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;padding-bottom:4px;border-bottom:1px dashed var(--border)">
+                        <input type="checkbox" ${allEvts ? 'checked' : ''} onchange="toggleSlackAllEvents(${i}, this.checked)" style="accent-color:#10b981;width:14px;height:14px">
                         <span style="font-size:0.72rem;font-weight:600;color:${allEvts ? '#10b981' : 'var(--text-muted)'}">All Events</span>
                     </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px">
                         ${EVENT_TYPES.map(et => {
             const checked = allEvts || evts.includes(et.key);
-            return `<label style="display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:4px;cursor:pointer;font-size:0.72rem;${checked ? '' : 'opacity:0.5'}">
-                                <input type="checkbox" ${checked ? 'checked' : ''} ${allEvts ? 'disabled' : ''} onchange="toggleSlackEvent(${i}, '${et.key}', this.checked)" style="accent-color:${et.color}">
+            return `<label style="display:flex;align-items:center;gap:4px;padding:2px 4px;border-radius:4px;cursor:${allEvts ? 'default' : 'pointer'};font-size:0.7rem;${checked ? '' : 'opacity:0.45'}">
+                                <input type="checkbox" ${checked ? 'checked' : ''} ${allEvts ? 'disabled' : ''} onchange="toggleSlackEvent(${i}, '${et.key}', this.checked)" style="accent-color:${et.color};width:13px;height:13px">
                                 ${et.label}
                             </label>`;
         }).join('')}
                     </div>
-                </div>` : ''}
+                </div>
             </div>`;
     }).join('')}
             ${!webhooks.length ? '<div style="font-size:0.75rem;color:var(--text-muted);padding:6px">No webhooks. Create one at <a href="https://api.slack.com/apps" target="_blank" style="color:#3b82f6">api.slack.com</a></div>' : ''}
