@@ -17,6 +17,9 @@ function setupMiddleware(app, redis) {
     const metrics = require('../observability/metrics');
     const slo = require('../observability/slo');
 
+    // Trust proxy (Nginx reverse proxy) — so req.ip uses X-Forwarded-For
+    app.set('trust proxy', 1);
+
     // v9.4: WAF first — block malicious requests early
     app.use(waf.middleware());
     app.use(securityHeaders);
