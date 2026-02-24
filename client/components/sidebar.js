@@ -36,223 +36,219 @@ const ROLE_VISIBILITY = {
 
   // Manager — Operations + some SCM
   manager: {
-    domains: ['overview', 'supply-chain', 'products-qr'],
+    domains: ['command-center', 'operations'],
     items: [
       'dashboard',
       'ca-nodes', 'ca-batches',
-      'products', 'scanner', 'scans',
+      'products', 'scans',
     ],
   },
 
   // GGC Member — ESG, Governance, Carbon, Lineage
   ggc_member: {
-    domains: ['overview', 'supply-chain', 'risk-monitoring'],
+    domains: ['command-center', 'operations', 'carbon-sustainability', 'risk-protection'],
     items: [
       'dashboard',
       'ca-nodes', 'ca-batches', 'ca-traceability',
       'fraud',
     ],
     extraItems: [
-      { id: 'green-finance', domain: 'supply-chain', icon: icon('globe'), label: 'Green Finance' },
-      { id: 'governance', domain: 'supply-chain', icon: icon('shield'), label: 'Governance' },
-      { id: 'scm-carbon', domain: 'supply-chain', icon: icon('globe'), label: 'Carbon Footprint' },
-      { id: 'scm-carbon-credit', domain: 'supply-chain', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'green-finance', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Green Finance' },
+      { id: 'scm-carbon', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Carbon Accounting' },
+      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
   // Risk Committee — Risk models, Lineage, Fraud, Evidence
   risk_committee: {
-    domains: ['overview', 'risk-monitoring', 'supply-chain'],
+    domains: ['command-center', 'risk-protection', 'operations'],
     items: [
       'dashboard',
       'fraud', 'ca-incidents', 'ca-risk-rules',
       'ca-nodes', 'ca-batches', 'ca-traceability',
     ],
     extraItems: [
-      { id: 'hardening', domain: 'risk-monitoring', icon: icon('shield'), label: 'Risk Models' },
-      { id: 'mrmf', domain: 'risk-monitoring', icon: icon('target'), label: 'MRMF' },
-      { id: 'ercm', domain: 'risk-monitoring', icon: icon('workflow'), label: 'ERCM' },
-      { id: 'risk-graph', domain: 'risk-monitoring', icon: icon('network'), label: 'Risk Graph' },
-      { id: 'risk-intelligence', domain: 'risk-monitoring', icon: icon('brain'), label: 'Risk Intelligence' },
+      { id: 'hardening', domain: 'risk-protection', icon: icon('shield'), label: 'Risk Models' },
+      { id: 'mrmf', domain: 'risk-protection', icon: icon('target'), label: 'MRMF' },
+      { id: 'ercm', domain: 'risk-protection', icon: icon('workflow'), label: 'ERCM' },
+      { id: 'risk-graph', domain: 'risk-protection', icon: icon('network'), label: 'Risk Graph' },
+      { id: 'risk-intelligence', domain: 'risk-protection', icon: icon('brain'), label: 'Risk Intelligence' },
     ],
   },
 
   // IVU Validator — Model Validation, Lineage, Evidence, Bias
   ivu_validator: {
-    domains: ['overview', 'risk-monitoring'],
+    domains: ['command-center', 'risk-protection'],
     items: [
       'dashboard',
       'fraud',
     ],
     extraItems: [
-      { id: 'mrmf', domain: 'risk-monitoring', icon: icon('target'), label: 'MRMF' },
-      { id: 'hardening', domain: 'risk-monitoring', icon: icon('shield'), label: 'Risk Models' },
-      { id: 'risk-intelligence', domain: 'risk-monitoring', icon: icon('brain'), label: 'Risk Intelligence' },
+      { id: 'mrmf', domain: 'risk-protection', icon: icon('target'), label: 'MRMF' },
+      { id: 'hardening', domain: 'risk-protection', icon: icon('shield'), label: 'Risk Models' },
+      { id: 'risk-intelligence', domain: 'risk-protection', icon: icon('brain'), label: 'Risk Intelligence' },
     ],
   },
 
   // SCM Analyst — Products, Supply Chain, Scans, Reports
   scm_analyst: {
-    domains: ['overview', 'supply-chain', 'products-qr', 'risk-monitoring'],
+    domains: ['command-center', 'operations', 'carbon-sustainability', 'risk-protection'],
     items: [
       'dashboard',
-      'ca-nodes', 'ca-flow-config', 'ca-batches', 'ca-traceability',
-      'products', 'scanner', 'scans', 'branding',
-      'fraud', 'ca-scan-analytics', 'scan-result',
+      'ca-nodes', 'ca-batches', 'ca-traceability',
+      'products', 'scans',
+      'fraud', 'ca-scan-analytics',
     ],
     extraItems: [
-      { id: 'scm-carbon', domain: 'supply-chain', icon: icon('globe'), label: 'Carbon Footprint' },
-      { id: 'sustainability', domain: 'supply-chain', icon: icon('globe'), label: 'Sustainability' },
-      { id: 'reports', domain: 'risk-monitoring', icon: icon('scroll'), label: 'Reports' },
+      { id: 'scm-carbon', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Carbon Accounting' },
+      { id: 'reports', domain: 'risk-protection', icon: icon('scroll'), label: 'Reports' },
     ],
   },
 
   // Blockchain Operator — Evidence, Anchor, Seal, DID
   blockchain_operator: {
-    domains: ['overview', 'products-qr'],
+    domains: ['command-center', 'operations'],
     items: [
       'dashboard',
-      'products', 'scanner', 'scans',
+      'products', 'scans',
     ],
     extraItems: [
-      { id: 'identity', domain: 'products-qr', icon: icon('shield'), label: 'DID / VC' },
-      { id: 'blockchain', domain: 'products-qr', icon: icon('lock'), label: 'Blockchain' },
-      { id: 'blockchain-explorer', domain: 'products-qr', icon: icon('search'), label: 'Explorer' },
-      { id: 'evidence', domain: 'products-qr', icon: icon('check'), label: 'Evidence' },
+      { id: 'identity', domain: 'operations', icon: icon('shield'), label: 'DID / VC' },
+      { id: 'blockchain', domain: 'operations', icon: icon('lock'), label: 'Blockchain' },
+      { id: 'blockchain-explorer', domain: 'operations', icon: icon('search'), label: 'Explorer' },
+      { id: 'evidence', domain: 'operations', icon: icon('check'), label: 'Evidence' },
     ],
   },
 
   // Carbon Officer — Carbon Data, Emission, Credit, ESG
   carbon_officer: {
-    domains: ['overview', 'supply-chain'],
+    domains: ['command-center', 'carbon-sustainability'],
     items: [
       'dashboard',
       'ca-nodes', 'ca-batches',
     ],
     extraItems: [
-      { id: 'scm-carbon', domain: 'supply-chain', icon: icon('globe'), label: 'Carbon Footprint' },
-      { id: 'scm-carbon-credit', domain: 'supply-chain', icon: icon('tag'), label: 'Carbon Passport' },
-      { id: 'green-finance', domain: 'supply-chain', icon: icon('globe'), label: 'Green Finance' },
-      { id: 'sustainability', domain: 'supply-chain', icon: icon('globe'), label: 'Sustainability' },
-      { id: 'carbon-registry', domain: 'supply-chain', icon: icon('scroll'), label: 'Carbon Registry' },
+      { id: 'scm-carbon', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Carbon Accounting' },
+      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'green-finance', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Green Finance Layer' },
+      { id: 'carbon-registry', domain: 'carbon-sustainability', icon: icon('scroll'), label: 'Carbon Registry' },
     ],
   },
 
   // Auditor → Internal Audit (CIE v2.1 — forensic access)
   auditor: {
-    domains: ['overview', 'risk-monitoring', 'supply-chain'],
+    domains: ['command-center', 'risk-protection', 'carbon-sustainability'],
     items: [
       'dashboard',
       'fraud',
     ],
     extraItems: [
-      { id: 'audit-view', domain: 'risk-monitoring', icon: icon('scroll'), label: 'Audit Logs' },
-      { id: 'compliance', domain: 'risk-monitoring', icon: icon('shield'), label: 'Compliance' },
-      { id: 'reports', domain: 'risk-monitoring', icon: icon('scroll'), label: 'Reports' },
-      { id: 'compliance-regtech', domain: 'risk-monitoring', icon: icon('globe'), label: 'RegTech' },
-      { id: 'scm-carbon-credit', domain: 'supply-chain', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'audit-view', domain: 'risk-protection', icon: icon('scroll'), label: 'Audit Logs' },
+      { id: 'compliance', domain: 'risk-protection', icon: icon('shield'), label: 'Compliance' },
+      { id: 'reports', domain: 'risk-protection', icon: icon('scroll'), label: 'Reports' },
+      { id: 'compliance-regtech', domain: 'risk-protection', icon: icon('globe'), label: 'RegTech' },
+      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
   // Board Observer (CIE v2.1 — read-only strategic oversight)
   board_observer: {
-    domains: ['overview', 'supply-chain'],
+    domains: ['command-center', 'carbon-sustainability'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'supply-chain', icon: icon('tag'), label: 'Carbon Passport' },
-      { id: 'governance', domain: 'supply-chain', icon: icon('shield'), label: 'Governance' },
+      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'governance', domain: 'carbon-sustainability', icon: icon('shield'), label: 'Governance' },
     ],
   },
 
   // Data Steward (CIE v2.1 — validate data quality before CIP)
   data_steward: {
-    domains: ['overview', 'supply-chain'],
+    domains: ['command-center', 'carbon-sustainability'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon', domain: 'supply-chain', icon: icon('globe'), label: 'Carbon Footprint' },
-      { id: 'scm-carbon-credit', domain: 'supply-chain', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-carbon', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Carbon Accounting' },
+      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
   // Legal Counsel (CIE v2.1 — sealed CIP + liability view)
   legal_counsel: {
-    domains: ['overview', 'supply-chain'],
+    domains: ['command-center', 'carbon-sustainability'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'supply-chain', icon: icon('tag'), label: 'Carbon Passport' },
-      { id: 'governance', domain: 'supply-chain', icon: icon('shield'), label: 'Governance' },
+      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'governance', domain: 'carbon-sustainability', icon: icon('shield'), label: 'Governance' },
     ],
   },
 
   // Supplier Contributor (CIE v2.5 — scoped external input)
   supplier_contributor: {
-    domains: ['overview', 'supply-chain'],
+    domains: ['command-center', 'carbon-sustainability'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'supply-chain', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
   // ESG Reporting Manager (CIE v2.5 — ESG reports + investor disclosure)
   esg_reporting_manager: {
-    domains: ['overview', 'supply-chain'],
+    domains: ['command-center', 'carbon-sustainability'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon', domain: 'supply-chain', icon: icon('globe'), label: 'Carbon Footprint' },
-      { id: 'scm-carbon-credit', domain: 'supply-chain', icon: icon('tag'), label: 'Carbon Passport' },
-      { id: 'green-finance', domain: 'supply-chain', icon: icon('globe'), label: 'Green Finance' },
-      { id: 'sustainability', domain: 'supply-chain', icon: icon('globe'), label: 'Sustainability' },
+      { id: 'scm-carbon', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Carbon Accounting' },
+      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'green-finance', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Green Finance Layer' },
     ],
   },
 
   // External Auditor (CIE v2.5 — time-bound snapshot)
   external_auditor: {
-    domains: ['overview', 'supply-chain'],
+    domains: ['command-center', 'carbon-sustainability'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'supply-chain', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
   // Financial Institution Viewer (CIE v3.0 — NDA-bound, scoped)
   financial_viewer: {
-    domains: ['overview', 'supply-chain'],
+    domains: ['command-center', 'carbon-sustainability'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'supply-chain', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
   // Public Verifier (CIE v3.0 — QR/hash verification)
   public_verifier: {
-    domains: ['overview', 'supply-chain'],
+    domains: ['command-center', 'carbon-sustainability'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'supply-chain', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
   // Disclosure Officer (CIE v3.0 — CSRD/ESRS sign-off)
   disclosure_officer: {
-    domains: ['overview', 'supply-chain'],
+    domains: ['command-center', 'carbon-sustainability'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'supply-chain', icon: icon('tag'), label: 'Carbon Passport' },
-      { id: 'scm-carbon', domain: 'supply-chain', icon: icon('globe'), label: 'Carbon Footprint' },
-      { id: 'green-finance', domain: 'supply-chain', icon: icon('globe'), label: 'Green Finance' },
+      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-carbon', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Carbon Accounting' },
+      { id: 'green-finance', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Green Finance Layer' },
     ],
   },
 
   // Default operator — minimal
   operator: {
-    domains: ['overview', 'products-qr'],
-    items: ['dashboard', 'products', 'scanner', 'scans'],
+    domains: ['command-center', 'operations'],
+    items: ['dashboard', 'products', 'scans'],
   },
 
   // Viewer — same as operator
   viewer: {
-    domains: ['overview', 'products-qr'],
-    items: ['dashboard', 'products', 'scanner', 'scans'],
+    domains: ['command-center', 'operations'],
+    items: ['dashboard', 'products', 'scans'],
   },
 };
 
@@ -272,65 +268,61 @@ const SUPERADMIN_NAV = [
 ];
 
 // ═══════════════════════════════════════════════════════════════
-// COMPANY ADMIN — 6-DOMAIN BUSINESS PLANE (IA v10)
+// COMPANY ADMIN — FORTUNE 100 ENTERPRISE LAYOUT (IA v3.0)
+// Structure: Control & Accountability — 7 Institutional Domains
 // ═══════════════════════════════════════════════════════════════
 
 const DOMAIN_ITEMS = {
-  overview: [
-    { id: 'dashboard', icon: icon('dashboard'), label: 'Business Dashboard' },
+  'command-center': [
+    { id: 'dashboard', icon: icon('dashboard'), label: 'Executive Dashboard' },
   ],
-  'supply-chain': [
-    { id: 'ca-nodes', icon: icon('factory'), label: 'Nodes' },
-    { id: 'ca-flow-config', icon: icon('network'), label: 'Flow Config' },
-    { id: 'ca-batches', icon: icon('clipboard'), label: 'Batches' },
-    { id: 'ca-traceability', icon: icon('search'), label: 'Traceability' },
-    { id: 'scm-carbon', icon: icon('globe'), label: 'Carbon Footprint' },
-    { id: 'scm-carbon-credit', icon: icon('tag'), label: 'Carbon Passport' },
-    { id: 'green-finance', icon: icon('globe'), label: 'Green Finance' },
-  ],
-  'products-qr': [
+  'operations': [
     { id: 'products', icon: icon('products'), label: 'Products' },
-    { id: 'scanner', icon: icon('scanner'), label: 'QR Generator' },
-    { id: 'scans', icon: icon('search'), label: 'Verification Logs' },
-    { id: 'branding', icon: icon('palette'), label: 'Templates' },
+    { id: 'ca-batches', icon: icon('clipboard'), label: 'Batch Management' },
+    { id: 'ca-nodes', icon: icon('factory'), label: 'Supply Network' },
+    { id: 'ca-traceability', icon: icon('search'), label: 'Traceability Map' },
+    { id: 'scans', icon: icon('check'), label: 'Verification Logs' },
   ],
-  'code-management': [
-    { id: 'ca-code-generate', icon: icon('zap'), label: 'Generate Codes' },
-    { id: 'ca-code-format-rules', icon: icon('settings'), label: 'Format Rules' },
-    { id: 'ca-code-batch-assign', icon: icon('clipboard'), label: 'Batch Assignment' },
-    { id: 'ca-code-lifecycle', icon: icon('workflow'), label: 'Code Lifecycle' },
-    { id: 'ca-code-audit-log', icon: icon('scroll'), label: 'Code Audit Log' },
+  'carbon-sustainability': [
+    { id: 'scm-carbon', icon: icon('globe'), label: 'Carbon Accounting' },
+    { id: 'scm-carbon-credit', icon: icon('tag'), label: 'Carbon Passport' },
+    { id: 'green-finance', icon: icon('globe'), label: 'Green Finance Layer' },
   ],
-  'risk-monitoring': [
-    { id: 'fraud', icon: icon('alert'), label: 'Fraud Dashboard' },
+  'risk-protection': [
+    { id: 'fraud', icon: icon('alert'), label: 'Fraud Monitoring' },
     { id: 'ca-incidents', icon: icon('alertTriangle'), label: 'Incidents' },
     { id: 'ca-risk-rules', icon: icon('target'), label: 'Risk Rules' },
     { id: 'ca-scan-analytics', icon: icon('search'), label: 'Scan Analytics' },
-    { id: 'scan-result', icon: icon('check'), label: 'Scan Response' },
-    { id: 'ca-duplicate-classification', icon: icon('target'), label: 'Duplicate Intel' },
-    { id: 'ca-supply-route-engine', icon: icon('network'), label: 'Supply Routes' },
+    { id: 'ca-supply-route-engine', icon: icon('network'), label: 'Supply Risk Index' },
   ],
-  organization: [
+  'identity-code': [
+    { id: 'ca-code-lifecycle', icon: icon('workflow'), label: 'Code Lifecycle' },
+    { id: 'ca-code-generate', icon: icon('zap'), label: 'Code Allocation' },
+    { id: 'ca-code-audit-log', icon: icon('scroll'), label: 'Audit Trail' },
+    { id: 'ca-duplicate-classification', icon: icon('target'), label: 'Duplicate Intelligence' },
+    { id: 'ca-code-format-rules', icon: icon('settings'), label: 'Format Rules' },
+  ],
+  'corporate-governance': [
     { id: 'admin-users', icon: icon('users'), label: 'Users' },
-    { id: 'role-manager', icon: icon('shield'), label: 'Roles' },
+    { id: 'role-manager', icon: icon('shield'), label: 'Roles & Access Matrix' },
     { id: 'ca-access-logs', icon: icon('scroll'), label: 'Access Logs' },
   ],
-  settings: [
+  'corporate-settings': [
     { id: 'ca-company-profile', icon: icon('building'), label: 'Company Profile' },
     { id: 'settings', icon: icon('lock'), label: 'Security' },
-    { id: 'integrations', icon: icon('plug'), label: 'Integrations' },
-    { id: 'billing', icon: icon('creditCard'), label: 'Usage & Quota' },
+    { id: 'integrations', icon: icon('plug'), label: 'API & Integrations' },
+    { id: 'billing', icon: icon('creditCard'), label: 'Billing & Quota' },
   ],
 };
 
 const DOMAIN_LABELS = {
-  overview: 'Overview',
-  'supply-chain': 'Supply Chain',
-  'products-qr': 'Products & QR',
-  'code-management': '🔐 Code Governance',
-  'risk-monitoring': 'Risk & Monitoring',
-  organization: 'Organization',
-  settings: 'Settings',
+  'command-center': '🏛 Command Center',
+  'operations': '⚙️ Operations & Supply',
+  'carbon-sustainability': '🌱 Carbon & Sustainability',
+  'risk-protection': '🛡 Risk & Protection',
+  'identity-code': '🔐 Identity & Code Gov',
+  'corporate-governance': '👥 Corporate Governance',
+  'corporate-settings': '⚙️ Settings & Integration',
 };
 
 // ─── Collapse state management ──────────────────────────────
