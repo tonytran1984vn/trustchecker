@@ -409,14 +409,14 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
         }
 
         const codes = await db.all(`
-            SELECT qc.id, qc.qr_data as code, qc.qr_image_base64, qc.status, qc.created_at,
+            SELECT qc.id, qc.qr_data as code, qc.qr_image_base64, qc.status, qc.generated_at,
                    COUNT(se.id) as scan_count,
                    MAX(se.scanned_at) as last_scanned
             FROM qr_codes qc
             LEFT JOIN scan_events se ON se.qr_code_id = qc.id
             WHERE qc.product_id = ? AND qc.status != 'deleted'
-            GROUP BY qc.id
-            ORDER BY qc.created_at DESC
+            GROUP BY qc.id, qc.qr_data, qc.qr_image_base64, qc.status, qc.generated_at
+            ORDER BY qc.generated_at DESC
         `, [req.params.id]);
 
         if (codes.length === 0) {
@@ -436,7 +436,7 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
                 `"${product.name}"`,
                 `"${product.sku}"`,
                 c.status,
-                c.created_at ? new Date(c.created_at).toLocaleString('vi-VN') : '',
+                c.generated_at ? new Date(c.generated_at).toLocaleString('vi-VN') : '',
                 c.scan_count || 0,
                 c.last_scanned ? new Date(c.last_scanned).toLocaleString('vi-VN') : 'Chưa quét'
             ]);
