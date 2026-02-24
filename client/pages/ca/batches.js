@@ -45,7 +45,7 @@ function renderContent() {
 
       <div class="sa-toolbar">
         <div class="sa-filters">
-          ${statuses.map(f => `<button class="sa-filter-btn ${filter === f ? 'active' : ''}" onclick="_caBatchFilter('${f}')">${f.charAt(0).toUpperCase() + f.slice(1)} <span class="sa-filter-count">${counts[f] || 0}</span></button>`).join('')}
+          ${statuses.map(f => `<button class="sa-filter-btn ${filter === f ? 'active' : ''}" style="${filter === f ? 'color:#1e293b;background:#fef3c7;border-color:#f59e0b' : 'color:#fff;background:#475569;border-color:#475569'}" onclick="_caBatchFilter('${f}')">${f.charAt(0).toUpperCase() + f.slice(1)} <span class="sa-filter-count">${counts[f] || 0}</span></button>`).join('')}
         </div>
       </div>
 
