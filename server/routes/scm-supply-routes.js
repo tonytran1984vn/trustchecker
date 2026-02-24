@@ -32,13 +32,13 @@ router.get('/routes', authMiddleware, async (req, res) => {
 });
 
 // ─── POST /api/scm/routes – Create supply route (Admin only) ────────────────
-router.post('/routes', authMiddleware, requireRole('admin'), async (req, res) => {
+router.post('/routes', authMiddleware, requireRole('admin', 'company_admin'), async (req, res) => {
     try {
         const { name, chain, products, geo_fence, status } = req.body;
         const id = uuidv4();
         await db.prepare(`
             INSERT INTO supply_routes (id, name, chain, products, geo_fence, status, created_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
         `).run(id, name, JSON.stringify(chain || []), JSON.stringify(products || []),
             geo_fence || '', status || 'active', req.user?.id || null);
 
