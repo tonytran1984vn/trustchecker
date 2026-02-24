@@ -102,24 +102,25 @@ router.get('/events', authMiddleware, async (req, res) => {
 });
 
 // ─── POST /api/scm/batches – Create batch ────────────────────────────────────
-router.post('/batches', authMiddleware, requireRole('operator'), async (req, res) => {
+router.post('/batches', authMiddleware, requireRole('operator', 'admin', 'company_admin'), async (req, res) => {
     try {
         const { batch_number, product_id, quantity, manufactured_date, expiry_date, origin_facility } = req.body;
         if (!batch_number || !product_id) return res.status(400).json({ error: 'batch_number and product_id required' });
 
         const id = uuidv4();
+        const orgId = req.user?.org_id || null;
         await db.prepare(`
-      INSERT INTO batches (id, batch_number, product_id, quantity, manufactured_date, expiry_date, origin_facility)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, batch_number, product_id, quantity || 0, manufactured_date || null, expiry_date || null, origin_facility || '');
+      INSERT INTO batches (id, batch_number, product_id, quantity, manufactured_date, expiry_date, origin_facility, org_id, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'created', NOW())
+    `).run(id, batch_number, product_id, quantity || 0, manufactured_date || null, expiry_date || null, origin_facility || '', orgId);
 
         // Auto-create commission event
         const eventId = uuidv4();
         const seal = await blockchainEngine.seal('BatchCreated', eventId, { batch_number, product_id, quantity });
         await db.prepare(`
-      INSERT INTO supply_chain_events (id, event_type, product_id, batch_id, location, actor, details, blockchain_seal_id)
-      VALUES (?, 'commission', ?, ?, ?, ?, ?, ?)
-    `).run(eventId, product_id, id, origin_facility || '', req.user.username, JSON.stringify({ quantity, batch_number }), seal.seal_id);
+      INSERT INTO supply_chain_events (id, event_type, product_id, batch_id, location, actor, details, blockchain_seal_id, org_id)
+      VALUES (?, 'commission', ?, ?, ?, ?, ?, ?, ?)
+    `).run(eventId, product_id, id, origin_facility || '', req.user.username, JSON.stringify({ quantity, batch_number }), seal.seal_id, orgId);
 
         res.status(201).json({ id, batch_number, blockchain_seal: seal });
     } catch (err) {
@@ -132,13 +133,17 @@ router.post('/batches', authMiddleware, requireRole('operator'), async (req, res
 router.get('/batches', authMiddleware, async (req, res) => {
     try {
         const { product_id, limit = 50 } = req.query;
+        const orgId = req.user?.org_id;
         let query = `
       SELECT b.*, p.name as product_name, p.sku as product_sku
       FROM batches b
       LEFT JOIN products p ON b.product_id = p.id
     `;
         const params = [];
-        if (product_id) { query += ' WHERE b.product_id = ?'; params.push(product_id); }
+        const conditions = [];
+        if (orgId) { conditions.push('b.org_id = ?'); params.push(orgId); }
+        if (product_id) { conditions.push('b.product_id = ?'); params.push(product_id); }
+        if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
         query += ' ORDER BY b.created_at DESC LIMIT ?';
         params.push(Math.min(Number(limit) || 20, 100));
 
