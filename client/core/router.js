@@ -419,12 +419,17 @@ export async function loadPageData(page) {
             } catch (e) { State.pricingAdminData = {}; }
             render();
         } else if (page === 'billing' || page === 'sa-revenue' || page === 'sa-usage') {
-            const [planRes, usageRes, invoiceRes] = await Promise.all([
-                API.get('/billing/plan'),
-                API.get('/billing/usage'),
-                API.get('/billing/invoices'),
-            ]);
-            State.billingData = { plan: planRes.plan, available: planRes.available_plans, period: usageRes.period, usage: usageRes.usage, invoices: invoiceRes.invoices };
+            try {
+                const [planRes, usageRes, invoiceRes] = await Promise.all([
+                    API.get('/billing/plan').catch(() => ({ plan: null, available_plans: [] })),
+                    API.get('/billing/usage').catch(() => ({ period: null, usage: {} })),
+                    API.get('/billing/invoices').catch(() => ({ invoices: [] })),
+                ]);
+                State.billingData = { plan: planRes.plan, available: planRes.available_plans, period: usageRes.period, usage: usageRes.usage, invoices: invoiceRes.invoices };
+            } catch (e) {
+                console.warn('[router] Billing fetch failed:', e.message);
+                State.billingData = { plan: null, available: [], period: null, usage: {}, invoices: [] };
+            }
             render();
         } else if (page === 'pricing') {
             try {
@@ -485,12 +490,17 @@ export async function loadPageData(page) {
         } else if (page === 'integrations') {
             try {
                 const [schema, data] = await Promise.all([
-                    API.get('/integrations/schema'),
-                    API.get('/integrations')
+                    API.get('/integrations/schema').catch(() => ({})),
+                    API.get('/integrations').catch(() => ({}))
                 ]);
                 State.integrationsSchema = schema;
                 State.integrationsData = data;
-            } catch (e) { }
+            } catch (e) {
+                console.warn('[router] Integrations fetch failed:', e.message);
+                State.integrationsSchema = {};
+                State.integrationsData = {};
+            }
+            render();
         } else if (page === 'scm-epcis') {
             const [events, stats] = await Promise.all([API.get('/scm/epcis/events'), API.get('/scm/epcis/stats')]);
             State.epcisData = { events: events.events || [], stats };

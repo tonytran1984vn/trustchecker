@@ -9,6 +9,11 @@ let data = null, loading = false;
 
 async function load() {
   if (loading) return; loading = true;
+  const emptyData = { total: 0, curiosity: 0, leakage: 0, counterfeit: 0, unclassified: 0, classList: [], duplicates: [] };
+  // Safety timeout — render empty state if API hangs
+  const timer = setTimeout(() => {
+    if (!data) { data = emptyData; loading = false; const el = document.getElementById('duplicate-classification-root'); if (el) el.innerHTML = renderContent(); }
+  }, 5000);
   try {
     const [classifications, scans] = await Promise.all([
       API.get('/scm/classify?limit=100').catch(() => ({ classifications: [] })),
@@ -25,7 +30,8 @@ async function load() {
     const unclassified = total - curiosity - leakage - counterfeit;
 
     data = { total, curiosity, leakage, counterfeit, unclassified: Math.max(0, unclassified), classList, duplicates };
-  } catch (e) { data = { total: 0, curiosity: 0, leakage: 0, counterfeit: 0, unclassified: 0, classList: [], duplicates: [] }; }
+  } catch (e) { data = emptyData; }
+  clearTimeout(timer);
   loading = false;
   setTimeout(() => { const el = document.getElementById('duplicate-classification-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }

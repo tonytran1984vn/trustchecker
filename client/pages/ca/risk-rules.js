@@ -10,6 +10,10 @@ let rules = null, loading = false;
 
 async function load() {
   if (loading) return; loading = true;
+  // Safety timeout — render empty state if API hangs
+  const timer = setTimeout(() => {
+    if (!rules) { rules = { models: [], risks: [] }; loading = false; const el = document.getElementById('risk-rules-root'); if (el) el.innerHTML = renderContent(); }
+  }, 5000);
   try {
     const [models, risks] = await Promise.all([
       API.get('/scm/model?limit=50').catch(() => ({ models: [] })),
@@ -19,6 +23,7 @@ async function load() {
     const riskList = Array.isArray(risks) ? risks : (risks.alerts || risks.rules || []);
     rules = { models: modelList, risks: riskList };
   } catch (e) { rules = { models: [], risks: [] }; }
+  clearTimeout(timer);
   loading = false;
   setTimeout(() => { const el = document.getElementById('risk-rules-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
