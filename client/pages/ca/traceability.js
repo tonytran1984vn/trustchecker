@@ -7,6 +7,116 @@ import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
 
 let events = null, batches = null, loading = false, activeTab = 'timeline';
+
+// ═══ Geo Map — Leaflet.js + OpenStreetMap (free, no API key) ═══
+const GEO_COORDS = {
+  'dalat coffee farm, vietnam': [11.94, 108.44],
+  'hcmc processing hub': [10.85, 106.63],
+  'cat lai port, hcmc': [10.77, 106.77],
+  'singapore customs': [1.27, 103.81],
+  'singapore dc, jurong': [1.33, 103.72],
+  'binh duong factory': [11.17, 106.65],
+  'da nang packaging center': [16.05, 108.22],
+  'hai phong port': [20.86, 106.68],
+  'tokyo warehouse, chiba': [35.61, 140.11],
+  'akihabara store, tokyo': [35.70, 139.77],
+  'factory hcmc': [10.85, 106.65],
+  'qc lab dalat': [11.94, 108.43],
+  'port hai phong': [20.86, 106.68],
+  'can tho': [10.04, 105.77],
+  'dalat': [11.94, 108.44], 'binh duong': [11.17, 106.65],
+  'da nang': [16.05, 108.22], 'hai phong': [20.86, 106.68],
+  'hcmc': [10.82, 106.63], 'hanoi': [21.03, 105.85],
+  'tokyo': [35.68, 139.69], 'singapore': [1.35, 103.82],
+  'jurong': [1.33, 103.72], 'dubai': [25.20, 55.27],
+  'hamburg': [53.55, 9.99], 'munich': [48.14, 11.58],
+  'seoul': [37.57, 126.98], 'phu quoc': [10.23, 103.97],
+};
+
+function _findCoords(loc) {
+  if (!loc) return null;
+  const lower = loc.toLowerCase().trim();
+  if (GEO_COORDS[lower]) return GEO_COORDS[lower];
+  for (const [key, val] of Object.entries(GEO_COORDS)) {
+    if (lower.includes(key) || key.includes(lower)) return val;
+  }
+  const words = lower.split(/[,\s—\-]+/).filter(w => w.length >= 3);
+  for (const w of words) {
+    for (const [key, val] of Object.entries(GEO_COORDS)) {
+      if (key.includes(w)) return val;
+    }
+  }
+  return null;
+}
+
+function _loadLeaflet(cb) {
+  // CSS
+  if (!document.getElementById('leaflet-css')) {
+    const css = document.createElement('link');
+    css.id = 'leaflet-css'; css.rel = 'stylesheet';
+    css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(css);
+  }
+  // JS
+  if (window.L) return cb();
+  const s = document.createElement('script');
+  s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+  s.onload = cb;
+  document.head.appendChild(s);
+}
+
+function _initGeoMap() {
+  const container = document.getElementById('geo-map');
+  if (!container) return;
+  // Clean up previous map instance
+  if (container._leaflet_id) {
+    container._leaflet_id = null;
+    container.innerHTML = '<div id="geo-map-loading" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#64748b;font-size:0.85rem;z-index:1">Loading map...</div>';
+  }
+
+  _loadLeaflet(() => {
+    const el = document.getElementById('geo-map');
+    if (!el) return;
+    // Remove loading text
+    const loadingEl = document.getElementById('geo-map-loading');
+    if (loadingEl) loadingEl.remove();
+
+    const map = L.map(el).setView([15, 108], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap', maxZoom: 18
+    }).addTo(map);
+
+    const evts = window._geoMapEvents || [];
+    const groups = {};
+    evts.forEach(e => {
+      if (!e.location) return;
+      if (!groups[e.location]) groups[e.location] = [];
+      groups[e.location].push(e);
+    });
+
+    const pts = [];
+    Object.entries(groups).forEach(([loc, list]) => {
+      const c = _findCoords(loc);
+      if (!c) return;
+      const detail = list.map(e => '<b>' + (e.event_type || '').replace(/_/g, ' ') + '</b>').join('<br>');
+      L.circleMarker(c, {
+        radius: 7 + Math.min(list.length * 2, 10),
+        fillColor: '#3b82f6', fillOpacity: 0.85,
+        color: '#1e40af', weight: 2
+      }).addTo(map).bindPopup(
+        '<div style="min-width:150px"><strong>' + loc + '</strong><br><small>' + list.length + ' event(s)</small><hr style="margin:4px 0">' + detail + '</div>'
+      );
+      pts.push(c);
+    });
+
+    if (pts.length >= 2) {
+      L.polyline(pts, { color: '#3b82f6', weight: 2, opacity: 0.5, dashArray: '6 4' }).addTo(map);
+      map.fitBounds(L.latLngBounds(pts).pad(0.15));
+    }
+    setTimeout(() => map.invalidateSize(), 300);
+  });
+}
+window._initGeoMap = _initGeoMap;
 export function renderPage() {
   return `<div id="traceability-root">${renderContent()}</div>`;
 }
@@ -99,132 +209,24 @@ function renderTabContent() {
 
   // geo tab — Leaflet.js + OpenStreetMap (FREE, no API key)
   const uniqueLocations = [...new Set(evList.map(e => e.location).filter(Boolean))];
+  // Store events for map init
+  window._geoMapEvents = evList.filter(e => e.location);
+
+  // Trigger map init after DOM update
+  setTimeout(() => _initGeoMap(), 150);
+
   return `
     <div class="sa-card">
       <h3>Geographic View</h3>
-      <div id="geo-map" style="height:420px;border-radius:8px;overflow:hidden;background:#e8ecf1"></div>
+      <div id="geo-map" style="height:420px;border-radius:8px;overflow:hidden;background:#e8ecf1;position:relative">
+        <div id="geo-map-loading" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#64748b;font-size:0.85rem;z-index:1">Loading map...</div>
+      </div>
       <div class="sa-metrics-row" style="margin-top:1rem">
         <div class="sa-metric-card sa-metric-blue"><div class="sa-metric-body"><div class="sa-metric-value">${uniqueLocations.length}</div><div class="sa-metric-label">Locations</div></div></div>
         <div class="sa-metric-card sa-metric-green"><div class="sa-metric-body"><div class="sa-metric-value">${evList.length}</div><div class="sa-metric-label">Total Events</div></div></div>
         <div class="sa-metric-card sa-metric-orange"><div class="sa-metric-body"><div class="sa-metric-value">${bList.length}</div><div class="sa-metric-label">Batches Tracked</div></div></div>
       </div>
     </div>
-    <script>
-    (function() {
-      // Known location coordinates
-      const COORDS = {
-        'dalat coffee farm, vietnam': [11.94, 108.44],
-        'hcmc processing hub': [10.85, 106.63],
-        'cat lai port, hcmc': [10.77, 106.77],
-        'singapore customs': [1.27, 103.81],
-        'singapore dc, jurong': [1.33, 103.72],
-        'binh duong factory': [11.17, 106.65],
-        'da nang packaging center': [16.05, 108.22],
-        'hai phong port': [20.86, 106.68],
-        'tokyo warehouse, chiba': [35.61, 140.11],
-        'akihabara store, tokyo': [35.70, 139.77],
-        'factory hcmc': [10.85, 106.65],
-        'qc lab dalat': [11.94, 108.43],
-        'port hai phong': [20.86, 106.68],
-        'can tho': [10.04, 105.77],
-        'dalat': [11.94, 108.44],
-        'binh duong': [11.17, 106.65],
-        'da nang': [16.05, 108.22],
-        'hai phong': [20.86, 106.68],
-        'hcmc': [10.82, 106.63],
-        'hanoi': [21.03, 105.85],
-        'tokyo': [35.68, 139.69],
-        'singapore': [1.35, 103.82],
-        'jurong': [1.33, 103.72],
-        'dubai': [25.20, 55.27],
-        'hamburg': [53.55, 9.99],
-        'munich': [48.14, 11.58],
-        'seoul': [37.57, 126.98],
-        'phu quoc': [10.23, 103.97],
-      };
-
-      function findCoords(loc) {
-        if (!loc) return null;
-        const lower = loc.toLowerCase().trim();
-        if (COORDS[lower]) return COORDS[lower];
-        for (const [key, val] of Object.entries(COORDS)) {
-          if (lower.includes(key) || key.includes(lower)) return val;
-        }
-        // Try partial match on first word
-        const words = lower.split(/[,\\s—-]+/).filter(Boolean);
-        for (const w of words) {
-          if (w.length < 3) continue;
-          for (const [key, val] of Object.entries(COORDS)) {
-            if (key.includes(w)) return val;
-          }
-        }
-        return null;
-      }
-
-      // Load Leaflet CSS + JS
-      if (!document.getElementById('leaflet-css')) {
-        const css = document.createElement('link');
-        css.id = 'leaflet-css';
-        css.rel = 'stylesheet';
-        css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        document.head.appendChild(css);
-      }
-
-      function initMap() {
-        const container = document.getElementById('geo-map');
-        if (!container || container._leaflet_id) return;
-
-        const map = L.map('geo-map').setView([15, 108], 5);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap',
-          maxZoom: 18
-        }).addTo(map);
-
-        const events = ${JSON.stringify(evList.map(e => ({ location: e.location, event_type: e.event_type, created_at: e.created_at })))};
-        const markers = [];
-        const locationGroups = {};
-
-        events.forEach(e => {
-          if (!e.location) return;
-          if (!locationGroups[e.location]) locationGroups[e.location] = [];
-          locationGroups[e.location].push(e);
-        });
-
-        Object.entries(locationGroups).forEach(([loc, evts]) => {
-          const coords = findCoords(loc);
-          if (!coords) return;
-          const eventList = evts.map(e => '<b>' + (e.event_type||'').replace(/_/g,' ') + '</b>').join('<br>');
-          const marker = L.circleMarker(coords, {
-            radius: 7 + Math.min(evts.length * 2, 10),
-            fillColor: '#3b82f6',
-            fillOpacity: 0.8,
-            color: '#1e40af',
-            weight: 2
-          }).addTo(map)
-            .bindPopup('<div style="min-width:160px"><strong>' + loc + '</strong><br><small>' + evts.length + ' event(s)</small><hr style="margin:4px 0">' + eventList + '</div>');
-          markers.push(coords);
-        });
-
-        // Draw route lines between sequential locations
-        if (markers.length >= 2) {
-          L.polyline(markers, { color: '#3b82f6', weight: 2, opacity: 0.5, dashArray: '6 4' }).addTo(map);
-          map.fitBounds(L.latLngBounds(markers).pad(0.15));
-        }
-
-        // Invalidate size after render
-        setTimeout(() => map.invalidateSize(), 200);
-      }
-
-      if (window.L) {
-        setTimeout(initMap, 100);
-      } else {
-        const script = document.createElement('script');
-        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        script.onload = () => setTimeout(initMap, 100);
-        document.head.appendChild(script);
-      }
-    })();
-    <\/script>
   `;
 }
 
