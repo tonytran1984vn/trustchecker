@@ -26,9 +26,10 @@ router.post('/incidents', requirePermission('risk:view'), async (req, res) => {
         });
         if (result.error) return res.status(400).json(result);
         // Persist to DB
+        const orgId = req.user?.org_id || req.user?.orgId || null;
         try {
-            await db.prepare('INSERT INTO ops_incidents (id,incident_id,title,description,severity,runbook_key,triggered_by,hash) VALUES (?,?,?,?,?,?,?,?)')
-                .run(uuidv4(), result.incident_id, result.title, result.description, req.body.severity || 'SEV3', req.body.runbook_key, req.user?.id, result.hash);
+            await db.prepare('INSERT INTO ops_incidents (id,incident_id,title,description,severity,status,runbook_key,triggered_by,org_id,hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,NOW())')
+                .run(uuidv4(), result.incident_id, result.title, result.description, req.body.severity || 'SEV3', 'open', req.body.runbook_key, req.user?.id, orgId, result.hash);
         } catch (dbErr) { console.warn('[ops] DB persist failed:', dbErr.message); }
         res.status(201).json(result);
     } catch (err) { res.status(500).json({ error: 'Incident creation failed' }); }
@@ -37,9 +38,34 @@ router.post('/incidents', requirePermission('risk:view'), async (req, res) => {
 // ─── GET /incidents — List incidents ────────────────────────────
 router.get('/incidents', async (req, res) => {
     try {
-        const limit = parseInt(req.query.limit) || 20;
-        const incidents = opsEngine.getAllIncidents(limit);
-        res.json({ title: 'Ops Incidents', total: incidents.length, incidents });
+        const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+        const orgId = req.user?.org_id || req.user?.orgId;
+
+        // Try DB first
+        try {
+            const params = [];
+            let sql = 'SELECT * FROM ops_incidents';
+            const conditions = [];
+            if (orgId && req.user?.role !== 'super_admin') {
+                conditions.push('org_id = ?');
+                params.push(orgId);
+            }
+            if (req.query.status) {
+                conditions.push('status = ?');
+                params.push(req.query.status);
+            }
+            if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+            sql += ' ORDER BY created_at DESC LIMIT ?';
+            params.push(limit);
+
+            const incidents = await db.all(sql, params);
+            return res.json({ title: 'Ops Incidents', total: incidents.length, incidents });
+        } catch (dbErr) {
+            // DB table might not exist — fall back to in-memory engine
+            console.warn('[ops] DB query failed, using in-memory:', dbErr.message);
+            const incidents = opsEngine.getAllIncidents(limit);
+            return res.json({ title: 'Ops Incidents', total: incidents.length, incidents });
+        }
     } catch (err) { res.status(500).json({ error: 'Incidents query failed' }); }
 });
 
