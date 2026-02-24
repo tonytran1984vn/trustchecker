@@ -191,6 +191,47 @@ router.put('/users/:id/status', async (req, res) => {
     }
 });
 
+// ─── DELETE /users/:id — Remove user (org-scoped) ───────────
+router.delete('/users/:id', async (req, res) => {
+    try {
+        if (req.params.id === req.user.id) {
+            return res.status(400).json({ error: 'Cannot delete your own account' });
+        }
+
+        // Scope check: non-platform users can only delete within their org
+        let user;
+        const userRole = req.user?.role;
+        const userType = req.user?.user_type;
+        if (userRole !== 'super_admin' && userType !== 'platform') {
+            const orgId = req.user?.org_id || req.user?.orgId;
+            user = await db.get('SELECT id, username, role FROM users WHERE id = ? AND org_id = ?', [req.params.id, orgId]);
+        } else {
+            user = await db.get('SELECT id, username, role FROM users WHERE id = ?', [req.params.id]);
+        }
+
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Prevent non-super_admin from deleting super_admins
+        if (user.role === 'super_admin' && req.user.role !== 'super_admin') {
+            return res.status(403).json({ error: 'Cannot delete super_admin' });
+        }
+
+        // Remove RBAC assignments
+        await db.run('DELETE FROM rbac_user_roles WHERE user_id = ?', [req.params.id]);
+        // Delete user
+        await db.run('DELETE FROM users WHERE id = ?', [req.params.id]);
+
+        await db.run(
+            'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+            [uuidv4(), req.user.id, 'USER_DELETED', 'user', req.params.id, JSON.stringify({ username: user.username })]
+        );
+
+        res.json({ message: `User ${user.username} deleted`, user_id: req.params.id });
+    } catch (e) {
+        safeError(res, 'Failed to delete user', e);
+    }
+});
+
 // SEC-3: Admin-only endpoint must require authentication
 router.post('/users/:id/reset-password', authMiddleware, requireRole('admin'), async (req, res) => {
     try {
