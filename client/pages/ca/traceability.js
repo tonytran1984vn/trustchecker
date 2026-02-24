@@ -80,15 +80,15 @@ function renderTabContent() {
     return `
       <div class="sa-card">
         <h3>Batch Traceability</h3>
-        <table class="sa-table"><thead><tr><th>Batch</th><th>Product</th><th>Qty</th><th>Origin</th><th>Destination</th><th>Status</th><th>Created</th></tr></thead><tbody>
+        <table class="sa-table"><thead><tr><th>Batch</th><th>Product</th><th>Qty</th><th>Facility</th><th>Mfg Date</th><th>Status</th><th>Created</th></tr></thead><tbody>
           ${bList.map(b => `
             <tr class="sa-row-clickable">
-              <td><strong class="sa-code">${b.batch_code || b.id?.substring(0, 12) || '—'}</strong></td>
+              <td><strong class="sa-code">${b.batch_number || b.batch_code || b.id?.substring(0, 12) || '—'}</strong></td>
               <td>${b.product_name || '—'}</td>
               <td class="sa-code">${(b.quantity || 0).toLocaleString()}</td>
-              <td>${b.origin || '—'}</td>
-              <td>${b.destination || '—'}</td>
-              <td><span class="sa-status-pill sa-pill-${b.status === 'delivered' ? 'green' : b.status === 'in_transit' ? 'blue' : 'orange'}">${(b.status || 'pending').replace(/_/g, ' ')}</span></td>
+              <td>${b.origin_facility || b.origin || '—'}</td>
+              <td style="color:var(--text-secondary)">${b.manufactured_date ? new Date(b.manufactured_date).toLocaleDateString('en-US') : '—'}</td>
+              <td><span class="sa-status-pill sa-pill-${b.status === 'delivered' ? 'green' : b.status === 'shipped' || b.status === 'in_transit' ? 'blue' : b.status === 'manufactured' ? 'purple' : 'orange'}">${(b.status || 'created').replace(/_/g, ' ')}</span></td>
               <td style="color:var(--text-secondary)">${b.created_at ? new Date(b.created_at).toLocaleDateString('en-US') : '—'}</td>
             </tr>
           `).join('')}
