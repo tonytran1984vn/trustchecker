@@ -426,29 +426,30 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
         const safeFileName = product.name.replace(/[^a-zA-Z0-9_\-\u00C0-\u024F\u1E00-\u1EFF ]/g, '').replace(/\s+/g, '_');
         const dateStr = new Date().toISOString().slice(0, 10);
 
-        // ── CSV Format ──
+        // ── CSV Format (Tab-separated for reliable Excel column splitting) ──
         if (format === 'csv') {
             const BOM = '\uFEFF'; // UTF-8 BOM for Excel compatibility
-            const header = ['No.', 'QR Code', 'Product Name', 'SKU', 'Status', 'Created Date', 'Scan Count', 'Last Scanned'];
+            const SEP = '\t'; // Tab separator — Excel auto-detects columns
+            const header = ['No.', 'Code', 'Product', 'SKU', 'Status', 'Created Date', 'Scan Count', 'Last Scanned'];
             const rows = codes.map((c, i) => [
                 i + 1,
-                `"${c.code}"`,
-                `"${product.name}"`,
-                `"${product.sku}"`,
-                c.status,
+                c.code || '',
+                product.name,
+                product.sku,
+                c.status || 'active',
                 c.generated_at ? new Date(c.generated_at).toLocaleString('en-US') : '',
                 c.scan_count || 0,
                 c.last_scanned ? new Date(c.last_scanned).toLocaleString('en-US') : 'Not scanned'
             ]);
 
-            const csvContent = BOM + header.join(',') + '\n' + rows.map(r => r.join(',')).join('\n');
+            const csvContent = BOM + header.join(SEP) + '\n' + rows.map(r => r.join(SEP)).join('\n');
 
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-            res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}_QR_codes_${dateStr}.csv"`);
+            res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}_codes_${dateStr}.csv"`);
             return res.send(csvContent);
         }
 
-        // ── PDF Format ──
+        // ── PDF Format (Clean text code list for printing — NO QR images) ──
         if (format === 'pdf') {
             const PDFDocument = require('pdfkit');
             const doc = new PDFDocument({ size: 'A4', margin: 40 });
@@ -458,62 +459,81 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
             doc.on('end', () => {
                 const pdfData = Buffer.concat(buffers);
                 res.setHeader('Content-Type', 'application/pdf');
-                res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}_QR_codes_${dateStr}.pdf"`);
+                res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}_codes_${dateStr}.pdf"`);
                 res.send(pdfData);
             });
 
             const pageWidth = doc.page.width - 80; // 40px margin each side
-            const colCount = 4;
-            const rowCount = 5;
-            const codesPerPage = colCount * rowCount;
-            const cellWidth = pageWidth / colCount;
-            const qrSize = Math.min(cellWidth - 16, 110);
-            const cellHeight = qrSize + 40; // QR image + code text
+            const rowHeight = 18;
+            const headerHeight = 80;
+            const pageHeight = doc.page.height - 80; // 40px top + bottom
+            const codesPerPage = Math.floor((pageHeight - headerHeight) / rowHeight);
             const totalPages = Math.ceil(codes.length / codesPerPage);
+
+            // Column widths
+            const col1W = 35;  // No.
+            const col3W = 55;  // Status
+            const col4W = 80;  // Date
+            const col2W = pageWidth - col1W - col3W - col4W; // Code (flex)
 
             for (let page = 0; page < totalPages; page++) {
                 if (page > 0) doc.addPage();
 
-                // Page header
+                // ── Page Header ──
                 doc.fontSize(14).font('Helvetica-Bold')
                     .text(product.name, 40, 40, { width: pageWidth });
-                doc.fontSize(9).font('Helvetica')
-                    .text(`SKU: ${product.sku}  |  Export date: ${dateStr}  |  Total codes: ${codes.length}  |  Page ${page + 1}/${totalPages}`, 40, 58, { width: pageWidth });
-                doc.moveTo(40, 75).lineTo(40 + pageWidth, 75).stroke('#ccc');
+                doc.fontSize(8).font('Helvetica')
+                    .fillColor('#666')
+                    .text(`SKU: ${product.sku}  |  Export: ${dateStr}  |  Total: ${codes.length} codes  |  Page ${page + 1}/${totalPages}`, 40, 58);
+                doc.moveTo(40, 72).lineTo(40 + pageWidth, 72).stroke('#ccc');
 
+                // ── Table Header ──
+                const tableTop = headerHeight;
+                doc.fillColor('#333').fontSize(7).font('Helvetica-Bold');
+                doc.text('#', 40, tableTop, { width: col1W });
+                doc.text('CODE', 40 + col1W, tableTop, { width: col2W });
+                doc.text('STATUS', 40 + col1W + col2W, tableTop, { width: col3W });
+                doc.text('CREATED', 40 + col1W + col2W + col3W, tableTop, { width: col4W });
+                doc.moveTo(40, tableTop + 12).lineTo(40 + pageWidth, tableTop + 12).stroke('#ddd');
+
+                // ── Code Rows ──
                 const startIdx = page * codesPerPage;
                 const pageCodes = codes.slice(startIdx, startIdx + codesPerPage);
-                const topY = 85;
 
                 for (let i = 0; i < pageCodes.length; i++) {
-                    const col = i % colCount;
-                    const row = Math.floor(i / colCount);
-                    const x = 40 + col * cellWidth + (cellWidth - qrSize) / 2;
-                    const y = topY + row * cellHeight;
+                    const y = tableTop + 16 + i * rowHeight;
+                    const globalIdx = startIdx + i + 1;
 
-                    // Draw QR image if available
-                    if (pageCodes[i].qr_image_base64) {
-                        try {
-                            const imgData = pageCodes[i].qr_image_base64.replace(/^data:image\/\w+;base64,/, '');
-                            const imgBuffer = Buffer.from(imgData, 'base64');
-                            doc.image(imgBuffer, x, y, { width: qrSize, height: qrSize });
-                        } catch (imgErr) {
-                            // If image fails, draw placeholder box
-                            doc.rect(x, y, qrSize, qrSize).stroke('#ddd');
-                            doc.fontSize(7).text('QR', x, y + qrSize / 2 - 4, { width: qrSize, align: 'center' });
-                        }
-                    } else {
-                        doc.rect(x, y, qrSize, qrSize).stroke('#ddd');
-                        doc.fontSize(7).text('No Image', x, y + qrSize / 2 - 4, { width: qrSize, align: 'center' });
+                    // Alternating row background
+                    if (i % 2 === 0) {
+                        doc.rect(40, y - 2, pageWidth, rowHeight).fill('#f8f9fa').stroke();
                     }
 
-                    // Code text below QR
-                    const codeText = pageCodes[i].code || '';
-                    const displayCode = codeText.length > 22 ? codeText.substring(0, 22) + '…' : codeText;
-                    doc.fontSize(6).font('Courier')
-                        .text(displayCode, 40 + col * cellWidth, y + qrSize + 3, { width: cellWidth, align: 'center' });
-                    doc.font('Helvetica'); // Reset font
+                    // Row number
+                    doc.fillColor('#999').fontSize(7).font('Helvetica')
+                        .text(String(globalIdx), 40, y, { width: col1W });
+
+                    // Code (monospace, prominent)
+                    doc.fillColor('#111').fontSize(8.5).font('Courier-Bold')
+                        .text(pageCodes[i].code || '', 40 + col1W, y, { width: col2W });
+
+                    // Status
+                    const status = pageCodes[i].status || 'active';
+                    doc.fillColor(status === 'active' ? '#16a34a' : '#dc2626')
+                        .fontSize(7).font('Helvetica')
+                        .text(status, 40 + col1W + col2W, y, { width: col3W });
+
+                    // Date
+                    const dateVal = pageCodes[i].generated_at
+                        ? new Date(pageCodes[i].generated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                        : '';
+                    doc.fillColor('#666').fontSize(6.5).font('Helvetica')
+                        .text(dateVal, 40 + col1W + col2W + col3W, y, { width: col4W });
                 }
+
+                // Bottom line
+                const bottomY = tableTop + 16 + pageCodes.length * rowHeight;
+                doc.moveTo(40, bottomY).lineTo(40 + pageWidth, bottomY).stroke('#ddd');
             }
 
             doc.end();
