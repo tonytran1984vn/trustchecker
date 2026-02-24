@@ -309,7 +309,7 @@ const DOMAIN_ITEMS = {
   'corporate-settings': [
     { id: 'ca-company-profile', icon: icon('building'), label: 'Company Profile' },
     { id: 'settings', icon: icon('lock'), label: 'Security' },
-    { id: 'integrations', icon: icon('plug'), label: 'API & Integrations' },
+    { id: 'ca-integrations', icon: icon('plug'), label: 'API & Integrations' },
     { id: 'billing', icon: icon('creditCard'), label: 'Billing & Quota' },
   ],
 };

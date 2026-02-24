@@ -70,6 +70,7 @@ const PAGE_LOADERS = {
     'scm-demand-planning': () => import('../pages/scm/demand-planning.js'),
     'scm-shipment-tracking': () => import('../pages/scm/shipment-tracking.js'),
     'kyc': () => import('../pages/kyc.js'),
+    'ca-integrations': () => import('../pages/ca/integrations.js'),
     'evidence': () => import('../pages/evidence.js'),
     'stakeholder': () => import('../pages/stakeholder.js'),
     'billing': () => import('../pages/billing.js'),

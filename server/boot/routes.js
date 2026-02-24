@@ -83,6 +83,7 @@ function setupRoutes(app) {
     const infrastructureRoutes = require('../routes/infrastructure');
     const gapCoverageRoutes = require('../routes/gap-coverage');
     const cieRoutes = require('../routes/cie');
+    const tenantIntegrationsFactory = require('../routes/tenant-integrations');
 
     // Declarative route table — each route is mounted on both /api and /api/v1
     const API_ROUTES = [
@@ -167,6 +168,7 @@ function setupRoutes(app) {
     const { authMiddleware, requirePermission } = require('../auth');
     const db = require('../db');
     app.use('/api/integrations', authMiddleware, requirePermission('settings:update'), integrationsRouteFactory(db));
+    app.use('/api/tenant-integrations', authMiddleware, tenantIntegrationsFactory(db));
 
     // API version info
     const { versionInfoHandler } = require('../middleware/api-version');
