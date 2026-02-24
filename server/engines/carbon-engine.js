@@ -339,7 +339,7 @@ class CarbonEngine {
             },
             risk_factors: risks,
             affected_scores: ['BRI (Brand Risk Index)', 'CRS (Channel Risk Score)', 'ERS (Event Risk Score)'],
-            note: 'ESG risk trở thành thành phần trong Brand Risk — infrastructure-level positioning'
+            note: 'ESG risk becomes a component of Brand Risk — infrastructure-level positioning'
         };
     }
 
@@ -430,7 +430,7 @@ class CarbonEngine {
                 super_admin: { view_passport: true, view_scope_breakdown: true, view_transport_detail: true, view_esg_leaderboard: true, submit_offset: false, configure_factors: true, export_gri_report: true, cross_tenant_benchmark: true, view_esg_kpi: false },
                 ceo: { view_passport: 'aggregated', view_scope_breakdown: false, view_transport_detail: false, view_esg_leaderboard: 'top_5', submit_offset: false, configure_factors: false, export_gri_report: false, cross_tenant_benchmark: false, view_esg_kpi: true }
             },
-            design_principle: 'CEO xem KPI, CA operate, SA benchmark, Compliance export, Risk analyze'
+            design_principle: 'CEO views KPI, CA operates, SA benchmarks, Compliance exports, Risk analyzes'
         };
     }
 
@@ -448,7 +448,7 @@ class CarbonEngine {
                 { step: 5, layer: 'Layer 4 — Integrity', name: 'Blockchain Seal', components: ['SHA-256 Hash', 'Evidence Store', 'Public Verification Portal'], icon: '🔗' },
                 { step: 6, layer: 'Layer 1 — Presentation', name: 'CEO Dashboard', components: ['ESG Grade KPI', '2030 Target', 'Offset Proof', 'Board Narrative'], icon: '👔' }
             ],
-            principle: 'Carbon nằm giữa: Data → Risk → Governance → Executive. Governance amplifier — không phải module đơn lẻ.'
+            principle: 'Carbon sits between: Data → Risk → Governance → Executive. Governance amplifier — not a standalone module.'
         };
     }
 

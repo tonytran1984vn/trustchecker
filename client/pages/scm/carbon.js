@@ -343,7 +343,7 @@ function renderContent() {
                 `).join('')}
             </div>
             <div style="text-align:center;margin-top:12px;padding:8px;background:rgba(16,185,129,0.06);border-radius:8px;color:#10b981;font-size:0.82rem;font-weight:600">
-                Carbon Passport = Governance Amplifier Module — chạy xuyên toàn bộ kiến trúc TrustChecker
+                Carbon Passport = Governance Amplifier Module — cross-cutting across the entire TrustChecker architecture
             </div>
         </div>
     </div>`;
