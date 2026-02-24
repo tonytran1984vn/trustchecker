@@ -1,6 +1,6 @@
 /**
  * Company Admin – Code Format Rules
- * Real data from /api/scm/code-gov + /api/qr
+ * Real data from /api/scm/code-gov + /api/products
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
@@ -10,15 +10,15 @@ let data = null, loading = false;
 async function load() {
   if (loading) return; loading = true;
   try {
-    const [govRes, qrRes] = await Promise.all([
-      API.get('/scm/code-gov?limit=50').catch(() => []),
-      API.get('/qr?limit=1').catch(() => ({ total: 0 })),
+    const [govRes, prodRes] = await Promise.all([
+      API.get('/scm/code-gov/generation-limits').catch(() => ({})),
+      API.get('/products?limit=1').catch(() => ({ products: [] })),
     ]);
-    const rules = Array.isArray(govRes) ? govRes : (govRes.rules || govRes.formats || []);
-    data = { rules, totalCodes: qrRes.total || 0 };
-  } catch (e) { data = { rules: [], totalCodes: 0 }; }
+    const rules = govRes.limits ? [govRes] : (Array.isArray(govRes) ? govRes : []);
+    const products = Array.isArray(prodRes) ? prodRes : (prodRes.products || []);
+    data = { rules, totalProducts: products.length };
+  } catch (e) { data = { rules: [], totalProducts: 0 }; }
   loading = false;
-  // Targeted DOM update
   setTimeout(() => {
     const el = document.getElementById('code-format-root');
     if (el) el.innerHTML = renderContent();
@@ -27,6 +27,7 @@ async function load() {
 
 function renderContent() {
   if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Format Rules...</div></div>`;
+  if (!data) { data = { rules: [], totalProducts: 0 }; }
 
   const rules = data?.rules || [];
 
@@ -36,7 +37,7 @@ function renderContent() {
 
       <div class="sa-metrics-row" style="margin-bottom:1.5rem">
         ${m('Active Formats', String(rules.length), 'Format definitions', 'blue', 'settings')}
-        ${m('Total Codes', String(data?.totalCodes || 0), 'Generated with rules', 'green', 'zap')}
+        ${m('Products', String(data?.totalProducts || 0), 'In system', 'green', 'zap')}
         ${m('Engine Status', 'Active', 'Validation enforced', 'green', 'shield')}
       </div>
 

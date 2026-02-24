@@ -1,6 +1,6 @@
 /**
  * Company Admin – Code Batch Assignment
- * Real data from /api/scm/batches + /api/qr
+ * Real data from /api/scm/batches + /api/products
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
@@ -10,22 +10,23 @@ let data = null, loading = false;
 async function load() {
   if (loading) return; loading = true;
   try {
-    const [batches, codes] = await Promise.all([
+    const [batchRes, prodRes] = await Promise.all([
       API.get('/scm/batches?limit=50').catch(() => []),
-      API.get('/qr?limit=1').catch(() => ({ total: 0 })),
+      API.get('/products?limit=50').catch(() => ({ products: [] })),
     ]);
+    const products = Array.isArray(prodRes) ? prodRes : (prodRes.products || []);
     data = {
-      batches: Array.isArray(batches) ? batches : (batches.batches || []),
-      totalCodes: codes.total || 0,
+      batches: Array.isArray(batchRes) ? batchRes : (batchRes.batches || []),
+      totalProducts: products.length,
     };
-  } catch (e) { data = { batches: [], totalCodes: 0 }; }
+  } catch (e) { data = { batches: [], totalProducts: 0 }; }
   loading = false;
-  setTimeout(() => { const el = document.getElementById('code-batch-assign-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
+  setTimeout(() => { const el = document.getElementById('code-batch-assign-root'); if (el) el.innerHTML = renderContent(); }, 50);
 }
 
 function renderContent() {
-  if (!data && !loading) { load(); }
   if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Batch Assignments...</div></div>`;
+  if (!data) { data = { batches: [], totalProducts: 0 }; }
 
   const batches = data?.batches || [];
   const complete = batches.filter(b => b.status === 'delivered' || b.status === 'complete').length;
@@ -39,13 +40,13 @@ function renderContent() {
         ${m('Total Batches', String(batches.length), 'In system', 'blue', 'clipboard')}
         ${m('Complete', String(complete), 'Fully assigned', 'green', 'check')}
         ${m('Pending', String(pending), 'Codes to assign', 'orange', 'clock')}
-        ${m('Total Codes', String(data?.totalCodes || 0), 'Platform-wide', 'blue', 'zap')}
+        ${m('Products', String(data?.totalProducts || 0), 'In system', 'blue', 'zap')}
       </div>
 
       <div class="sa-card" style="margin-bottom:1.5rem">
         <h3>📦 Batch ↔ Code Assignments</h3>
         <p style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:1rem">Each code is bound to a batch with full metadata before activation.</p>
-        ${batches.length === 0 ? '<div style="text-align:center;padding:40px;color:var(--text-muted)">No batches found</div>' : `
+        ${batches.length === 0 ? '<div style="text-align:center;padding:40px;color:var(--text-muted)">No batches found. Create a batch in Supply Chain to start assigning codes.</div>' : `
         <table class="sa-table"><thead><tr><th>Batch</th><th>Product</th><th>Qty</th><th>Origin</th><th>Destination</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>
           ${batches.map(b => `<tr class="${b.status === 'pending' ? 'ops-alert-row' : ''}">
             <td class="sa-code">${b.batch_code || b.id?.substring(0, 12) || '—'}</td>
@@ -64,5 +65,6 @@ function renderContent() {
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
 
 export function renderPage() {
+  if (!data && !loading) load();
   return `<div id="code-batch-assign-root">${renderContent()}</div>`;
 }
