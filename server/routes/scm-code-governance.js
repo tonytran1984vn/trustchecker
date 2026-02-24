@@ -13,8 +13,9 @@ const router = express.Router();
 // ═══════════════════════════════════════════════════════════
 // AUTO-CREATE FORMAT_RULES TABLES
 // ═══════════════════════════════════════════════════════════
-try {
-    db.run(`CREATE TABLE IF NOT EXISTS format_rules (
+(async () => {
+    try {
+        await db.run(`CREATE TABLE IF NOT EXISTS format_rules (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         prefix TEXT DEFAULT '',
@@ -29,19 +30,20 @@ try {
         status TEXT DEFAULT 'active',
         usage_count INTEGER DEFAULT 0,
         created_by TEXT,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now'))
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
     )`);
-    db.run(`CREATE TABLE IF NOT EXISTS format_rules_audit (
+        await db.run(`CREATE TABLE IF NOT EXISTS format_rules_audit (
         id TEXT PRIMARY KEY,
         rule_id TEXT NOT NULL,
         action TEXT NOT NULL,
         changes TEXT DEFAULT '{}',
         actor_id TEXT,
         actor_name TEXT DEFAULT '',
-        created_at TEXT DEFAULT (datetime('now'))
+        created_at TIMESTAMP DEFAULT NOW()
     )`);
-} catch (e) { /* tables may already exist */ }
+    } catch (e) { console.error('format_rules table init:', e.message); }
+})();
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
