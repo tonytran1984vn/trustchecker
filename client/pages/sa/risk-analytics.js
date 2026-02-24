@@ -3,7 +3,6 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let data = null, loading = false;
 
@@ -11,10 +10,11 @@ async function load() {
   if (loading) return; loading = true;
   try { data = await API.get('/risk-graph/risk-analytics'); } catch (e) { data = {}; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('risk-analytics-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
-export function renderPage() {
-  if (!data && !loading) { load().then(() => render()); }
+function renderContent() {
+  if (!data && !loading) { load(); }
   if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Risk Analytics...</div></div>`;
 
   const regions = data?.riskByRegion || [];
@@ -91,4 +91,8 @@ function barItem(label, count, pct, sub) {
       <div class="sa-bar-label">${label} <span class="sa-bar-count">${count}</span> ${sub ? '<span style="font-size:0.65rem;color:#94a3b8;margin-left:4px">' + sub + '</span>' : ''}</div>
       <div class="sa-bar-track"><div class="sa-bar-fill" style="width:${pct}%"></div></div>
     </div>`;
+}
+
+export function renderPage() {
+  return `<div id="risk-analytics-root">${renderContent()}</div>`;
 }

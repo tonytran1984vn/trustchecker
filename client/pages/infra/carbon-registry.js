@@ -19,13 +19,7 @@ async function load() {
     D = { jur, proto, cm, fee, rev, def, stats };
     _loading = false;
     // Re-render only if this tab is still active
-    setTimeout(() => {
-        const active = document.querySelector('.ws-tab.active');
-        if (active && active.getAttribute('data-tab') === 'registry') {
-            const ws = document.querySelector('.ws-content');
-            if (ws) ws.innerHTML = render();
-        }
-    }, 50);
+    setTimeout(() => { const el = document.getElementById('carbon-registry-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
 const sc = s => s === 'mature' ? '#10b981' : s === 'developing' || s === 'mixed' ? '#f59e0b' : '#3b82f6';
@@ -138,4 +132,8 @@ export function render() {
 
 </div>`;
 }
-export function renderPage() { return render(); }
+function renderContent() { return { const _el = document.getElementById('carbon-registry-root'); if (_el) _el.innerHTML = renderContent ? renderContent() : ''; } }
+
+export function renderPage() {
+  return `<div id="carbon-registry-root">${renderContent()}</div>`;
+}

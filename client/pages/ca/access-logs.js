@@ -5,10 +5,13 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let logs = null, loading = false, activeTab = 'all';
-window._caAccessTab = (t) => { activeTab = t; render(); };
+export function renderPage() {
+  return `<div id="access-logs-root">${renderContent()}</div>`;
+}
+
+window._caAccessTab = (t) => { activeTab = t; { const _el = document.getElementById('access-logs-root'); if (_el) _el.innerHTML = renderContent ? renderContent() : ''; } };
 
 async function load() {
   if (loading) return; loading = true;
@@ -17,6 +20,7 @@ async function load() {
     logs = Array.isArray(res) ? res : (res.logs || res.entries || []);
   } catch (e) { logs = []; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('access-logs-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
 function timeAgo(d) {
@@ -26,8 +30,8 @@ function timeAgo(d) {
   if (m < 1) return 'Just now'; if (m < 60) return m + 'm ago'; if (h < 24) return h + 'h ago'; return dd + 'd ago';
 }
 
-export function renderPage() {
-  if (!logs && !loading) { load().then(() => render()); }
+function renderContent() {
+  if (!logs && !loading) { load(); }
   if (loading && !logs) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Access Logs...</div></div>`;
 
   const list = logs || [];

@@ -5,7 +5,6 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let incidents = null, loading = false;
 
@@ -16,6 +15,7 @@ async function load() {
     incidents = Array.isArray(res) ? res : (res.incidents || []);
   } catch (e) { incidents = []; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('incidents-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
 function timeAgo(d) {
@@ -25,8 +25,8 @@ function timeAgo(d) {
   if (m < 1) return 'Just now'; if (m < 60) return m + 'm ago'; if (h < 24) return h + 'h ago'; return dd + 'd ago';
 }
 
-export function renderPage() {
-  if (!incidents && !loading) { load().then(() => render()); }
+function renderContent() {
+  if (!incidents && !loading) { load(); }
   if (loading && !incidents) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Incidents...</div></div>`;
 
   const list = incidents || [];
@@ -79,4 +79,8 @@ export function renderPage() {
       </div>
     </div>
   `;
+}
+
+export function renderPage() {
+  return `<div id="incidents-root">${renderContent()}</div>`;
 }

@@ -5,10 +5,13 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let batches = null, loading = false, filter = 'all';
-window._caBatchFilter = (f) => { filter = f; render(); };
+export function renderPage() {
+  return `<div id="batches-root">${renderContent()}</div>`;
+}
+
+window._caBatchFilter = (f) => { filter = f; { const _el = document.getElementById('batches-root'); if (_el) _el.innerHTML = renderContent ? renderContent() : ''; } };
 
 async function load() {
   if (loading) return; loading = true;
@@ -17,10 +20,11 @@ async function load() {
     batches = Array.isArray(res) ? res : (res.batches || []);
   } catch (e) { batches = []; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('batches-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
-export function renderPage() {
-  if (!batches && !loading) { load().then(() => render()); }
+function renderContent() {
+  if (!batches && !loading) { load(); }
   if (loading && !batches) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Batches...</div></div>`;
 
   const list = batches || [];

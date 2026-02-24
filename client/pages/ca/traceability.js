@@ -5,10 +5,13 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let events = null, batches = null, loading = false, activeTab = 'timeline';
-window._caTraceTab = (t) => { activeTab = t; render(); };
+export function renderPage() {
+  return `<div id="traceability-root">${renderContent()}</div>`;
+}
+
+window._caTraceTab = (t) => { activeTab = t; { const _el = document.getElementById('traceability-root'); if (_el) _el.innerHTML = renderContent ? renderContent() : ''; } };
 
 async function load() {
   if (loading) return; loading = true;
@@ -21,10 +24,11 @@ async function load() {
     batches = Array.isArray(bRes) ? bRes : (bRes.batches || []);
   } catch (e) { events = []; batches = []; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('traceability-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
-export function renderPage() {
-  if (!events && !loading) { load().then(() => render()); }
+function renderContent() {
+  if (!events && !loading) { load(); }
   if (loading && !events) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Traceability...</div></div>`;
 
   return `

@@ -4,7 +4,6 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let data = null, loading = false;
 
@@ -21,10 +20,11 @@ async function load() {
     };
   } catch (e) { data = { batches: [], totalCodes: 0 }; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('code-batch-assign-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
-export function renderPage() {
-  if (!data && !loading) { load().then(() => render()); }
+function renderContent() {
+  if (!data && !loading) { load(); }
   if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Batch Assignments...</div></div>`;
 
   const batches = data?.batches || [];
@@ -62,3 +62,7 @@ export function renderPage() {
     </div>`;
 }
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
+
+export function renderPage() {
+  return `<div id="code-batch-assign-root">${renderContent()}</div>`;
+}

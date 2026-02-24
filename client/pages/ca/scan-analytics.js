@@ -4,7 +4,6 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let data = null, loading = false;
 
@@ -29,10 +28,11 @@ async function load() {
     data = { totalScans, duplicates, dupRate, firstScanRate, anomalyCount: anomalyList.length, critAnomalies, highAnomalies, scanList, anomalyList };
   } catch (e) { data = { totalScans: 0, duplicates: 0, dupRate: '0', firstScanRate: '100', anomalyCount: 0, critAnomalies: 0, highAnomalies: 0, scanList: [], anomalyList: [] }; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('scan-analytics-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
-export function renderPage() {
-  if (!data && !loading) { load().then(() => render()); }
+function renderContent() {
+  if (!data && !loading) { load(); }
   if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Scan Analytics...</div></div>`;
 
   const d = data || {};
@@ -84,3 +84,7 @@ export function renderPage() {
     </div>`;
 }
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
+
+export function renderPage() {
+  return `<div id="scan-analytics-root">${renderContent()}</div>`;
+}

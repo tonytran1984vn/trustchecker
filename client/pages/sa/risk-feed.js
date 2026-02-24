@@ -4,7 +4,6 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let feedData = null;
 let loading = false;
@@ -22,6 +21,7 @@ async function loadFeed() {
     loadedAt = now;
   } catch (e) { feedData = { alerts: [], summary: {}, topTenants: [], topTypes: [], insights: [{ level: 'info', msg: 'Unable to load data — ' + e.message }] }; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('risk-feed-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
 function timeAgo(iso) {
@@ -45,8 +45,8 @@ const INSIGHT_STYLE = {
 };
 const INSIGHT_ICON = { critical: '🚨', danger: '⚠️', warning: '⚡', info: 'ℹ️' };
 
-export function renderPage() {
-  if (!feedData && !loading) { loadFeed().then(() => render()); }
+function renderContent() {
+  if (!feedData && !loading) { loadFeed(); }
 
   if (loading && !feedData) {
     return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('radio', 28)} Global Fraud Feed</h1></div>
@@ -198,6 +198,10 @@ function kpi(ic, val, label, color) {
     </div>`;
 }
 
-window._rfRefresh = () => { feedData = null; loadedAt = 0; currentPage = 1; loadFeed().then(() => render()); };
-window._rfPage = (p) => { currentPage = Math.max(1, p); render(); };
-window._rfPageSize = (n) => { pageSize = n; currentPage = 1; render(); };
+window._rfRefresh = () => { feedData = null; loadedAt = 0; currentPage = 1; loadFeed(); };
+window._rfPage = (p) => { currentPage = Math.max(1, p); { const _el = document.getElementById('risk-feed-root'); if (_el) _el.innerHTML = renderContent ? renderContent() : ''; } };
+export function renderPage() {
+  return `<div id="risk-feed-root">${renderContent()}</div>`;
+}
+
+window._rfPageSize = (n) => { pageSize = n; currentPage = 1; { const _el = document.getElementById('risk-feed-root'); if (_el) _el.innerHTML = renderContent ? renderContent() : ''; } };

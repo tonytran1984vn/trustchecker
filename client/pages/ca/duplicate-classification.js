@@ -4,7 +4,6 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let data = null, loading = false;
 
@@ -28,10 +27,11 @@ async function load() {
     data = { total, curiosity, leakage, counterfeit, unclassified: Math.max(0, unclassified), classList, duplicates };
   } catch (e) { data = { total: 0, curiosity: 0, leakage: 0, counterfeit: 0, unclassified: 0, classList: [], duplicates: [] }; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('duplicate-classification-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
-export function renderPage() {
-  if (!data && !loading) { load().then(() => render()); }
+function renderContent() {
+  if (!data && !loading) { load(); }
   if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Classification Data...</div></div>`;
 
   const d = data || {};
@@ -92,3 +92,7 @@ function classBox(label, count, pct, color, desc) {
   </div>`;
 }
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
+
+export function renderPage() {
+  return `<div id="duplicate-classification-root">${renderContent()}</div>`;
+}

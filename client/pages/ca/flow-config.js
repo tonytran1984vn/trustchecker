@@ -5,7 +5,6 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let data = null, loading = false;
 
@@ -22,10 +21,11 @@ async function load() {
     };
   } catch (e) { data = { routes: [], rules: [] }; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('flow-config-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
-export function renderPage() {
-  if (!data && !loading) { load().then(() => render()); }
+function renderContent() {
+  if (!data && !loading) { load(); }
   if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Flow Configuration...</div></div>`;
 
   const routes = data?.routes || [];
@@ -106,4 +106,8 @@ function ruleItem(name, desc, enabled) {
       <div class="sa-threshold-desc">${desc}</div>
     </div>
   `;
+}
+
+export function renderPage() {
+  return `<div id="flow-config-root">${renderContent()}</div>`;
 }

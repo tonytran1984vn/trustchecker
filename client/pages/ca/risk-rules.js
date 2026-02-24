@@ -5,7 +5,6 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let rules = null, loading = false;
 
@@ -21,10 +20,11 @@ async function load() {
     rules = { models: modelList, risks: riskList };
   } catch (e) { rules = { models: [], risks: [] }; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('risk-rules-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
-export function renderPage() {
-  if (!rules && !loading) { load().then(() => render()); }
+function renderContent() {
+  if (!rules && !loading) { load(); }
   if (loading && !rules) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Risk Rules...</div></div>`;
 
   const models = rules?.models || [];
@@ -108,4 +108,8 @@ function thresholdItem(name, desc, value) {
       <div class="sa-threshold-desc">${desc}</div>
     </div>
   `;
+}
+
+export function renderPage() {
+  return `<div id="risk-rules-root">${renderContent()}</div>`;
 }

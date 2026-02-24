@@ -4,7 +4,6 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let data = null, loading = false, generating = false, genResult = null;
 
@@ -27,6 +26,11 @@ async function load() {
     };
   } catch (e) { data = { codes: [], batches: [], products: [], stats: {} }; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('code-generate-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
+}
+
+export function renderPage() {
+  return `<div id="code-generate-root">${renderContent()}</div>`;
 }
 
 window._caGenSubmit = async () => {
@@ -37,7 +41,7 @@ window._caGenSubmit = async () => {
 
   if (!productSelect || !productSelect.value) { alert('Please select a product'); return; }
 
-  generating = true; genResult = null; render();
+  generating = true; genResult = null; { const _el = document.getElementById('code-generate-root'); if (_el) _el.innerHTML = renderContent ? renderContent() : ''; }
 
   try {
     const res = await API.post('/qr/generate', {
@@ -51,11 +55,11 @@ window._caGenSubmit = async () => {
     genResult = { success: false, error: e.message || 'Generation failed' };
   }
   generating = false;
-  load().then(() => render());
+  load();
 };
 
-export function renderPage() {
-  if (!data && !loading) { load().then(() => render()); }
+function renderContent() {
+  if (!data && !loading) { load(); }
   if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Code Generator...</div></div>`;
 
   const codes = data?.codes || [];

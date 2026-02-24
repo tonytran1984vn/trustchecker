@@ -4,7 +4,6 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let logs = null, loading = false;
 
@@ -16,10 +15,11 @@ async function load() {
     logs = all;
   } catch (e) { logs = []; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('code-audit-log-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
-export function renderPage() {
-  if (!logs && !loading) { load().then(() => render()); }
+function renderContent() {
+  if (!logs && !loading) { load(); }
   if (loading && !logs) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Code Audit Log...</div></div>`;
 
   const list = logs || [];
@@ -66,3 +66,7 @@ export function renderPage() {
     </div>`;
 }
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
+
+export function renderPage() {
+  return `<div id="code-audit-log-root">${renderContent()}</div>`;
+}

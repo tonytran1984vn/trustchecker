@@ -20,15 +20,10 @@ async function loadData() {
     _data = { stats: stats || {}, scores: lb?.leaderboard || [] };
     // Re-render into workspace content
     // Re-render only if this tab is still active
-    setTimeout(() => {
-      const active = document.querySelector('.ws-tab.active');
-      if (active && active.getAttribute('data-tab') === 'sustainability') {
-        const ws = document.querySelector('.ws-content');
-        if (ws) ws.innerHTML = renderContent();
-      }
-    }, 50);
+    setTimeout(() => { const el = document.getElementById('sustainability-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
   } catch (e) { console.error('Sustainability fetch error:', e); }
   _loading = false;
+  setTimeout(() => { const el = document.getElementById('sustainability-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
 function scoreColor(s) {
@@ -125,7 +120,11 @@ function renderContent() {
     </div>`;
 }
 
-export function renderPage() {
+function renderContent() {
   loadData();
   return renderContent();
+}
+
+export function renderPage() {
+  return `<div id="sustainability-root">${renderContent()}</div>`;
 }

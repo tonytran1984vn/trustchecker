@@ -5,31 +5,36 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let nodes = null, loading = false, filter = 'all';
-window._caNodeFilter = (f) => { filter = f; render(); };
+window._caNodeFilter = (f) => {
+  filter = f;
+  const el = document.getElementById('nodes-root');
+  if (el) el.innerHTML = renderContent();
+};
 
 async function load() {
   if (loading) return; loading = true;
   try {
     const res = await API.get('/scm/supply/routes');
     const routes = Array.isArray(res) ? res : (res.routes || []);
-    // Build unique nodes from route origins and destinations
     const nodeMap = {};
     routes.forEach(r => {
       if (r.origin && !nodeMap[r.origin]) nodeMap[r.origin] = { name: r.origin, type: guessType(r.origin), location: r.origin_location || '—', status: 'active', products: 0, lastSync: r.updated_at || r.created_at };
       if (r.destination && !nodeMap[r.destination]) nodeMap[r.destination] = { name: r.destination, type: guessType(r.destination), location: r.destination_location || '—', status: 'active', products: 0, lastSync: r.updated_at || r.created_at };
-      // Alternatively, if raw routes have node-level data, use that
       if (r.node_name || r.name) {
         const n = r.node_name || r.name;
         nodeMap[n] = { name: n, type: r.type || r.node_type || guessType(n), location: r.location || '—', status: r.status || 'active', products: r.products || r.product_count || 0, lastSync: r.updated_at || r.created_at };
       }
     });
     nodes = Object.values(nodeMap);
-    if (nodes.length === 0) nodes = routes; // fallback: use routes as-is
+    if (nodes.length === 0) nodes = routes;
   } catch (e) { nodes = []; }
   loading = false;
+  setTimeout(() => {
+    const el = document.getElementById('nodes-root');
+    if (el) el.innerHTML = renderContent();
+  }, 50);
 }
 
 function guessType(name) {
@@ -48,8 +53,7 @@ function timeAgo(d) {
   if (m < 2) return 'Just now'; if (m < 60) return m + ' min ago'; if (h < 24) return h + 'h ago'; return dd + 'd ago';
 }
 
-export function renderPage() {
-  if (!nodes && !loading) { load().then(() => render()); }
+function renderContent() {
   if (loading && !nodes) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Supply Chain Nodes...</div></div>`;
 
   const list = nodes || [];
@@ -100,4 +104,9 @@ export function renderPage() {
       </div>
     </div>
   `;
+}
+
+export function renderPage() {
+  if (!nodes && !loading) load();
+  return `<div id="nodes-root">${renderContent()}</div>`;
 }

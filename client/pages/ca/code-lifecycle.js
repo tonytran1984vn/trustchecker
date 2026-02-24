@@ -4,7 +4,6 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let data = null, loading = false;
 
@@ -19,13 +18,14 @@ async function load() {
     data = { codes, batches: Array.isArray(batchRes) ? batchRes : (batchRes.batches || []) };
   } catch (e) { data = { codes: [], batches: [] }; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('code-lifecycle-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
 const STAGES = ['generated', 'printed', 'activated', 'scanned', 'flagged', 'locked', 'revoked'];
 const STAGE_COLORS = { generated: '#64748b', printed: '#3b82f6', activated: '#22c55e', scanned: '#06b6d4', flagged: '#f59e0b', locked: '#ef4444', revoked: '#991b1b' };
 
-export function renderPage() {
-  if (!data && !loading) { load().then(() => render()); }
+function renderContent() {
+  if (!data && !loading) { load(); }
   if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Code Lifecycle...</div></div>`;
 
   const codes = data?.codes || [];
@@ -73,4 +73,8 @@ export function renderPage() {
         </tbody></table>`}
       </div>
     </div>`;
+}
+
+export function renderPage() {
+  return `<div id="code-lifecycle-root">${renderContent()}</div>`;
 }
