@@ -52,21 +52,40 @@ router.get('/overview', async (req, res) => {
     }
 });
 
-// ─── GET /users — List all users ────────────────────────────
+// ─── GET /users — List users (org-scoped for non-platform) ──
 router.get('/users', async (req, res) => {
     try {
         const { role, status, search, limit = 50, offset = 0 } = req.query;
-        let sql = "SELECT id, username, email, role, company, mfa_enabled, created_at, last_login FROM users WHERE 1=1";
+        let sql = "SELECT id, username, email, role, company, mfa_enabled, created_at, last_login, org_id FROM users WHERE 1=1";
         const params = [];
+
+        // Company Admin / Admin → only their org's users
+        const userRole = req.user?.role;
+        const userType = req.user?.user_type;
+        if (userRole !== 'super_admin' && userType !== 'platform') {
+            const orgId = req.user?.org_id || req.user?.orgId;
+            if (orgId) {
+                sql += ' AND org_id = ?';
+                params.push(orgId);
+            }
+        }
 
         if (role) { sql += ' AND role = ?'; params.push(role); }
         if (search) { sql += ' AND (username LIKE ? OR email LIKE ? OR company LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
 
         sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-        params.push(Math.min(Number(limit) || 50, 200), Math.max(Number(offset) || 0, 0)); // NODE-BP-2: cap
+        params.push(Math.min(Number(limit) || 50, 200), Math.max(Number(offset) || 0, 0));
 
         const users = await db.all(sql, params);
-        const total = (await db.get('SELECT COUNT(*) as c FROM users'))?.c || 0;
+
+        // Count total (also scoped)
+        let countSql = 'SELECT COUNT(*) as c FROM users WHERE 1=1';
+        const countParams = [];
+        if (userRole !== 'super_admin' && userType !== 'platform') {
+            const orgId = req.user?.org_id || req.user?.orgId;
+            if (orgId) { countSql += ' AND org_id = ?'; countParams.push(orgId); }
+        }
+        const total = (await db.get(countSql, countParams))?.c || 0;
 
         res.json({ users, total, page: Math.floor(offset / limit) + 1, pages: Math.ceil(total / limit) });
     } catch (e) {
