@@ -157,6 +157,16 @@ const PAGE_LOADERS = {
     'ca-supply-route-engine': () => import('../pages/ca/supply-route-engine.js'),
     'scan-result': () => import('../pages/scan-result.js'),
 
+    // ─── CA Workspace Routes (matching SA workspace pattern) ──
+    'ca-operations': () => import('../pages/ca/ca-operations-workspace.js'),
+    'ca-risk': () => import('../pages/ca/ca-risk-workspace.js'),
+    'ca-identity': () => import('../pages/ca/ca-identity-workspace.js'),
+    'ca-governance': () => import('../pages/ca/ca-governance-workspace.js'),
+    'ca-settings': () => import('../pages/ca/ca-settings-workspace.js'),
+
+    // ─── Org Owner (Strategic Governance Authority) ───────
+    'owner-governance': () => import('../pages/owner/owner-workspace.js?v=10.5'),
+
     // ─── Executive (CEO Decision Intelligence) pages ─────
     'exec-overview': () => import('../pages/exec/overview.js'),
     'exec-risk-intel': () => import('../pages/exec/risk-intel.js'),
@@ -270,6 +280,16 @@ const PAGE_LOADERS = {
 
 // ─── Navigate ───────────────────────────────────────────────
 export function navigate(page, opts = {}) {
+    // v10.1: Role-based page redirect (prevents org_owner from seeing operational dashboard)
+    const _roleRedirects = {
+        org_owner: { dashboard: 'owner-governance' },
+        super_admin: { dashboard: 'control-tower' },
+        executive: { dashboard: 'exec-overview' },
+    };
+    const userRole = State.user?.role;
+    const redirect = _roleRedirects[userRole]?.[page];
+    if (redirect) page = redirect;
+
     // Support both navigate('page', {tenantId:'x'}) and navigate('page', {skipPush:true})
     const skipPush = opts.skipPush || false;
     const params = { ...opts };
@@ -305,7 +325,17 @@ export function navigate(page, opts = {}) {
 
 // ─── Render current page (with lazy loading) ────────────────
 export function renderPage() {
-    const page = State.page;
+    let page = State.page;
+
+    // v10.1: Auto-correct default 'dashboard' page for roles with dedicated landing pages
+    const _roleLanding = { org_owner: 'owner-governance', super_admin: 'control-tower', executive: 'exec-overview' };
+    const correctPage = _roleLanding[State.user?.role];
+    if (correctPage && page === 'dashboard') {
+        State.page = correctPage;
+        page = correctPage;
+        // Update URL to match (defer to avoid re-entrancy)
+        setTimeout(() => { const url = _basePath + '/' + correctPage; history.replaceState({ page: correctPage }, '', url); }, 0);
+    }
 
     // If module is already cached, use it
     if (_pageCache[page]) {
@@ -567,6 +597,54 @@ export async function loadPageData(page) {
                 State.pricingAdminData = {};
             }
             render();
+
+            // ─── CA Workspace data preloads ────────────────────────
+        } else if (page === 'ca-operations') {
+            // Products + Scans are dumb renderers needing State preload
+            const [prodRes, scanRes] = await Promise.all([
+                API.get('/products').catch(() => ({ products: [] })),
+                API.get('/qr/scan-history?limit=50').catch(() => ({ scans: [] })),
+            ]);
+            State.products = prodRes.products || [];
+            State.scanHistory = scanRes.scans || [];
+            // Carbon data (optional, tab may self-load)
+            try {
+                const [scope, lb, rpt] = await Promise.all([
+                    API.get('/scm/carbon/scope').catch(() => ({})),
+                    API.get('/scm/carbon/leaderboard').catch(() => ({})),
+                    API.get('/scm/carbon/report').catch(() => ({})),
+                ]);
+                State.carbonData = { scope, leaderboard: lb, report: rpt };
+            } catch (_) { }
+            render();
+        } else if (page === 'ca-risk') {
+            // Fraud alerts are dumb renderer
+            const res = await API.get('/qr/fraud-alerts?status=open&limit=50').catch(() => ({ alerts: [] }));
+            State.fraudAlerts = res.alerts || [];
+            render();
+        } else if (page === 'ca-identity') {
+            // All tabs self-load — just trigger render
+            render();
+        } else if (page === 'ca-governance') {
+            // admin-users and role-manager self-load via their own init
+            render();
+            // Trigger admin-users loader if cached
+            if (_pageCache['admin-users']?.loadAdminUsers) _pageCache['admin-users'].loadAdminUsers();
+            if (_pageCache['role-manager']?.loadRoleManager) _pageCache['role-manager'].loadRoleManager();
+        } else if (page === 'ca-settings') {
+            // Settings (security) and billing need preload
+            try {
+                const [planRes, usageRes, invoiceRes] = await Promise.all([
+                    API.get('/billing/plan').catch(() => ({ plan: null, available_plans: [] })),
+                    API.get('/billing/usage').catch(() => ({ period: null, usage: {} })),
+                    API.get('/billing/invoices').catch(() => ({ invoices: [] })),
+                ]);
+                State.billingData = { plan: planRes.plan, available: planRes.available_plans, period: usageRes.period, usage: usageRes.usage, invoices: invoiceRes.invoices };
+            } catch (e) {
+                State.billingData = { plan: null, available: [], period: null, usage: {}, invoices: [] };
+            }
+            render();
+            if (_pageCache['settings']?.loadSettingsData) _pageCache['settings'].loadSettingsData();
         }
     } catch (e) {
         console.error('Load data error:', e);
@@ -607,6 +685,7 @@ function _defaultPageForRole() {
     const role = State.user?.role;
     const map = {
         super_admin: 'control-tower', platform_security: 'control-tower',
+        org_owner: 'owner-governance', security_officer: 'ca-governance',
         data_gov_officer: 'compliance-dashboard', executive: 'exec-overview',
         ops_manager: 'ops-dashboard', risk_officer: 'risk-dashboard',
         compliance_officer: 'compliance-dashboard', developer: 'it-authentication',
