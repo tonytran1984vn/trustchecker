@@ -252,6 +252,37 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
     }
 });
 
+// ─── GET /api/products/generation-history — Products with QR code counts ─────
+router.get('/generation-history', authMiddleware, async (req, res) => {
+    try {
+        let orgFilter = '';
+        const params = [];
+
+        if (req.user.role !== 'super_admin' && req.user.orgId) {
+            orgFilter = 'AND p.org_id = ?';
+            params.push(req.user.orgId);
+        }
+
+        const history = await db.all(`
+            SELECT p.id, p.name, p.sku, p.category,
+                   COUNT(qc.id) as total_codes,
+                   MAX(qc.created_at) as last_generated,
+                   GROUP_CONCAT(qc.qr_data, ', ') as recent_codes
+            FROM products p
+            INNER JOIN qr_codes qc ON qc.product_id = p.id AND qc.status != 'deleted'
+            WHERE 1=1 ${orgFilter}
+            GROUP BY p.id
+            ORDER BY last_generated DESC
+            LIMIT 20
+        `, params);
+
+        res.json({ history });
+    } catch (err) {
+        console.error('Generation history error:', err);
+        res.status(500).json({ error: 'Failed to fetch generation history' });
+    }
+});
+
 // ─── GET /api/products/:id/codes — List all codes for a product ──────────────
 router.get('/:id/codes', authMiddleware, async (req, res) => {
     try {

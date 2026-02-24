@@ -19,18 +19,11 @@ async function load() {
     const codes = qrRes.scans || [];
     const qrCodes = await API.get('/qr/dashboard-stats').catch(() => ({}));
 
-    // Load generation history: recently generated QR codes grouped by product
+    // Load generation history in a single query
     let genHistory = [];
     try {
-      const prodList = Array.isArray(prodRes) ? prodRes : (prodRes.products || []);
-      // Fetch recent QR codes for history
-      const historyPromises = prodList.slice(0, 10).map(async p => {
-        try {
-          const r = await API.get(`/products/${p.id}/codes`);
-          return { product: p, total_codes: r.total_codes || 0, codes: (r.codes || []).slice(0, 5) };
-        } catch { return null; }
-      });
-      genHistory = (await Promise.all(historyPromises)).filter(h => h && h.total_codes > 0);
+      const histRes = await API.get('/products/generation-history');
+      genHistory = histRes.history || [];
     } catch { }
 
     data = {
@@ -194,13 +187,13 @@ function renderContent() {
         ${genHistory.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted)">No codes generated yet — generate codes above to see history</div>' : `
         <table class="sa-table"><thead><tr><th>Product</th><th>SKU</th><th>Total Codes</th><th>Recent Codes</th><th>Export</th></tr></thead><tbody>
           ${genHistory.map(h => `<tr>
-            <td><strong>${h.product.name}</strong></td>
-            <td class="sa-code" style="font-size:0.72rem">${h.product.sku || '—'}</td>
+            <td><strong>${h.name || '—'}</strong></td>
+            <td class="sa-code" style="font-size:0.72rem">${h.sku || '—'}</td>
             <td style="font-weight:700;text-align:center">${h.total_codes}</td>
-            <td style="font-size:0.68rem;max-width:250px;overflow:hidden;text-overflow:ellipsis">${h.codes.map(c => c.code).join(', ')}</td>
+            <td style="font-size:0.68rem;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${(h.recent_codes || '').split(', ').slice(0, 5).join(', ')}</td>
             <td style="white-space:nowrap">
-              <button class="btn btn-sm" onclick="_caExportCodes('${h.product.id}','csv')" style="font-size:0.68rem;padding:0.2rem 0.4rem" title="Download CSV">📊</button>
-              <button class="btn btn-sm" onclick="_caExportCodes('${h.product.id}','pdf')" style="font-size:0.68rem;padding:0.2rem 0.4rem" title="Download PDF">📄</button>
+              <button class="btn btn-sm" onclick="_caExportCodes('${h.id}','csv')" style="font-size:0.68rem;padding:0.2rem 0.4rem" title="Download CSV">📊</button>
+              <button class="btn btn-sm" onclick="_caExportCodes('${h.id}','pdf')" style="font-size:0.68rem;padding:0.2rem 0.4rem" title="Download PDF">📄</button>
             </td>
           </tr>`).join('')}
         </tbody></table>`}
