@@ -426,23 +426,23 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
         const safeFileName = product.name.replace(/[^a-zA-Z0-9_\-\u00C0-\u024F\u1E00-\u1EFF ]/g, '').replace(/\s+/g, '_');
         const dateStr = new Date().toISOString().slice(0, 10);
 
-        // ── CSV Format (Tab-separated for reliable Excel column splitting) ──
+        // ── CSV Format (comma-separated, all fields quoted for Excel) ──
         if (format === 'csv') {
-            const BOM = '\uFEFF'; // UTF-8 BOM for Excel compatibility
-            const SEP = '\t'; // Tab separator — Excel auto-detects columns
+            const BOM = '\uFEFF';
+            const q = (v) => `"${String(v).replace(/"/g, '""')}"`;  // Quote & escape
             const header = ['No.', 'Code', 'Product', 'SKU', 'Status', 'Created Date', 'Scan Count', 'Last Scanned'];
             const rows = codes.map((c, i) => [
-                i + 1,
-                c.code || '',
-                product.name,
-                product.sku,
-                c.status || 'active',
-                c.generated_at ? new Date(c.generated_at).toLocaleString('en-US') : '',
-                c.scan_count || 0,
-                c.last_scanned ? new Date(c.last_scanned).toLocaleString('en-US') : 'Not scanned'
+                q(i + 1),
+                q(c.code || ''),
+                q(product.name),
+                q(product.sku),
+                q(c.status || 'active'),
+                q(c.generated_at ? new Date(c.generated_at).toISOString().replace('T', ' ').substring(0, 16) : ''),
+                q(c.scan_count || 0),
+                q(c.last_scanned ? new Date(c.last_scanned).toISOString().replace('T', ' ').substring(0, 16) : 'Not scanned')
             ]);
 
-            const csvContent = BOM + header.join(SEP) + '\n' + rows.map(r => r.join(SEP)).join('\n');
+            const csvContent = BOM + 'sep=,\n' + header.map(q).join(',') + '\n' + rows.map(r => r.join(',')).join('\n');
 
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}_codes_${dateStr}.csv"`);
