@@ -46,16 +46,16 @@ const ROLE_VISIBILITY = {
 
   // GGC Member — ESG, Governance, Carbon, Lineage
   ggc_member: {
-    domains: ['command-center', 'operations', 'carbon-sustainability', 'risk-protection'],
+    domains: ['command-center', 'operations', 'corporate-governance', 'risk-protection'],
     items: [
       'dashboard',
       'ca-nodes', 'ca-batches', 'ca-traceability',
       'fraud',
     ],
     extraItems: [
-      { id: 'green-finance', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Green Finance' },
-      { id: 'scm-carbon', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Carbon Accounting' },
-      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'green-finance', domain: 'corporate-governance', icon: icon('globe'), label: 'Green Finance' },
+      { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
+      { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
@@ -92,7 +92,7 @@ const ROLE_VISIBILITY = {
 
   // SCM Analyst — Products, Supply Chain, Scans, Reports
   scm_analyst: {
-    domains: ['command-center', 'operations', 'carbon-sustainability', 'risk-protection'],
+    domains: ['command-center', 'operations', 'corporate-governance', 'risk-protection'],
     items: [
       'dashboard',
       'ca-nodes', 'ca-batches', 'ca-traceability',
@@ -100,7 +100,7 @@ const ROLE_VISIBILITY = {
       'fraud', 'ca-scan-analytics',
     ],
     extraItems: [
-      { id: 'scm-carbon', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Carbon Accounting' },
+      { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
       { id: 'reports', domain: 'risk-protection', icon: icon('scroll'), label: 'Reports' },
     ],
   },
@@ -122,22 +122,22 @@ const ROLE_VISIBILITY = {
 
   // Carbon Officer — Carbon Data, Emission, Credit, ESG
   carbon_officer: {
-    domains: ['command-center', 'carbon-sustainability'],
+    domains: ['command-center', 'corporate-governance'],
     items: [
       'dashboard',
       'ca-nodes', 'ca-batches',
     ],
     extraItems: [
-      { id: 'scm-carbon', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Carbon Accounting' },
-      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
-      { id: 'green-finance', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Green Finance Layer' },
-      { id: 'carbon-registry', domain: 'carbon-sustainability', icon: icon('scroll'), label: 'Carbon Registry' },
+      { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
+      { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'green-finance', domain: 'corporate-governance', icon: icon('globe'), label: 'Green Finance Layer' },
+      { id: 'carbon-registry', domain: 'corporate-governance', icon: icon('scroll'), label: 'Carbon Registry' },
     ],
   },
 
   // Auditor → Internal Audit (CIE v2.1 — forensic access)
   auditor: {
-    domains: ['command-center', 'risk-protection', 'carbon-sustainability'],
+    domains: ['command-center', 'risk-protection', 'corporate-governance'],
     items: [
       'dashboard',
       'fraud',
@@ -147,95 +147,95 @@ const ROLE_VISIBILITY = {
       { id: 'compliance', domain: 'risk-protection', icon: icon('shield'), label: 'Compliance' },
       { id: 'reports', domain: 'risk-protection', icon: icon('scroll'), label: 'Reports' },
       { id: 'compliance-regtech', domain: 'risk-protection', icon: icon('globe'), label: 'RegTech' },
-      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
   // Board Observer (CIE v2.1 — read-only strategic oversight)
   board_observer: {
-    domains: ['command-center', 'carbon-sustainability'],
+    domains: ['command-center', 'corporate-governance'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
-      { id: 'governance', domain: 'carbon-sustainability', icon: icon('shield'), label: 'Governance' },
+      { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'governance', domain: 'corporate-governance', icon: icon('shield'), label: 'Governance' },
     ],
   },
 
   // Data Steward (CIE v2.1 — validate data quality before CIP)
   data_steward: {
-    domains: ['command-center', 'carbon-sustainability'],
+    domains: ['command-center', 'corporate-governance'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Carbon Accounting' },
-      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
+      { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
   // Legal Counsel (CIE v2.1 — sealed CIP + liability view)
   legal_counsel: {
-    domains: ['command-center', 'carbon-sustainability'],
+    domains: ['command-center', 'corporate-governance'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
-      { id: 'governance', domain: 'carbon-sustainability', icon: icon('shield'), label: 'Governance' },
+      { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'governance', domain: 'corporate-governance', icon: icon('shield'), label: 'Governance' },
     ],
   },
 
   // Supplier Contributor (CIE v2.5 — scoped external input)
   supplier_contributor: {
-    domains: ['command-center', 'carbon-sustainability'],
+    domains: ['command-center', 'corporate-governance'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
   // ESG Reporting Manager (CIE v2.5 — ESG reports + investor disclosure)
   esg_reporting_manager: {
-    domains: ['command-center', 'carbon-sustainability'],
+    domains: ['command-center', 'corporate-governance'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Carbon Accounting' },
-      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
-      { id: 'green-finance', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Green Finance Layer' },
+      { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
+      { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'green-finance', domain: 'corporate-governance', icon: icon('globe'), label: 'Green Finance Layer' },
     ],
   },
 
   // External Auditor (CIE v2.5 — time-bound snapshot)
   external_auditor: {
-    domains: ['command-center', 'carbon-sustainability'],
+    domains: ['command-center', 'corporate-governance'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
   // Financial Institution Viewer (CIE v3.0 — NDA-bound, scoped)
   financial_viewer: {
-    domains: ['command-center', 'carbon-sustainability'],
+    domains: ['command-center', 'corporate-governance'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
   // Public Verifier (CIE v3.0 — QR/hash verification)
   public_verifier: {
-    domains: ['command-center', 'carbon-sustainability'],
+    domains: ['command-center', 'corporate-governance'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
     ],
   },
 
   // Disclosure Officer (CIE v3.0 — CSRD/ESRS sign-off)
   disclosure_officer: {
-    domains: ['command-center', 'carbon-sustainability'],
+    domains: ['command-center', 'corporate-governance'],
     items: ['dashboard'],
     extraItems: [
-      { id: 'scm-carbon-credit', domain: 'carbon-sustainability', icon: icon('tag'), label: 'Carbon Passport' },
-      { id: 'scm-carbon', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Carbon Accounting' },
-      { id: 'green-finance', domain: 'carbon-sustainability', icon: icon('globe'), label: 'Green Finance Layer' },
+      { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
+      { id: 'green-finance', domain: 'corporate-governance', icon: icon('globe'), label: 'Green Finance Layer' },
     ],
   },
 
@@ -269,7 +269,8 @@ const SUPERADMIN_NAV = [
 
 // ═══════════════════════════════════════════════════════════════
 // COMPANY ADMIN — FORTUNE 100 ENTERPRISE LAYOUT (IA v3.0)
-// Structure: Control & Accountability — 7 Institutional Domains
+// Structure: Control & Accountability — 6 Institutional Domains
+// Carbon = Governance Amplifier (distributed across domains)
 // ═══════════════════════════════════════════════════════════════
 
 const DOMAIN_ITEMS = {
@@ -282,11 +283,7 @@ const DOMAIN_ITEMS = {
     { id: 'ca-nodes', icon: icon('factory'), label: 'Supply Network' },
     { id: 'ca-traceability', icon: icon('search'), label: 'Traceability Map' },
     { id: 'scans', icon: icon('check'), label: 'Verification Logs' },
-  ],
-  'carbon-sustainability': [
     { id: 'scm-carbon', icon: icon('globe'), label: 'Carbon Accounting' },
-    { id: 'scm-carbon-credit', icon: icon('tag'), label: 'Carbon Passport' },
-    { id: 'green-finance', icon: icon('globe'), label: 'Green Finance Layer' },
   ],
   'risk-protection': [
     { id: 'fraud', icon: icon('alert'), label: 'Fraud Monitoring' },
@@ -306,6 +303,8 @@ const DOMAIN_ITEMS = {
     { id: 'admin-users', icon: icon('users'), label: 'Users' },
     { id: 'role-manager', icon: icon('shield'), label: 'Roles & Access Matrix' },
     { id: 'ca-access-logs', icon: icon('scroll'), label: 'Access Logs' },
+    { id: 'scm-carbon-credit', icon: icon('tag'), label: 'Carbon Passport' },
+    { id: 'green-finance', icon: icon('globe'), label: 'Green Finance' },
   ],
   'corporate-settings': [
     { id: 'ca-company-profile', icon: icon('building'), label: 'Company Profile' },
@@ -316,13 +315,12 @@ const DOMAIN_ITEMS = {
 };
 
 const DOMAIN_LABELS = {
-  'command-center': '🏛 Command Center',
-  'operations': '⚙️ Operations & Supply',
-  'carbon-sustainability': '🌱 Carbon & Sustainability',
-  'risk-protection': '🛡 Risk & Protection',
-  'identity-code': '🔐 Identity & Code Gov',
-  'corporate-governance': '👥 Corporate Governance',
-  'corporate-settings': '⚙️ Settings & Integration',
+  'command-center': 'Enterprise Command Center',
+  'operations': 'Operations & Supply Integrity',
+  'risk-protection': 'Risk & Protection Office',
+  'identity-code': 'Identity & Code Governance',
+  'corporate-governance': 'Corporate Governance',
+  'corporate-settings': 'Settings & Integration',
 };
 
 // ─── Collapse state management ──────────────────────────────
