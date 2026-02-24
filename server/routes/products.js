@@ -237,7 +237,7 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
             } while (await db.get('SELECT id FROM qr_codes WHERE qr_data = ?', [code]) && attempts < 50);
 
             if (attempts >= 50) {
-                return res.status(500).json({ error: 'Không thể tạo mã duy nhất, thử lại sau' });
+                return res.status(500).json({ error: 'Unable to generate unique code, please try again' });
             }
 
             // Generate QR code image for this code
@@ -273,14 +273,14 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
         });
 
         res.status(201).json({
-            message: `Đã tạo ${generatedCodes.length} mã xác thực`,
+            message: `Generated ${generatedCodes.length} verification codes`,
             product: { id: product.id, name: product.name, sku: product.sku },
             codes: generatedCodes,
-            instructions: 'In các mã này và dán lên sản phẩm. Khách hàng có thể kiểm tra tại /check hoặc quét mã QR.'
+            instructions: 'Print these codes and attach to products. Customers can verify at /check or scan the QR code.'
         });
     } catch (err) {
         console.error('Generate code error:', err);
-        res.status(500).json({ error: 'Không thể tạo mã' });
+        res.status(500).json({ error: 'Failed to generate codes' });
     }
 });
 
@@ -289,7 +289,7 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
 router.get('/:id/codes', authMiddleware, async (req, res) => {
     try {
         const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
-        if (!product) return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
+        if (!product) return res.status(404).json({ error: 'Product not found' });
 
         const codes = await db.all(`
             SELECT qc.id, qc.qr_data as code, qc.status, qc.generated_at,
@@ -322,26 +322,26 @@ router.delete('/codes/:codeId', authMiddleware, requirePermission('product:delet
         // Find the code
         const code = await db.prepare('SELECT * FROM qr_codes WHERE id = ?').get(codeId);
         if (!code) {
-            return res.status(404).json({ error: 'Mã không tồn tại' });
+            return res.status(404).json({ error: 'Code not found' });
         }
 
         // Tenant check: admin can only delete their org's codes
         if (req.user.role !== 'super_admin' && req.user.orgId && code.org_id && code.org_id !== req.user.orgId) {
-            return res.status(403).json({ error: 'Không có quyền xoá mã của tổ chức khác' });
+            return res.status(403).json({ error: 'Not authorized to delete codes from another organization' });
         }
 
         // Already deleted?
         if (code.status === 'deleted') {
-            return res.status(409).json({ error: 'Mã đã bị xoá trước đó' });
+            return res.status(409).json({ error: 'Code has already been deleted' });
         }
 
         // Check if code has been scanned
         const scanCount = await db.prepare('SELECT COUNT(*) as count FROM scan_events WHERE qr_code_id = ?').get(codeId);
         if (scanCount && scanCount.count > 0) {
             return res.status(409).json({
-                error: 'Không thể xoá mã đã được quét',
+                error: 'Cannot delete scanned codes',
                 scan_count: scanCount.count,
-                message: 'Mã đã được quét ' + scanCount.count + ' lần. Mã đã quét không thể xoá để đảm bảo tính toàn vẹn dữ liệu.'
+                message: 'This code has been scanned ' + scanCount.count + ' times. Scanned codes cannot be deleted to ensure data integrity.'
             });
         }
 
@@ -356,14 +356,14 @@ router.delete('/codes/:codeId', authMiddleware, requirePermission('product:delet
                 JSON.stringify({ code: code.qr_data, product_id: code.product_id }));
 
         res.json({
-            message: 'Mã đã được xoá thành công',
+            message: 'Code deleted successfully',
             code_id: codeId,
             code: code.qr_data,
             deleted_by: req.user.username
         });
     } catch (err) {
         console.error('Delete code error:', err);
-        res.status(500).json({ error: 'Không thể xoá mã' });
+        res.status(500).json({ error: 'Failed to delete code' });
     }
 });
 
@@ -401,11 +401,11 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
     try {
         const { format = 'csv' } = req.query;
         const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
-        if (!product) return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
+        if (!product) return res.status(404).json({ error: 'Product not found' });
 
         // Tenant scoping
         if (req.user.role !== 'super_admin' && req.user.orgId && product.org_id && product.org_id !== req.user.orgId) {
-            return res.status(403).json({ error: 'Không có quyền truy cập sản phẩm này' });
+            return res.status(403).json({ error: 'Not authorized to access this product' });
         }
 
         const codes = await db.all(`
@@ -420,7 +420,7 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
         `, [req.params.id]);
 
         if (codes.length === 0) {
-            return res.status(404).json({ error: 'Sản phẩm chưa có mã QR nào' });
+            return res.status(404).json({ error: 'No QR codes found for this product' });
         }
 
         const safeFileName = product.name.replace(/[^a-zA-Z0-9_\-\u00C0-\u024F\u1E00-\u1EFF ]/g, '').replace(/\s+/g, '_');
@@ -429,16 +429,16 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
         // ── CSV Format ──
         if (format === 'csv') {
             const BOM = '\uFEFF'; // UTF-8 BOM for Excel compatibility
-            const header = ['STT', 'Mã QR (Code)', 'Tên Sản Phẩm', 'SKU', 'Trạng Thái', 'Ngày Tạo', 'Số Lần Quét', 'Lần Quét Gần Nhất'];
+            const header = ['No.', 'QR Code', 'Product Name', 'SKU', 'Status', 'Created Date', 'Scan Count', 'Last Scanned'];
             const rows = codes.map((c, i) => [
                 i + 1,
                 `"${c.code}"`,
                 `"${product.name}"`,
                 `"${product.sku}"`,
                 c.status,
-                c.generated_at ? new Date(c.generated_at).toLocaleString('vi-VN') : '',
+                c.generated_at ? new Date(c.generated_at).toLocaleString('en-US') : '',
                 c.scan_count || 0,
-                c.last_scanned ? new Date(c.last_scanned).toLocaleString('vi-VN') : 'Chưa quét'
+                c.last_scanned ? new Date(c.last_scanned).toLocaleString('en-US') : 'Not scanned'
             ]);
 
             const csvContent = BOM + header.join(',') + '\n' + rows.map(r => r.join(',')).join('\n');
@@ -478,7 +478,7 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
                 doc.fontSize(14).font('Helvetica-Bold')
                     .text(product.name, 40, 40, { width: pageWidth });
                 doc.fontSize(9).font('Helvetica')
-                    .text(`SKU: ${product.sku}  |  Ngày xuất: ${dateStr}  |  Tổng mã: ${codes.length}  |  Trang ${page + 1}/${totalPages}`, 40, 58, { width: pageWidth });
+                    .text(`SKU: ${product.sku}  |  Export date: ${dateStr}  |  Total codes: ${codes.length}  |  Page ${page + 1}/${totalPages}`, 40, 58, { width: pageWidth });
                 doc.moveTo(40, 75).lineTo(40 + pageWidth, 75).stroke('#ccc');
 
                 const startIdx = page * codesPerPage;
@@ -520,11 +520,11 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
             return;
         }
 
-        return res.status(400).json({ error: 'Format không hợp lệ. Sử dụng: csv hoặc pdf' });
+        return res.status(400).json({ error: 'Invalid format. Use: csv or pdf' });
 
     } catch (err) {
         console.error('Export codes error:', err);
-        res.status(500).json({ error: 'Không thể xuất mã QR' });
+        res.status(500).json({ error: 'Failed to export QR codes' });
     }
 });
 

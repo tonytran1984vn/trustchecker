@@ -73,7 +73,7 @@ window._caGenSubmit = async () => {
 window._caExportCodes = async (productId, format) => {
   try {
     const el = document.getElementById('export-status');
-    if (el) el.textContent = `⏳ Đang tạo file ${format.toUpperCase()}...`;
+    if (el) el.textContent = `⏳ Generating ${format.toUpperCase()} file...`;
 
     // Use the same API base and token as the API client
     const apiBase = window.API ? window.API.base : (window.location.origin + '/api');
@@ -97,10 +97,10 @@ window._caExportCodes = async (productId, format) => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    if (el) el.textContent = `✅ Đã tải file ${format.toUpperCase()} thành công!`;
+    if (el) el.textContent = `✅ ${format.toUpperCase()} file downloaded successfully!`;
   } catch (e) {
     const el = document.getElementById('export-status');
-    if (el) el.textContent = '❌ ' + (e.message || 'Export thất bại');
+    if (el) el.textContent = '❌ ' + (e.message || 'Export failed');
   }
 };
 
@@ -119,7 +119,7 @@ window._caViewCodes = async (productId, productName) => {
 
   // Show loading
   row.style.display = '';
-  cell.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-muted)">⏳ Đang tải danh sách mã...</div>';
+  cell.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-muted)">⏳ Loading codes...</div>';
 
   try {
     const apiBase = window.API ? window.API.base : (window.location.origin + '/api');
@@ -132,37 +132,37 @@ window._caViewCodes = async (productId, productName) => {
     const codes = data.codes || [];
 
     if (codes.length === 0) {
-      cell.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-muted)">Chưa có mã QR nào</div>';
+      cell.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-muted)">No QR codes found</div>';
       return;
     }
 
     cell.innerHTML = `
       <div style="background:var(--bg-tertiary,#f8fafc);border:1px solid var(--border-color,#e2e8f0);border-radius:8px;margin:4px 8px 8px;padding:12px;max-height:350px;overflow-y:auto">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <strong style="font-size:0.78rem">📋 ${productName || 'Codes'} — ${codes.length} mã</strong>
-          <button class="btn btn-sm" onclick="document.getElementById('codes-row-${productId}').style.display='none'" style="font-size:0.65rem;padding:0.15rem 0.4rem">✕ Đóng</button>
+          <strong style="font-size:0.78rem">📋 ${productName || 'Codes'} — ${codes.length} codes</strong>
+          <button class="btn btn-sm" onclick="document.getElementById('codes-row-${productId}').style.display='none'" style="font-size:0.65rem;padding:0.15rem 0.4rem">✕ Close</button>
         </div>
         <table style="width:100%;border-collapse:collapse;font-size:0.72rem">
           <thead><tr style="background:var(--bg-secondary,#f1f5f9)">
             <th style="padding:4px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">#</th>
-            <th style="padding:4px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Mã QR</th>
-            <th style="padding:4px 8px;text-align:center;border-bottom:1px solid var(--border-color,#e2e8f0)">Trạng thái</th>
-            <th style="padding:4px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Ngày tạo</th>
-            <th style="padding:4px 8px;text-align:center;border-bottom:1px solid var(--border-color,#e2e8f0)">Số lần quét</th>
+            <th style="padding:4px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">QR Code</th>
+            <th style="padding:4px 8px;text-align:center;border-bottom:1px solid var(--border-color,#e2e8f0)">Status</th>
+            <th style="padding:4px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Created</th>
+            <th style="padding:4px 8px;text-align:center;border-bottom:1px solid var(--border-color,#e2e8f0)">Scans</th>
           </tr></thead>
           <tbody>
             ${codes.map((c, i) => `<tr style="border-bottom:1px solid var(--border-color,#e2e8f0)">
               <td style="padding:3px 8px;color:var(--text-muted)">${i + 1}</td>
               <td style="padding:3px 8px;font-family:monospace;font-size:0.7rem;color:var(--primary,#4f46e5)">${c.code}</td>
               <td style="padding:3px 8px;text-align:center"><span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:0.62rem;font-weight:600;background:${c.status === 'active' ? '#dcfce7' : '#fee2e2'};color:${c.status === 'active' ? '#16a34a' : '#dc2626'}">${c.status === 'active' ? '✓ Active' : c.status}</span></td>
-              <td style="padding:3px 8px;color:var(--text-secondary)">${c.generated_at ? new Date(c.generated_at).toLocaleString('vi-VN') : '—'}</td>
+              <td style="padding:3px 8px;color:var(--text-secondary)">${c.generated_at ? new Date(c.generated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
               <td style="padding:3px 8px;text-align:center;font-weight:600">${c.scan_count || 0}</td>
             </tr>`).join('')}
           </tbody>
         </table>
       </div>`;
   } catch (e) {
-    cell.innerHTML = `<div style="padding:12px;text-align:center;color:#ef4444">❌ ${e.message || 'Không thể tải mã'}</div>`;
+    cell.innerHTML = `<div style="padding:12px;text-align:center;color:#ef4444">❌ ${e.message || 'Failed to load codes'}</div>`;
   }
 };
 
@@ -206,9 +206,9 @@ function renderContent() {
             </div>
           </div>
           <div style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
-            <span style="font-size:0.78rem;font-weight:600;color:var(--text-secondary)">📥 Xuất để in:</span>
-            <button class="btn btn-sm" onclick="_caExportCodes('${genResult._product_id || genResult.product?.id || ''}','csv')" style="font-size:0.75rem;padding:0.35rem 0.75rem">📊 Tải CSV (Excel)</button>
-            <button class="btn btn-sm" onclick="_caExportCodes('${genResult._product_id || genResult.product?.id || ''}','pdf')" style="font-size:0.75rem;padding:0.35rem 0.75rem">📄 Tải PDF (In ấn)</button>
+            <span style="font-size:0.78rem;font-weight:600;color:var(--text-secondary)">📥 Export for printing:</span>
+            <button class="btn btn-sm" onclick="_caExportCodes('${genResult._product_id || genResult.product?.id || ''}','csv')" style="font-size:0.75rem;padding:0.35rem 0.75rem">📊 Download CSV</button>
+            <button class="btn btn-sm" onclick="_caExportCodes('${genResult._product_id || genResult.product?.id || ''}','pdf')" style="font-size:0.75rem;padding:0.35rem 0.75rem">📄 Download PDF</button>
             <span id="export-status" style="font-size:0.72rem;color:var(--text-secondary)"></span>
           </div>` : ''}
         </div>` : ''}
@@ -252,11 +252,11 @@ function renderContent() {
             <td><strong>${h.name || '—'}</strong></td>
             <td class="sa-code" style="font-size:0.72rem">${h.sku || '—'}</td>
             <td style="font-weight:700;text-align:center">${h.total_codes}</td>
-            <td style="font-size:0.72rem;color:var(--text-secondary)">${h.last_generated ? new Date(h.last_generated).toLocaleString('vi-VN') : '—'}</td>
+            <td style="font-size:0.72rem;color:var(--text-secondary)">${h.last_generated ? new Date(h.last_generated).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
             <td style="white-space:nowrap;text-align:center">
-              <button class="btn btn-sm" onclick="_caViewCodes('${h.id}','${(h.name || '').replace(/'/g, '\\&#39;')}')" style="font-size:0.68rem;padding:0.25rem 0.5rem;margin-right:0.25rem" title="Xem mã">👁 Xem</button>
-              <button class="btn btn-sm" onclick="_caExportCodes('${h.id}','csv')" style="font-size:0.68rem;padding:0.25rem 0.5rem;margin-right:0.15rem" title="Tải CSV">📊 CSV</button>
-              <button class="btn btn-sm" onclick="_caExportCodes('${h.id}','pdf')" style="font-size:0.68rem;padding:0.25rem 0.5rem" title="Tải PDF">📄 PDF</button>
+              <button class="btn btn-sm" onclick="_caViewCodes('${h.id}','${(h.name || '').replace(/'/g, '\\&#39;')}')" style="font-size:0.68rem;padding:0.25rem 0.5rem;margin-right:0.25rem" title="View codes">👁 View</button>
+              <button class="btn btn-sm" onclick="_caExportCodes('${h.id}','csv')" style="font-size:0.68rem;padding:0.25rem 0.5rem;margin-right:0.15rem" title="Download CSV">📊 CSV</button>
+              <button class="btn btn-sm" onclick="_caExportCodes('${h.id}','pdf')" style="font-size:0.68rem;padding:0.25rem 0.5rem" title="Download PDF">📄 PDF</button>
             </td>
           </tr>
           <tr id="codes-row-${h.id}" style="display:none"><td colspan="5" style="padding:0"></td></tr>`).join('')}
