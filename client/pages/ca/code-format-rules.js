@@ -5,7 +5,7 @@
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
 
-let data = null, loading = false, activeTab = 'rules';
+let data = null, loading = false, activeTab = 'rules', editingRuleId = null;
 
 async function load() {
   if (loading) return; loading = true;
@@ -27,7 +27,7 @@ async function load() {
   setTimeout(() => { const el = document.getElementById('code-format-root'); if (el) el.innerHTML = renderContent(); }, 50);
 }
 
-// ── Create Rule ──
+// ── Create / Update Rule ──
 window._cfCreateRule = async () => {
   const name = document.getElementById('cf-name')?.value?.trim();
   if (!name) return alert('Rule name is required');
@@ -42,9 +42,37 @@ window._cfCreateRule = async () => {
     description: document.getElementById('cf-desc')?.value?.trim() || '',
   };
   try {
-    await API.post('/scm/code-gov/format-rules', body);
+    if (editingRuleId) {
+      await API.put(`/scm/code-gov/format-rules/${editingRuleId}`, body);
+      editingRuleId = null;
+    } else {
+      await API.post('/scm/code-gov/format-rules', body);
+    }
+    activeTab = 'rules';
     data = null; load();
-  } catch (e) { alert('Error: ' + (e.message || 'Failed to create rule')); }
+  } catch (e) { alert('Error: ' + (e.message || 'Failed to save rule')); }
+};
+
+// ── Edit Rule ── (load into form)
+window._cfEditRule = (id) => {
+  const rule = data?.rules?.find(r => r.id === id);
+  if (!rule) return;
+  editingRuleId = id;
+  activeTab = 'create';
+  const el = document.getElementById('code-format-root');
+  if (el) el.innerHTML = renderContent();
+  // Fill form after render
+  setTimeout(() => {
+    const set = (fid, v) => { const el = document.getElementById(fid); if (el) el.value = v || ''; };
+    set('cf-name', rule.name);
+    set('cf-prefix', rule.prefix);
+    set('cf-pattern', rule.pattern);
+    set('cf-separator', rule.separator);
+    set('cf-length', rule.code_length);
+    set('cf-charset', rule.charset);
+    set('cf-algo', rule.check_digit_algo);
+    set('cf-desc', rule.description);
+  }, 50);
 };
 
 // ── Delete Rule ──
@@ -202,6 +230,7 @@ function renderRulesTab(rules) {
         <td style="text-align:center;font-weight:600">${(r.codes_generated || 0).toLocaleString()}</td>
         <td><span class="sa-status-pill sa-pill-${r.status === 'active' ? 'green' : 'orange'}">${r.status}</span></td>
         <td style="white-space:nowrap">
+          <button class="btn btn-xs btn-primary" onclick="_cfEditRule('${r.id}')">✏️ Edit</button>
           <button class="btn btn-xs btn-outline" onclick="_cfToggleStatus('${r.id}','${r.status}')">${r.status === 'active' ? 'Pause' : 'Activate'}</button>
           <button class="btn btn-xs btn-ghost" style="color:#ef4444" onclick="_cfDeleteRule('${r.id}')">Delete</button>
         </td>
@@ -211,9 +240,10 @@ function renderRulesTab(rules) {
 }
 
 function renderCreateTab() {
+  const isEditing = !!editingRuleId;
   return `<div class="sa-card">
-    <h3>➕ Create New Format Rule</h3>
-    <p style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:1rem">Define how codes are structured. You can also start from a <button style="background:none;border:none;color:var(--primary,#6366f1);cursor:pointer;font-weight:600;padding:0;text-decoration:underline;font-size:0.78rem" onclick="_cfSwitchTab('templates')">template</button>.</p>
+    <h3>${isEditing ? '✏️ Edit Format Rule' : '➕ Create New Format Rule'}${isEditing ? ` <button style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:0.72rem;margin-left:8px" onclick="editingRuleId=null;_cfSwitchTab('create')">(Cancel Edit → New)</button>` : ''}</h3>
+    <p style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:1rem">${isEditing ? 'Update the rule fields below and save.' : 'Define how codes are structured. You can also start from a <button style="background:none;border:none;color:var(--primary,#6366f1);cursor:pointer;font-weight:600;padding:0;text-decoration:underline;font-size:0.78rem" onclick="_cfSwitchTab(\'templates\')">template</button>.'}</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
       <div class="ops-field"><label class="ops-label">Rule Name *</label><input id="cf-name" class="ops-input" placeholder="e.g. TrustChecker Standard"></div>
       <div class="ops-field"><label class="ops-label">Prefix</label><input id="cf-prefix" class="ops-input" placeholder="e.g. TK-"></div>
@@ -237,7 +267,7 @@ function renderCreateTab() {
         </select></div>
       <div class="ops-field"><label class="ops-label">Description</label><input id="cf-desc" class="ops-input" placeholder="Optional description"></div>
     </div>
-    <button class="btn btn-primary" onclick="_cfCreateRule()">⚡ Create Format Rule</button>
+    <button class="btn btn-primary" onclick="_cfCreateRule()">${isEditing ? '💾 Save Changes' : '⚡ Create Format Rule'}</button>
   </div>`;
 }
 
