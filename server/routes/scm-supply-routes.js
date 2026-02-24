@@ -17,13 +17,21 @@ router.use(authMiddleware);
 // ─── GET /api/scm/routes – List all supply routes ────────────────────────────
 router.get('/routes', authMiddleware, async (req, res) => {
     try {
-        const routes = await db.prepare(`
-            SELECT * FROM supply_routes ORDER BY created_at DESC
-        `).all();
+        const orgId = req.user?.org_id;
+        let routes;
+        if (orgId) {
+            routes = await db.prepare(`
+                SELECT * FROM supply_routes WHERE org_id = ? ORDER BY created_at DESC
+            `).all(orgId);
+        } else {
+            routes = await db.prepare(`
+                SELECT * FROM supply_routes ORDER BY created_at DESC
+            `).all();
+        }
         res.json(routes.map(r => ({
             ...r,
-            chain: JSON.parse(r.chain || '[]'),
-            products: JSON.parse(r.products || '[]')
+            chain: typeof r.chain === 'string' ? JSON.parse(r.chain || '[]') : (r.chain || []),
+            products: typeof r.products === 'string' ? JSON.parse(r.products || '[]') : (r.products || [])
         })));
     } catch (err) {
         console.error('List supply routes error:', err);
@@ -36,11 +44,12 @@ router.post('/routes', authMiddleware, requireRole('admin', 'company_admin'), as
     try {
         const { name, chain, products, geo_fence, status } = req.body;
         const id = uuidv4();
+        const orgId = req.user?.org_id || null;
         await db.prepare(`
-            INSERT INTO supply_routes (id, name, chain, products, geo_fence, status, created_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            INSERT INTO supply_routes (id, name, chain, products, geo_fence, status, created_by, org_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
         `).run(id, name, JSON.stringify(chain || []), JSON.stringify(products || []),
-            geo_fence || '', status || 'active', req.user?.id || null);
+            geo_fence || '', status || 'active', req.user?.id || null, orgId);
 
         res.status(201).json({ id, name, status: 'created' });
     } catch (err) {
