@@ -142,7 +142,7 @@ function renderContent() {
 
       <div class="sa-toolbar">
         <div class="sa-filters">
-          ${types.map(t => `<button class="sa-filter-btn ${filter === t ? 'active' : ''}" onclick="_caNodeFilter('${t}')">${t === 'all' ? 'All' : t} <span class="sa-filter-count">${t === 'all' ? list.length : list.filter(n => n.type === t).length}</span></button>`).join('')}
+          ${types.map(t => `<button class="sa-filter-btn ${filter === t ? 'active' : ''}" style="${filter === t ? 'color:#1e293b;background:#fef3c7;border-color:#f59e0b' : 'color:#fff;background:#475569;border-color:#475569'}" onclick="_caNodeFilter('${t}')">${t === 'all' ? 'All' : t} <span class="sa-filter-count">${t === 'all' ? list.length : list.filter(n => n.type === t).length}</span></button>`).join('')}
         </div>
         <input class="sa-search-input" placeholder="Search nodes..." oninput="window._caNodeSearch && window._caNodeSearch(this.value)" />
       </div>
