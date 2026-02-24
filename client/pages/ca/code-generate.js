@@ -1,6 +1,7 @@
 /**
  * Company Admin – Generate Codes
  * Real generation via POST /api/qr/generate + list from /api/qr
+ * Includes: export CSV/PDF after generation + generation history
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
@@ -16,15 +17,30 @@ async function load() {
       API.get('/products?limit=50').catch(() => ({ products: [] })),
     ]);
     const codes = qrRes.scans || [];
-    // Also try getting existing QR codes from DB
     const qrCodes = await API.get('/qr/dashboard-stats').catch(() => ({}));
+
+    // Load generation history: recently generated QR codes grouped by product
+    let genHistory = [];
+    try {
+      const prodList = Array.isArray(prodRes) ? prodRes : (prodRes.products || []);
+      // Fetch recent QR codes for history
+      const historyPromises = prodList.slice(0, 10).map(async p => {
+        try {
+          const r = await API.get(`/products/${p.id}/codes`);
+          return { product: p, total_codes: r.total_codes || 0, codes: (r.codes || []).slice(0, 5) };
+        } catch { return null; }
+      });
+      genHistory = (await Promise.all(historyPromises)).filter(h => h && h.total_codes > 0);
+    } catch { }
+
     data = {
       codes,
       batches: Array.isArray(batchRes) ? batchRes : (batchRes.batches || []),
       products: Array.isArray(prodRes) ? prodRes : (prodRes.products || []),
       stats: qrCodes,
+      genHistory,
     };
-  } catch (e) { data = { codes: [], batches: [], products: [], stats: {} }; }
+  } catch (e) { data = { codes: [], batches: [], products: [], stats: {}, genHistory: [] }; }
   loading = false;
   setTimeout(() => { const el = document.getElementById('code-generate-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
@@ -50,12 +66,49 @@ window._caGenSubmit = async () => {
       batch_id: batchSelect?.value || null,
     });
     genResult = res;
+    // Store the product_id for export
+    genResult._product_id = productSelect.value;
     data = null; // force reload
   } catch (e) {
     genResult = { success: false, error: e.message || 'Generation failed' };
   }
   generating = false;
   load();
+};
+
+// ── Export QR codes for a product (CSV or PDF download) ──
+window._caExportCodes = async (productId, format) => {
+  try {
+    const el = document.getElementById('export-status');
+    if (el) el.textContent = `⏳ Đang tạo file ${format.toUpperCase()}...`;
+
+    // Use the same API base and token as the API client
+    const apiBase = window.API ? window.API.base : (window.location.origin + '/api');
+    const token = window.API ? window.API.token : sessionStorage.getItem('tc_token');
+
+    const response = await fetch(`${apiBase}/products/${productId}/codes/export?format=${format}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Export failed');
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+    a.download = filenameMatch ? filenameMatch[1] : `QR_codes.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    if (el) el.textContent = `✅ Đã tải file ${format.toUpperCase()} thành công!`;
+  } catch (e) {
+    const el = document.getElementById('export-status');
+    if (el) el.textContent = '❌ ' + (e.message || 'Export thất bại');
+  }
 };
 
 function renderContent() {
@@ -66,6 +119,7 @@ function renderContent() {
   const batches = data?.batches || [];
   const products = data?.products || [];
   const stats = data?.stats || {};
+  const genHistory = data?.genHistory || [];
 
   return `
     <div class="sa-page">
@@ -95,6 +149,12 @@ function renderContent() {
               ${genResult.codes.slice(0, 50).map(c => `<span class="sa-code" style="font-size:0.68rem;background:rgba(99,102,241,0.08);padding:0.2rem 0.5rem;border-radius:4px">${c.code}</span>`).join('')}
               ${genResult.codes.length > 50 ? `<span style="font-size:0.68rem;color:var(--text-secondary)">... and ${genResult.codes.length - 50} more</span>` : ''}
             </div>
+          </div>
+          <div style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+            <span style="font-size:0.78rem;font-weight:600;color:var(--text-secondary)">📥 Xuất để in:</span>
+            <button class="btn btn-sm" onclick="_caExportCodes('${genResult._product_id || genResult.product?.id || ''}','csv')" style="font-size:0.75rem;padding:0.35rem 0.75rem">📊 Tải CSV (Excel)</button>
+            <button class="btn btn-sm" onclick="_caExportCodes('${genResult._product_id || genResult.product?.id || ''}','pdf')" style="font-size:0.75rem;padding:0.35rem 0.75rem">📄 Tải PDF (In ấn)</button>
+            <span id="export-status" style="font-size:0.72rem;color:var(--text-secondary)"></span>
           </div>` : ''}
         </div>` : ''}
 
@@ -111,7 +171,7 @@ function renderContent() {
           </div>
           <div>
             <label style="font-size:0.78rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:0.3rem">Quantity *</label>
-            <input id="gen-qty" class="ops-input" type="number" value="10" min="1" max="10000" style="width:100%;padding:0.6rem" />
+            <input id="gen-qty" class="ops-input" type="number" placeholder="10" min="1" max="10000" style="width:100%;padding:0.6rem" onfocus="this.select()" />
           </div>
           <div>
             <label style="font-size:0.78rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:0.3rem">Target Batch (optional)</label>
@@ -126,6 +186,24 @@ function renderContent() {
             </button>
           </div>
         </div>
+      </div>
+
+      <div class="sa-card" style="margin-bottom:1.5rem">
+        <h3>📦 Code Generation History</h3>
+        <p style="font-size:0.72rem;color:var(--text-secondary);margin-bottom:0.75rem">Products with generated QR codes. Click Export to download for printing.</p>
+        ${genHistory.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted)">No codes generated yet — generate codes above to see history</div>' : `
+        <table class="sa-table"><thead><tr><th>Product</th><th>SKU</th><th>Total Codes</th><th>Recent Codes</th><th>Export</th></tr></thead><tbody>
+          ${genHistory.map(h => `<tr>
+            <td><strong>${h.product.name}</strong></td>
+            <td class="sa-code" style="font-size:0.72rem">${h.product.sku || '—'}</td>
+            <td style="font-weight:700;text-align:center">${h.total_codes}</td>
+            <td style="font-size:0.68rem;max-width:250px;overflow:hidden;text-overflow:ellipsis">${h.codes.map(c => c.code).join(', ')}</td>
+            <td style="white-space:nowrap">
+              <button class="btn btn-sm" onclick="_caExportCodes('${h.product.id}','csv')" style="font-size:0.68rem;padding:0.2rem 0.4rem" title="Download CSV">📊</button>
+              <button class="btn btn-sm" onclick="_caExportCodes('${h.product.id}','pdf')" style="font-size:0.68rem;padding:0.2rem 0.4rem" title="Download PDF">📄</button>
+            </td>
+          </tr>`).join('')}
+        </tbody></table>`}
       </div>
 
       <div class="sa-card">

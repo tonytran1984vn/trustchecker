@@ -99,7 +99,13 @@ async function showProductDetail(id) {
 
         ${codes.length > 0 ? `
           <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
-            <div style="font-weight:600;font-size:0.85rem;margin-bottom:8px">📱 QR Codes (${codes.length})</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="font-weight:600;font-size:0.85rem">📱 QR Codes (${codes.length})</div>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-sm" onclick="exportQrCodes('${p.id}','csv')" style="font-size:0.72rem" title="Tải file CSV (Excel)">📊 CSV</button>
+                <button class="btn btn-sm" onclick="exportQrCodes('${p.id}','pdf')" style="font-size:0.72rem" title="Tải file PDF (in ấn)">📄 PDF</button>
+              </div>
+            </div>
             <div style="max-height:200px;overflow-y:auto">
               ${codes.map(c => `
                 <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.78rem">
@@ -172,6 +178,73 @@ async function searchProducts(q) {
   } catch (e) { }
 }
 
+// ── Export QR codes for a specific product (CSV or PDF) ──
+async function exportQrCodes(productId, format) {
+  try {
+    showToast(`⏳ Đang tạo file ${format.toUpperCase()}...`, 'info');
+
+    // Use the same API base and token as the API client
+    const apiBase = window.API ? window.API.base : (window.location.origin + '/api');
+    const token = window.API ? window.API.token : sessionStorage.getItem('tc_token');
+
+    const response = await fetch(`${apiBase}/products/${productId}/codes/export?format=${format}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Export failed');
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+    a.download = filenameMatch ? filenameMatch[1] : `QR_codes.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast(`✅ Đã tải file ${format.toUpperCase()} thành công!`, 'success');
+  } catch (e) {
+    showToast('❌ ' + (e.message || 'Export thất bại'), 'error');
+  }
+}
+
+// ── Export all products list as CSV ──
+function exportProductsCSV() {
+  try {
+    if (!State.products || State.products.length === 0) {
+      showToast('Không có sản phẩm để xuất', 'warning');
+      return;
+    }
+    const BOM = '\uFEFF';
+    const header = ['Tên Sản Phẩm', 'SKU', 'Danh Mục', 'Nhà Sản Xuất', 'Xuất Xứ', 'Trust Score', 'Trạng Thái'];
+    const rows = State.products.map(p => [
+      `"${p.name || ''}"`,
+      `"${p.sku || ''}"`,
+      `"${p.category || ''}"`,
+      `"${p.manufacturer || ''}"`,
+      `"${p.origin_country || ''}"`,
+      Math.round(p.trust_score || 0),
+      p.status || 'active'
+    ]);
+    const csv = BOM + header.join(',') + '\n' + rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `TrustChecker_Products_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('✅ Đã tải danh sách sản phẩm!', 'success');
+  } catch (e) {
+    showToast('❌ Export thất bại', 'error');
+  }
+}
+
 // Window exports
 window.showAddProduct = showAddProduct;
 window.addProduct = addProduct;
@@ -179,4 +252,6 @@ window.showProductDetail = showProductDetail;
 window.searchProducts = searchProducts;
 window.deleteQrCode = deleteQrCode;
 window.showDeletionHistory = showDeletionHistory;
+window.exportQrCodes = exportQrCodes;
+window.exportProductsCSV = exportProductsCSV;
 

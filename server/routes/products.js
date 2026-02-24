@@ -363,4 +363,136 @@ router.get('/codes/deletion-history', authMiddleware, requirePermission('product
     }
 });
 
+// ─── GET /api/products/:id/codes/export — Export QR codes as CSV or PDF ──────
+router.get('/:id/codes/export', authMiddleware, async (req, res) => {
+    try {
+        const { format = 'csv' } = req.query;
+        const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+        if (!product) return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
+
+        // Tenant scoping
+        if (req.user.role !== 'super_admin' && req.user.orgId && product.org_id && product.org_id !== req.user.orgId) {
+            return res.status(403).json({ error: 'Không có quyền truy cập sản phẩm này' });
+        }
+
+        const codes = await db.all(`
+            SELECT qc.id, qc.qr_data as code, qc.qr_image_base64, qc.status, qc.created_at,
+                   COUNT(se.id) as scan_count,
+                   MAX(se.scanned_at) as last_scanned
+            FROM qr_codes qc
+            LEFT JOIN scan_events se ON se.qr_code_id = qc.id
+            WHERE qc.product_id = ? AND qc.status != 'deleted'
+            GROUP BY qc.id
+            ORDER BY qc.created_at DESC
+        `, [req.params.id]);
+
+        if (codes.length === 0) {
+            return res.status(404).json({ error: 'Sản phẩm chưa có mã QR nào' });
+        }
+
+        const safeFileName = product.name.replace(/[^a-zA-Z0-9_\-\u00C0-\u024F\u1E00-\u1EFF ]/g, '').replace(/\s+/g, '_');
+        const dateStr = new Date().toISOString().slice(0, 10);
+
+        // ── CSV Format ──
+        if (format === 'csv') {
+            const BOM = '\uFEFF'; // UTF-8 BOM for Excel compatibility
+            const header = ['STT', 'Mã QR (Code)', 'Tên Sản Phẩm', 'SKU', 'Trạng Thái', 'Ngày Tạo', 'Số Lần Quét', 'Lần Quét Gần Nhất'];
+            const rows = codes.map((c, i) => [
+                i + 1,
+                `"${c.code}"`,
+                `"${product.name}"`,
+                `"${product.sku}"`,
+                c.status,
+                c.created_at ? new Date(c.created_at).toLocaleString('vi-VN') : '',
+                c.scan_count || 0,
+                c.last_scanned ? new Date(c.last_scanned).toLocaleString('vi-VN') : 'Chưa quét'
+            ]);
+
+            const csvContent = BOM + header.join(',') + '\n' + rows.map(r => r.join(',')).join('\n');
+
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}_QR_codes_${dateStr}.csv"`);
+            return res.send(csvContent);
+        }
+
+        // ── PDF Format ──
+        if (format === 'pdf') {
+            const PDFDocument = require('pdfkit');
+            const doc = new PDFDocument({ size: 'A4', margin: 40 });
+            const buffers = [];
+
+            doc.on('data', chunk => buffers.push(chunk));
+            doc.on('end', () => {
+                const pdfData = Buffer.concat(buffers);
+                res.setHeader('Content-Type', 'application/pdf');
+                res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}_QR_codes_${dateStr}.pdf"`);
+                res.send(pdfData);
+            });
+
+            const pageWidth = doc.page.width - 80; // 40px margin each side
+            const colCount = 4;
+            const rowCount = 5;
+            const codesPerPage = colCount * rowCount;
+            const cellWidth = pageWidth / colCount;
+            const qrSize = Math.min(cellWidth - 16, 110);
+            const cellHeight = qrSize + 40; // QR image + code text
+            const totalPages = Math.ceil(codes.length / codesPerPage);
+
+            for (let page = 0; page < totalPages; page++) {
+                if (page > 0) doc.addPage();
+
+                // Page header
+                doc.fontSize(14).font('Helvetica-Bold')
+                    .text(product.name, 40, 40, { width: pageWidth });
+                doc.fontSize(9).font('Helvetica')
+                    .text(`SKU: ${product.sku}  |  Ngày xuất: ${dateStr}  |  Tổng mã: ${codes.length}  |  Trang ${page + 1}/${totalPages}`, 40, 58, { width: pageWidth });
+                doc.moveTo(40, 75).lineTo(40 + pageWidth, 75).stroke('#ccc');
+
+                const startIdx = page * codesPerPage;
+                const pageCodes = codes.slice(startIdx, startIdx + codesPerPage);
+                const topY = 85;
+
+                for (let i = 0; i < pageCodes.length; i++) {
+                    const col = i % colCount;
+                    const row = Math.floor(i / colCount);
+                    const x = 40 + col * cellWidth + (cellWidth - qrSize) / 2;
+                    const y = topY + row * cellHeight;
+
+                    // Draw QR image if available
+                    if (pageCodes[i].qr_image_base64) {
+                        try {
+                            const imgData = pageCodes[i].qr_image_base64.replace(/^data:image\/\w+;base64,/, '');
+                            const imgBuffer = Buffer.from(imgData, 'base64');
+                            doc.image(imgBuffer, x, y, { width: qrSize, height: qrSize });
+                        } catch (imgErr) {
+                            // If image fails, draw placeholder box
+                            doc.rect(x, y, qrSize, qrSize).stroke('#ddd');
+                            doc.fontSize(7).text('QR', x, y + qrSize / 2 - 4, { width: qrSize, align: 'center' });
+                        }
+                    } else {
+                        doc.rect(x, y, qrSize, qrSize).stroke('#ddd');
+                        doc.fontSize(7).text('No Image', x, y + qrSize / 2 - 4, { width: qrSize, align: 'center' });
+                    }
+
+                    // Code text below QR
+                    const codeText = pageCodes[i].code || '';
+                    const displayCode = codeText.length > 22 ? codeText.substring(0, 22) + '…' : codeText;
+                    doc.fontSize(6).font('Courier')
+                        .text(displayCode, 40 + col * cellWidth, y + qrSize + 3, { width: cellWidth, align: 'center' });
+                    doc.font('Helvetica'); // Reset font
+                }
+            }
+
+            doc.end();
+            return;
+        }
+
+        return res.status(400).json({ error: 'Format không hợp lệ. Sử dụng: csv hoặc pdf' });
+
+    } catch (err) {
+        console.error('Export codes error:', err);
+        res.status(500).json({ error: 'Không thể xuất mã QR' });
+    }
+});
+
 module.exports = router;
