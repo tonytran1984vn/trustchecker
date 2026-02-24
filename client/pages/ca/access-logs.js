@@ -16,7 +16,7 @@ window._caAccessTab = (t) => { activeTab = t; { const _el = document.getElementB
 async function load() {
   if (loading) return; loading = true;
   try {
-    const res = await API.get('/audit-log?limit=100');
+    const res = await API.get('/tenant/audit?limit=100');
     logs = Array.isArray(res) ? res : (res.logs || res.entries || []);
   } catch (e) { logs = []; }
   loading = false;
