@@ -77,8 +77,8 @@ router.get('/generation-history', authMiddleware, async (req, res) => {
 
         res.json({ history });
     } catch (err) {
-        console.error('Generation history error:', err);
-        res.status(500).json({ error: 'Failed to fetch generation history' });
+        console.error('Generation history error:', err.message, '\nSQL details:', err.meta || '');
+        res.status(500).json({ error: 'Failed to fetch generation history', detail: err.message });
     }
 });
 
@@ -292,14 +292,14 @@ router.get('/:id/codes', authMiddleware, async (req, res) => {
         if (!product) return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
 
         const codes = await db.all(`
-            SELECT qc.id, qc.qr_data as code, qc.status, qc.created_at,
+            SELECT qc.id, qc.qr_data as code, qc.status, qc.generated_at,
                    COUNT(se.id) as scan_count,
                    MAX(se.scanned_at) as last_scanned
             FROM qr_codes qc
             LEFT JOIN scan_events se ON se.qr_code_id = qc.id
             WHERE qc.product_id = ?
-            GROUP BY qc.id
-            ORDER BY qc.created_at DESC
+            GROUP BY qc.id, qc.qr_data, qc.status, qc.generated_at
+            ORDER BY qc.generated_at DESC
         `, [req.params.id]);
 
         res.json({
