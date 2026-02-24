@@ -104,15 +104,17 @@ window._caExportCodes = async (productId, format) => {
   }
 };
 
-// ── View QR codes for a product (expand/collapse inline) ──
-window._caViewCodes = async (productId, productName) => {
+// ── View QR codes for a product (paginated, expand/collapse inline) ──
+window._caViewCodes = async (productId, productName, page, limit) => {
+  page = page || 1;
+  limit = limit || 20;
   const row = document.getElementById(`codes-row-${productId}`);
   if (!row) return;
   const cell = row.querySelector('td');
   if (!cell) return;
 
-  // Toggle: if already visible, hide it
-  if (row.style.display !== 'none') {
+  // Toggle: if already visible and called without explicit page, hide it
+  if (row.style.display !== 'none' && arguments.length <= 2) {
     row.style.display = 'none';
     return;
   }
@@ -124,35 +126,47 @@ window._caViewCodes = async (productId, productName) => {
   try {
     const apiBase = window.API ? window.API.base : (window.location.origin + '/api');
     const token = window.API ? window.API.token : sessionStorage.getItem('tc_token');
-    const response = await fetch(`${apiBase}/products/${productId}/codes`, {
+    const response = await fetch(`${apiBase}/products/${productId}/codes?page=${page}&limit=${limit}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!response.ok) throw new Error('Failed to fetch codes');
-    const data = await response.json();
-    const codes = data.codes || [];
+    const res = await response.json();
+    const codes = res.codes || [];
+    const total = res.total || 0;
+    const totalPages = res.total_pages || 1;
+    const curPage = res.page || 1;
+    const curLimit = res.limit || 20;
+    const startNum = (curPage - 1) * curLimit + 1;
+    const endNum = Math.min(curPage * curLimit, total);
+    const sn = (productName || '').replace(/'/g, "\\'");
 
-    if (codes.length === 0) {
-      cell.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-muted)">No QR codes found</div>';
+    if (total === 0) {
+      cell.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-muted)">No codes found</div>';
       return;
     }
 
     cell.innerHTML = `
-      <div style="background:var(--bg-tertiary,#f8fafc);border:1px solid var(--border-color,#e2e8f0);border-radius:8px;margin:4px 8px 8px;padding:12px;max-height:350px;overflow-y:auto">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <strong style="font-size:0.78rem">📋 ${productName || 'Codes'} — ${codes.length} codes</strong>
-          <button class="btn btn-sm" onclick="document.getElementById('codes-row-${productId}').style.display='none'" style="font-size:0.65rem;padding:0.15rem 0.4rem">✕ Close</button>
+      <div style="background:var(--bg-tertiary,#f8fafc);border:1px solid var(--border-color,#e2e8f0);border-radius:8px;margin:4px 8px 8px;padding:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px">
+          <strong style="font-size:0.78rem">📋 ${productName || 'Codes'} — ${total} codes</strong>
+          <div style="display:flex;align-items:center;gap:4px">
+            <span style="font-size:0.65rem;color:var(--text-secondary)">Show:</span>
+            ${[10, 20, 50, 100].map(n => `<button class="btn btn-sm" onclick="_caViewCodes('${productId}','${sn}',1,${n})" style="font-size:0.6rem;padding:1px 6px;min-width:28px;${curLimit === n ? 'background:#6366f1;color:#fff;font-weight:700' : ''}">${n}</button>`).join('')}
+            <button class="btn btn-sm" onclick="document.getElementById('codes-row-${productId}').style.display='none'" style="font-size:0.6rem;padding:1px 6px;margin-left:6px">✕</button>
+          </div>
         </div>
+        <div style="max-height:420px;overflow-y:auto">
         <table style="width:100%;border-collapse:collapse;font-size:0.72rem">
           <thead><tr style="background:var(--bg-secondary,#f1f5f9)">
             <th style="padding:4px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">#</th>
-            <th style="padding:4px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">QR Code</th>
+            <th style="padding:4px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Code</th>
             <th style="padding:4px 8px;text-align:center;border-bottom:1px solid var(--border-color,#e2e8f0)">Status</th>
             <th style="padding:4px 8px;text-align:left;border-bottom:1px solid var(--border-color,#e2e8f0)">Created</th>
             <th style="padding:4px 8px;text-align:center;border-bottom:1px solid var(--border-color,#e2e8f0)">Scans</th>
           </tr></thead>
           <tbody>
             ${codes.map((c, i) => `<tr style="border-bottom:1px solid var(--border-color,#e2e8f0)">
-              <td style="padding:3px 8px;color:var(--text-muted)">${i + 1}</td>
+              <td style="padding:3px 8px;color:var(--text-muted)">${startNum + i}</td>
               <td style="padding:3px 8px;font-family:monospace;font-size:0.7rem;color:var(--primary,#4f46e5)">${c.code}</td>
               <td style="padding:3px 8px;text-align:center"><span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:0.62rem;font-weight:600;background:${c.status === 'active' ? '#dcfce7' : '#fee2e2'};color:${c.status === 'active' ? '#16a34a' : '#dc2626'}">${c.status === 'active' ? '✓ Active' : c.status}</span></td>
               <td style="padding:3px 8px;color:var(--text-secondary)">${c.generated_at ? new Date(c.generated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
@@ -160,6 +174,16 @@ window._caViewCodes = async (productId, productName) => {
             </tr>`).join('')}
           </tbody>
         </table>
+        </div>
+        ${totalPages > 1 ? `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-color,#e2e8f0)">
+          <span style="font-size:0.68rem;color:var(--text-secondary)">${startNum}–${endNum} of ${total}</span>
+          <div style="display:flex;align-items:center;gap:4px">
+            <button class="btn btn-sm" onclick="_caViewCodes('${productId}','${sn}',${curPage - 1},${curLimit})" ${curPage <= 1 ? 'disabled style="font-size:0.65rem;padding:2px 8px;opacity:0.4;cursor:default"' : 'style="font-size:0.65rem;padding:2px 8px"'}>◀ Prev</button>
+            <span style="font-size:0.68rem;font-weight:600;padding:0 6px">Page ${curPage} / ${totalPages}</span>
+            <button class="btn btn-sm" onclick="_caViewCodes('${productId}','${sn}',${curPage + 1},${curLimit})" ${curPage >= totalPages ? 'disabled style="font-size:0.65rem;padding:2px 8px;opacity:0.4;cursor:default"' : 'style="font-size:0.65rem;padding:2px 8px"'}>Next ▶</button>
+          </div>
+        </div>` : ''}
       </div>`;
   } catch (e) {
     cell.innerHTML = `<div style="padding:12px;text-align:center;color:#ef4444">❌ ${e.message || 'Failed to load codes'}</div>`;

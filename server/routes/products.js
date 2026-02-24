@@ -285,26 +285,43 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
 });
 
 
-// ─── GET /api/products/:id/codes — List all codes for a product ──────────────
+// ─── GET /api/products/:id/codes — List codes for a product (paginated) ──────
 router.get('/:id/codes', authMiddleware, async (req, res) => {
     try {
         const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
+        // Pagination params
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 200);
+        const page = Math.max(parseInt(req.query.page) || 1, 1);
+        const offset = (page - 1) * limit;
+
+        // Get total count
+        const countResult = await db.get(
+            'SELECT COUNT(*) as total FROM qr_codes WHERE product_id = ? AND status != ?',
+            [req.params.id, 'deleted']
+        );
+        const total = countResult?.total || 0;
+
+        // Get paginated codes
         const codes = await db.all(`
             SELECT qc.id, qc.qr_data as code, qc.status, qc.generated_at,
                    COUNT(se.id) as scan_count,
                    MAX(se.scanned_at) as last_scanned
             FROM qr_codes qc
             LEFT JOIN scan_events se ON se.qr_code_id = qc.id
-            WHERE qc.product_id = ?
+            WHERE qc.product_id = ? AND qc.status != 'deleted'
             GROUP BY qc.id, qc.qr_data, qc.status, qc.generated_at
             ORDER BY qc.generated_at DESC
-        `, [req.params.id]);
+            LIMIT ? OFFSET ?
+        `, [req.params.id, limit, offset]);
 
         res.json({
             product: { id: product.id, name: product.name, sku: product.sku },
-            total_codes: codes.length,
+            total,
+            page,
+            limit,
+            total_pages: Math.ceil(total / limit),
             codes
         });
     } catch (err) {
