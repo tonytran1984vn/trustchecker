@@ -66,7 +66,7 @@ router.get('/generation-history', authMiddleware, async (req, res) => {
             SELECT p.id, p.name, p.sku, p.category,
                    COUNT(qc.id) as total_codes,
                    MAX(qc.generated_at) as last_generated,
-                   GROUP_CONCAT(qc.qr_data, ', ') as recent_codes
+                   GROUP_CONCAT(qr_data, ', ') as recent_codes
             FROM products p
             INNER JOIN qr_codes qc ON qc.product_id = p.id AND qc.status != 'deleted'
             WHERE 1=1 ${orgFilter}
