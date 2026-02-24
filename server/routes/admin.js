@@ -197,8 +197,15 @@ router.post('/users/:id/reset-password', authMiddleware, requireRole('admin'), a
 router.get('/audit', async (req, res) => {
     try {
         const { action, actor_id, entity_type, from_date, to_date, limit = 100, offset = 0 } = req.query;
+        const orgId = req.user?.org_id || req.user?.orgId;
         let sql = 'SELECT a.*, u.username as actor_name FROM audit_log a LEFT JOIN users u ON a.actor_id = u.id WHERE 1=1';
         const params = [];
+
+        // Org-scope: non-super_admin only sees audit entries from their org
+        if (orgId && req.user?.role !== 'super_admin') {
+            sql += ' AND (u.org_id = ? OR a.actor_id = ?)';
+            params.push(orgId, req.user.id);
+        }
 
         if (action) { sql += ' AND a.action = ?'; params.push(action); }
         if (actor_id) { sql += ' AND a.actor_id = ?'; params.push(actor_id); }
@@ -210,10 +217,17 @@ router.get('/audit', async (req, res) => {
         params.push(Math.min(Number(limit) || 100, 500), Math.max(Number(offset) || 0, 0)); // NODE-BP-2: cap
 
         const logs = await db.all(sql, params);
-        const total = (await db.get('SELECT COUNT(*) as c FROM audit_log'))?.c || 0;
+        const total = logs.length;
 
-        // Action breakdown
-        const actionBreakdown = await db.all('SELECT action, COUNT(*) as count FROM audit_log GROUP BY action ORDER BY count DESC LIMIT 20');
+        // Action breakdown (scoped)
+        let breakdownSql = 'SELECT action, COUNT(*) as count FROM audit_log';
+        const breakdownParams = [];
+        if (orgId && req.user?.role !== 'super_admin') {
+            breakdownSql += ' WHERE actor_id IN (SELECT id FROM users WHERE org_id = ?)';
+            breakdownParams.push(orgId);
+        }
+        breakdownSql += ' GROUP BY action ORDER BY count DESC LIMIT 20';
+        const actionBreakdown = await db.all(breakdownSql, breakdownParams);
 
         res.json({ logs, total, action_breakdown: actionBreakdown });
     } catch (e) {
@@ -322,7 +336,7 @@ function getDBSize() {
     try {
         const fs = require('fs');
         const path = require('path');
-const { safeParse } = require('../utils/safe-json');
+        const { safeParse } = require('../utils/safe-json');
         const dbPath = path.join(__dirname, '..', 'data', 'trustchecker.db');
         if (fs.existsSync(dbPath)) {
             return Math.round(fs.statSync(dbPath).size / 1024 / 1024 * 100) / 100;

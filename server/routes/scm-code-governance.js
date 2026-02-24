@@ -55,13 +55,20 @@ router.use(authMiddleware);
 // ─── GET /api/scm/code-gov/format-rules — List all format rules ─────────────
 router.get('/format-rules', async (req, res) => {
     try {
+        const orgId = req.user?.org_id || req.user?.orgId;
+        const params = [];
+        let whereClause = "fr.status != 'deleted'";
+        if (orgId && req.user?.role !== 'super_admin') {
+            whereClause += ' AND fr.tenant_id = ?';
+            params.push(orgId);
+        }
         const rules = await db.all(`
             SELECT fr.*,
                    (SELECT COUNT(*) FROM qr_codes qc WHERE qc.qr_data LIKE fr.prefix || '%') as codes_generated
             FROM format_rules fr
-            WHERE fr.status != 'deleted'
+            WHERE ${whereClause}
             ORDER BY fr.created_at DESC
-        `);
+        `, ...params);
         res.json({ rules, total: rules.length });
     } catch (err) {
         console.error('List format rules error:', err);

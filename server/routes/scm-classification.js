@@ -72,10 +72,16 @@ function classifyDuplicate(scanEvent, previousScan, routeGeoFence) {
 router.get('/duplicates', authMiddleware, async (req, res) => {
     try {
         const { classification, limit = 50 } = req.query;
-        let query = 'SELECT * FROM duplicate_classifications';
+        const orgId = req.user?.org_id || req.user?.orgId;
+        let query = `SELECT dc.* FROM duplicate_classifications dc
+            LEFT JOIN scan_events se ON dc.scan_event_id = se.id
+            LEFT JOIN products p ON se.product_id = p.id`;
         const params = [];
-        if (classification) { query += ' WHERE classification = ?'; params.push(classification); }
-        query += ' ORDER BY created_at DESC LIMIT ?';
+        const conditions = [];
+        if (orgId && req.user?.role !== 'super_admin') { conditions.push('p.org_id = ?'); params.push(orgId); }
+        if (classification) { conditions.push('dc.classification = ?'); params.push(classification); }
+        if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
+        query += ' ORDER BY dc.created_at DESC LIMIT ?';
         params.push(Math.min(parseInt(limit) || 50, 200));
 
         const dups = await db.prepare(query).all(...params);

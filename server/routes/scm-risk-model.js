@@ -17,9 +17,15 @@ router.use(authMiddleware);
 // ─── GET /api/scm/models – List all model versions ──────────────────────────
 router.get('/models', authMiddleware, async (req, res) => {
     try {
-        const models = await db.prepare(`
-            SELECT * FROM risk_models ORDER BY created_at DESC
-        `).all();
+        const orgId = req.user?.org_id || req.user?.orgId;
+        let query = 'SELECT * FROM risk_models';
+        const params = [];
+        if (orgId && req.user?.role !== 'super_admin') {
+            query += " WHERE org_id = ? OR org_id IS NULL OR org_id = ''";
+            params.push(orgId);
+        }
+        query += ' ORDER BY created_at DESC';
+        const models = await db.prepare(query).all(...params);
         res.json(models.map(m => ({ ...m, weights: JSON.parse(m.weights || '{}') })));
     } catch (err) {
         console.error('List models error:', err);

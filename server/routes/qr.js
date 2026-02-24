@@ -290,17 +290,24 @@ router.post('/generate', authMiddleware, async (req, res) => {
 router.get('/scan-history', authMiddleware, async (req, res) => {
     try {
         const { product_id, limit = 50 } = req.query;
+        const orgId = req.user?.org_id || req.user?.orgId;
         let query = `
       SELECT se.*, p.name as product_name, p.sku as product_sku
       FROM scan_events se
       LEFT JOIN products p ON se.product_id = p.id
     `;
         const params = [];
+        const conditions = [];
 
+        if (orgId && req.user?.role !== 'super_admin') {
+            conditions.push('p.org_id = ?');
+            params.push(orgId);
+        }
         if (product_id) {
-            query += ' WHERE se.product_id = ?';
+            conditions.push('se.product_id = ?');
             params.push(product_id);
         }
+        if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
 
         query += ' ORDER BY se.scanned_at DESC LIMIT ?';
         params.push(Math.min(Number(limit) || 50, 200));

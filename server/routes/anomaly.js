@@ -55,16 +55,29 @@ router.post('/scan', requirePermission('anomaly:create'), async (req, res) => {
 let _cache = { data: null, expires: 0 };
 const CACHE_TTL = 60_000; // 60 seconds
 
-async function fetchAnomalyList(query) {
+async function fetchAnomalyList(query, user) {
     const { status = 'open', severity, type, limit = 50 } = query;
-    let sql = 'SELECT * FROM anomaly_detections WHERE 1=1';
+    const orgId = user?.org_id || user?.orgId;
+    const isSuper = user?.role === 'super_admin';
+
+    // Base query with org scoping through scan_events → products
+    let sql = `SELECT ad.* FROM anomaly_detections ad`;
     const params = [];
+    const conditions = [];
 
-    if (status) { sql += ' AND status = ?'; params.push(status); }
-    if (severity) { sql += ' AND severity = ?'; params.push(severity); }
-    if (type) { sql += ' AND anomaly_type = ?'; params.push(type); }
+    if (orgId && !isSuper) {
+        sql += ` LEFT JOIN scan_events se ON ad.source_id = se.id AND ad.source_type = 'scan'
+                 LEFT JOIN products p ON se.product_id = p.id`;
+        conditions.push("(p.org_id = ? OR ad.source_type != 'scan')");
+        params.push(orgId);
+    }
 
-    sql += ' ORDER BY CASE severity WHEN \'critical\' THEN 1 WHEN \'warning\' THEN 2 ELSE 3 END, detected_at DESC LIMIT ?';
+    if (status) { conditions.push('ad.status = ?'); params.push(status); }
+    if (severity) { conditions.push('ad.severity = ?'); params.push(severity); }
+    if (type) { conditions.push('ad.anomaly_type = ?'); params.push(type); }
+
+    if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+    sql += " ORDER BY CASE ad.severity WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END, ad.detected_at DESC LIMIT ?";
     params.push(Math.min(Number(limit) || 50, 200));
 
     const anomalies = await db.all(sql, params);
@@ -79,7 +92,7 @@ async function fetchAnomalyList(query) {
 
 router.get('/', async (req, res) => {
     try {
-        const result = await fetchAnomalyList(req.query);
+        const result = await fetchAnomalyList(req.query, req.user);
         res.json(result);
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -97,7 +110,7 @@ router.get('/detections', async (req, res) => {
             return res.json({ ..._cache.data, cached: true });
         }
 
-        const result = await fetchAnomalyList(req.query);
+        const result = await fetchAnomalyList(req.query, req.user);
 
         // Cache the response
         _cache = { data: result, expires: now + CACHE_TTL, key: cacheKey };

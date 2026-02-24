@@ -84,6 +84,7 @@ router.get('/events/:productId/journey', authMiddleware, async (req, res) => {
 router.get('/events', authMiddleware, async (req, res) => {
     try {
         const { limit = 50, event_type } = req.query;
+        const orgId = req.user?.org_id || req.user?.orgId;
         let query = `
       SELECT sce.*, p.name as partner_name, pr.name as product_name
       FROM supply_chain_events sce
@@ -91,7 +92,10 @@ router.get('/events', authMiddleware, async (req, res) => {
       LEFT JOIN products pr ON sce.product_id = pr.id
     `;
         const params = [];
-        if (event_type) { query += ' WHERE sce.event_type = ?'; params.push(event_type); }
+        const conditions = [];
+        if (orgId && req.user?.role !== 'super_admin') { conditions.push('(sce.org_id = ? OR pr.org_id = ?)'); params.push(orgId, orgId); }
+        if (event_type) { conditions.push('sce.event_type = ?'); params.push(event_type); }
+        if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
         query += ' ORDER BY sce.created_at DESC LIMIT ?';
         params.push(Math.min(Number(limit) || 50, 200));
 
