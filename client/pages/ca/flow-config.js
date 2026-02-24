@@ -87,12 +87,22 @@ async function load() {
   setTimeout(() => { const el = document.getElementById('flow-config-root'); if (el) el.innerHTML = renderContent(); }, 50);
 }
 
+function parseChain(route) {
+  let chain = route.chain;
+  if (typeof chain === 'string') {
+    try { chain = JSON.parse(chain); } catch (e) { chain = []; }
+  }
+  return Array.isArray(chain) ? chain : [];
+}
+
 function extractPath(route) {
-  const chain = Array.isArray(route.chain) ? route.chain : [];
+  const chain = parseChain(route);
   if (chain.length >= 2) {
-    const first = chain[0].node_name || chain[0].location || '?';
-    const last = chain[chain.length - 1].node_name || chain[chain.length - 1].location || '?';
-    return `${first} → ${last}`;
+    const nodeName = (n) => n.node_name || n.name || n.location || '?';
+    return `${nodeName(chain[0])} → ${nodeName(chain[chain.length - 1])}`;
+  }
+  if (chain.length === 1) {
+    return chain[0].node_name || chain[0].name || chain[0].location || route.name || '—';
   }
   return route.name || '—';
 }
@@ -119,12 +129,15 @@ function renderContent() {
           <h3>Active Supply Routes</h3>
           ${routes.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted)">No routes configured. Click "+ Create Flow" to add one.</div>' : `
           <div class="sa-spike-list">
-            ${routes.map(r => flowItem(
-    r.name || extractPath(r),
-    extractPath(r),
-    Array.isArray(r.chain) ? r.chain.length : 2,
-    r.status || 'active'
-  )).join('')}
+            ${routes.map(r => {
+    const chain = parseChain(r);
+    return flowItem(
+      r.name || extractPath(r),
+      extractPath(r),
+      chain.length,
+      r.status || 'active'
+    );
+  }).join('')}
           </div>`}
         </div>
 
