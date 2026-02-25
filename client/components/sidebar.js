@@ -617,13 +617,13 @@ function renderDomainSection(domain, label, items) {
 const EXECUTIVE_ITEMS = [
   { id: 'exec-overview', icon: icon('target'), label: 'Capital Command' },
   { id: 'exec-risk-intel', icon: icon('alertTriangle'), label: 'Capital Exposure' },
-  { id: 'exec-market', icon: icon('globe'), label: 'Decisions' },
-  { id: 'exec-performance', icon: icon('star'), label: 'Enterprise Value' },
-  { id: 'exec-reports', icon: icon('scroll'), label: 'Board Reports' },
-  { id: 'exec-trust-report', icon: icon('shield'), label: 'Trust Report' },
   { id: 'exec-scm-summary', icon: icon('truck'), label: 'Supply Chain Capital' },
   { id: 'exec-carbon-summary', icon: icon('leaf'), label: 'Carbon Capital' },
+  { id: 'exec-performance', icon: icon('star'), label: 'Enterprise Value' },
   { id: 'exec-allocation-engine', icon: icon('target'), label: 'Capital Allocator' },
+  { id: 'exec-market', icon: icon('globe'), label: 'Decisions' },
+  { id: 'exec-trust-report', icon: icon('shield'), label: 'Trust Report' },
+  { id: 'exec-reports', icon: icon('scroll'), label: 'Board Reports' },
 ];
 
 function renderExecutiveSidebar() {
