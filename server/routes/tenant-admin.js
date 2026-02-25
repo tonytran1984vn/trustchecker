@@ -1471,7 +1471,13 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             automotive: { beta: 2.0, avgFine: 40000, k: 3.5 },
         };
         const industry = fin.industry_type || 'pharmaceutical';
-        const preset = industryPresets[industry] || industryPresets.pharmaceutical;
+        const basePreset = industryPresets[industry] || industryPresets.pharmaceutical;
+        // Custom overrides — user can fine-tune β, k, avgFine per tenant
+        const preset = {
+            beta: fin.custom_beta > 0 ? fin.custom_beta : basePreset.beta,
+            k: fin.custom_k > 0 ? fin.custom_k : basePreset.k,
+            avgFine: fin.custom_avg_fine > 0 ? fin.custom_avg_fine : basePreset.avgFine,
+        };
 
         // ── 1. FRAUD PROBABILITY MODEL ──
         // P(Fraud) = (confirmed + suspicious × confirmationRate) / total
@@ -1850,7 +1856,8 @@ router.patch('/owner/org-financials', requireExecutiveAccess(), async (req, res)
         const tid = req.tenantId;
         const {
             annual_revenue, ebitda, ev_multiple, brand_value_estimate, risk_tolerance,
-            industry_type, estimated_units_ytd, manual_cost_per_check, recovery_rate
+            industry_type, estimated_units_ytd, manual_cost_per_check, recovery_rate,
+            custom_beta, custom_k, custom_avg_fine
         } = req.body;
 
         // Get current settings
@@ -1871,6 +1878,10 @@ router.patch('/owner/org-financials', requireExecutiveAccess(), async (req, res)
             estimated_units_ytd: estimated_units_ytd !== undefined ? Number(estimated_units_ytd) : (prev.estimated_units_ytd || 0),
             manual_cost_per_check: manual_cost_per_check !== undefined ? Number(manual_cost_per_check) : (prev.manual_cost_per_check || 5),
             recovery_rate: recovery_rate !== undefined ? Number(recovery_rate) : (prev.recovery_rate || 0.2),
+            // Custom ERQF overrides (0 = use industry default)
+            custom_beta: custom_beta !== undefined ? Number(custom_beta) : (prev.custom_beta || 0),
+            custom_k: custom_k !== undefined ? Number(custom_k) : (prev.custom_k || 0),
+            custom_avg_fine: custom_avg_fine !== undefined ? Number(custom_avg_fine) : (prev.custom_avg_fine || 0),
             updated_at: new Date().toISOString(),
             updated_by: req.user.id,
         };

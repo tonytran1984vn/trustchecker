@@ -346,12 +346,12 @@ function renderCCS() {
 
           <div style="font-size:0.7rem;opacity:0.6;margin:1rem 0 0.75rem;text-transform:uppercase;letter-spacing:1px;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.75rem">ERQF Risk Parameters</div>
           <label>Industry Type</label>
-          <select id="ccs-fin-industry" style="padding:8px;border-radius:6px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0);font-size:0.85rem">
-            <option value="pharmaceutical" ${(fin.industry_type || 'pharmaceutical') === 'pharmaceutical' ? 'selected' : ''}>Pharmaceutical (β=1.8)</option>
-            <option value="luxury" ${fin.industry_type === 'luxury' ? 'selected' : ''}>Luxury (β=2.5)</option>
-            <option value="fmcg" ${fin.industry_type === 'fmcg' ? 'selected' : ''}>FMCG (β=1.2)</option>
-            <option value="electronics" ${fin.industry_type === 'electronics' ? 'selected' : ''}>Electronics (β=1.5)</option>
-            <option value="automotive" ${fin.industry_type === 'automotive' ? 'selected' : ''}>Automotive (β=2.0)</option>
+          <select id="ccs-fin-industry" onchange="window._fillERQFDefaults && window._fillERQFDefaults()" style="padding:8px;border-radius:6px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0);font-size:0.85rem">
+            <option value="pharmaceutical" ${(fin.industry_type || 'pharmaceutical') === 'pharmaceutical' ? 'selected' : ''}>Pharmaceutical (β=1.8, k=3.0)</option>
+            <option value="luxury" ${fin.industry_type === 'luxury' ? 'selected' : ''}>Luxury (β=2.5, k=4.0)</option>
+            <option value="fmcg" ${fin.industry_type === 'fmcg' ? 'selected' : ''}>FMCG (β=1.2, k=2.0)</option>
+            <option value="electronics" ${fin.industry_type === 'electronics' ? 'selected' : ''}>Electronics (β=1.5, k=2.5)</option>
+            <option value="automotive" ${fin.industry_type === 'automotive' ? 'selected' : ''}>Automotive (β=2.0, k=3.5)</option>
           </select>
           <label>Estimated Units Sold (YTD)</label>
           <input type="number" id="ccs-fin-units" value="${fin.estimated_units_ytd || ''}" placeholder="e.g. 500000 · Leave blank for auto">
@@ -359,6 +359,23 @@ function renderCCS() {
           <input type="number" id="ccs-fin-manual-cost" value="${fin.manual_cost_per_check || 5}" step="0.5" placeholder="e.g. 5">
           <label>Fraud Recovery Rate (0-1)</label>
           <input type="number" id="ccs-fin-recovery" value="${fin.recovery_rate || 0.2}" step="0.05" min="0" max="1" placeholder="e.g. 0.2">
+
+          <div style="font-size:0.7rem;opacity:0.6;margin:1rem 0 0.75rem;text-transform:uppercase;letter-spacing:1px;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.75rem">Advanced — ERQF Coefficients <span style="opacity:0.5">(0 = use industry default)</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem">
+            <div>
+              <label style="font-size:0.75rem">β Brand Sensitivity</label>
+              <input type="number" id="ccs-fin-beta" value="${fin.custom_beta || ''}" step="0.1" min="0" max="5" placeholder="auto" style="font-size:0.85rem">
+            </div>
+            <div>
+              <label style="font-size:0.75rem">k Escalation Rate</label>
+              <input type="number" id="ccs-fin-k" value="${fin.custom_k || ''}" step="0.5" min="0" max="10" placeholder="auto" style="font-size:0.85rem">
+            </div>
+            <div>
+              <label style="font-size:0.75rem">Avg Fine/Violation ($)</label>
+              <input type="number" id="ccs-fin-avgfine" value="${fin.custom_avg_fine || ''}" step="1000" min="0" placeholder="auto" style="font-size:0.85rem">
+            </div>
+          </div>
+          <div style="font-size:0.68rem;opacity:0.4;margin-top:0.3rem">Leave blank or 0 to use industry defaults. Custom values override presets.</div>
         </div>
         <div class="ccs-modal-footer">
           <button onclick="document.getElementById('ccs-fin-modal').style.display='none'" class="ccs-btn-secondary">Cancel</button>
@@ -380,6 +397,9 @@ window.saveCCSFinancials = async function () {
     estimated_units_ytd: Number(document.getElementById('ccs-fin-units')?.value || 0),
     manual_cost_per_check: Number(document.getElementById('ccs-fin-manual-cost')?.value || 5),
     recovery_rate: Number(document.getElementById('ccs-fin-recovery')?.value || 0.2),
+    custom_beta: Number(document.getElementById('ccs-fin-beta')?.value || 0),
+    custom_k: Number(document.getElementById('ccs-fin-k')?.value || 0),
+    custom_avg_fine: Number(document.getElementById('ccs-fin-avgfine')?.value || 0),
   };
   try {
     await API.patch('/tenant/owner/org-financials', body);
@@ -388,6 +408,25 @@ window.saveCCSFinancials = async function () {
   } catch (e) {
     alert('Failed to save financial configuration');
   }
+};
+
+// Auto-fill ERQF defaults when industry changes
+window._fillERQFDefaults = function () {
+  const presets = {
+    pharmaceutical: { beta: 1.8, k: 3.0, avgFine: 50000 },
+    luxury: { beta: 2.5, k: 4.0, avgFine: 30000 },
+    fmcg: { beta: 1.2, k: 2.0, avgFine: 15000 },
+    electronics: { beta: 1.5, k: 2.5, avgFine: 25000 },
+    automotive: { beta: 2.0, k: 3.5, avgFine: 40000 },
+  };
+  const sel = document.getElementById('ccs-fin-industry')?.value || 'pharmaceutical';
+  const p = presets[sel] || presets.pharmaceutical;
+  const betaEl = document.getElementById('ccs-fin-beta');
+  const kEl = document.getElementById('ccs-fin-k');
+  const fineEl = document.getElementById('ccs-fin-avgfine');
+  if (betaEl) betaEl.placeholder = p.beta;
+  if (kEl) kEl.placeholder = p.k;
+  if (fineEl) fineEl.placeholder = p.avgFine;
 };
 
 // ── Category Exposure Pagination ─────────────────────────────────────────────
