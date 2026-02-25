@@ -644,7 +644,7 @@ window._renderBUModal = function () {
   rows.forEach(r => (r.categories || []).forEach(c => assigned.add(c)));
 
   modal.innerHTML = `
-    <div class="ccs-modal" style="max-width:900px;max-height:90vh;overflow-y:auto">
+    <div class="ccs-modal" style="max-width:900px;max-height:90vh;overflow-y:auto;color:#1e293b">
       <div class="ccs-modal-header">
         <h3>🏢 Business Unit Configuration</h3>
         <button onclick="document.getElementById('ccs-bu-modal').style.display='none'" class="ccs-modal-close">✕</button>
@@ -682,10 +682,10 @@ window._renderBUModal = function () {
 
         <!-- BU Rows -->
         ${rows.map((bu, idx) => `
-        <div style="border:1px solid var(--border-color,rgba(255,255,255,0.1));border-radius:8px;padding:0.75rem;margin-bottom:0.75rem;background:rgba(255,255,255,0.02)">
+        <div style="border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem;margin-bottom:0.75rem;background:#f8fafc">
           <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;align-items:center">
-            <input type="text" value="${bu.name || ''}" onchange="window._buRows[${idx}].name=this.value" placeholder="BU Name" style="flex:2;padding:6px;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0)">
-            <select onchange="window._setBUIndustry(${idx},this.value)" style="flex:2;padding:6px;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0);font-size:0.78rem">
+            <input type="text" value="${bu.name || ''}" onchange="window._buRows[${idx}].name=this.value" placeholder="BU Name" style="flex:2;padding:6px;border-radius:4px;border:1px solid #cbd5e1;background:#f8fafc;color:#1e293b">
+            <select onchange="window._setBUIndustry(${idx},this.value)" style="flex:2;padding:6px;border-radius:4px;border:1px solid #cbd5e1;background:#f8fafc;color:#1e293b;font-size:0.78rem">
               <optgroup label="⚠️ Life-Critical (A)">
                 <option value="pharmaceutical" ${(bu.industry_type || '') === 'pharmaceutical' ? 'selected' : ''}>Pharmaceutical</option>
                 <option value="aviation" ${bu.industry_type === 'aviation' ? 'selected' : ''}>Civil Aviation</option>
@@ -740,7 +740,7 @@ window._renderBUModal = function () {
               </optgroup>
             </select>
             <div style="width:80px">
-              <input type="number" value="${Math.round((bu.revenue_weight || 0) * 100)}" onchange="window._buRows[${idx}].revenue_weight=Number(this.value)/100" min="0" max="100" step="5" style="width:50px;padding:4px;font-size:0.8rem;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0)"><span style="font-size:0.75rem;opacity:0.6"> %</span>
+              <input type="number" value="${Math.round((bu.revenue_weight || 0) * 100)}" onchange="window._buRows[${idx}].revenue_weight=Number(this.value)/100" min="0" max="100" step="5" style="width:50px;padding:4px;font-size:0.8rem;border-radius:4px;border:1px solid #cbd5e1;background:#f8fafc;color:#1e293b"><span style="font-size:0.75rem;opacity:0.6"> %</span>
             </div>
             ${rows.length > 1 ? `<button onclick="window._buRows.splice(${idx},1);window._renderBUModal()" style="background:#ef4444;color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.75rem">✕</button>` : ''}
           </div>
