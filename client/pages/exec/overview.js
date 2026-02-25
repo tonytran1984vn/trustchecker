@@ -620,7 +620,8 @@ window.openBUConfigModal = async function () {
     if (!modal) {
       modal = document.createElement('div');
       modal.id = 'ccs-bu-modal';
-      modal.className = 'ccs-modal-overlay';
+      modal.className = 'ccs-modal';
+      modal.style.display = 'none';
       document.body.appendChild(modal);
     }
     window._buBrandArch = cfg.brand_architecture || 'house_of_brands';
@@ -629,7 +630,8 @@ window.openBUConfigModal = async function () {
     window._renderBUModal();
     modal.style.display = 'flex';
   } catch (e) {
-    alert('Failed to load BU config');
+    console.error('BU Config error:', e);
+    alert('Failed to load BU config: ' + e.message);
   }
 };
 
