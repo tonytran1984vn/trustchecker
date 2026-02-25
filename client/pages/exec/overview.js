@@ -106,7 +106,7 @@ function renderCCS() {
         <div style="display:flex;gap:0.5rem;align-items:center">
           ${exp.per_bu && exp.per_bu.length > 0 ? `
           <button onclick="openBUConfigModal()" class="ccs-config-btn" style="padding:4px 10px;font-size:0.7rem;background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.3)">${icon('settings', 12)} Edit BUs</button>
-          <button onclick="document.getElementById('ccs-bu-detail').style.display=document.getElementById('ccs-bu-detail').style.display==='none'?'block':'none';this.textContent=document.getElementById('ccs-bu-detail').style.display==='none'?'▸ Show per BU':'▾ Hide per BU'" class="ccs-config-btn" style="padding:4px 12px;font-size:0.72rem;background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.25)">▸ Show per BU</button>
+          <button onclick="document.getElementById('ccs-bu-detail').style.display=document.getElementById('ccs-bu-detail').style.display==='none'?'block':'none';this.textContent=document.getElementById('ccs-bu-detail').style.display==='none'?'▸ Show per BU':'▾ Hide per BU'" class="ccs-config-btn" style="padding:4px 12px;font-size:0.72rem;background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.25)">▾ Hide per BU</button>
           ` : `
           <button onclick="openBUConfigModal()" class="ccs-config-btn" style="padding:4px 10px;font-size:0.7rem;background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.2)">${icon('layers', 12)} Setup Multi-BU</button>
           `}
@@ -138,10 +138,10 @@ function renderCCS() {
 
       ${exp.per_bu && exp.per_bu.length > 0 ? `
       <!-- ═══ Per-BU Detail View (collapsible) ═══ -->
-      <div id="ccs-bu-detail" style="display:none;margin-top:1rem">
+      <div id="ccs-bu-detail" style="margin-top:1rem">
 
         <!-- Group Aggregation Summary -->
-        <div class="exec-card" style="margin-bottom:1rem;border-left:3px solid #6366f1">
+        <div class="exec-card" style="margin-bottom:1rem;border:none;border-left:3px solid #6366f1">
           <h3 style="margin-bottom:0.5rem">${icon('layers', 18)} Group Aggregation Summary
             <span style="font-size:0.62rem;opacity:0.5;margin-left:6px;font-weight:400">${exp.group_aggregated?.brand_architecture === 'branded_house' ? '🏢 Branded House' : '🏘️ House of Brands'} · ρ=${exp.group_aggregated?.cross_bu_correlation || 0.3}${exp.group_aggregated?.brand_architecture === 'branded_house' ? ' · γ=' + (exp.group_aggregated?.contagion_factor || 0) : ''}</span>
           </h3>
