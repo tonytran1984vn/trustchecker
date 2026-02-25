@@ -3,7 +3,7 @@
  * Data from PostgreSQL via /owner/ccs/trust-report
  */
 import { icon } from '../../core/icons.js';
-import { api } from '../../core/api.js';
+import { API as api } from '../../core/api.js';
 
 let _data = null;
 
