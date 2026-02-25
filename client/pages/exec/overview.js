@@ -11,6 +11,7 @@ import { icon } from '../../core/icons.js';
 
 let _exposure = null, _decisions = null, _valuation = null;
 let _catData = [], _catPage = 1, _catSize = 10;
+let _decData = [], _decPage = 1, _decSize = 10;
 
 export function renderPage() {
   loadCCSData();
@@ -44,6 +45,15 @@ async function loadCCSData() {
       _catData = (_exposure || {}).category_exposure || [];
       _catPage = 1;
       filterCategoryTable();
+      // Build unified decision list
+      const d = _decisions || {};
+      _decData = [
+        ...(d.strategic_alerts || []).map(a => ({ type: 'alert', severity: a.severity, title: a.title, meta: `${a.product || ''} · ${a.category || ''}`, action: a.action_required, time: a.time })),
+        ...(d.compliance_actions || []).map(c => ({ type: 'compliance', severity: c.urgency || 'compliance', title: c.action, meta: `${c.product || ''} · ${c.framework || ''} · ${c.requirement || ''}`, action: null, time: c.days_until_review + 'd until review' })),
+        ...(d.security_events || []).map(s => ({ type: 'security', severity: 'info', title: (s.action || '').replace(/_/g, ' '), meta: s.actor || 'system', action: null, time: s.time })),
+      ];
+      _decPage = 1;
+      filterDecisionTable();
     }, 0);
   } catch (e) {
     console.error('[CCS] Load error:', e);
@@ -204,52 +214,27 @@ function renderCCS() {
         <span class="ccs-dec-chip ccs-dec-compliance">${summary.compliance_urgent || 0} Compliance Urgent</span>
         <span class="ccs-dec-chip ccs-dec-total">${summary.total_decisions || 0} Total Actions</span>
       </div>
-
-      ${(dec.strategic_alerts || []).length > 0 ? `
-      <div class="ccs-decision-section">
-        <h3>🔴 Strategic Alerts</h3>
-        ${(dec.strategic_alerts || []).map(a => `
-          <div class="ccs-alert ccs-alert-${a.severity}">
-            <div class="ccs-alert-header">
-              <span class="ccs-alert-sev">${a.severity.toUpperCase()}</span>
-              <span class="ccs-alert-time">${timeAgo(a.time)}</span>
-            </div>
-            <div class="ccs-alert-title">${a.title}</div>
-            <div class="ccs-alert-meta">${a.product} · ${a.category}</div>
-            <div class="ccs-alert-action">${icon('zap', 14)} ${a.action_required}</div>
-          </div>
-        `).join('')}
-      </div>` : ''}
-
-      ${(dec.compliance_actions || []).length > 0 ? `
-      <div class="ccs-decision-section">
-        <h3>🟡 Compliance Actions</h3>
-        ${(dec.compliance_actions || []).map(c => `
-          <div class="ccs-alert ccs-alert-${c.urgency}">
-            <div class="ccs-alert-header">
-              <span class="ccs-alert-sev">${c.urgency.toUpperCase()}</span>
-              <span class="ccs-alert-time">${c.days_until_review}d until review</span>
-            </div>
-            <div class="ccs-alert-title">${c.action}</div>
-            <div class="ccs-alert-meta">${c.product} · ${c.framework} · ${c.requirement}</div>
-          </div>
-        `).join('')}
-      </div>` : ''}
-
-      ${(dec.security_events || []).length > 0 ? `
-      <div class="ccs-decision-section">
-        <h3>🟢 Security Events</h3>
-        ${(dec.security_events || []).map(s => `
-          <div class="ccs-alert ccs-alert-info">
-            <div class="ccs-alert-header">
-              <span class="ccs-alert-sev">INFO</span>
-              <span class="ccs-alert-time">${timeAgo(s.time)}</span>
-            </div>
-            <div class="ccs-alert-title">${(s.action || '').replace(/_/g, ' ')}</div>
-            <div class="ccs-alert-meta">${s.actor || 'system'}</div>
-          </div>
-        `).join('')}
-      </div>` : ''}
+      <div style="display:flex;gap:0.5rem;align-items:center;margin:0.75rem 0;flex-wrap:wrap">
+        <input type="text" id="ccs-dec-search" placeholder="Search decisions..."
+               oninput="filterDecisionTable()"
+               style="padding:6px 10px;border-radius:6px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);font-size:0.78rem;width:180px;flex-shrink:0">
+        <select id="ccs-dec-severity" onchange="filterDecisionTable(true)"
+                style="padding:6px 8px;border-radius:6px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);font-size:0.78rem">
+          <option value="">All Severity</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="compliance">Compliance</option>
+          <option value="info">Info</option>
+        </select>
+        <select id="ccs-dec-pagesize" onchange="filterDecisionTable(true)"
+                style="padding:6px 8px;border-radius:6px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);font-size:0.78rem">
+          <option value="10">10 / page</option>
+          <option value="20">20 / page</option>
+          <option value="50">50 / page</option>
+        </select>
+      </div>
+      <div id="ccs-dec-container"></div>
+      <div id="ccs-dec-pager" style="display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem;font-size:0.78rem;color:var(--text-secondary)"></div>
     </section>
 
     <!-- LAYER 5: Enterprise Value Snapshot -->
@@ -414,6 +399,59 @@ window.filterCategoryTable = function (resetPage) {
 window.changeCatPage = function (delta) {
   _catPage += delta;
   filterCategoryTable();
+};
+
+// ── Decision Command Center Pagination ───────────────────────────────────────
+window.filterDecisionTable = function (resetPage) {
+  const q = (document.getElementById('ccs-dec-search')?.value || '').toLowerCase();
+  const sev = document.getElementById('ccs-dec-severity')?.value || '';
+  _decSize = Number(document.getElementById('ccs-dec-pagesize')?.value || 10);
+  if (resetPage) _decPage = 1;
+
+  const filtered = _decData.filter(d => {
+    if (q && !d.title.toLowerCase().includes(q) && !(d.meta || '').toLowerCase().includes(q)) return false;
+    if (sev && d.severity !== sev) return false;
+    return true;
+  });
+  const totalPages = Math.max(1, Math.ceil(filtered.length / _decSize));
+  if (_decPage > totalPages) _decPage = totalPages;
+  const start = (_decPage - 1) * _decSize;
+  const page = filtered.slice(start, start + _decSize);
+
+  const sevIcon = { critical: '🔴', high: '🟠', compliance: '🟡', info: '🟢' };
+  const container = document.getElementById('ccs-dec-container');
+  if (container) {
+    container.innerHTML = page.length > 0 ? page.map(d => `
+      <div class="ccs-alert ccs-alert-${d.severity}">
+        <div class="ccs-alert-header">
+          <span class="ccs-alert-sev">${sevIcon[d.severity] || '⚪'} ${d.severity.toUpperCase()}</span>
+          <span class="ccs-alert-time">${typeof d.time === 'string' && !d.time.includes('until') ? timeAgo(d.time) : d.time || ''}</span>
+        </div>
+        <div class="ccs-alert-title">${d.title}</div>
+        <div class="ccs-alert-meta">${d.meta}</div>
+        ${d.action ? `<div class="ccs-alert-action">⚡ ${d.action}</div>` : ''}
+      </div>
+    `).join('') : '<div style="text-align:center;padding:1rem;color:var(--text-muted)">No matching decisions</div>';
+  }
+
+  const pager = document.getElementById('ccs-dec-pager');
+  if (pager) {
+    pager.innerHTML = `
+      <span>Showing ${filtered.length > 0 ? start + 1 : 0}–${Math.min(start + _decSize, filtered.length)} of ${filtered.length} decisions</span>
+      <div style="display:flex;gap:4px">
+        <button onclick="changeDecPage(-1)" ${_decPage <= 1 ? 'disabled' : ''}
+                style="padding:4px 10px;border-radius:4px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);cursor:pointer;font-size:0.75rem">← Prev</button>
+        <span style="padding:4px 8px;font-size:0.75rem">${_decPage} / ${totalPages}</span>
+        <button onclick="changeDecPage(1)" ${_decPage >= totalPages ? 'disabled' : ''}
+                style="padding:4px 10px;border-radius:4px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);cursor:pointer;font-size:0.75rem">Next →</button>
+      </div>
+    `;
+  }
+};
+
+window.changeDecPage = function (delta) {
+  _decPage += delta;
+  filterDecisionTable();
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
