@@ -2880,7 +2880,7 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
         // Financial calculations
         const revenue = Number(finConfig?.annual_revenue || 10000000);
         const ebitda = Number(finConfig?.ebitda || revenue * 0.15);
-        const totalEmissions = Number(scopeData?.total_kgCO2e || 0);
+        const totalEmissions = Number(scopeData?.total_emissions_kgCO2e || scopeData?.total_kgCO2e || 0);
         const carbonPrice = 90; // EU ETS avg price €/tonne
         const carbonLiability = Math.round(totalEmissions / 1000 * carbonPrice);
         const regulatoryFineRisk = Math.round(carbonLiability * (riskFactors?.regulatory_risk || 0.15));
@@ -2891,10 +2891,10 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
         const complianceScore = riskFactors?.compliance_score || 0;
         const complianceStatus = complianceScore >= 80 ? 'Pass' : complianceScore >= 50 ? 'At Risk' : 'Fail';
 
-        // Scope breakdown
-        const scope1 = Number(scopeData?.scope1_kgCO2e || 0);
-        const scope2 = Number(scopeData?.scope2_kgCO2e || 0);
-        const scope3 = Number(scopeData?.scope3_kgCO2e || 0);
+        // Scope breakdown — engine returns scope_1.total, scope_2.total, scope_3.total
+        const scope1 = Number(scopeData?.scope_1?.total || scopeData?.scope1_kgCO2e || 0);
+        const scope2 = Number(scopeData?.scope_2?.total || scopeData?.scope2_kgCO2e || 0);
+        const scope3 = Number(scopeData?.scope_3?.total || scopeData?.scope3_kgCO2e || 0);
 
         res.json({
             compliance_status: complianceStatus,
@@ -2906,8 +2906,8 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
                 scope1: Math.round(scope1),
                 scope2: Math.round(scope2),
                 scope3: Math.round(scope3),
-                grade: scopeData?.grade || 'N/A',
-                grade_label: scopeData?.grade_label || 'No data',
+                grade: scopeData?.grade || (scopeData?.product_rankings?.[0]?.grade) || 'N/A',
+                grade_label: scopeData?.grade_label || (totalEmissions > 0 ? `${Math.round(totalEmissions / 100) / 10} tCO₂e total` : 'No data'),
             },
             financial_exposure: {
                 carbon_liability: carbonLiability,
