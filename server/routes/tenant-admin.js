@@ -1465,71 +1465,61 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         const prevFlagged = parseInt(sPrev.flagged) || 0;
         const prevTotal = parseInt(sPrev.total) || 1;
 
-        // Industry presets — 50 industries (GICS + ISO 31000 + Actuarial Data)
-        const industryPresets = {
-            // ── Group 1: Critical Risk ──
-            pharmaceutical: { beta: 1.8, k: 3.0, avgFine: 50000, recovery: 0.1 },
-            aviation: { beta: 5.0, k: 30.0, avgFine: 500000, recovery: 0.05 },
-            banking_finance: { beta: 4.5, k: 25.0, avgFine: 250000, recovery: 0.2 },
-            nuclear_energy: { beta: 5.0, k: 50.0, avgFine: 1000000, recovery: 0.0 },
-            baby_food: { beta: 4.8, k: 35.0, avgFine: 200000, recovery: 0.1 },
-            blood_vaccine: { beta: 4.9, k: 40.0, avgFine: 500000, recovery: 0.05 },
-            cybersecurity: { beta: 4.2, k: 20.0, avgFine: 150000, recovery: 0.3 },
-            life_medical_device: { beta: 4.5, k: 25.0, avgFine: 300000, recovery: 0.15 },
-            fund_management: { beta: 4.0, k: 18.0, avgFine: 200000, recovery: 0.4 },
-            oil_gas: { beta: 3.5, k: 22.0, avgFine: 400000, recovery: 0.2 },
-            // ── Group 2: High Brand Sensitivity ──
-            luxury: { beta: 2.5, k: 4.0, avgFine: 30000, recovery: 0.5 },
-            jewelry_gems: { beta: 3.5, k: 10.0, avgFine: 50000, recovery: 0.7 },
-            premium_wine: { beta: 3.0, k: 12.0, avgFine: 40000, recovery: 0.4 },
-            cosmetics_skincare: { beta: 2.8, k: 15.0, avgFine: 60000, recovery: 0.3 },
-            premium_watches: { beta: 3.2, k: 8.0, avgFine: 35000, recovery: 0.6 },
-            luxury_auto: { beta: 2.7, k: 10.0, avgFine: 80000, recovery: 0.5 },
-            art_antiques: { beta: 4.0, k: 5.0, avgFine: 20000, recovery: 0.8 },
-            premium_hospitality: { beta: 2.4, k: 12.0, avgFine: 45000, recovery: 0.2 },
-            premium_real_estate: { beta: 2.2, k: 7.0, avgFine: 30000, recovery: 0.9 },
-            yacht_jet: { beta: 2.6, k: 10.0, avgFine: 50000, recovery: 0.6 },
-            // ── Group 3: Operational & Tech ──
-            electronics: { beta: 1.5, k: 2.5, avgFine: 25000, recovery: 0.5 },
-            electronic_parts: { beta: 1.4, k: 5.0, avgFine: 20000, recovery: 0.6 },
-            telecom: { beta: 1.8, k: 10.0, avgFine: 80000, recovery: 0.4 },
-            logistics: { beta: 1.3, k: 6.0, avgFine: 15000, recovery: 0.5 },
-            ecommerce: { beta: 1.7, k: 15.0, avgFine: 50000, recovery: 0.3 },
-            saas: { beta: 1.6, k: 8.0, avgFine: 40000, recovery: 0.2 },
-            automotive: { beta: 1.8, k: 12.0, avgFine: 75000, recovery: 0.6 },
-            home_appliances: { beta: 1.4, k: 7.0, avgFine: 25000, recovery: 0.5 },
-            construction: { beta: 1.5, k: 9.0, avgFine: 30000, recovery: 0.8 },
-            renewable_energy: { beta: 1.6, k: 5.0, avgFine: 20000, recovery: 0.7 },
-            // ── Group 4: Consumer & Retail ──
-            fmcg: { beta: 1.2, k: 2.0, avgFine: 15000, recovery: 0.4 },
-            retail: { beta: 1.1, k: 4.0, avgFine: 10000, recovery: 0.6 },
-            fast_fashion: { beta: 1.2, k: 3.0, avgFine: 12000, recovery: 0.7 },
-            toys: { beta: 2.0, k: 18.0, avgFine: 80000, recovery: 0.3 },
-            animal_feed: { beta: 1.5, k: 10.0, avgFine: 30000, recovery: 0.4 },
-            furniture: { beta: 1.2, k: 3.0, avgFine: 8000, recovery: 0.8 },
-            household_chemicals: { beta: 1.4, k: 8.0, avgFine: 25000, recovery: 0.5 },
-            sporting_goods: { beta: 1.3, k: 4.0, avgFine: 10000, recovery: 0.7 },
-            publishing: { beta: 1.1, k: 2.0, avgFine: 5000, recovery: 0.8 },
-            restaurant: { beta: 1.6, k: 12.0, avgFine: 35000, recovery: 0.2 },
-            // ── Group 5: Industrial & Materials ──
-            mining: { beta: 1.2, k: 15.0, avgFine: 100000, recovery: 0.9 },
-            steel_metals: { beta: 1.1, k: 5.0, avgFine: 20000, recovery: 0.9 },
-            heavy_chemicals: { beta: 1.8, k: 20.0, avgFine: 150000, recovery: 0.4 },
-            wood_forestry: { beta: 1.3, k: 8.0, avgFine: 25000, recovery: 0.7 },
-            cement: { beta: 1.1, k: 6.0, avgFine: 15000, recovery: 0.9 },
-            waste_management: { beta: 2.5, k: 25.0, avgFine: 200000, recovery: 0.1 },
-            water_utilities: { beta: 2.0, k: 15.0, avgFine: 80000, recovery: 0.3 },
-            shipbuilding: { beta: 1.5, k: 10.0, avgFine: 40000, recovery: 0.7 },
-            fertilizer_pesticide: { beta: 1.9, k: 18.0, avgFine: 100000, recovery: 0.5 },
-            machinery: { beta: 1.4, k: 5.0, avgFine: 20000, recovery: 0.8 },
+        // ═══ RISK CLUSTERS — Bounded Statistical Distributions (GICS + ISO 31000) ═══
+        // β ~ TruncatedNormal, k ~ TruncatedLogNormal, Recovery ~ Beta
+        // Point estimates = distribution means. σ used for 95% CI bands.
+        const riskClusters = {
+            A: { label: 'Life-Critical Regulated', beta: { mean: 2.8, sigma: 0.30 }, k: { mean: 2.2, sigma: 0.50 }, recovery: { mean: 0.286, sigma: 0.16 } },
+            B: { label: 'Financial & Systemic Trust', beta: { mean: 2.5, sigma: 0.40 }, k: { mean: 2.8, sigma: 0.70 }, recovery: { mean: 0.429, sigma: 0.17 } },
+            C: { label: 'Luxury & Brand-Driven', beta: { mean: 2.2, sigma: 0.30 }, k: { mean: 1.9, sigma: 0.50 }, recovery: { mean: 0.571, sigma: 0.17 } },
+            D: { label: 'Consumer Mass Market', beta: { mean: 1.4, sigma: 0.20 }, k: { mean: 1.5, sigma: 0.40 }, recovery: { mean: 0.625, sigma: 0.16 } },
+            E: { label: 'Industrial & Commodity', beta: { mean: 1.2, sigma: 0.20 }, k: { mean: 1.25, sigma: 0.30 }, recovery: { mean: 0.750, sigma: 0.14 } },
+        };
+        // Industry → Cluster mapping + per-industry avgFine (regulatory fines vary by jurisdiction)
+        const industryMap = {
+            // Cluster A — Life-Critical
+            pharmaceutical: 'A', aviation: 'A', nuclear_energy: 'A', blood_vaccine: 'A',
+            life_medical_device: 'A', baby_food: 'A', waste_management: 'A', oil_gas: 'A',
+            // Cluster B — Financial & Systemic
+            banking_finance: 'B', fund_management: 'B', cybersecurity: 'B', saas: 'B', telecom: 'B',
+            // Cluster C — Luxury & Brand
+            luxury: 'C', jewelry_gems: 'C', premium_wine: 'C', cosmetics_skincare: 'C',
+            premium_watches: 'C', luxury_auto: 'C', art_antiques: 'C', premium_hospitality: 'C',
+            premium_real_estate: 'C', yacht_jet: 'C',
+            // Cluster D — Consumer Mass Market
+            fmcg: 'D', retail: 'D', fast_fashion: 'D', toys: 'D', animal_feed: 'D', furniture: 'D',
+            household_chemicals: 'D', sporting_goods: 'D', publishing: 'D', restaurant: 'D',
+            electronics: 'D', electronic_parts: 'D', ecommerce: 'D', home_appliances: 'D',
+            automotive: 'D',
+            // Cluster E — Industrial & Commodity
+            mining: 'E', steel_metals: 'E', heavy_chemicals: 'E', wood_forestry: 'E', cement: 'E',
+            water_utilities: 'E', shipbuilding: 'E', fertilizer_pesticide: 'E', machinery: 'E',
+            construction: 'E', renewable_energy: 'E', logistics: 'E',
+        };
+        const industryFines = {
+            pharmaceutical: 50000, aviation: 500000, banking_finance: 250000, nuclear_energy: 1000000,
+            baby_food: 200000, blood_vaccine: 500000, cybersecurity: 150000, life_medical_device: 300000,
+            fund_management: 200000, oil_gas: 400000, luxury: 30000, jewelry_gems: 50000,
+            premium_wine: 40000, cosmetics_skincare: 60000, premium_watches: 35000, luxury_auto: 80000,
+            art_antiques: 20000, premium_hospitality: 45000, premium_real_estate: 30000, yacht_jet: 50000,
+            electronics: 25000, electronic_parts: 20000, telecom: 80000, logistics: 15000,
+            ecommerce: 50000, saas: 40000, automotive: 75000, home_appliances: 25000,
+            construction: 30000, renewable_energy: 20000, fmcg: 15000, retail: 10000,
+            fast_fashion: 12000, toys: 80000, animal_feed: 30000, furniture: 8000,
+            household_chemicals: 25000, sporting_goods: 10000, publishing: 5000, restaurant: 35000,
+            mining: 100000, steel_metals: 20000, heavy_chemicals: 150000, wood_forestry: 25000,
+            cement: 15000, waste_management: 200000, water_utilities: 80000, shipbuilding: 40000,
+            fertilizer_pesticide: 100000, machinery: 20000,
         };
         const industry = fin.industry_type || 'pharmaceutical';
-        const basePreset = industryPresets[industry] || industryPresets.pharmaceutical;
+        const clusterId = industryMap[industry] || 'A';
+        const cluster = riskClusters[clusterId];
+        const avgFine = industryFines[industry] || 50000;
         // Custom overrides — user can fine-tune β, k, avgFine per tenant
         const preset = {
-            beta: fin.custom_beta > 0 ? fin.custom_beta : basePreset.beta,
-            k: fin.custom_k > 0 ? fin.custom_k : basePreset.k,
-            avgFine: fin.custom_avg_fine > 0 ? fin.custom_avg_fine : basePreset.avgFine,
+            beta: fin.custom_beta > 0 ? fin.custom_beta : cluster.beta.mean,
+            k: fin.custom_k > 0 ? fin.custom_k : cluster.k.mean,
+            avgFine: fin.custom_avg_fine > 0 ? fin.custom_avg_fine : avgFine,
         };
 
         // ── 1. FRAUD PROBABILITY MODEL ──
@@ -1606,6 +1596,37 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             base: { erl: ERL, ebi: EBI, rfe: RFE, tcar: TCAR },
             stress: calcScenario(1.5, -10, 2.0),    // ERQF: +50% fraud, trust-10%, high enforcement
         };
+
+        // ── PHASE 2: 95% CONFIDENCE INTERVAL (Closed-form sensitivity) ──
+        // CI computed by recalculating TCAR at ±1.96σ parameter shifts
+        const z = 1.96; // 95% confidence
+        const hasCustom = fin.custom_beta > 0 || fin.custom_k > 0;
+        let tcar_ci_low = TCAR, tcar_ci_high = TCAR;
+        if (!hasCustom) {
+            // Optimistic: lower β, lower k, higher recovery → lower TCAR
+            const optBeta = Math.max(1.0, cluster.beta.mean - z * cluster.beta.sigma);
+            const optK = Math.max(0.5, cluster.k.mean - z * cluster.k.sigma);
+            const optRecovery = Math.min(0.9, cluster.recovery.mean + z * cluster.recovery.sigma);
+            const optSeverity = 1 - optRecovery;
+            const optERL = Math.round(revenueCovered * pFraud * optSeverity);
+            const optBRF = Math.pow(1 - trustScore / 100, optBeta);
+            const optIE = 1 - Math.exp(-optK * pFraud);
+            const optEBI = Math.round(brandValue * optBRF * optIE);
+            const optRFE = Math.round(WCRS * preset.avgFine * enforcementProbability * crNonCompliant);
+            tcar_ci_low = Math.round(optERL + optEBI + optRFE - 0.3 * Math.min(optERL, optEBI));
+
+            // Pessimistic: higher β, higher k, lower recovery → higher TCAR
+            const pesBeta = Math.min(3.5, cluster.beta.mean + z * cluster.beta.sigma);
+            const pesK = Math.min(8.0, cluster.k.mean + z * cluster.k.sigma);
+            const pesRecovery = Math.max(0.2, cluster.recovery.mean - z * cluster.recovery.sigma);
+            const pesSeverity = 1 - pesRecovery;
+            const pesERL = Math.round(revenueCovered * pFraud * pesSeverity);
+            const pesBRF = Math.pow(1 - trustScore / 100, pesBeta);
+            const pesIE = 1 - Math.exp(-pesK * pFraud);
+            const pesEBI = Math.round(brandValue * pesBRF * pesIE);
+            const pesRFE = Math.round(WCRS * preset.avgFine * enforcementProbability * crNonCompliant);
+            tcar_ci_high = Math.round(pesERL + pesEBI + pesRFE - 0.3 * Math.min(pesERL, pesEBI));
+        }
 
         // ── GEO RISK MAP ──
         const geoRisk = geoRiskList.map(g => ({
@@ -1753,6 +1774,8 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         res.json({
             exposure: {
                 total_capital_at_risk: TCAR,
+                tcar_ci_low,
+                tcar_ci_high,
                 expected_revenue_loss: ERL,
                 expected_brand_impact: EBI,
                 regulatory_exposure: RFE,
@@ -1763,6 +1786,7 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
                 supply_chain_scri: SCRI,
                 brand_risk_factor: Math.round(brandRiskFactor * 10000) / 10000,
                 incident_escalation: Math.round(incidentEscalation * 10000) / 10000,
+                risk_cluster: { id: clusterId, label: cluster.label },
             },
             scenarios,
             products: {

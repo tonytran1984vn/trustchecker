@@ -115,7 +115,12 @@ function renderCCS() {
 
       <!-- Group-level KPI cards (always visible) -->
       <div class="ccs-kpi-row" style="margin-top:0.75rem">
-        ${exposureCard('Total Capital at Risk', fmtMoney(exposure.total_capital_at_risk), 'ERL + EBI + RFE − Diversification', exposure.total_capital_at_risk > 0 ? 'red' : 'green')}
+        ${exposureCard('Total Capital at Risk', fmtMoney(exposure.total_capital_at_risk),
+    (exposure.tcar_ci_low && exposure.tcar_ci_low !== exposure.total_capital_at_risk
+      ? `${fmtMoney(exposure.tcar_ci_low)} – ${fmtMoney(exposure.tcar_ci_high)} (95% CI)`
+      : 'ERL + EBI + RFE − Diversification') +
+    (exposure.risk_cluster ? ` · ${exposure.risk_cluster.id}: ${exposure.risk_cluster.label}` : ''),
+    exposure.total_capital_at_risk > 0 ? 'red' : 'green')}
         ${exposureCard('Expected Revenue Loss', fmtMoney(exposure.expected_revenue_loss), `P(Fraud): ${exposure.fraud_probability || 0}% · Coverage: ${exposure.coverage_ratio || 100}%`, exposure.expected_revenue_loss > 0 ? 'orange' : 'green')}
         ${exposureCard('Expected Brand Impact', fmtMoney(exposure.expected_brand_impact), `BRF: ${exposure.brand_risk_factor || 0} · Escalation: ${((exposure.incident_escalation || 0) * 100).toFixed(1)}%`, exposure.expected_brand_impact > 0 ? 'orange' : 'green')}
         ${exposureCard('Regulatory Exposure', fmtMoney(exposure.regulatory_exposure), `WCRS: ${exposure.compliance_wcrs || 0} · ${compliance.compliant || 0}/${compliance.total || 0}`, exposure.regulatory_exposure > 0 ? 'red' : 'green')}
@@ -541,45 +546,40 @@ window.saveCCSFinancials = async function () {
   }
 };
 
-// Auto-fill ERQF defaults when industry changes
+// Auto-fill ERQF defaults when industry changes — cluster-based
 window._fillERQFDefaults = function () {
-  const presets = {
-    pharmaceutical: { beta: 1.8, k: 3, avgFine: 50000, recovery: 0.1 }, aviation: { beta: 5, k: 30, avgFine: 500000, recovery: 0.05 },
-    banking_finance: { beta: 4.5, k: 25, avgFine: 250000, recovery: 0.2 }, nuclear_energy: { beta: 5, k: 50, avgFine: 1000000, recovery: 0 },
-    baby_food: { beta: 4.8, k: 35, avgFine: 200000, recovery: 0.1 }, blood_vaccine: { beta: 4.9, k: 40, avgFine: 500000, recovery: 0.05 },
-    cybersecurity: { beta: 4.2, k: 20, avgFine: 150000, recovery: 0.3 }, life_medical_device: { beta: 4.5, k: 25, avgFine: 300000, recovery: 0.15 },
-    fund_management: { beta: 4, k: 18, avgFine: 200000, recovery: 0.4 }, oil_gas: { beta: 3.5, k: 22, avgFine: 400000, recovery: 0.2 },
-    luxury: { beta: 2.5, k: 4, avgFine: 30000, recovery: 0.5 }, jewelry_gems: { beta: 3.5, k: 10, avgFine: 50000, recovery: 0.7 },
-    premium_wine: { beta: 3, k: 12, avgFine: 40000, recovery: 0.4 }, cosmetics_skincare: { beta: 2.8, k: 15, avgFine: 60000, recovery: 0.3 },
-    premium_watches: { beta: 3.2, k: 8, avgFine: 35000, recovery: 0.6 }, luxury_auto: { beta: 2.7, k: 10, avgFine: 80000, recovery: 0.5 },
-    art_antiques: { beta: 4, k: 5, avgFine: 20000, recovery: 0.8 }, premium_hospitality: { beta: 2.4, k: 12, avgFine: 45000, recovery: 0.2 },
-    premium_real_estate: { beta: 2.2, k: 7, avgFine: 30000, recovery: 0.9 }, yacht_jet: { beta: 2.6, k: 10, avgFine: 50000, recovery: 0.6 },
-    electronics: { beta: 1.5, k: 2.5, avgFine: 25000, recovery: 0.5 }, electronic_parts: { beta: 1.4, k: 5, avgFine: 20000, recovery: 0.6 },
-    telecom: { beta: 1.8, k: 10, avgFine: 80000, recovery: 0.4 }, logistics: { beta: 1.3, k: 6, avgFine: 15000, recovery: 0.5 },
-    ecommerce: { beta: 1.7, k: 15, avgFine: 50000, recovery: 0.3 }, saas: { beta: 1.6, k: 8, avgFine: 40000, recovery: 0.2 },
-    automotive: { beta: 1.8, k: 12, avgFine: 75000, recovery: 0.6 }, home_appliances: { beta: 1.4, k: 7, avgFine: 25000, recovery: 0.5 },
-    construction: { beta: 1.5, k: 9, avgFine: 30000, recovery: 0.8 }, renewable_energy: { beta: 1.6, k: 5, avgFine: 20000, recovery: 0.7 },
-    fmcg: { beta: 1.2, k: 2, avgFine: 15000, recovery: 0.4 }, retail: { beta: 1.1, k: 4, avgFine: 10000, recovery: 0.6 },
-    fast_fashion: { beta: 1.2, k: 3, avgFine: 12000, recovery: 0.7 }, toys: { beta: 2, k: 18, avgFine: 80000, recovery: 0.3 },
-    animal_feed: { beta: 1.5, k: 10, avgFine: 30000, recovery: 0.4 }, furniture: { beta: 1.2, k: 3, avgFine: 8000, recovery: 0.8 },
-    household_chemicals: { beta: 1.4, k: 8, avgFine: 25000, recovery: 0.5 }, sporting_goods: { beta: 1.3, k: 4, avgFine: 10000, recovery: 0.7 },
-    publishing: { beta: 1.1, k: 2, avgFine: 5000, recovery: 0.8 }, restaurant: { beta: 1.6, k: 12, avgFine: 35000, recovery: 0.2 },
-    mining: { beta: 1.2, k: 15, avgFine: 100000, recovery: 0.9 }, steel_metals: { beta: 1.1, k: 5, avgFine: 20000, recovery: 0.9 },
-    heavy_chemicals: { beta: 1.8, k: 20, avgFine: 150000, recovery: 0.4 }, wood_forestry: { beta: 1.3, k: 8, avgFine: 25000, recovery: 0.7 },
-    cement: { beta: 1.1, k: 6, avgFine: 15000, recovery: 0.9 }, waste_management: { beta: 2.5, k: 25, avgFine: 200000, recovery: 0.1 },
-    water_utilities: { beta: 2, k: 15, avgFine: 80000, recovery: 0.3 }, shipbuilding: { beta: 1.5, k: 10, avgFine: 40000, recovery: 0.7 },
-    fertilizer_pesticide: { beta: 1.9, k: 18, avgFine: 100000, recovery: 0.5 }, machinery: { beta: 1.4, k: 5, avgFine: 20000, recovery: 0.8 },
+  const clusters = {
+    A: { beta: 2.8, k: 2.2, recovery: 0.286 },
+    B: { beta: 2.5, k: 2.8, recovery: 0.429 },
+    C: { beta: 2.2, k: 1.9, recovery: 0.571 },
+    D: { beta: 1.4, k: 1.5, recovery: 0.625 },
+    E: { beta: 1.2, k: 1.25, recovery: 0.750 },
+  };
+  const map = {
+    pharmaceutical: 'A', aviation: 'A', nuclear_energy: 'A', blood_vaccine: 'A', life_medical_device: 'A', baby_food: 'A', waste_management: 'A', oil_gas: 'A',
+    banking_finance: 'B', fund_management: 'B', cybersecurity: 'B', saas: 'B', telecom: 'B',
+    luxury: 'C', jewelry_gems: 'C', premium_wine: 'C', cosmetics_skincare: 'C', premium_watches: 'C', luxury_auto: 'C', art_antiques: 'C', premium_hospitality: 'C', premium_real_estate: 'C', yacht_jet: 'C',
+    fmcg: 'D', retail: 'D', fast_fashion: 'D', toys: 'D', animal_feed: 'D', furniture: 'D', household_chemicals: 'D', sporting_goods: 'D', publishing: 'D', restaurant: 'D', electronics: 'D', electronic_parts: 'D', ecommerce: 'D', home_appliances: 'D', automotive: 'D',
+    mining: 'E', steel_metals: 'E', heavy_chemicals: 'E', wood_forestry: 'E', cement: 'E', water_utilities: 'E', shipbuilding: 'E', fertilizer_pesticide: 'E', machinery: 'E', construction: 'E', renewable_energy: 'E', logistics: 'E',
+  };
+  const fines = {
+    pharmaceutical: 50000, aviation: 500000, banking_finance: 250000, nuclear_energy: 1000000, baby_food: 200000, blood_vaccine: 500000, cybersecurity: 150000, life_medical_device: 300000,
+    fund_management: 200000, oil_gas: 400000, luxury: 30000, jewelry_gems: 50000, premium_wine: 40000, cosmetics_skincare: 60000, premium_watches: 35000, luxury_auto: 80000,
+    art_antiques: 20000, premium_hospitality: 45000, premium_real_estate: 30000, yacht_jet: 50000, electronics: 25000, electronic_parts: 20000, telecom: 80000, logistics: 15000,
+    ecommerce: 50000, saas: 40000, automotive: 75000, home_appliances: 25000, construction: 30000, renewable_energy: 20000, fmcg: 15000, retail: 10000, fast_fashion: 12000, toys: 80000,
+    animal_feed: 30000, furniture: 8000, household_chemicals: 25000, sporting_goods: 10000, publishing: 5000, restaurant: 35000, mining: 100000, steel_metals: 20000, heavy_chemicals: 150000,
+    wood_forestry: 25000, cement: 15000, waste_management: 200000, water_utilities: 80000, shipbuilding: 40000, fertilizer_pesticide: 100000, machinery: 20000,
   };
   const sel = document.getElementById('ccs-fin-industry')?.value || 'pharmaceutical';
-  const p = presets[sel] || presets.pharmaceutical;
+  const c = clusters[map[sel] || 'A'];
   const betaEl = document.getElementById('ccs-fin-beta');
   const kEl = document.getElementById('ccs-fin-k');
   const fineEl = document.getElementById('ccs-fin-avgfine');
   const recoveryEl = document.getElementById('ccs-fin-recovery');
-  if (betaEl) betaEl.placeholder = p.beta;
-  if (kEl) kEl.placeholder = p.k;
-  if (fineEl) fineEl.placeholder = p.avgFine;
-  if (recoveryEl) recoveryEl.placeholder = p.recovery;
+  if (betaEl) betaEl.placeholder = c.beta;
+  if (kEl) kEl.placeholder = c.k;
+  if (fineEl) fineEl.placeholder = fines[sel] || 50000;
+  if (recoveryEl) recoveryEl.placeholder = c.recovery;
 };
 
 // ── Business Unit Config Modal ────────────────────────────────────────────────
