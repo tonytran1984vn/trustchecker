@@ -30,13 +30,29 @@ const WAREHOUSE_FACTORS = {
 
 // Manufacturing emission factors by industry (kgCO2e per unit)
 const MANUFACTURING_FACTORS = {
-    'F&B': 2.5,
-    'Electronics': 15.0,
-    'Fashion': 8.0,
-    'Healthcare': 5.0,
-    'Industrial': 20.0,
-    'Agriculture': 1.8,
-    'Energy': 25.0
+    'F&B': 2.5, 'F&B Artisan': 3.0, 'F&B Heritage': 2.8, 'F&B Organic': 1.5, 'F&B Premium': 3.2,
+    'Electronics': 15.0, 'IoT': 12.0, 'Sensor': 10.0, 'Tracking': 8.0,
+    'Semiconductor': 35.0, 'Passive Component': 20.0, 'LED': 18.0, 'PCB': 22.0, 'Optics': 25.0, 'Motor': 15.0,
+    'Display': 28.0, 'OLED Panel': 28.0,
+    'Fashion': 8.0, 'Luxury Textiles': 12.0, 'Art': 6.0,
+    'Healthcare': 5.0, 'Pharmaceutical': 8.0, 'Pharmaceuticals': 8.0, 'Supplement': 4.0,
+    'Topical': 3.5, 'Vaccine': 15.0, 'Medical Device': 12.0, 'Medical Devices': 12.0,
+    'Industrial': 20.0, 'Advanced Materials': 30.0, 'Aerospace Tech': 45.0, 'EV Components': 55.0,
+    'Energy': 25.0, 'Smart Security': 12.0,
+    'Luxury Watch': 18.0, 'Luxury Watches': 18.0, 'Dress Watch': 14.0, 'Sports Watch': 16.0,
+    'Pilot Watch': 16.0, 'Eco Watch': 10.0, 'Vintage Watch': 8.0, 'Jewelry Watch': 20.0,
+    'Jewelry': 25.0, 'Precious Metal': 50.0, 'Perfume': 6.0,
+    'Coffee': 3.5, 'Coffee Bean': 2.8, 'Specialty Coffee': 4.0, 'Beverage': 2.0,
+    'Rice': 1.5, 'Grain': 1.2, 'Nut': 2.0, 'Spice': 1.8, 'Oil': 2.5,
+    'Seafood': 4.5, 'Fruit': 1.0, 'Fresh Fruit': 0.8, 'Dried Fruit': 2.5,
+    'Snack': 3.0, 'Instant Food': 3.5, 'Condiment': 2.0,
+    'Meat': 12.0, 'Dairy': 5.0, 'Bakery': 2.0, 'Pasta': 1.5,
+    'Natural': 1.0, 'Confection': 3.5, 'Tea': 2.0, 'Gourmet': 8.0, 'Spirits': 5.0,
+    'Gift Set': 3.0, 'Equipment': 8.0,
+    'Laptop': 250.0, 'Tablet': 80.0, 'Audio': 15.0, 'Wearable': 20.0,
+    'Drone': 45.0, 'VR': 35.0, 'Accessory': 8.0, 'Network': 18.0,
+    'Peripheral': 12.0, 'Storage': 20.0, 'Security': 15.0, 'eReader': 25.0,
+    'Agriculture': 1.8
 };
 
 // Carbon grade thresholds
@@ -109,8 +125,8 @@ class CarbonEngine {
             else if (carrier.includes('maersk') || carrier.includes('cosco')) mode = 'sea';
             else if (carrier.includes('rail') || carrier.includes('train')) mode = 'rail';
 
-            const distance = this._estimateDistance(s);
-            const weight = 0.05;
+            const distance = s.distance_km || this._estimateDistance(s);
+            const weight = product.weight || 0.5; // actual product weight in kg
             const emissions = TRANSPORT_EMISSION_FACTORS[mode] * distance * weight;
 
             transportEmissions += emissions;
@@ -167,10 +183,19 @@ class CarbonEngine {
         const productFootprints = [];
 
         for (const product of products) {
-            const productShipments = shipments.filter(s => {
-                const batch = events.find(e => e.product_id === product.id && e.batch_id);
-                return batch ? s.batch_id === batch.batch_id : false;
+            // Match shipments: try batch chain first, then proportional fallback
+            let productShipments = shipments.filter(s => {
+                if (!s.batch_id) return false;
+                // Check via events
+                const batch = events.find(e => e.product_id === product.id && e.batch_id === s.batch_id);
+                return !!batch;
             });
+            // Fallback: distribute unmatched shipments proportionally
+            if (productShipments.length === 0 && shipments.length > 0) {
+                const idx = products.indexOf(product);
+                const perProduct = Math.max(1, Math.ceil(shipments.length / products.length));
+                productShipments = shipments.slice(idx * perProduct, (idx + 1) * perProduct);
+            }
             const productEvents = events.filter(e => e.product_id === product.id);
 
             const fp = this.calculateFootprint(product, productShipments, productEvents);
