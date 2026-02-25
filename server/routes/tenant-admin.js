@@ -1367,4 +1367,431 @@ router.get('/owner/compliance', requireOrgOwner(), async (req, res) => {
     }
 });
 
+// ═════════════════════════════════════════════════════════════════════════════
+// CAPITAL COMMAND SYSTEM (CCS) — CEO Decision Intelligence
+// All queries scoped by org_id
+// ═════════════════════════════════════════════════════════════════════════════
+
+function requireExecutiveAccess() {
+    return (req, res, next) => {
+        if (!['org_owner', 'super_admin', 'executive'].includes(req.user.role)) {
+            return res.status(403).json({ error: 'Executive access required', code: 'EXEC_ONLY' });
+        }
+        next();
+    };
+}
+
+// ─── CCS Layer 1: Capital Exposure Radar ─────────────────────────────────────
+router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [
+            productStats, scanStats30d, scanStatsPrev, fraudAlerts,
+            compRecords, supplyEvents, geoBreakdown, categoryBreakdown,
+            orgInfo
+        ] = await Promise.all([
+            // Products overview
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE status = 'active') as active,
+                    ROUND(AVG(trust_score)::numeric, 2) as avg_trust
+                    FROM products WHERE org_id = $1`, [tid]),
+            // Scan stats (30d)
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
+                    COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
+                    COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
+                    ROUND(AVG(trust_score)::numeric, 3) as avg_trust,
+                    ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud
+                    FROM scan_events WHERE org_id = $1
+                    AND scanned_at >= NOW() - INTERVAL '30 days'`, [tid]),
+            // Scan stats (prev 30d for trend)
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE result = 'suspicious' OR result = 'counterfeit') as flagged
+                    FROM scan_events WHERE org_id = $1
+                    AND scanned_at >= NOW() - INTERVAL '60 days'
+                    AND scanned_at < NOW() - INTERVAL '30 days'`, [tid]),
+            // Fraud alerts
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE status != 'resolved') as open,
+                    COUNT(*) FILTER (WHERE severity = 'critical') as critical,
+                    COUNT(*) FILTER (WHERE severity = 'high') as high
+                    FROM fraud_alerts WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+            // Compliance records
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE status = 'compliant') as compliant,
+                    COUNT(*) FILTER (WHERE status = 'partial') as partial,
+                    COUNT(*) FILTER (WHERE status != 'compliant' AND status != 'partial') as non_compliant
+                    FROM compliance_records WHERE entity_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+            // Supply chain events
+            db.get(`SELECT COUNT(*) as total FROM supply_chain_events
+                    WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+            // Geographic exposure
+            db.all(`SELECT geo_country, COUNT(*) as scans,
+                    COUNT(*) FILTER (WHERE result = 'suspicious' OR result = 'counterfeit') as flagged,
+                    ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud
+                    FROM scan_events WHERE org_id = $1
+                    AND scanned_at >= NOW() - INTERVAL '30 days'
+                    AND geo_country IS NOT NULL
+                    GROUP BY geo_country ORDER BY scans DESC LIMIT 15`, [tid]),
+            // Category exposure
+            db.all(`SELECT p.category, COUNT(DISTINCT p.id) as products,
+                    COUNT(se.id) as scans,
+                    COUNT(se.id) FILTER (WHERE se.result = 'suspicious') as suspicious
+                    FROM products p
+                    LEFT JOIN scan_events se ON se.product_id = p.id
+                        AND se.scanned_at >= NOW() - INTERVAL '30 days'
+                    WHERE p.org_id = $1 GROUP BY p.category ORDER BY scans DESC`, [tid]),
+            // Org info + financial config
+            db.get(`SELECT name, plan, settings FROM organizations WHERE id = $1`, [tid]),
+        ]);
+
+        const s30 = scanStats30d || {};
+        const sPrev = scanStatsPrev || {};
+        const fa = fraudAlerts || {};
+        const cr = compRecords || {};
+        const fin = orgInfo?.settings?.financials || {};
+
+        // Capital exposure calculations
+        const annualRevenue = fin.annual_revenue || 0;
+        const brandValue = fin.brand_value_estimate || 0;
+        const totalScans = parseInt(s30.total) || 0;
+        const flaggedScans = (parseInt(s30.suspicious) || 0) + (parseInt(s30.counterfeit) || 0);
+        const fraudRate = totalScans > 0 ? flaggedScans / totalScans : 0;
+        const prevFlagged = parseInt(sPrev.flagged) || 0;
+        const prevTotal = parseInt(sPrev.total) || 1;
+        const prevFraudRate = prevTotal > 0 ? prevFlagged / prevTotal : 0;
+
+        // Risk dimensions ($)
+        const revenueAtRisk = Math.round(annualRevenue * fraudRate);
+        const brandAtRisk = Math.round(brandValue * (1 - (parseFloat(s30.avg_trust) || 0.9)));
+        const complianceRiskPct = cr.total > 0 ? (parseInt(cr.non_compliant || 0) + parseInt(cr.partial || 0) * 0.5) / parseInt(cr.total) : 0;
+        const supplyChainRiskIndex = parseFloat(s30.avg_fraud) || 0;
+
+        // Total exposure
+        const totalExposure = revenueAtRisk + brandAtRisk;
+
+        // Geo risk map
+        const geoRisk = (geoBreakdown || []).map(g => ({
+            country: g.geo_country,
+            scans: parseInt(g.scans),
+            flagged: parseInt(g.flagged),
+            fraud_rate: parseInt(g.scans) > 0 ? Math.round((parseInt(g.flagged) / parseInt(g.scans)) * 100) : 0,
+            avg_fraud_score: parseFloat(g.avg_fraud) || 0,
+            risk_level: parseFloat(g.avg_fraud) > 0.5 ? 'critical' : parseFloat(g.avg_fraud) > 0.3 ? 'high' : parseFloat(g.avg_fraud) > 0.1 ? 'medium' : 'low',
+        }));
+
+        res.json({
+            exposure: {
+                total_capital_at_risk: totalExposure,
+                revenue_at_risk: revenueAtRisk,
+                brand_value_at_risk: brandAtRisk,
+                compliance_risk_pct: Math.round(complianceRiskPct * 100),
+                supply_chain_risk_index: supplyChainRiskIndex,
+                fraud_exposure_rate: Math.round(fraudRate * 10000) / 100,
+            },
+            products: {
+                total: parseInt(productStats?.total) || 0,
+                active: parseInt(productStats?.active) || 0,
+                avg_trust: parseFloat(productStats?.avg_trust) || 0,
+            },
+            scans_30d: {
+                total: totalScans,
+                authentic: parseInt(s30.authentic) || 0,
+                suspicious: parseInt(s30.suspicious) || 0,
+                counterfeit: parseInt(s30.counterfeit) || 0,
+                avg_trust: parseFloat(s30.avg_trust) || 0,
+                avg_fraud: parseFloat(s30.avg_fraud) || 0,
+                trend: prevTotal > 0 ? Math.round(((totalScans - prevTotal) / prevTotal) * 100) : 0,
+                fraud_trend: Math.round((fraudRate - prevFraudRate) * 10000) / 100,
+            },
+            fraud: {
+                total: parseInt(fa.total) || 0,
+                open: parseInt(fa.open) || 0,
+                critical: parseInt(fa.critical) || 0,
+                high: parseInt(fa.high) || 0,
+            },
+            compliance: {
+                total: parseInt(cr.total) || 0,
+                compliant: parseInt(cr.compliant) || 0,
+                partial: parseInt(cr.partial) || 0,
+                non_compliant: parseInt(cr.non_compliant) || 0,
+                score: cr.total > 0 ? Math.round((parseInt(cr.compliant) / parseInt(cr.total)) * 100) : 0,
+            },
+            supply_chain: { events: parseInt(supplyEvents?.total) || 0 },
+            geo_risk: geoRisk,
+            category_exposure: (categoryBreakdown || []).map(c => ({
+                category: c.category,
+                products: parseInt(c.products),
+                scans: parseInt(c.scans),
+                suspicious: parseInt(c.suspicious),
+                risk_rate: parseInt(c.scans) > 0 ? Math.round((parseInt(c.suspicious) / parseInt(c.scans)) * 100) : 0,
+            })),
+            financial_config: {
+                annual_revenue: annualRevenue,
+                brand_value: brandValue,
+                configured: annualRevenue > 0,
+            },
+        });
+    } catch (err) {
+        console.error('[CCS] Exposure error:', err);
+        res.status(500).json({ error: 'Failed to load capital exposure data' });
+    }
+});
+
+// ─── CCS Layer 4: Decision Command Center ───────────────────────────────────
+router.get('/owner/ccs/decisions', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [criticalAlerts, complianceDeadlines, pendingApprovals, recentAnomalies, recentAudit] = await Promise.all([
+            // Critical/high fraud alerts (unresolved)
+            db.all(`SELECT fa.id, fa.alert_type, fa.severity, fa.description, fa.status, fa.created_at,
+                           p.name as product_name, p.category
+                    FROM fraud_alerts fa
+                    JOIN products p ON p.id = fa.product_id
+                    WHERE p.org_id = $1 AND fa.status != 'resolved'
+                    ORDER BY CASE fa.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
+                             fa.created_at DESC LIMIT 10`, [tid]),
+            // Compliance records expiring within 60 days
+            db.all(`SELECT cr.framework, cr.requirement, cr.status, cr.next_review, cr.checked_by,
+                           p.name as product_name
+                    FROM compliance_records cr
+                    JOIN products p ON p.id = cr.entity_id
+                    WHERE p.org_id = $1 AND cr.next_review IS NOT NULL
+                    AND cr.next_review <= NOW() + INTERVAL '60 days'
+                    ORDER BY cr.next_review ASC LIMIT 10`, [tid]),
+            // Pending role/governance approvals
+            db.all(`SELECT al.action, al.details, al.created_at, u.email as actor_email
+                    FROM audit_log al
+                    LEFT JOIN users u ON u.id = al.actor_id
+                    WHERE al.action IN ('ROLE_CHANGE_REQUESTED','APPROVAL_PENDING','CA_APPOINTMENT_REQUESTED')
+                    AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
+                    ORDER BY al.created_at DESC LIMIT 5`, [tid]),
+            // Recent anomalies
+            db.all(`SELECT ad.anomaly_type, ad.severity, ad.score, ad.description, ad.detected_at, ad.status
+                    FROM anomaly_detections ad
+                    WHERE ad.status != 'resolved'
+                    ORDER BY ad.detected_at DESC LIMIT 5`).catch(() => []),
+            // Recent critical audit actions
+            db.all(`SELECT al.action, al.entity_type, al.details, al.created_at, u.email
+                    FROM audit_log al
+                    LEFT JOIN users u ON u.id = al.actor_id
+                    WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
+                    AND al.action IN ('EMERGENCY_ACTION','LOCKOUT','ROLE_CHANGED','SELF_ELEVATION_BLOCKED','MFA_DISABLED')
+                    ORDER BY al.created_at DESC LIMIT 5`, [tid]),
+        ]);
+
+        // Classify decisions
+        const strategic_alerts = (criticalAlerts || []).map(a => ({
+            id: a.id,
+            severity: a.severity,
+            type: a.alert_type,
+            title: `${a.severity.toUpperCase()}: ${a.description}`,
+            product: a.product_name,
+            category: a.category,
+            time: a.created_at,
+            action_required: a.severity === 'critical' ? 'IMMEDIATE ACTION REQUIRED' : 'Review and assess',
+        }));
+
+        const compliance_actions = (complianceDeadlines || []).map(c => {
+            const daysUntil = Math.ceil((new Date(c.next_review) - Date.now()) / 86400000);
+            return {
+                framework: c.framework,
+                requirement: c.requirement,
+                product: c.product_name,
+                status: c.status,
+                days_until_review: daysUntil,
+                urgency: daysUntil <= 14 ? 'critical' : daysUntil <= 30 ? 'high' : 'medium',
+                action: daysUntil <= 14 ? `URGENT: ${c.framework} review due in ${daysUntil} days` : `Schedule ${c.framework} review (${daysUntil} days)`,
+            };
+        });
+
+        const governance_actions = (pendingApprovals || []).map(a => {
+            let details = {};
+            try { details = typeof a.details === 'string' ? JSON.parse(a.details) : (a.details || {}); } catch (_) { }
+            return { action: a.action, actor: a.actor_email, time: a.created_at, details };
+        });
+
+        res.json({
+            strategic_alerts,
+            compliance_actions,
+            governance_actions,
+            anomalies: recentAnomalies || [],
+            security_events: (recentAudit || []).map(a => {
+                let details = {};
+                try { details = typeof a.details === 'string' ? JSON.parse(a.details) : (a.details || {}); } catch (_) { }
+                return { action: a.action, actor: a.email, time: a.created_at, details };
+            }),
+            summary: {
+                total_decisions: strategic_alerts.length + compliance_actions.length + governance_actions.length,
+                critical: strategic_alerts.filter(a => a.severity === 'critical').length,
+                high: strategic_alerts.filter(a => a.severity === 'high').length,
+                compliance_urgent: compliance_actions.filter(c => c.urgency === 'critical').length,
+            },
+        });
+    } catch (err) {
+        console.error('[CCS] Decisions error:', err);
+        res.status(500).json({ error: 'Failed to load decision data' });
+    }
+});
+
+// ─── CCS Layer 5: Enterprise Value Monitor ──────────────────────────────────
+router.get('/owner/ccs/valuation', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [orgInfo, compStats, scanStats, fraudStats, userStats, retentionStats, consentStats, invoiceStats] = await Promise.all([
+            db.get(`SELECT name, plan, settings FROM organizations WHERE id = $1`, [tid]),
+            // Compliance maturity
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE status = 'compliant') as compliant
+                    FROM compliance_records WHERE entity_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+            // Scan integrity
+            db.get(`SELECT COUNT(*) as total,
+                    ROUND(AVG(trust_score)::numeric, 3) as avg_trust,
+                    COUNT(*) FILTER (WHERE result = 'authentic') as authentic
+                    FROM scan_events WHERE org_id = $1
+                    AND scanned_at >= NOW() - INTERVAL '90 days'`, [tid]),
+            // Fraud control
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE status = 'resolved') as resolved
+                    FROM fraud_alerts WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+            // User governance
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE mfa_enabled = true) as mfa_enabled
+                    FROM users WHERE org_id = $1`, [tid]),
+            // Retention policies
+            db.get(`SELECT COUNT(*) as c FROM data_retention_policies
+                    WHERE created_by IN (SELECT id FROM users WHERE org_id = $1)`, [tid]),
+            // Consent
+            db.get(`SELECT COUNT(DISTINCT actor_id) as c FROM audit_log
+                    WHERE action = 'CONSENT_GIVEN'
+                    AND actor_id IN (SELECT id FROM users WHERE org_id = $1)`, [tid]),
+            // Revenue (actual from invoices)
+            db.get(`SELECT COALESCE(SUM(amount), 0) as total_paid,
+                    COUNT(*) as invoice_count
+                    FROM invoices WHERE user_id IN (SELECT id FROM users WHERE org_id = $1)
+                    AND status = 'paid'`, [tid]),
+        ]);
+
+        const fin = orgInfo?.settings?.financials || {};
+        const annualRevenue = fin.annual_revenue || 0;
+        const ebitda = fin.ebitda || 0;
+        const baseMultiple = fin.ev_multiple || 8;
+        const brandValue = fin.brand_value_estimate || 0;
+
+        // Governance Maturity Score (0-100)
+        const compScore = compStats?.total > 0 ? (parseInt(compStats.compliant) / parseInt(compStats.total)) : 0;
+        const scanIntegrity = scanStats?.total > 0 ? (parseInt(scanStats.authentic) / parseInt(scanStats.total)) : 0;
+        const fraudResRate = fraudStats?.total > 0 ? (parseInt(fraudStats.resolved) / parseInt(fraudStats.total)) : 0;
+        const mfaRate = userStats?.total > 0 ? (parseInt(userStats.mfa_enabled) / parseInt(userStats.total)) : 0;
+        const hasRetention = (parseInt(retentionStats?.c) || 0) > 0 ? 1 : 0;
+        const consentRate = userStats?.total > 0 ? (parseInt(consentStats?.c || 0) / parseInt(userStats.total)) : 0;
+
+        const governanceScore = Math.round(
+            compScore * 25 +        // Compliance (25%)
+            scanIntegrity * 20 +     // Scan integrity (20%)
+            fraudResRate * 15 +      // Fraud resolution (15%)
+            mfaRate * 15 +           // MFA adoption (15%)
+            hasRetention * 10 +      // Data governance (10%)
+            consentRate * 15          // GDPR consent (15%)
+        );
+
+        // Governance Premium Multiplier (0.8x to 1.2x based on governance score)
+        const govPremium = 0.8 + (governanceScore / 100) * 0.4;
+
+        // EV Calculations
+        const adjustedMultiple = Math.round(baseMultiple * govPremium * 100) / 100;
+        const evBaseline = Math.round(ebitda * baseMultiple);
+        const evWithGovernance = Math.round(ebitda * adjustedMultiple);
+        const evUplift = evWithGovernance - evBaseline;
+
+        // Risk-Adjusted Revenue
+        const fraudRate = scanStats?.total > 0 ? (parseInt(scanStats.total) - parseInt(scanStats.authentic)) / parseInt(scanStats.total) : 0;
+        const rar = Math.round(annualRevenue * (1 - fraudRate * 0.3)); // 30% impact severity
+
+        // Capital Efficiency (if they invest in TrustChecker platform)
+        const platformCost = parseFloat(invoiceStats?.total_paid || 0);
+        const capitalEfficiency = platformCost > 0 && evUplift > 0 ? Math.round((evUplift / platformCost) * 100) / 100 : 0;
+
+        res.json({
+            financial_inputs: {
+                annual_revenue: annualRevenue,
+                ebitda,
+                base_multiple: baseMultiple,
+                brand_value: brandValue,
+                configured: annualRevenue > 0,
+            },
+            governance_maturity: {
+                score: governanceScore,
+                breakdown: {
+                    compliance: Math.round(compScore * 100),
+                    scan_integrity: Math.round(scanIntegrity * 100),
+                    fraud_resolution: Math.round(fraudResRate * 100),
+                    mfa_adoption: Math.round(mfaRate * 100),
+                    data_governance: hasRetention ? 100 : 0,
+                    gdpr_consent: Math.round(consentRate * 100),
+                },
+                premium_multiplier: govPremium,
+            },
+            valuation: {
+                ev_baseline: evBaseline,
+                ev_with_governance: evWithGovernance,
+                ev_uplift: evUplift,
+                adjusted_multiple: adjustedMultiple,
+                risk_adjusted_revenue: rar,
+                revenue_protection: annualRevenue - rar,
+            },
+            efficiency: {
+                platform_cost: platformCost,
+                ev_uplift: evUplift,
+                roi: capitalEfficiency,
+                payback_months: platformCost > 0 && evUplift > 0 ? Math.round((platformCost / (evUplift / 12)) * 10) / 10 : 0,
+            },
+            org_plan: orgInfo?.plan || 'free',
+        });
+    } catch (err) {
+        console.error('[CCS] Valuation error:', err);
+        res.status(500).json({ error: 'Failed to load valuation data' });
+    }
+});
+
+// ─── CCS: Save financial configuration ──────────────────────────────────────
+router.patch('/owner/org-financials', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+        const { annual_revenue, ebitda, ev_multiple, brand_value_estimate, risk_tolerance } = req.body;
+
+        // Get current settings
+        const org = await db.get(`SELECT settings FROM organizations WHERE id = $1`, [tid]);
+        const settings = org?.settings || {};
+
+        // Merge financials
+        settings.financials = {
+            ...(settings.financials || {}),
+            annual_revenue: annual_revenue !== undefined ? Number(annual_revenue) : (settings.financials?.annual_revenue || 0),
+            ebitda: ebitda !== undefined ? Number(ebitda) : (settings.financials?.ebitda || 0),
+            ev_multiple: ev_multiple !== undefined ? Number(ev_multiple) : (settings.financials?.ev_multiple || 8),
+            brand_value_estimate: brand_value_estimate !== undefined ? Number(brand_value_estimate) : (settings.financials?.brand_value_estimate || 0),
+            risk_tolerance: risk_tolerance || settings.financials?.risk_tolerance || 'moderate',
+            updated_at: new Date().toISOString(),
+            updated_by: req.user.id,
+        };
+
+        await db.run(`UPDATE organizations SET settings = $1, updated_at = NOW() WHERE id = $2`,
+            [JSON.stringify(settings), tid]);
+
+        // Audit log
+        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, created_at)
+                      VALUES ($1, $2, 'FINANCIAL_CONFIG_UPDATED', 'organization', $3, $4, NOW())`,
+            [require('uuid').v4(), req.user.id, tid, JSON.stringify(settings.financials)]);
+
+        res.json({ success: true, financials: settings.financials });
+    } catch (err) {
+        console.error('[CCS] Financials update error:', err);
+        res.status(500).json({ error: 'Failed to update financial configuration' });
+    }
+});
+
 module.exports = router;

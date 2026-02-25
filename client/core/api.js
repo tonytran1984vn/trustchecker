@@ -77,6 +77,7 @@ export const API = {
     get(p) { return this.request('GET', p); },
     post(p, b) { return this.request('POST', p, b); },
     put(p, b) { return this.request('PUT', p, b); },
+    patch(p, b) { return this.request('PATCH', p, b); },
     delete(p) { return this.request('DELETE', p); },
 
     setToken(t, r) {

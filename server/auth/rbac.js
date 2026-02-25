@@ -387,7 +387,7 @@ function requireTenantAdmin() {
             'tenant:settings:update'
         ], req);
 
-        if (!has && req.user.role !== 'admin' && req.user.role !== 'company_admin' && req.user.role !== 'org_owner') {
+        if (!has && req.user.role !== 'admin' && req.user.role !== 'company_admin' && req.user.role !== 'org_owner' && req.user.role !== 'executive') {
             return res.status(403).json({ error: 'Tenant admin access required', code: 'TENANT_ADMIN_ONLY' });
         }
         next();

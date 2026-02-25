@@ -615,11 +615,11 @@ function renderDomainSection(domain, label, items) {
 // ═══════════════════════════════════════════════════════════════
 
 const EXECUTIVE_ITEMS = [
-  { id: 'exec-overview', icon: icon('dashboard'), label: 'Executive Overview' },
-  { id: 'exec-risk-intel', icon: icon('target'), label: 'Risk Intelligence' },
-  { id: 'exec-market', icon: icon('globe'), label: 'Market Insights' },
-  { id: 'exec-performance', icon: icon('barChart'), label: 'Performance' },
-  { id: 'exec-reports', icon: icon('scroll'), label: 'Reports' },
+  { id: 'exec-overview', icon: icon('target'), label: 'Capital Command' },
+  { id: 'exec-risk-intel', icon: icon('alertTriangle'), label: 'Capital Exposure' },
+  { id: 'exec-market', icon: icon('globe'), label: 'Decisions' },
+  { id: 'exec-performance', icon: icon('star'), label: 'Enterprise Value' },
+  { id: 'exec-reports', icon: icon('scroll'), label: 'Board Reports' },
   { id: 'exec-trust-report', icon: icon('shield'), label: 'Trust Report' },
 ];
 

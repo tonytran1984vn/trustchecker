@@ -1,198 +1,383 @@
 /**
- * Executive – Overview (CEO Decision Intelligence Dashboard)
- * ═════════════════════════════════════════════════════════
- * Decision-Ready Metrics: WHAT → SO WHAT → NOW WHAT
+ * Capital Command System — Executive Overview (CCS v1.0)
+ * ═════════════════════════════════════════════════════════════
+ * Layer 1: Capital Exposure Radar
+ * Layer 4: Decision Command Center
+ * Layer 5: Enterprise Value Snapshot
+ * 
+ * All data from PostgreSQL via org_id-scoped APIs.
  */
 import { icon } from '../../core/icons.js';
 
+let _exposure = null, _decisions = null, _valuation = null;
+
 export function renderPage() {
+  loadCCSData();
   return `
-    <div class="exec-page">
+    <div class="exec-page ccs-page">
       <div class="exec-header">
-        <h1>${icon('star', 28)} CEO Decision Intelligence</h1>
+        <h1>${icon('target', 28)} Capital Command System</h1>
         <div class="exec-timestamp">Live · ${new Date().toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}</div>
       </div>
-
-      <!-- Decision Cards: What → So What → Now What -->
-      <section class="exec-section">
-        <h2 class="exec-section-title">Decision Metrics</h2>
-        <div class="exec-grid-2">
-          ${decisionCard(
-    'Revenue Protection', '$2.4M', '+18%', 'up',
-    'Counterfeit interception saved $2.4M in brand damage this quarter.',
-    'Expand QR coverage to Thailand market (est. +$800K protection).',
-    'green'
-  )}
-          ${decisionCard(
-    'Supply Chain Risk', '0.23', '−0.08', 'down-good',
-    'Risk index dropped 26% after Cambodia distributor removal.',
-    'Approve Jakarta distributor audit ($12K) to maintain downtrend.',
-    'green'
-  )}
-          ${decisionCard(
-    'Fraud Detection Rate', '94.7%', '+2.3%', 'up',
-    'AI model v3 catching 94.7% of counterfeit scans vs 92.4% last quarter.',
-    'No action needed. Next model upgrade scheduled for Q2.',
-    'green'
-  )}
-          ${decisionCard(
-    'Geo Anomaly Alert', '7 regions', '+2', 'up-bad',
-    'Cambodia (+340%) and Laos (+180%) show unusual scan patterns. Possible gray market.',
-    'DECISION REQUIRED: Authorize field investigation team ($25K budget).',
-    'red'
-  )}
+      <div id="ccs-overview-content">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
+          <div class="spinner"></div>
+          <div style="font-size:0.78rem;color:var(--text-muted)">Initializing Capital Command…</div>
         </div>
-      </section>
-
-      <!-- Business KPIs -->
-      <section class="exec-section">
-        <h2 class="exec-section-title">Business Performance</h2>
-        <div class="exec-kpi-grid">
-          ${kpi('Products in Market', '1,247', '+12%', 'up', 'products')}
-          ${kpi('QR Verification Rate', '94.7%', '+2.3%', 'up', 'check')}
-          ${kpi('Brand Protection Score', '87/100', '+5 pts', 'up', 'shield')}
-          ${kpi('Counterfeit Incidents', '3', '−40%', 'down-good', 'alert')}
-          ${kpi('Market Penetration', '72%', '+8%', 'up', 'globe')}
-          ${kpi('Channel Coverage', '89%', '+4%', 'up', 'network')}
-          ${kpi('Revenue Protected', '$2.4M', '+18%', 'up', 'creditCard')}
-          ${kpi('Regional Risk Index', '0.23', '−0.08', 'down-good', 'target')}
-        </div>
-      </section>
-
-      <!-- Governance Scorecard -->
-      <section class="exec-section">
-        <h2 class="exec-section-title">${icon('shield', 20)} Governance Scorecard</h2>
-        <div class="exec-grid-2">
-          <div class="exec-card">
-            <h3>Compliance Health</h3>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
-              ${govMetric('SoD Violations', '0', 'green')}
-              ${govMetric('Self-Approval Flags', '2', 'orange')}
-              ${govMetric('Pending Approvals', '3', 'blue')}
-              ${govMetric('Policy Violations (30d)', '1', 'green')}
-              ${govMetric('Audit Chain Integrity', '100%', 'green')}
-              ${govMetric('SLA Compliance', '99.97%', 'green')}
-            </div>
-          </div>
-          <div class="exec-card">
-            <h3>Security Posture</h3>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
-              ${govMetric('MFA Adoption', '98%', 'green')}
-              ${govMetric('Untrusted Devices', '1', 'orange')}
-              ${govMetric('Failed Logins (24h)', '4', 'green')}
-              ${govMetric('ABAC Denials (24h)', '18', 'blue')}
-              ${govMetric('Key Rotation', 'On schedule', 'green')}
-              ${govMetric('Open Incidents', '0', 'green')}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Trend Intelligence -->
-      <section class="exec-section">
-        <h2 class="exec-section-title">${icon('barChart', 20)} Trend Intelligence</h2>
-        <div class="exec-grid-2">
-          <div class="exec-card">
-            <h3>Scan Growth (30d)</h3>
-            <div class="exec-trend-row">
-              <div class="exec-trend-value">+23.4%</div>
-              <div class="exec-trend-spark">▂▃▄▅▆▇█▇▆▇█</div>
-            </div>
-            <div class="exec-trend-sub">142K total scans · 4.7K avg/day</div>
-          </div>
-          <div class="exec-card">
-            <h3>Fraud Trend (30d)</h3>
-            <div class="exec-trend-row">
-              <div class="exec-trend-value exec-trend-good">−12.8%</div>
-              <div class="exec-trend-spark">█▇▆▅▄▃▃▂▂▂▁</div>
-            </div>
-            <div class="exec-trend-sub">23 incidents · Down from 37 last month</div>
-          </div>
-          <div class="exec-card">
-            <h3>Integration Health</h3>
-            <div class="exec-trend-row">
-              <div class="exec-trend-value">7/8</div>
-              <div class="exec-trend-spark">████████████</div>
-            </div>
-            <div class="exec-trend-sub">1 connector degraded (WMS) · 28K events/day</div>
-          </div>
-          <div class="exec-card">
-            <h3>Blockchain Verified</h3>
-            <div class="exec-trend-row">
-              <div class="exec-trend-value">99.9%</div>
-              <div class="exec-trend-spark">████████████</div>
-            </div>
-            <div class="exec-trend-sub">21K on-chain txns · VeChain + Polygon</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Executive Alerts -->
-      <section class="exec-section">
-        <h2 class="exec-section-title">${icon('alertTriangle', 20)} Executive Alerts</h2>
-        <div class="exec-alerts">
-          ${alertItem('CRITICAL', 'Counterfeit batch detected in Thai market', '2h ago', 'BATCH-2026-0138 · Bangkok region · 3 retailers affected', 'DECISION: Approve batch recall + notify distributor')}
-          ${alertItem('HIGH', 'Unusual scan surge from Cambodia (+340%)', '5h ago', 'Phnom Penh district · Potential gray market activity', 'DECISION: Authorize field investigation ($25K)')}
-          ${alertItem('MEDIUM', 'WMS integration degraded for 35 minutes', '1h ago', 'Warehouse sync delayed · Ops team investigating', 'INFO: Auto-escalated to IT · No action needed')}
-        </div>
-      </section>
+      </div>
     </div>
   `;
 }
 
-function decisionCard(title, value, change, direction, soWhat, nowWhat, color) {
-  const isGood = direction === 'up' || direction === 'down-good';
-  const borderColor = color === 'red' ? '#ef4444' : '#22c55e';
-  return `
-    <div class="exec-card" style="border-left:4px solid ${borderColor}">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
-        <h3 style="margin:0">${title}</h3>
-        <div style="text-align:right">
-          <span style="font-size:1.5rem;font-weight:800">${value}</span>
-          <span class="exec-kpi-change ${isGood ? 'exec-change-good' : 'exec-change-bad'}" style="margin-left:0.5rem">${change}</span>
+async function loadCCSData() {
+  try {
+    const API = window.API;
+    [_exposure, _decisions, _valuation] = await Promise.all([
+      API.get('/tenant/owner/ccs/exposure').catch(() => null),
+      API.get('/tenant/owner/ccs/decisions').catch(() => null),
+      API.get('/tenant/owner/ccs/valuation').catch(() => null),
+    ]);
+    renderCCS();
+  } catch (e) {
+    console.error('[CCS] Load error:', e);
+    const el = document.getElementById('ccs-overview-content');
+    if (el) el.innerHTML = '<div style="text-align:center;padding:40px;color:#ef4444">Failed to load Capital Command data</div>';
+  }
+}
+
+function renderCCS() {
+  const el = document.getElementById('ccs-overview-content');
+  if (!el) return;
+
+  const exp = _exposure || {};
+  const dec = _decisions || {};
+  const val = _valuation || {};
+  const exposure = exp.exposure || {};
+  const scans = exp.scans_30d || {};
+  const fraud = exp.fraud || {};
+  const compliance = exp.compliance || {};
+  const fin = val.financial_inputs || {};
+  const gov = val.governance_maturity || {};
+  const ev = val.valuation || {};
+  const eff = val.efficiency || {};
+  const summary = dec.summary || {};
+  const configured = fin.configured;
+
+  el.innerHTML = `
+    ${!configured ? `
+    <div class="ccs-config-banner">
+      <div class="ccs-config-icon">${icon('settings', 20)}</div>
+      <div>
+        <strong>Configure Financial Inputs</strong>
+        <div style="font-size:0.78rem;opacity:0.8;margin-top:2px">Set your Annual Revenue, EBITDA, and EV Multiple to unlock full Capital Intelligence</div>
+      </div>
+      <button onclick="document.getElementById('ccs-fin-modal').style.display='flex'" class="ccs-config-btn">Configure Now</button>
+    </div>` : ''}
+
+    <!-- LAYER 1: Capital Exposure Radar -->
+    <section class="exec-section">
+      <h2 class="exec-section-title">${icon('target', 20)} Capital Exposure Radar</h2>
+      <div class="ccs-kpi-row">
+        ${exposureCard('Total Capital at Risk', fmtMoney(exposure.total_capital_at_risk), 'Total estimated exposure', exposure.total_capital_at_risk > 0 ? 'red' : 'green')}
+        ${exposureCard('Revenue at Risk', fmtMoney(exposure.revenue_at_risk), `${exposure.fraud_exposure_rate || 0}% fraud rate`, exposure.fraud_exposure_rate > 5 ? 'red' : exposure.fraud_exposure_rate > 1 ? 'orange' : 'green')}
+        ${exposureCard('Brand Value at Risk', fmtMoney(exposure.brand_value_at_risk), `Trust: ${scans.avg_trust || 0}`, exposure.brand_value_at_risk > 0 ? 'orange' : 'green')}
+        ${exposureCard('Compliance Risk', `${exposure.compliance_risk_pct || 0}%`, `${compliance.compliant || 0}/${compliance.total || 0} compliant`, exposure.compliance_risk_pct > 30 ? 'red' : exposure.compliance_risk_pct > 10 ? 'orange' : 'green')}
+        ${exposureCard('Supply Chain Index', (exposure.supply_chain_risk_index || 0).toFixed(3), `${exp.supply_chain?.events || 0} events tracked`, exposure.supply_chain_risk_index > 0.3 ? 'red' : 'green')}
+      </div>
+      
+      <div class="exec-grid-2" style="margin-top:1rem">
+        <!-- Scan Integrity -->
+        <div class="exec-card">
+          <h3>${icon('barChart', 18)} Scan Intelligence (30d)</h3>
+          <div class="ccs-metric-grid">
+            <div class="ccs-metric">
+              <div class="ccs-metric-value">${(scans.total || 0).toLocaleString()}</div>
+              <div class="ccs-metric-label">Total Scans</div>
+              <div class="ccs-metric-trend ${scans.trend >= 0 ? 'ccs-trend-up' : 'ccs-trend-down'}">${scans.trend >= 0 ? '↑' : '↓'} ${Math.abs(scans.trend || 0)}%</div>
+            </div>
+            <div class="ccs-metric">
+              <div class="ccs-metric-value" style="color:#22c55e">${scans.authentic || 0}</div>
+              <div class="ccs-metric-label">Authentic</div>
+            </div>
+            <div class="ccs-metric">
+              <div class="ccs-metric-value" style="color:#f59e0b">${scans.suspicious || 0}</div>
+              <div class="ccs-metric-label">Suspicious</div>
+            </div>
+            <div class="ccs-metric">
+              <div class="ccs-metric-value" style="color:#ef4444">${scans.counterfeit || 0}</div>
+              <div class="ccs-metric-label">Counterfeit</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Fraud Exposure -->
+        <div class="exec-card">
+          <h3>${icon('alertTriangle', 18)} Fraud Exposure</h3>
+          <div class="ccs-metric-grid">
+            <div class="ccs-metric">
+              <div class="ccs-metric-value" style="color:#ef4444">${fraud.open || 0}</div>
+              <div class="ccs-metric-label">Open Alerts</div>
+            </div>
+            <div class="ccs-metric">
+              <div class="ccs-metric-value" style="color:#dc2626">${fraud.critical || 0}</div>
+              <div class="ccs-metric-label">Critical</div>
+            </div>
+            <div class="ccs-metric">
+              <div class="ccs-metric-value" style="color:#f59e0b">${fraud.high || 0}</div>
+              <div class="ccs-metric-label">High</div>
+            </div>
+            <div class="ccs-metric">
+              <div class="ccs-metric-value">${fraud.total || 0}</div>
+              <div class="ccs-metric-label">Total</div>
+            </div>
+          </div>
         </div>
       </div>
-      <div style="background:rgba(99,102,241,0.04);border-radius:6px;padding:0.6rem;margin-bottom:0.4rem;font-size:0.82rem">
-        <strong style="color:var(--text-secondary)">SO WHAT:</strong> ${soWhat}
+      
+      <!-- Geo Risk + Category -->
+      <div class="exec-grid-2" style="margin-top:0.75rem">
+        <div class="exec-card">
+          <h3>${icon('globe', 18)} Geographic Risk Map</h3>
+          ${(exp.geo_risk || []).length > 0 ? `
+          <table class="ccs-table">
+            <thead><tr><th>Country</th><th>Scans</th><th>Flagged</th><th>Fraud %</th><th>Risk</th></tr></thead>
+            <tbody>
+              ${(exp.geo_risk || []).map(g => `
+                <tr>
+                  <td><strong>${g.country || '—'}</strong></td>
+                  <td>${g.scans}</td>
+                  <td>${g.flagged}</td>
+                  <td>${g.fraud_rate}%</td>
+                  <td><span class="ccs-risk-badge ccs-risk-${g.risk_level}">${g.risk_level}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>` : '<div style="color:var(--text-muted);padding:1rem;text-align:center">No geographic scan data in last 30 days</div>'}
+        </div>
+        <div class="exec-card">
+          <h3>${icon('products', 18)} Category Exposure</h3>
+          ${(exp.category_exposure || []).length > 0 ? `
+          <table class="ccs-table">
+            <thead><tr><th>Category</th><th>Products</th><th>Scans</th><th>Suspicious</th><th>Risk %</th></tr></thead>
+            <tbody>
+              ${(exp.category_exposure || []).map(c => `
+                <tr>
+                  <td><strong>${c.category || '—'}</strong></td>
+                  <td>${c.products}</td>
+                  <td>${c.scans}</td>
+                  <td>${c.suspicious}</td>
+                  <td>${c.risk_rate}%</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>` : '<div style="color:var(--text-muted);padding:1rem;text-align:center">No scan data by category</div>'}
+        </div>
       </div>
-      <div style="background:${color === 'red' ? 'rgba(239,68,68,0.06)' : 'rgba(34,197,94,0.04)'};border-radius:6px;padding:0.6rem;font-size:0.82rem;font-weight:500">
-        <strong style="color:${borderColor}">NOW WHAT:</strong> ${nowWhat}
+    </section>
+
+    <!-- LAYER 4: Decision Command Center -->
+    <section class="exec-section">
+      <h2 class="exec-section-title">${icon('zap', 20)} Decision Command Center</h2>
+      <div class="ccs-decision-summary">
+        <span class="ccs-dec-chip ccs-dec-critical">${summary.critical || 0} Critical</span>
+        <span class="ccs-dec-chip ccs-dec-high">${summary.high || 0} High</span>
+        <span class="ccs-dec-chip ccs-dec-compliance">${summary.compliance_urgent || 0} Compliance Urgent</span>
+        <span class="ccs-dec-chip ccs-dec-total">${summary.total_decisions || 0} Total Actions</span>
       </div>
+
+      ${(dec.strategic_alerts || []).length > 0 ? `
+      <div class="ccs-decision-section">
+        <h3>🔴 Strategic Alerts</h3>
+        ${(dec.strategic_alerts || []).map(a => `
+          <div class="ccs-alert ccs-alert-${a.severity}">
+            <div class="ccs-alert-header">
+              <span class="ccs-alert-sev">${a.severity.toUpperCase()}</span>
+              <span class="ccs-alert-time">${timeAgo(a.time)}</span>
+            </div>
+            <div class="ccs-alert-title">${a.title}</div>
+            <div class="ccs-alert-meta">${a.product} · ${a.category}</div>
+            <div class="ccs-alert-action">${icon('zap', 14)} ${a.action_required}</div>
+          </div>
+        `).join('')}
+      </div>` : ''}
+
+      ${(dec.compliance_actions || []).length > 0 ? `
+      <div class="ccs-decision-section">
+        <h3>🟡 Compliance Actions</h3>
+        ${(dec.compliance_actions || []).map(c => `
+          <div class="ccs-alert ccs-alert-${c.urgency}">
+            <div class="ccs-alert-header">
+              <span class="ccs-alert-sev">${c.urgency.toUpperCase()}</span>
+              <span class="ccs-alert-time">${c.days_until_review}d until review</span>
+            </div>
+            <div class="ccs-alert-title">${c.action}</div>
+            <div class="ccs-alert-meta">${c.product} · ${c.framework} · ${c.requirement}</div>
+          </div>
+        `).join('')}
+      </div>` : ''}
+
+      ${(dec.security_events || []).length > 0 ? `
+      <div class="ccs-decision-section">
+        <h3>🟢 Security Events</h3>
+        ${(dec.security_events || []).map(s => `
+          <div class="ccs-alert ccs-alert-info">
+            <div class="ccs-alert-header">
+              <span class="ccs-alert-sev">INFO</span>
+              <span class="ccs-alert-time">${timeAgo(s.time)}</span>
+            </div>
+            <div class="ccs-alert-title">${(s.action || '').replace(/_/g, ' ')}</div>
+            <div class="ccs-alert-meta">${s.actor || 'system'}</div>
+          </div>
+        `).join('')}
+      </div>` : ''}
+    </section>
+
+    <!-- LAYER 5: Enterprise Value Snapshot -->
+    <section class="exec-section">
+      <h2 class="exec-section-title">${icon('star', 20)} Enterprise Value Monitor</h2>
+      ${configured ? `
+      <div class="ccs-ev-grid">
+        <div class="ccs-ev-card ccs-ev-baseline">
+          <div class="ccs-ev-label">EV Baseline</div>
+          <div class="ccs-ev-value">${fmtMoney(ev.ev_baseline)}</div>
+          <div class="ccs-ev-sub">EBITDA ${fmtMoney(fin.ebitda)} × ${fin.base_multiple}x</div>
+        </div>
+        <div class="ccs-ev-card ccs-ev-adjusted">
+          <div class="ccs-ev-label">EV with Governance</div>
+          <div class="ccs-ev-value">${fmtMoney(ev.ev_with_governance)}</div>
+          <div class="ccs-ev-sub">Adjusted multiple: ${ev.adjusted_multiple}x</div>
+        </div>
+        <div class="ccs-ev-card ccs-ev-uplift">
+          <div class="ccs-ev-label">EV Uplift</div>
+          <div class="ccs-ev-value">${ev.ev_uplift >= 0 ? '+' : ''}${fmtMoney(ev.ev_uplift)}</div>
+          <div class="ccs-ev-sub">Governance premium: ${((gov.premium_multiplier || 1) * 100 - 100).toFixed(1)}%</div>
+        </div>
+        <div class="ccs-ev-card ccs-ev-rar">
+          <div class="ccs-ev-label">Risk-Adjusted Revenue</div>
+          <div class="ccs-ev-value">${fmtMoney(ev.risk_adjusted_revenue)}</div>
+          <div class="ccs-ev-sub">Revenue protection: ${fmtMoney(ev.revenue_protection)}</div>
+        </div>
+      </div>
+
+      <!-- Governance Maturity Breakdown -->
+      <div class="exec-card" style="margin-top:1rem">
+        <h3>${icon('shield', 18)} Governance Maturity Score: <span style="color:${gov.score >= 70 ? '#22c55e' : gov.score >= 40 ? '#f59e0b' : '#ef4444'};font-size:1.3rem">${gov.score || 0}/100</span></h3>
+        <div class="ccs-gov-bars">
+          ${Object.entries(gov.breakdown || {}).map(([k, v]) => `
+            <div class="ccs-gov-bar-row">
+              <div class="ccs-gov-bar-label">${k.replace(/_/g, ' ')}</div>
+              <div class="ccs-gov-bar-track">
+                <div class="ccs-gov-bar-fill" style="width:${v}%;background:${v >= 70 ? '#22c55e' : v >= 40 ? '#f59e0b' : '#ef4444'}"></div>
+              </div>
+              <div class="ccs-gov-bar-pct">${v}%</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      ${eff.roi > 0 ? `
+      <div class="exec-card" style="margin-top:0.75rem">
+        <h3>${icon('creditCard', 18)} Capital Efficiency</h3>
+        <div class="ccs-metric-grid">
+          <div class="ccs-metric">
+            <div class="ccs-metric-value">${fmtMoney(eff.platform_cost)}</div>
+            <div class="ccs-metric-label">Platform Investment</div>
+          </div>
+          <div class="ccs-metric">
+            <div class="ccs-metric-value" style="color:#22c55e">${fmtMoney(eff.ev_uplift)}</div>
+            <div class="ccs-metric-label">EV Uplift</div>
+          </div>
+          <div class="ccs-metric">
+            <div class="ccs-metric-value" style="color:#6366f1">${eff.roi}x</div>
+            <div class="ccs-metric-label">ROI</div>
+          </div>
+          <div class="ccs-metric">
+            <div class="ccs-metric-value">${eff.payback_months}mo</div>
+            <div class="ccs-metric-label">Payback Period</div>
+          </div>
+        </div>
+      </div>` : ''}
+      ` : `
+      <div class="ccs-ev-unconfigured">
+        <div style="font-size:2rem;margin-bottom:0.5rem">${icon('settings', 40)}</div>
+        <h3>Financial Inputs Required</h3>
+        <p>Enter your Annual Revenue, EBITDA, and EV Multiple to unlock Enterprise Value intelligence.</p>
+        <button onclick="document.getElementById('ccs-fin-modal').style.display='flex'" class="ccs-config-btn" style="margin-top:1rem">Configure Financial Inputs</button>
+      </div>`}
+    </section>
+
+    <!-- Financial Config Modal -->
+    <div id="ccs-fin-modal" class="ccs-modal" style="display:none">
+      <div class="ccs-modal-content">
+        <div class="ccs-modal-header">
+          <h3>${icon('settings', 20)} Financial Configuration</h3>
+          <button onclick="document.getElementById('ccs-fin-modal').style.display='none'" class="ccs-modal-close">&times;</button>
+        </div>
+        <div class="ccs-modal-body">
+          <label>Annual Revenue (USD)</label>
+          <input type="number" id="ccs-fin-revenue" value="${fin.annual_revenue || ''}" placeholder="e.g. 12000000">
+          <label>EBITDA (USD)</label>
+          <input type="number" id="ccs-fin-ebitda" value="${fin.ebitda || ''}" placeholder="e.g. 2400000">
+          <label>EV Multiple</label>
+          <input type="number" id="ccs-fin-multiple" value="${fin.base_multiple || 8}" step="0.5" placeholder="e.g. 8.5">
+          <label>Brand Value Estimate (USD)</label>
+          <input type="number" id="ccs-fin-brand" value="${fin.brand_value || ''}" placeholder="e.g. 5000000">
+        </div>
+        <div class="ccs-modal-footer">
+          <button onclick="document.getElementById('ccs-fin-modal').style.display='none'" class="ccs-btn-secondary">Cancel</button>
+          <button onclick="saveCCSFinancials()" class="ccs-btn-primary">Save & Recalculate</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+window.saveCCSFinancials = async function () {
+  const API = window.API;
+  const body = {
+    annual_revenue: Number(document.getElementById('ccs-fin-revenue')?.value || 0),
+    ebitda: Number(document.getElementById('ccs-fin-ebitda')?.value || 0),
+    ev_multiple: Number(document.getElementById('ccs-fin-multiple')?.value || 8),
+    brand_value_estimate: Number(document.getElementById('ccs-fin-brand')?.value || 0),
+  };
+  try {
+    await API.patch('/tenant/owner/org-financials', body);
+    document.getElementById('ccs-fin-modal').style.display = 'none';
+    loadCCSData(); // Refresh all data
+  } catch (e) {
+    alert('Failed to save financial configuration');
+  }
+};
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtMoney(n) {
+  if (!n || n === 0) return '$0';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1e9) return sign + '$' + (abs / 1e9).toFixed(1) + 'B';
+  if (abs >= 1e6) return sign + '$' + (abs / 1e6).toFixed(1) + 'M';
+  if (abs >= 1e3) return sign + '$' + (abs / 1e3).toFixed(1) + 'K';
+  return sign + '$' + abs.toLocaleString();
+}
+
+function timeAgo(ts) {
+  if (!ts) return '';
+  const diff = Date.now() - new Date(ts).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function exposureCard(title, value, sub, color) {
+  const colors = { red: '#ef4444', orange: '#f59e0b', green: '#22c55e', blue: '#6366f1' };
+  const bgColors = { red: 'rgba(239,68,68,0.08)', orange: 'rgba(245,158,11,0.08)', green: 'rgba(34,197,94,0.06)', blue: 'rgba(99,102,241,0.06)' };
+  return `
+    <div class="ccs-exposure-card" style="border-left:4px solid ${colors[color]};background:${bgColors[color]}">
+      <div class="ccs-exp-title">${title}</div>
+      <div class="ccs-exp-value" style="color:${colors[color]}">${value}</div>
+      <div class="ccs-exp-sub">${sub}</div>
     </div>`;
-}
-
-function kpi(label, value, change, direction, iconName) {
-  const isGood = direction === 'up' || direction === 'down-good';
-  return `
-    <div class="exec-kpi-card">
-      <div class="exec-kpi-icon">${icon(iconName, 20)}</div>
-      <div class="exec-kpi-value">${value}</div>
-      <div class="exec-kpi-label">${label}</div>
-      <div class="exec-kpi-change ${isGood ? 'exec-change-good' : 'exec-change-bad'}">${change}</div>
-    </div>
-  `;
-}
-
-function govMetric(label, value, color) {
-  const bg = color === 'green' ? 'rgba(34,197,94,0.06)' : color === 'orange' ? 'rgba(245,158,11,0.08)' : 'rgba(59,130,246,0.06)';
-  const textColor = color === 'green' ? '#22c55e' : color === 'orange' ? '#f59e0b' : '#3b82f6';
-  return `<div style="background:${bg};border-radius:6px;padding:0.5rem;text-align:center">
-      <div style="font-size:1.1rem;font-weight:700;color:${textColor}">${value}</div>
-      <div style="font-size:0.68rem;color:var(--text-secondary)">${label}</div>
-    </div>`;
-}
-
-function alertItem(severity, title, time, detail, decision) {
-  const cls = severity === 'CRITICAL' ? 'exec-alert-critical' : severity === 'HIGH' ? 'exec-alert-high' : 'exec-alert-medium';
-  return `
-    <div class="exec-alert ${cls}">
-      <div class="exec-alert-header">
-        <span class="exec-alert-severity">${severity}</span>
-        <span class="exec-alert-time">${time}</span>
-      </div>
-      <div class="exec-alert-title">${title}</div>
-      <div class="exec-alert-detail">${detail}</div>
-      <div style="margin-top:0.5rem;padding:0.4rem 0.6rem;background:rgba(99,102,241,0.06);border-radius:4px;font-size:0.78rem;font-weight:500;color:var(--text-primary)">${decision}</div>
-    </div>
-  `;
 }
