@@ -652,28 +652,6 @@ window._renderBUModal = function () {
         <button onclick="document.getElementById('ccs-bu-modal').style.display='none'" class="ccs-modal-close">&times;</button>
       </div>
       <div class="ccs-modal-body" style="max-height:65vh;overflow-y:auto">
-
-        <div style="font-size:0.7rem;opacity:0.6;margin-bottom:0.75rem;text-transform:uppercase;letter-spacing:1px">Brand Architecture</div>
-        <div style="display:flex;gap:1rem;margin-bottom:1rem">
-          <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer">
-            <input type="radio" name="bu-arch" value="house_of_brands" ${window._buBrandArch !== 'branded_house' ? 'checked' : ''} onchange="window._buBrandArch=this.value;window._renderBUModal()"> 🏘️ House of Brands
-          </label>
-          <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer">
-            <input type="radio" name="bu-arch" value="branded_house" ${window._buBrandArch === 'branded_house' ? 'checked' : ''} onchange="window._buBrandArch=this.value;window._renderBUModal()"> 🏢 Branded House
-          </label>
-        </div>
-        <div style="font-size:0.68rem;opacity:0.45;margin-bottom:1rem">${window._buBrandArch === 'branded_house' ? 'Risk spills across BUs (Samsung, Vingroup)' : 'Risk is isolated per BU (P&G, Unilever)'}</div>
-
-        ${window._buBrandArch === 'branded_house' ? `
-        <label>γ Contagion Factor (0.0 - 0.5)</label>
-        <input type="range" id="bu-contagion" min="0" max="0.5" step="0.05" value="${window._buContagion}" oninput="window._buContagion=Number(this.value);document.getElementById('bu-contagion-val').textContent=this.value" style="width:100%">
-        <span id="bu-contagion-val" style="font-size:0.75rem;opacity:0.7">${window._buContagion}</span>
-        ` : ''}
-
-        <label>ρ Cross-BU Correlation (0.0 - 1.0)</label>
-        <input type="range" id="bu-correlation" min="0" max="1" step="0.05" value="${window._buCorrelation}" oninput="window._buCorrelation=Number(this.value);document.getElementById('bu-correlation-val').textContent=this.value" style="width:100%">
-        <span id="bu-correlation-val" style="font-size:0.75rem;opacity:0.7">${window._buCorrelation}</span>
-
         ${rows.map((bu, idx) => `
         <div style="font-size:0.7rem;opacity:0.6;margin:1.25rem 0 0.75rem;text-transform:uppercase;letter-spacing:1px;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.75rem">Business Unit ${idx + 1} ${rows.length > 1 ? `<button onclick="window._buRows.splice(${idx},1);window._renderBUModal()" style="float:right;background:none;border:none;color:#ef4444;cursor:pointer;font-size:0.75rem">✕ Remove</button>` : ''}</div>
 
@@ -753,6 +731,23 @@ window._renderBUModal = function () {
         </div>
         `).join('')}
 
+
+        <div style="font-size:0.7rem;opacity:0.4;margin:1.5rem 0 0.5rem;text-transform:uppercase;letter-spacing:1px;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.75rem;cursor:pointer" onclick="var el=document.getElementById('bu-advanced');el.style.display=el.style.display==='none'?'block':'none'">ADVANCED — RISK MODEL ▾</div>
+        <div id="bu-advanced" style="display:none">
+          <label>Brand Architecture</label>
+          <select onchange="window._buBrandArch=this.value;window._renderBUModal()">
+            <option value="house_of_brands" ${window._buBrandArch !== 'branded_house' ? 'selected' : ''}>House of Brands — Risk isolated per BU (P&G)</option>
+            <option value="branded_house" ${window._buBrandArch === 'branded_house' ? 'selected' : ''}>Branded House — Risk spills across BUs (Samsung)</option>
+          </select>
+          ${window._buBrandArch === 'branded_house' ? `
+          <label>γ Contagion Factor (0.0 – 0.5)</label>
+          <input type="range" id="bu-contagion" min="0" max="0.5" step="0.05" value="${window._buContagion}" oninput="window._buContagion=Number(this.value);document.getElementById('bu-contagion-val').textContent=this.value" style="width:100%">
+          <span id="bu-contagion-val" style="font-size:0.75rem;opacity:0.7">${window._buContagion}</span>
+          ` : ''}
+          <label>ρ Cross-BU Correlation (0.0 – 1.0)</label>
+          <input type="range" id="bu-correlation" min="0" max="1" step="0.05" value="${window._buCorrelation}" oninput="window._buCorrelation=Number(this.value);document.getElementById('bu-correlation-val').textContent=this.value" style="width:100%">
+          <span id="bu-correlation-val" style="font-size:0.75rem;opacity:0.7">${window._buCorrelation}</span>
+        </div>
         <button onclick="window._buRows.push({id:'bu_'+(window._buRows.length+1),name:'Division '+(window._buRows.length+1),categories:[],industry_type:'fmcg',beta:1.4,k:1.5,avg_fine:15000,revenue_weight:0,_cluster:'D'});window._renderBUModal()" style="width:100%;padding:8px;border:1px dashed rgba(99,102,241,0.3);border-radius:8px;background:transparent;color:#818cf8;cursor:pointer;font-size:0.8rem">+ Add Business Unit</button>
       </div>
       <div class="ccs-modal-footer">
