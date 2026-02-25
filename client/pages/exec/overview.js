@@ -148,7 +148,7 @@ function renderCCS() {
           <table class="ccs-table" style="font-size:0.75rem">
             <thead><tr>
               <th>Business Unit</th><th>β</th><th>k</th><th>Weight</th><th>Scans</th><th>P(Fraud)</th>
-              <th>ERL</th><th>EBI</th><th>RFE</th><th style="font-weight:700">TCAR</th>
+              <th>ERL</th><th>EBI</th><th>RFE</th><th style="font-weight:700">TCAR</th><th>Risk %</th>
             </tr></thead>
             <tbody>
               ${exp.per_bu.map(bu => `<tr>
@@ -159,6 +159,7 @@ function renderCCS() {
                 <td>${bu.p_fraud}%</td>
                 <td>${fmtMoney(bu.erl)}</td><td>${fmtMoney(bu.ebi)}</td><td>${fmtMoney(bu.rfe)}</td>
                 <td><strong>${fmtMoney(bu.tcar)}</strong></td>
+                <td style="font-weight:600;color:${bu.tcar / (exp.group_aggregated?.raw_tcar || 1) > 0.3 ? '#ef4444' : '#f59e0b'}">${Math.round(bu.tcar / (exp.group_aggregated?.raw_tcar || 1) * 100)}%</td>
               </tr>`).join('')}
             </tbody>
             <tfoot>
@@ -168,13 +169,14 @@ function renderCCS() {
                 <td>${fmtMoney(exp.group_aggregated?.ebi)}</td>
                 <td>${fmtMoney(exp.group_aggregated?.rfe)}</td>
                 <td><strong>${fmtMoney(exp.group_aggregated?.tcar)}</strong></td>
+                <td>100%</td>
               </tr>
               ${exp.group_aggregated?.diversification_discount > 0 ? `<tr style="color:#22c55e;font-size:0.7rem">
-                <td colspan="9">↳ Diversification Discount (ρ=${exp.group_aggregated.cross_bu_correlation})</td>
+                <td colspan="10">↳ Diversification Discount (ρ=${exp.group_aggregated.cross_bu_correlation})</td>
                 <td>−${fmtMoney(exp.group_aggregated.diversification_discount)}</td>
               </tr>` : ''}
               ${exp.group_aggregated?.contagion_adjustment > 0 ? `<tr style="color:#ef4444;font-size:0.7rem">
-                <td colspan="8">↳ Brand Contagion (γ=${exp.group_aggregated.contagion_factor})</td>
+                <td colspan="9">↳ Brand Contagion (γ=${exp.group_aggregated.contagion_factor})</td>
                 <td>+${fmtMoney(exp.group_aggregated.contagion_adjustment)}</td><td></td>
               </tr>` : ''}
             </tfoot>
