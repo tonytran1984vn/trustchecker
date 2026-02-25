@@ -165,7 +165,7 @@ const PAGE_LOADERS = {
     'ca-settings': () => import('../pages/ca/ca-settings-workspace.js'),
 
     // ─── Org Owner (Strategic Governance Authority) ───────
-    'owner-governance': () => import('../pages/owner/owner-workspace.js?v=10.5'),
+    'owner-governance': () => import('../pages/owner/owner-workspace.js?v=10.4'),
 
     // ─── Executive (CEO Decision Intelligence) pages ─────
     'exec-overview': () => import('../pages/exec/overview.js'),
