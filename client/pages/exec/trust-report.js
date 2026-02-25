@@ -106,7 +106,7 @@ function m(l, v, s, c, i) {
   return `
     <div class="exec-kpi-card">
       <div class="exec-kpi-icon" style="color:${c}">${icon(i, 20)}</div>
-      <div class="exec-kpi-value">${v}</div>
+      <div class="exec-kpi-value" style="${String(v).length > 8 ? 'font-size:1.1rem' : ''}">${v}</div>
       <div class="exec-kpi-label">${l}</div>
       ${s ? `<div style="font-size:0.7rem;color:var(--text-secondary)">${s}</div>` : ''}
     </div>`;
