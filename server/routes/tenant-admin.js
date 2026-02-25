@@ -1437,7 +1437,10 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             // Category exposure
             db.all(`SELECT p.category, COUNT(DISTINCT p.id) as products,
                     COUNT(se.id) as scans,
-                    COUNT(se.id) FILTER (WHERE se.result = 'suspicious') as suspicious
+                    COUNT(se.id) FILTER (WHERE se.result = 'suspicious') as suspicious,
+                    COUNT(se.id) FILTER (WHERE se.result = 'counterfeit') as counterfeit,
+                    COUNT(se.id) FILTER (WHERE se.result = 'authentic') as authentic,
+                    ROUND(AVG(se.trust_score)::numeric, 1) as avg_trust
                     FROM products p
                     LEFT JOIN scan_events se ON se.product_id = p.id
                         AND se.scanned_at >= NOW() - INTERVAL '30 days'
@@ -1564,6 +1567,139 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             risk_level: parseFloat(g.avg_fraud) > 0.5 ? 'critical' : parseFloat(g.avg_fraud) > 0.3 ? 'high' : parseFloat(g.avg_fraud) > 0.1 ? 'medium' : 'low',
         }));
 
+        // ═══ ERQF Phase 2: PER-BU SEGMENTED AGGREGATION ═══
+        const buConfig = orgInfo?.settings?.bu_config || null;
+        let perBU = null;
+        let groupAggregated = null;
+
+        if (buConfig && buConfig.business_units && buConfig.business_units.length > 0) {
+            const catData = {};
+            for (const c of (categoryBreakdown || [])) {
+                catData[c.category] = {
+                    scans: parseInt(c.scans) || 0,
+                    suspicious: parseInt(c.suspicious) || 0,
+                    counterfeit: parseInt(c.counterfeit) || 0,
+                    authentic: parseInt(c.authentic) || 0,
+                    products: parseInt(c.products) || 0,
+                    avg_trust: parseFloat(c.avg_trust) || 85,
+                };
+            }
+
+            const estimatedUnits = Number(fin.estimated_units_ytd) || totalScans * 12;
+
+            perBU = buConfig.business_units.map(bu => {
+                // Aggregate scan data for this BU's categories
+                let buScans = 0, buSuspicious = 0, buCounterfeit = 0, buAuthentic = 0, buProducts = 0;
+                let trustSum = 0, trustCount = 0;
+                for (const cat of (bu.categories || [])) {
+                    const cd = catData[cat];
+                    if (cd) {
+                        buScans += cd.scans;
+                        buSuspicious += cd.suspicious;
+                        buCounterfeit += cd.counterfeit;
+                        buAuthentic += cd.authentic;
+                        buProducts += cd.products;
+                        if (cd.avg_trust > 0) { trustSum += cd.avg_trust * cd.scans; trustCount += cd.scans; }
+                    }
+                }
+                const buTrust = trustCount > 0 ? trustSum / trustCount : 85;
+                const buWeight = Number(bu.revenue_weight) || 0;
+                const buRevenue = annualRevenue * buWeight;
+                const buBrandValue = brandValue * buWeight;
+
+                // Per-BU P(Fraud)
+                const buPFraud = buScans > 0
+                    ? (buCounterfeit + buSuspicious * confirmationRate) / buScans : 0;
+
+                // Per-BU Coverage
+                const buUnits = estimatedUnits * buWeight;
+                const buCoverage = buUnits > 0 ? Math.min(buScans / (buUnits / 12), 1) : 1;
+                const buRevCovered = buRevenue * buCoverage;
+
+                // Per-BU ERL
+                const buERL = Math.round(buRevCovered * buPFraud * severity);
+
+                // Per-BU EBI (with BU-specific β and k)
+                const buBRF = Math.pow(Math.max(1 - buTrust / 100, 0.001), bu.beta || 1.5);
+                const buIE = 1 - Math.exp(-(bu.k || 2.5) * buPFraud);
+                const buEBI = Math.round(buBrandValue * buBRF * buIE);
+
+                // Per-BU RFE
+                const buCrTotal = crTotal > 0 ? Math.round(crTotal * buWeight) : 1;
+                const buWCRS = WCRS; // Use org-level WCRS (same compliance framework)
+                const buRFE = Math.round(buWCRS * (bu.avg_fine || 25000) * enforcementProbability * Math.max(crNonCompliant * buWeight, 0.1));
+
+                // Per-BU TCAR (no diversification at BU level)
+                const buTCAR = buERL + buEBI + buRFE;
+
+                return {
+                    id: bu.id,
+                    name: bu.name,
+                    categories: bu.categories,
+                    beta: bu.beta,
+                    k: bu.k,
+                    avg_fine: bu.avg_fine,
+                    revenue_weight: buWeight,
+                    scans: buScans,
+                    products: buProducts,
+                    trust_score: Math.round(buTrust * 10) / 10,
+                    p_fraud: Math.round(buPFraud * 10000) / 100,
+                    erl: buERL,
+                    ebi: buEBI,
+                    rfe: buRFE,
+                    tcar: buTCAR,
+                };
+            });
+
+            // ── GROUP AGGREGATION ──
+            const rho = buConfig.cross_bu_correlation || 0.3;
+            const gamma = buConfig.contagion_factor || 0;
+            const isBrandedHouse = buConfig.brand_architecture === 'branded_house';
+
+            // Weighted sum
+            let groupERL = 0, groupEBI = 0, groupRFE = 0;
+            let totalWeight = 0;
+            for (const bu of perBU) {
+                const w = bu.revenue_weight || (1 / perBU.length);
+                groupERL += bu.erl;
+                groupEBI += bu.ebi;
+                groupRFE += bu.rfe;
+                totalWeight += w;
+            }
+
+            // Brand Contagion Effect (Branded House only)
+            let contagionAdj = 0;
+            if (isBrandedHouse && gamma > 0) {
+                // For each BU, its incident adds γ × Σ(other BU brand values)
+                const totalBrandValue = brandValue;
+                for (const bu of perBU) {
+                    const buBV = totalBrandValue * (bu.revenue_weight || 1 / perBU.length);
+                    const otherBV = totalBrandValue - buBV;
+                    contagionAdj += bu.p_fraud / 100 * gamma * otherBV * 0.01; // weighted by fraud probability
+                }
+                contagionAdj = Math.round(contagionAdj);
+                groupEBI += contagionAdj;
+            }
+
+            // Cross-BU Diversification Discount
+            const rawTCAR = groupERL + groupEBI + groupRFE;
+            const diversificationDiscount = Math.round(rawTCAR * (1 - rho) * 0.15); // 15% max at ρ=0
+            const groupTCAR = rawTCAR - diversificationDiscount;
+
+            groupAggregated = {
+                erl: groupERL,
+                ebi: groupEBI,
+                rfe: groupRFE,
+                tcar: groupTCAR,
+                raw_tcar: rawTCAR,
+                diversification_discount: diversificationDiscount,
+                contagion_adjustment: contagionAdj,
+                brand_architecture: buConfig.brand_architecture,
+                cross_bu_correlation: rho,
+                contagion_factor: gamma,
+            };
+        }
+
         res.json({
             exposure: {
                 total_capital_at_risk: TCAR,
@@ -1625,10 +1761,69 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
                 recovery_rate: recoveryRate,
                 configured: annualRevenue > 0,
             },
+            // Multi-BU (Phase 2) — only present when bu_config exists
+            ...(perBU ? { per_bu: perBU, group_aggregated: groupAggregated } : {}),
         });
     } catch (err) {
         console.error('[CCS] Exposure error:', err);
         res.status(500).json({ error: 'Failed to load capital exposure data' });
+    }
+});
+
+// ─── CCS: Business Unit Config (Multi-BU Segmented Aggregation) ──────────────
+router.get('/owner/ccs/bu-config', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+        const org = await db.get(`SELECT settings FROM organizations WHERE id = $1`, [tid]);
+        const buConfig = org?.settings?.bu_config || null;
+        // Also return available categories for mapping
+        const categories = await db.all(`SELECT DISTINCT category FROM products WHERE org_id = $1 AND category IS NOT NULL ORDER BY category`, [tid]);
+        res.json({
+            bu_config: buConfig,
+            available_categories: categories.map(c => c.category),
+        });
+    } catch (err) {
+        console.error('[CCS] BU config read error:', err);
+        res.status(500).json({ error: 'Failed to load BU configuration' });
+    }
+});
+
+router.patch('/owner/ccs/bu-config', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+        const { business_units, brand_architecture, contagion_factor, cross_bu_correlation } = req.body;
+
+        const org = await db.get(`SELECT settings FROM organizations WHERE id = $1`, [tid]);
+        const settings = org?.settings || {};
+
+        settings.bu_config = {
+            business_units: (business_units || []).map(bu => ({
+                id: bu.id || bu.name?.toLowerCase().replace(/\s+/g, '_'),
+                name: bu.name,
+                categories: bu.categories || [],
+                beta: Number(bu.beta) || 1.5,
+                k: Number(bu.k) || 2.5,
+                avg_fine: Number(bu.avg_fine) || 25000,
+                revenue_weight: Number(bu.revenue_weight) || 0,
+            })),
+            brand_architecture: brand_architecture || 'house_of_brands',
+            contagion_factor: Math.min(Math.max(Number(contagion_factor) || 0, 0), 0.5),
+            cross_bu_correlation: Math.min(Math.max(Number(cross_bu_correlation) || 0.3, 0), 1),
+            updated_at: new Date().toISOString(),
+            updated_by: req.user.id,
+        };
+
+        await db.run(`UPDATE organizations SET settings = $1, updated_at = NOW() WHERE id = $2`,
+            [JSON.stringify(settings), tid]);
+
+        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, created_at)
+                      VALUES ($1, $2, 'BU_CONFIG_UPDATED', 'organization', $3, $4, NOW())`,
+            [require('uuid').v4(), req.user.id, tid, JSON.stringify(settings.bu_config)]);
+
+        res.json({ success: true, bu_config: settings.bu_config });
+    } catch (err) {
+        console.error('[CCS] BU config save error:', err);
+        res.status(500).json({ error: 'Failed to save BU configuration' });
     }
 });
 

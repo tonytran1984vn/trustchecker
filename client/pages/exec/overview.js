@@ -123,6 +123,58 @@ function renderCCS() {
           </tbody>
         </table>
       </div>` : ''}
+
+      ${exp.per_bu && exp.per_bu.length > 0 ? `
+      <!-- Per-BU Risk Breakdown -->
+      <div class="exec-card" style="margin-top:0.75rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+          <h3 style="margin:0">${icon('layers', 18)} Business Unit Risk Breakdown
+            <span style="font-size:0.6rem;opacity:0.5;margin-left:6px;font-weight:400">${exp.group_aggregated?.brand_architecture === 'branded_house' ? '🏢 Branded House' : '🏘️ House of Brands'}</span>
+          </h3>
+          <button onclick="document.getElementById('ccs-bu-modal').style.display='flex'" class="ccs-config-btn" style="padding:4px 10px;font-size:0.7rem;background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.3)">${icon('settings', 12)} Edit BUs</button>
+        </div>
+        <table class="ccs-table" style="font-size:0.75rem">
+          <thead><tr>
+            <th>Business Unit</th><th>β</th><th>k</th><th>Weight</th><th>Scans</th><th>P(Fraud)</th>
+            <th>ERL</th><th>EBI</th><th>RFE</th><th style="font-weight:700">TCAR</th>
+          </tr></thead>
+          <tbody>
+            ${exp.per_bu.map(bu => `<tr>
+              <td><strong>${bu.name}</strong><br><span style="font-size:0.65rem;opacity:0.5">${(bu.categories || []).join(', ')}</span></td>
+              <td>${bu.beta}</td><td>${bu.k}</td>
+              <td>${Math.round((bu.revenue_weight || 0) * 100)}%</td>
+              <td>${bu.scans.toLocaleString()}</td>
+              <td>${bu.p_fraud}%</td>
+              <td>${fmtMoney(bu.erl)}</td><td>${fmtMoney(bu.ebi)}</td><td>${fmtMoney(bu.rfe)}</td>
+              <td><strong>${fmtMoney(bu.tcar)}</strong></td>
+            </tr>`).join('')}
+          </tbody>
+          <tfoot>
+            <tr style="border-top:2px solid var(--border-color,rgba(255,255,255,0.15));font-weight:600">
+              <td colspan="6">Group Total</td>
+              <td>${fmtMoney(exp.group_aggregated?.erl)}</td>
+              <td>${fmtMoney(exp.group_aggregated?.ebi)}</td>
+              <td>${fmtMoney(exp.group_aggregated?.rfe)}</td>
+              <td><strong>${fmtMoney(exp.group_aggregated?.tcar)}</strong></td>
+            </tr>
+            ${exp.group_aggregated?.diversification_discount > 0 ? `<tr style="color:#22c55e;font-size:0.7rem">
+              <td colspan="6">↳ Diversification Discount (ρ=${exp.group_aggregated.cross_bu_correlation})</td>
+              <td colspan="3"></td><td>−${fmtMoney(exp.group_aggregated.diversification_discount)}</td>
+            </tr>` : ''}
+            ${exp.group_aggregated?.contagion_adjustment > 0 ? `<tr style="color:#ef4444;font-size:0.7rem">
+              <td colspan="6">↳ Brand Contagion (γ=${exp.group_aggregated.contagion_factor})</td>
+              <td colspan="2"></td><td>+${fmtMoney(exp.group_aggregated.contagion_adjustment)}</td><td></td>
+            </tr>` : ''}
+          </tfoot>
+        </table>
+      </div>
+      ` : `
+      <!-- No BU config — show setup prompt -->
+      <div style="margin-top:0.5rem;padding:0.6rem 1rem;background:rgba(99,102,241,0.06);border:1px dashed rgba(99,102,241,0.2);border-radius:8px;display:flex;align-items:center;gap:0.75rem">
+        <span style="opacity:0.6;font-size:0.78rem">${icon('layers', 16)} Multi-BU segmentation available for conglomerates</span>
+        <button onclick="openBUConfigModal()" class="ccs-config-btn" style="padding:4px 10px;font-size:0.7rem;background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.3);margin-left:auto">${icon('settings', 12)} Setup Business Units</button>
+      </div>
+      `}
       
       <div class="exec-grid-2" style="margin-top:1rem">
         <!-- Scan Integrity -->
@@ -427,6 +479,169 @@ window._fillERQFDefaults = function () {
   if (betaEl) betaEl.placeholder = p.beta;
   if (kEl) kEl.placeholder = p.k;
   if (fineEl) fineEl.placeholder = p.avgFine;
+};
+
+// ── Business Unit Config Modal ────────────────────────────────────────────────
+window._buCategories = []; // available categories from API
+window._buRows = [];       // current BU rows
+
+window.openBUConfigModal = async function () {
+  try {
+    const API = window.API;
+    const res = await API.get('/tenant/owner/ccs/bu-config');
+    window._buCategories = res.available_categories || [];
+    const cfg = res.bu_config || {};
+    window._buRows = cfg.business_units && cfg.business_units.length > 0
+      ? JSON.parse(JSON.stringify(cfg.business_units))
+      : [{ id: 'bu_1', name: 'Division 1', categories: [], beta: 1.5, k: 2.5, avg_fine: 25000, revenue_weight: 0.5 }];
+
+    // Create or show modal
+    let modal = document.getElementById('ccs-bu-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'ccs-bu-modal';
+      modal.className = 'ccs-modal-overlay';
+      document.body.appendChild(modal);
+    }
+    window._buBrandArch = cfg.brand_architecture || 'house_of_brands';
+    window._buContagion = cfg.contagion_factor || 0.15;
+    window._buCorrelation = cfg.cross_bu_correlation || 0.3;
+    window._renderBUModal();
+    modal.style.display = 'flex';
+  } catch (e) {
+    alert('Failed to load BU config');
+  }
+};
+
+window._renderBUModal = function () {
+  const modal = document.getElementById('ccs-bu-modal');
+  if (!modal) return;
+  const cats = window._buCategories;
+  const rows = window._buRows;
+
+  // Find which categories are already assigned
+  const assigned = new Set();
+  rows.forEach(r => (r.categories || []).forEach(c => assigned.add(c)));
+
+  modal.innerHTML = `
+    <div class="ccs-modal" style="max-width:900px;max-height:90vh;overflow-y:auto">
+      <div class="ccs-modal-header">
+        <h3>🏢 Business Unit Configuration</h3>
+        <button onclick="document.getElementById('ccs-bu-modal').style.display='none'" class="ccs-modal-close">✕</button>
+      </div>
+      <div class="ccs-modal-body" style="max-height:65vh;overflow-y:auto">
+        <!-- Brand Architecture Toggle -->
+        <div style="display:flex;gap:1rem;margin-bottom:1rem;padding:0.75rem;background:rgba(99,102,241,0.06);border-radius:8px">
+          <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer">
+            <input type="radio" name="bu-arch" value="house_of_brands" ${window._buBrandArch !== 'branded_house' ? 'checked' : ''} onchange="window._buBrandArch=this.value;window._renderBUModal()"> 🏘️ House of Brands
+          </label>
+          <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer">
+            <input type="radio" name="bu-arch" value="branded_house" ${window._buBrandArch === 'branded_house' ? 'checked' : ''} onchange="window._buBrandArch=this.value;window._renderBUModal()"> 🏢 Branded House
+          </label>
+          <span style="font-size:0.7rem;opacity:0.5;margin-left:auto">${window._buBrandArch === 'branded_house' ? 'Risk spills across BUs (Samsung, Vingroup)' : 'Risk is isolated per BU (P&G, Unilever)'}</span>
+        </div>
+
+        ${window._buBrandArch === 'branded_house' ? `
+        <div style="display:flex;gap:1rem;margin-bottom:1rem">
+          <div style="flex:1">
+            <label style="font-size:0.75rem">γ Contagion Factor (0.0 - 0.5)</label>
+            <input type="range" id="bu-contagion" min="0" max="0.5" step="0.05" value="${window._buContagion}" oninput="window._buContagion=Number(this.value);document.getElementById('bu-contagion-val').textContent=this.value" style="width:100%">
+            <span id="bu-contagion-val" style="font-size:0.75rem;opacity:0.7">${window._buContagion}</span>
+          </div>
+          <div style="flex:1">
+            <label style="font-size:0.75rem">ρ Cross-BU Correlation (0.0 - 1.0)</label>
+            <input type="range" id="bu-correlation" min="0" max="1" step="0.05" value="${window._buCorrelation}" oninput="window._buCorrelation=Number(this.value);document.getElementById('bu-correlation-val').textContent=this.value" style="width:100%">
+            <span id="bu-correlation-val" style="font-size:0.75rem;opacity:0.7">${window._buCorrelation}</span>
+          </div>
+        </div>` : `
+        <div style="margin-bottom:1rem">
+          <label style="font-size:0.75rem">ρ Cross-BU Correlation (0.0 - 1.0)</label>
+          <input type="range" id="bu-correlation" min="0" max="1" step="0.05" value="${window._buCorrelation}" oninput="window._buCorrelation=Number(this.value);document.getElementById('bu-correlation-val').textContent=this.value" style="width:100%">
+          <span id="bu-correlation-val" style="font-size:0.75rem;opacity:0.7">${window._buCorrelation}</span>
+        </div>`}
+
+        <!-- BU Rows -->
+        ${rows.map((bu, idx) => `
+        <div style="border:1px solid var(--border-color,rgba(255,255,255,0.1));border-radius:8px;padding:0.75rem;margin-bottom:0.75rem;background:rgba(255,255,255,0.02)">
+          <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;align-items:center">
+            <input type="text" value="${bu.name || ''}" onchange="window._buRows[${idx}].name=this.value" placeholder="BU Name" style="flex:2;padding:6px;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0)">
+            <div style="display:flex;gap:0.3rem;flex:1">
+              <input type="number" value="${bu.beta || 1.5}" onchange="window._buRows[${idx}].beta=Number(this.value)" step="0.1" min="0.5" max="5" style="width:55px;padding:4px;font-size:0.8rem;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0)" title="β">
+              <input type="number" value="${bu.k || 2.5}" onchange="window._buRows[${idx}].k=Number(this.value)" step="0.5" min="0.5" max="10" style="width:55px;padding:4px;font-size:0.8rem;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0)" title="k">
+              <input type="number" value="${bu.avg_fine || 25000}" onchange="window._buRows[${idx}].avg_fine=Number(this.value)" step="5000" min="0" style="width:70px;padding:4px;font-size:0.8rem;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0)" title="Avg Fine">
+            </div>
+            <div style="width:80px">
+              <input type="number" value="${Math.round((bu.revenue_weight || 0) * 100)}" onchange="window._buRows[${idx}].revenue_weight=Number(this.value)/100" min="0" max="100" step="5" style="width:50px;padding:4px;font-size:0.8rem;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0)"><span style="font-size:0.75rem;opacity:0.6"> %</span>
+            </div>
+            ${rows.length > 1 ? `<button onclick="window._buRows.splice(${idx},1);window._renderBUModal()" style="background:#ef4444;color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.75rem">✕</button>` : ''}
+          </div>
+          <div style="font-size:0.7rem;opacity:0.5;margin-bottom:4px">β=${bu.beta || 1.5} · k=${bu.k || 2.5} · Fine=$${(bu.avg_fine || 25000).toLocaleString()} · Weight=${Math.round((bu.revenue_weight || 0) * 100)}%</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">
+            ${cats.map(c => {
+    const isSelected = (bu.categories || []).includes(c);
+    const isUsedElsewhere = !isSelected && assigned.has(c);
+    return `<button onclick="window._toggleBUCat(${idx},'${c.replace(/'/g, "\\'")}')" style="
+                padding:2px 8px;border-radius:12px;font-size:0.7rem;cursor:${isUsedElsewhere ? 'not-allowed' : 'pointer'};border:1px solid;
+                ${isSelected ? 'background:rgba(99,102,241,0.3);border-color:rgba(99,102,241,0.5);color:#818cf8' : isUsedElsewhere ? 'background:rgba(255,255,255,0.02);border-color:rgba(255,255,255,0.05);color:rgba(255,255,255,0.2)' : 'background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.1);color:var(--text-primary,#e2e8f0)'}
+              " ${isUsedElsewhere ? 'disabled title="Assigned to another BU"' : ''}>${c}</button>`;
+  }).join('')}
+          </div>
+        </div>`).join('')}
+
+        <button onclick="window._buRows.push({id:'bu_'+(window._buRows.length+1),name:'Division '+(window._buRows.length+1),categories:[],beta:1.5,k:2.5,avg_fine:25000,revenue_weight:0});window._renderBUModal()" style="width:100%;padding:8px;border:1px dashed rgba(99,102,241,0.3);border-radius:8px;background:transparent;color:#818cf8;cursor:pointer;font-size:0.8rem">+ Add Business Unit</button>
+      </div>
+      <div class="ccs-modal-footer">
+        <button onclick="document.getElementById('ccs-bu-modal').style.display='none'" class="ccs-btn-secondary">Cancel</button>
+        <button onclick="window._clearBUConfig()" class="ccs-btn-secondary" style="color:#ef4444;border-color:rgba(239,68,68,0.3)">Clear All BUs</button>
+        <button onclick="window._saveBUConfig()" class="ccs-btn-primary">Save & Recalculate</button>
+      </div>
+    </div>
+  `;
+};
+
+window._toggleBUCat = function (buIdx, cat) {
+  const bu = window._buRows[buIdx];
+  if (!bu) return;
+  const idx = (bu.categories || []).indexOf(cat);
+  if (idx >= 0) bu.categories.splice(idx, 1);
+  else {
+    if (!bu.categories) bu.categories = [];
+    bu.categories.push(cat);
+  }
+  window._renderBUModal();
+};
+
+window._saveBUConfig = async function () {
+  const API = window.API;
+  // Validate weights sum
+  const totalWeight = window._buRows.reduce((s, b) => s + (b.revenue_weight || 0), 0);
+  if (Math.abs(totalWeight - 1.0) > 0.05) {
+    if (!confirm(`Revenue weights sum to ${Math.round(totalWeight * 100)}% (should be ~100%). Continue anyway?`)) return;
+  }
+  try {
+    await API.patch('/tenant/owner/ccs/bu-config', {
+      business_units: window._buRows,
+      brand_architecture: window._buBrandArch,
+      contagion_factor: window._buContagion,
+      cross_bu_correlation: window._buCorrelation,
+    });
+    document.getElementById('ccs-bu-modal').style.display = 'none';
+    loadCCSData();
+  } catch (e) {
+    alert('Failed to save BU configuration');
+  }
+};
+
+window._clearBUConfig = async function () {
+  if (!confirm('Remove all Business Unit configuration? This will revert to single-industry mode.')) return;
+  const API = window.API;
+  try {
+    await API.patch('/tenant/owner/ccs/bu-config', { business_units: [] });
+    document.getElementById('ccs-bu-modal').style.display = 'none';
+    loadCCSData();
+  } catch (e) {
+    alert('Failed to clear BU configuration');
+  }
 };
 
 // ── Category Exposure Pagination ─────────────────────────────────────────────
