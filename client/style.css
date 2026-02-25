@@ -5842,7 +5842,328 @@ html {
   background: #4338CA;
 }
 
-/* ─── Integrity Score ───────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════ */
+/* EXEC DASHBOARD — LIGHT THEME OVERRIDES  [data-theme="light"]     */
+/* All exec pages: Exposure, Decisions, EV, Reports, Risk, Market   */
+/* ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Page & Header ────────────────────────────────────────────────── */
+[data-theme="light"] .exec-page {
+  background: #F8FAFC;
+  color: #0F172A;
+}
+
+[data-theme="light"] .exec-header h1 {
+  color: #0F172A;
+}
+
+[data-theme="light"] .exec-timestamp {
+  color: #475569;
+}
+
+[data-theme="light"] .exec-section-title {
+  color: #1E293B;
+}
+
+/* ── Cards ────────────────────────────────────────────────────────── */
+[data-theme="light"] .exec-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  border-radius: 12px;
+}
+
+[data-theme="light"] .exec-card h3 {
+  color: #0F172A;
+  font-weight: 700;
+}
+
+/* ── KPI Cards ────────────────────────────────────────────────────── */
+[data-theme="light"] .exec-kpi-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+}
+
+[data-theme="light"] .exec-kpi-card::before {
+  background: linear-gradient(90deg, #4F46E5, #7C3AED, #4F46E5);
+  opacity: 0.8;
+}
+
+[data-theme="light"] .exec-kpi-card:hover {
+  border-color: #C7D2FE;
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.1);
+}
+
+[data-theme="light"] .exec-kpi-value {
+  color: #0F172A;
+}
+
+[data-theme="light"] .exec-kpi-label {
+  color: #475569;
+  font-weight: 600;
+}
+
+[data-theme="light"] .exec-kpi-icon {
+  opacity: 0.8;
+}
+
+/* ── Change Badges ────────────────────────────────────────────────── */
+[data-theme="light"] .exec-change-good {
+  color: #059669;
+  background: #D1FAE5;
+}
+
+[data-theme="light"] .exec-change-bad {
+  color: #DC2626;
+  background: #FEE2E2;
+}
+
+/* ── Trend Values ─────────────────────────────────────────────────── */
+[data-theme="light"] .exec-trend-value {
+  color: #0F172A;
+}
+
+[data-theme="light"] .exec-trend-good {
+  color: #059669;
+}
+
+[data-theme="light"] .exec-trend-warn {
+  color: #D97706;
+}
+
+[data-theme="light"] .exec-trend-spark {
+  color: #4F46E5;
+  opacity: 1;
+}
+
+[data-theme="light"] .exec-trend-sub {
+  color: #475569;
+}
+
+/* ── Executive Alerts ─────────────────────────────────────────────── */
+[data-theme="light"] .exec-alert {
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+}
+
+[data-theme="light"] .exec-alert-critical {
+  background: #FFF5F5;
+}
+
+[data-theme="light"] .exec-alert-high {
+  background: #FFFBEB;
+}
+
+[data-theme="light"] .exec-alert-critical .exec-alert-severity {
+  background: #FEE2E2;
+  color: #B91C1C;
+}
+
+[data-theme="light"] .exec-alert-high .exec-alert-severity {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+[data-theme="light"] .exec-alert-time {
+  color: #64748B;
+}
+
+[data-theme="light"] .exec-alert-title {
+  color: #0F172A;
+  font-weight: 700;
+}
+
+[data-theme="light"] .exec-alert-detail {
+  color: #475569;
+}
+
+/* ── Integrity Score ──────────────────────────────────────────────── */
+[data-theme="light"] .exec-integrity-card {
+  background: linear-gradient(135deg, #EEF2FF, #F0FDF4);
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+}
+
+[data-theme="light"] .exec-score-circle {
+  background: #FFFFFF;
+  border: 3px solid #4F46E5;
+  box-shadow: 0 4px 20px rgba(79, 70, 229, 0.15);
+}
+
+[data-theme="light"] .exec-score-value {
+  color: #4F46E5;
+}
+
+[data-theme="light"] .exec-score-label {
+  color: #475569;
+}
+
+[data-theme="light"] .exec-score-meta h3 {
+  color: #0F172A;
+}
+
+[data-theme="light"] .exec-score-line span:first-child {
+  color: #475569;
+}
+
+[data-theme="light"] .exec-score-bar {
+  background: #E2E8F0;
+}
+
+[data-theme="light"] .exec-score-num {
+  color: #0F172A;
+  font-weight: 700;
+}
+
+/* ── Risk Zones ───────────────────────────────────────────────────── */
+[data-theme="light"] .exec-risk-high {
+  background: #FFF5F5;
+  border-left-color: #EF4444;
+}
+
+[data-theme="light"] .exec-risk-medium {
+  background: #FFFBEB;
+  border-left-color: #F59E0B;
+}
+
+[data-theme="light"] .exec-risk-low {
+  background: #F0FDF4;
+  border-left-color: #10B981;
+}
+
+[data-theme="light"] .exec-risk-zone-header strong {
+  color: #0F172A;
+}
+
+[data-theme="light"] .exec-risk-badge.exec-risk-high {
+  background: #FEE2E2;
+  color: #B91C1C;
+}
+
+[data-theme="light"] .exec-risk-badge.exec-risk-medium {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+[data-theme="light"] .exec-risk-badge.exec-risk-low {
+  background: #D1FAE5;
+  color: #065F46;
+}
+
+[data-theme="light"] .exec-risk-zone-detail {
+  color: #475569;
+}
+
+[data-theme="light"] .exec-product-risk {
+  border-bottom: 1px solid #E2E8F0;
+  color: #0F172A;
+}
+
+/* ── Forecast Cards ───────────────────────────────────────────────── */
+[data-theme="light"] .exec-forecast-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+  border-radius: 12px;
+}
+
+[data-theme="light"] .exec-forecast-label {
+  color: #475569;
+}
+
+[data-theme="light"] .exec-forecast-value {
+  color: #0F172A;
+}
+
+[data-theme="light"] .exec-forecast-detail {
+  color: #64748B;
+}
+
+/* ── Financial Tables ─────────────────────────────────────────────── */
+[data-theme="light"] .exec-finance-row {
+  border-bottom: 1px solid #E2E8F0;
+  color: #0F172A;
+}
+
+[data-theme="light"] .exec-finance-total {
+  border-top: 2px solid #1E40AF;
+  color: #0F172A;
+}
+
+/* ── Big Numbers ──────────────────────────────────────────────────── */
+[data-theme="light"] .exec-big-number {
+  color: #4F46E5;
+}
+
+[data-theme="light"] .exec-big-sub {
+  color: #475569;
+}
+
+/* ── Detection Items ──────────────────────────────────────────────── */
+[data-theme="light"] .exec-detection-item {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+}
+
+[data-theme="light"] .exec-detection-label {
+  color: #475569;
+}
+
+[data-theme="light"] .exec-detection-value {
+  color: #0F172A;
+}
+
+[data-theme="light"] .exec-detection-detail {
+  color: #64748B;
+}
+
+/* ── Inline style overrides (channel/region rows in market.js) ──── */
+[data-theme="light"] .exec-card div[style*="border-bottom:1px solid rgba(255,255,255"] {
+  border-bottom-color: #E2E8F0 !important;
+}
+
+[data-theme="light"] .exec-card strong {
+  color: #0F172A;
+}
+
+/* ── sa-table inside exec pages (reports.js) ──────────────────────── */
+[data-theme="light"] .exec-page .sa-table th {
+  background: #1E40AF;
+  color: #FFFFFF;
+  border-bottom: none;
+}
+
+[data-theme="light"] .exec-page .sa-table td {
+  color: #1E293B;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+[data-theme="light"] .exec-page .sa-table td strong {
+  color: #0F172A;
+}
+
+[data-theme="light"] .exec-page .sa-table tbody tr:nth-child(even) td {
+  background: #F8FAFC;
+}
+
+[data-theme="light"] .exec-page .sa-table tbody tr:hover td {
+  background: #EEF2FF;
+}
+
+/* ── Trust Report specifics ───────────────────────────────────────── */
+[data-theme="light"] .exec-page .tr-metric {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+}
+
+[data-theme="light"] .exec-page .tr-cat-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+}
+
+
 .exec-integrity-card {
   background: linear-gradient(135deg, rgba(30, 27, 75, 0.5), rgba(15, 23, 42, 0.8));
   border: 1px solid rgba(99, 102, 241, 0.15);
