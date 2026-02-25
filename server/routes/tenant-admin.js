@@ -2715,5 +2715,131 @@ router.get('/owner/ccs/trust-report', requireExecutiveAccess(), async (req, res)
     }
 });
 
+// CCS: SCM Capital Summary — Supply Chain → Capital-at-Risk abstraction
+// ═══════════════════════════════════════════════════════════════════════════════
+router.get('/owner/ccs/scm-summary', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [chainStats, partnerRisk, geoExposure, breaches, inventoryStats, recentEvents] = await Promise.all([
+            // Supply chain event integrity
+            db.get(`SELECT COUNT(*) as total_events,
+                    COUNT(*) FILTER (WHERE blockchain_seal_id IS NOT NULL) as sealed_events,
+                    COUNT(DISTINCT product_id) as products_tracked,
+                    COUNT(DISTINCT partner_id) as partners_involved,
+                    COUNT(DISTINCT batch_id) as batches_tracked
+                    FROM supply_chain_events
+                    WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+            // Partner trust composition
+            db.all(`SELECT p.type as channel,
+                    COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE p.kyc_status = 'verified') as verified,
+                    COUNT(*) FILTER (WHERE p.risk_level = 'high') as high_risk,
+                    ROUND(AVG(p.trust_score)::numeric, 1) as avg_trust
+                    FROM partners p WHERE p.org_id = $1 AND p.status = 'active'
+                    GROUP BY p.type ORDER BY total DESC`, [tid]),
+            // Geographic exposure (supply chain events by location)
+            db.all(`SELECT sce.location as region,
+                    COUNT(*) as events,
+                    COUNT(*) FILTER (WHERE sce.blockchain_seal_id IS NOT NULL) as sealed,
+                    COUNT(DISTINCT sce.product_id) as products
+                    FROM supply_chain_events sce
+                    WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)
+                    AND sce.location IS NOT NULL AND sce.location != ''
+                    GROUP BY sce.location ORDER BY events DESC LIMIT 10`, [tid]),
+            // Integrity breaches (anomalies tied to supply chain)
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE severity = 'critical') as critical,
+                    COUNT(*) FILTER (WHERE severity = 'high') as high,
+                    COUNT(*) FILTER (WHERE status = 'resolved') as resolved
+                    FROM anomaly_detections
+                    WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+            // Inventory traceability
+            db.get(`SELECT COUNT(*) as total_products,
+                    COUNT(*) FILTER (WHERE id IN (
+                        SELECT DISTINCT product_id FROM supply_chain_events
+                        WHERE product_id IS NOT NULL AND blockchain_seal_id IS NOT NULL
+                    )) as traceable_products
+                    FROM products WHERE org_id = $1 AND status = 'active'`, [tid]),
+            // Recent supply chain events (last 5)
+            db.all(`SELECT sce.event_type, sce.location, sce.created_at,
+                    p.name as product_name,
+                    CASE WHEN sce.blockchain_seal_id IS NOT NULL THEN true ELSE false END as is_sealed
+                    FROM supply_chain_events sce
+                    LEFT JOIN products p ON sce.product_id = p.id
+                    WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)
+                    ORDER BY sce.created_at DESC LIMIT 5`, [tid]),
+        ]);
+
+        const totalEvents = Number(chainStats?.total_events || 0);
+        const sealedEvents = Number(chainStats?.sealed_events || 0);
+        const integrityIndex = totalEvents > 0 ? Math.round(100 * sealedEvents / totalEvents) : 0;
+        const totalProducts = Number(inventoryStats?.total_products || 0);
+        const traceableProducts = Number(inventoryStats?.traceable_products || 0);
+        const traceabilityPct = totalProducts > 0 ? Math.round(100 * traceableProducts / totalProducts) : 0;
+        const totalBreaches = Number(breaches?.total || 0);
+        const criticalBreaches = Number(breaches?.critical || 0);
+        const resolvedBreaches = Number(breaches?.resolved || 0);
+
+        // Loss estimate: critical breach × $50k avg, high × $15k, unresolved × $25k penalty
+        const unresolvedBreaches = totalBreaches - resolvedBreaches;
+        const estimatedLoss = (criticalBreaches * 50000) + (Number(breaches?.high || 0) * 15000) + (unresolvedBreaches * 25000);
+
+        // Supply Chain Risk Score (0-100, higher = safer)
+        const sealScore = integrityIndex; // 0-100
+        const traceScore = traceabilityPct; // 0-100
+        const breachScore = totalBreaches > 0 ? Math.max(0, 100 - (criticalBreaches * 20) - (Number(breaches?.high || 0) * 10)) : 100;
+        const partnerScore = partnerRisk.length > 0
+            ? Math.round(partnerRisk.reduce((s, p) => s + Number(p.avg_trust || 0), 0) / partnerRisk.length)
+            : 50;
+        const scRiskScore = Math.round(sealScore * 0.3 + traceScore * 0.25 + breachScore * 0.25 + partnerScore * 0.2);
+
+        res.json({
+            risk_score: scRiskScore,
+            integrity_index: integrityIndex,
+            traceability_pct: traceabilityPct,
+            total_events: totalEvents,
+            sealed_events: sealedEvents,
+            products_tracked: Number(chainStats?.products_tracked || 0),
+            partners_involved: Number(chainStats?.partners_involved || 0),
+            batches_tracked: Number(chainStats?.batches_tracked || 0),
+            total_products: totalProducts,
+            traceable_products: traceableProducts,
+            breaches: {
+                total: totalBreaches,
+                critical: criticalBreaches,
+                high: Number(breaches?.high || 0),
+                resolved: resolvedBreaches,
+                unresolved: unresolvedBreaches,
+                estimated_loss: estimatedLoss,
+            },
+            partner_risk: partnerRisk.map(p => ({
+                channel: p.channel || 'Unknown',
+                total: Number(p.total),
+                verified: Number(p.verified),
+                high_risk: Number(p.high_risk),
+                avg_trust: Number(p.avg_trust || 0),
+            })),
+            geographic_exposure: geoExposure.map(g => ({
+                region: g.region,
+                events: Number(g.events),
+                sealed: Number(g.sealed),
+                products: Number(g.products),
+                integrity_pct: Number(g.events) > 0 ? Math.round(100 * Number(g.sealed) / Number(g.events)) : 0,
+            })),
+            recent_events: recentEvents.map(e => ({
+                type: e.event_type,
+                location: e.location,
+                product: e.product_name,
+                sealed: e.is_sealed,
+                timestamp: e.created_at,
+            })),
+        });
+    } catch (err) {
+        console.error('[CCS] SCM Summary error:', err);
+        res.status(500).json({ error: 'Failed to load SCM summary' });
+    }
+});
+
 module.exports = router;
 
