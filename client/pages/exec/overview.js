@@ -99,16 +99,30 @@ function renderCCS() {
       <button onclick="document.getElementById('ccs-fin-modal').style.display='flex'" class="ccs-config-btn" style="background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.3)">${icon('edit', 14)} Edit</button>
     </div>`}
 
-    <!-- LAYER 1: Capital Exposure Radar -->
+    <!-- LAYER 1: Capital Exposure Radar (ERQF) -->
     <section class="exec-section">
-      <h2 class="exec-section-title">${icon('target', 20)} Capital Exposure Radar</h2>
+      <h2 class="exec-section-title">${icon('target', 20)} Capital Exposure Radar <span style="font-size:0.65rem;opacity:0.6;font-weight:400">ERQF Engine</span></h2>
       <div class="ccs-kpi-row">
-        ${exposureCard('Total Capital at Risk', fmtMoney(exposure.total_capital_at_risk), 'Total estimated exposure', exposure.total_capital_at_risk > 0 ? 'red' : 'green')}
-        ${exposureCard('Revenue at Risk', fmtMoney(exposure.revenue_at_risk), `${exposure.fraud_exposure_rate || 0}% fraud rate`, exposure.fraud_exposure_rate > 5 ? 'red' : exposure.fraud_exposure_rate > 1 ? 'orange' : 'green')}
-        ${exposureCard('Brand Value at Risk', fmtMoney(exposure.brand_value_at_risk), `Trust: ${scans.avg_trust || 0}`, exposure.brand_value_at_risk > 0 ? 'orange' : 'green')}
-        ${exposureCard('Compliance Risk', `${exposure.compliance_risk_pct || 0}%`, `${compliance.compliant || 0}/${compliance.total || 0} compliant`, exposure.compliance_risk_pct > 30 ? 'red' : exposure.compliance_risk_pct > 10 ? 'orange' : 'green')}
-        ${exposureCard('Supply Chain Index', (exposure.supply_chain_risk_index || 0).toFixed(3), `${exp.supply_chain?.events || 0} events tracked`, exposure.supply_chain_risk_index > 0.3 ? 'red' : 'green')}
+        ${exposureCard('Total Capital at Risk', fmtMoney(exposure.total_capital_at_risk), 'ERL + EBI + RFE − Diversification', exposure.total_capital_at_risk > 0 ? 'red' : 'green')}
+        ${exposureCard('Expected Revenue Loss', fmtMoney(exposure.expected_revenue_loss), `P(Fraud): ${exposure.fraud_probability || 0}% · Coverage: ${exposure.coverage_ratio || 100}%`, exposure.expected_revenue_loss > 0 ? 'orange' : 'green')}
+        ${exposureCard('Expected Brand Impact', fmtMoney(exposure.expected_brand_impact), `BRF: ${exposure.brand_risk_factor || 0} · Escalation: ${((exposure.incident_escalation || 0) * 100).toFixed(1)}%`, exposure.expected_brand_impact > 0 ? 'orange' : 'green')}
+        ${exposureCard('Regulatory Exposure', fmtMoney(exposure.regulatory_exposure), `WCRS: ${exposure.compliance_wcrs || 0} · ${compliance.compliant || 0}/${compliance.total || 0}`, exposure.regulatory_exposure > 0 ? 'red' : 'green')}
+        ${exposureCard('Supply Chain SCRI', (exposure.supply_chain_scri || 0).toFixed(3), `${exp.supply_chain?.events || 0} events · ${exp.supply_chain?.scri > 0.3 ? 'High Risk' : 'Normal'}`, exposure.supply_chain_scri > 0.3 ? 'red' : 'green')}
       </div>
+
+      <!-- ERQF Scenario Table -->
+      ${exp.scenarios ? `
+      <div class="exec-card" style="margin-top:0.75rem">
+        <h3>${icon('barChart', 18)} Scenario Analysis (ERQF)</h3>
+        <table class="ccs-table" style="font-size:0.78rem">
+          <thead><tr><th>Scenario</th><th>Exp. Revenue Loss</th><th>Exp. Brand Impact</th><th>Regulatory</th><th style="font-weight:700">Total Capital at Risk</th></tr></thead>
+          <tbody>
+            <tr style="color:#22c55e"><td>🟢 Best Case</td><td>${fmtMoney(exp.scenarios.best?.erl)}</td><td>${fmtMoney(exp.scenarios.best?.ebi)}</td><td>${fmtMoney(exp.scenarios.best?.rfe)}</td><td><strong>${fmtMoney(exp.scenarios.best?.tcar)}</strong></td></tr>
+            <tr><td>🔵 Base Case</td><td>${fmtMoney(exp.scenarios.base?.erl)}</td><td>${fmtMoney(exp.scenarios.base?.ebi)}</td><td>${fmtMoney(exp.scenarios.base?.rfe)}</td><td><strong>${fmtMoney(exp.scenarios.base?.tcar)}</strong></td></tr>
+            <tr style="color:#ef4444"><td>🔴 Stress Test</td><td>${fmtMoney(exp.scenarios.stress?.erl)}</td><td>${fmtMoney(exp.scenarios.stress?.ebi)}</td><td>${fmtMoney(exp.scenarios.stress?.rfe)}</td><td><strong>${fmtMoney(exp.scenarios.stress?.tcar)}</strong></td></tr>
+          </tbody>
+        </table>
+      </div>` : ''}
       
       <div class="exec-grid-2" style="margin-top:1rem">
         <!-- Scan Integrity -->
@@ -319,15 +333,32 @@ function renderCCS() {
           <h3>${icon('settings', 20)} Financial Configuration</h3>
           <button onclick="document.getElementById('ccs-fin-modal').style.display='none'" class="ccs-modal-close">&times;</button>
         </div>
-        <div class="ccs-modal-body">
+        <div class="ccs-modal-body" style="max-height:60vh;overflow-y:auto">
+          <div style="font-size:0.7rem;opacity:0.6;margin-bottom:0.75rem;text-transform:uppercase;letter-spacing:1px">Core Financial Inputs</div>
           <label>Annual Revenue (USD)</label>
-          <input type="number" id="ccs-fin-revenue" value="${fin.annual_revenue || ''}" placeholder="e.g. 12000000">
+          <input type="number" id="ccs-fin-revenue" value="${fin.annual_revenue || ''}" placeholder="e.g. 50000000">
           <label>EBITDA (USD)</label>
-          <input type="number" id="ccs-fin-ebitda" value="${fin.ebitda || ''}" placeholder="e.g. 2400000">
+          <input type="number" id="ccs-fin-ebitda" value="${fin.ebitda || ''}" placeholder="e.g. 10000000">
           <label>EV Multiple</label>
-          <input type="number" id="ccs-fin-multiple" value="${fin.base_multiple || 8}" step="0.5" placeholder="e.g. 8.5">
+          <input type="number" id="ccs-fin-multiple" value="${fin.base_multiple || 8}" step="0.5" placeholder="e.g. 10">
           <label>Brand Value Estimate (USD)</label>
-          <input type="number" id="ccs-fin-brand" value="${fin.brand_value || ''}" placeholder="e.g. 5000000">
+          <input type="number" id="ccs-fin-brand" value="${fin.brand_value || ''}" placeholder="e.g. 15000000">
+
+          <div style="font-size:0.7rem;opacity:0.6;margin:1rem 0 0.75rem;text-transform:uppercase;letter-spacing:1px;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.75rem">ERQF Risk Parameters</div>
+          <label>Industry Type</label>
+          <select id="ccs-fin-industry" style="padding:8px;border-radius:6px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0);font-size:0.85rem">
+            <option value="pharmaceutical" ${(fin.industry_type || 'pharmaceutical') === 'pharmaceutical' ? 'selected' : ''}>Pharmaceutical (β=1.8)</option>
+            <option value="luxury" ${fin.industry_type === 'luxury' ? 'selected' : ''}>Luxury (β=2.5)</option>
+            <option value="fmcg" ${fin.industry_type === 'fmcg' ? 'selected' : ''}>FMCG (β=1.2)</option>
+            <option value="electronics" ${fin.industry_type === 'electronics' ? 'selected' : ''}>Electronics (β=1.5)</option>
+            <option value="automotive" ${fin.industry_type === 'automotive' ? 'selected' : ''}>Automotive (β=2.0)</option>
+          </select>
+          <label>Estimated Units Sold (YTD)</label>
+          <input type="number" id="ccs-fin-units" value="${fin.estimated_units_ytd || ''}" placeholder="e.g. 500000 · Leave blank for auto">
+          <label>Manual Cost per Check (USD)</label>
+          <input type="number" id="ccs-fin-manual-cost" value="${fin.manual_cost_per_check || 5}" step="0.5" placeholder="e.g. 5">
+          <label>Fraud Recovery Rate (0-1)</label>
+          <input type="number" id="ccs-fin-recovery" value="${fin.recovery_rate || 0.2}" step="0.05" min="0" max="1" placeholder="e.g. 0.2">
         </div>
         <div class="ccs-modal-footer">
           <button onclick="document.getElementById('ccs-fin-modal').style.display='none'" class="ccs-btn-secondary">Cancel</button>
@@ -345,6 +376,10 @@ window.saveCCSFinancials = async function () {
     ebitda: Number(document.getElementById('ccs-fin-ebitda')?.value || 0),
     ev_multiple: Number(document.getElementById('ccs-fin-multiple')?.value || 8),
     brand_value_estimate: Number(document.getElementById('ccs-fin-brand')?.value || 0),
+    industry_type: document.getElementById('ccs-fin-industry')?.value || 'pharmaceutical',
+    estimated_units_ytd: Number(document.getElementById('ccs-fin-units')?.value || 0),
+    manual_cost_per_check: Number(document.getElementById('ccs-fin-manual-cost')?.value || 5),
+    recovery_rate: Number(document.getElementById('ccs-fin-recovery')?.value || 0.2),
   };
   try {
     await API.patch('/tenant/owner/org-financials', body);

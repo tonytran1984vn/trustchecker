@@ -1452,28 +1452,100 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         const cr = compRecords || {};
         const fin = orgInfo?.settings?.financials || {};
 
-        // Capital exposure calculations
-        const annualRevenue = fin.annual_revenue || 0;
-        const brandValue = fin.brand_value_estimate || 0;
+        // ═══ ERQF: Enterprise Risk Quantification Framework ═══
+        const annualRevenue = Number(fin.annual_revenue) || 0;
+        const brandValue = Number(fin.brand_value_estimate) || 0;
         const totalScans = parseInt(s30.total) || 0;
-        const flaggedScans = (parseInt(s30.suspicious) || 0) + (parseInt(s30.counterfeit) || 0);
-        const fraudRate = totalScans > 0 ? flaggedScans / totalScans : 0;
+        const suspicious30 = parseInt(s30.suspicious) || 0;
+        const counterfeit30 = parseInt(s30.counterfeit) || 0;
+        const authentic30 = parseInt(s30.authentic) || 0;
         const prevFlagged = parseInt(sPrev.flagged) || 0;
         const prevTotal = parseInt(sPrev.total) || 1;
+
+        // Industry presets
+        const industryPresets = {
+            pharmaceutical: { beta: 1.8, avgFine: 50000, k: 3.0 },
+            luxury: { beta: 2.5, avgFine: 30000, k: 4.0 },
+            fmcg: { beta: 1.2, avgFine: 15000, k: 2.0 },
+            electronics: { beta: 1.5, avgFine: 25000, k: 2.5 },
+            automotive: { beta: 2.0, avgFine: 40000, k: 3.5 },
+        };
+        const industry = fin.industry_type || 'pharmaceutical';
+        const preset = industryPresets[industry] || industryPresets.pharmaceutical;
+
+        // ── 1. FRAUD PROBABILITY MODEL ──
+        // P(Fraud) = (confirmed + suspicious × confirmationRate) / total
+        const faTotal = parseInt(fa.total) || 0;
+        const faCritical = parseInt(fa.critical) || 0;
+        const faHigh = parseInt(fa.high) || 0;
+        const confirmedProxy = faCritical + faHigh; // Critical+High as confirmed fraud proxy
+        const confirmationRate = faTotal > 0 ? Math.min(confirmedProxy / faTotal, 1) : 0.3;
+        const pFraud = totalScans > 0
+            ? (counterfeit30 + suspicious30 * confirmationRate) / totalScans
+            : 0;
+
+        // ── 2. EXPECTED REVENUE LOSS (ERL) ──
+        const estimatedUnits = Number(fin.estimated_units_ytd) || 0;
+        const coverageRatio = estimatedUnits > 0 ? Math.min(totalScans / (estimatedUnits / 12), 1) : 1;
+        const recoveryRate = Number(fin.recovery_rate) || 0.2;
+        const severity = 1 - recoveryRate;
+        const revenueCovered = annualRevenue * coverageRatio;
+        const ERL = Math.round(revenueCovered * pFraud * severity);
+
+        // ── 3. EXPECTED BRAND IMPACT (EBI) ──
+        const trustScore = Math.min(parseFloat(s30.avg_trust) || 90, 100);
+        const brandRiskFactor = Math.pow(1 - trustScore / 100, preset.beta);
+        const incidentEscalation = 1 - Math.exp(-preset.k * pFraud);
+        const EBI = Math.round(brandValue * brandRiskFactor * incidentEscalation);
+
+        // ── 4. WEIGHTED COMPLIANCE RISK SCORE (WCRS) + RFE ──
+        const crTotal = parseInt(cr.total) || 0;
+        const crNonCompliant = parseInt(cr.non_compliant) || 0;
+        const crPartial = parseInt(cr.partial) || 0;
+        const WCRS = crTotal > 0 ? (crNonCompliant * 1.0 + crPartial * 0.5) / crTotal : 0;
+        const enforcementProbability = WCRS > 0.3 ? 0.6 : WCRS > 0.15 ? 0.3 : 0.1;
+        const RFE = Math.round(WCRS * preset.avgFine * enforcementProbability * crNonCompliant);
+
+        // ── 5. SUPPLY CHAIN RISK INDEX (SCRI) ──
+        const avgFraudScore = parseFloat(s30.avg_fraud) || 0;
+        const geoRiskList = (geoBreakdown || []);
+        const maxGeoFraud = geoRiskList.length > 0
+            ? Math.max(...geoRiskList.map(g => parseFloat(g.avg_fraud) || 0))
+            : 0;
         const prevFraudRate = prevTotal > 0 ? prevFlagged / prevTotal : 0;
+        const currentFraudRate = totalScans > 0 ? (suspicious30 + counterfeit30) / totalScans : 0;
+        const volatility = Math.abs(currentFraudRate - prevFraudRate);
+        const SCRI = Math.round((
+            0.35 * pFraud +
+            0.25 * WCRS +
+            0.20 * Math.min(maxGeoFraud, 1) +
+            0.20 * Math.min(volatility * 10, 1)
+        ) * 1000) / 1000;
 
-        // Risk dimensions ($)
-        const revenueAtRisk = Math.round(annualRevenue * fraudRate);
-        const trustRatio = Math.min((parseFloat(s30.avg_trust) || 90) / 100, 1); // Convert 0-100 to 0-1
-        const brandAtRisk = Math.round(brandValue * (1 - trustRatio));
-        const complianceRiskPct = cr.total > 0 ? (parseInt(cr.non_compliant || 0)) / parseInt(cr.total) : 0;
-        const supplyChainRiskIndex = parseFloat(s30.avg_fraud) || 0;
+        // ── 6. TOTAL CAPITAL AT RISK (TCAR) ──
+        const diversification = Math.round(0.3 * Math.min(ERL, EBI));
+        const TCAR = ERL + EBI + RFE - diversification;
 
-        // Total exposure
-        const totalExposure = revenueAtRisk + brandAtRisk;
+        // ── 7. SCENARIO MODELING ──
+        function calcScenario(fraudMult, betaMult, enfMult) {
+            const sPFraud = pFraud * fraudMult;
+            const sERL = Math.round(revenueCovered * sPFraud * severity);
+            const sBRF = Math.pow(1 - trustScore / 100, preset.beta * betaMult);
+            const sIE = 1 - Math.exp(-preset.k * sPFraud);
+            const sEBI = Math.round(brandValue * sBRF * sIE);
+            const sEnf = Math.min(enforcementProbability * enfMult, 1);
+            const sRFE = Math.round(WCRS * preset.avgFine * sEnf * crNonCompliant);
+            const sDiv = Math.round(0.3 * Math.min(sERL, sEBI));
+            return { erl: sERL, ebi: sEBI, rfe: sRFE, tcar: sERL + sEBI + sRFE - sDiv };
+        }
+        const scenarios = {
+            best: calcScenario(0.5, 0.8, 0.5),
+            base: { erl: ERL, ebi: EBI, rfe: RFE, tcar: TCAR },
+            stress: calcScenario(2.0, 1.5, 2.0),
+        };
 
-        // Geo risk map
-        const geoRisk = (geoBreakdown || []).map(g => ({
+        // ── GEO RISK MAP ──
+        const geoRisk = geoRiskList.map(g => ({
             country: g.geo_country,
             scans: parseInt(g.scans),
             flagged: parseInt(g.flagged),
@@ -1484,13 +1556,19 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
 
         res.json({
             exposure: {
-                total_capital_at_risk: totalExposure,
-                revenue_at_risk: revenueAtRisk,
-                brand_value_at_risk: brandAtRisk,
-                compliance_risk_pct: Math.round(complianceRiskPct * 100),
-                supply_chain_risk_index: supplyChainRiskIndex,
-                fraud_exposure_rate: Math.round(fraudRate * 10000) / 100,
+                total_capital_at_risk: TCAR,
+                expected_revenue_loss: ERL,
+                expected_brand_impact: EBI,
+                regulatory_exposure: RFE,
+                diversification_adj: diversification,
+                fraud_probability: Math.round(pFraud * 10000) / 100,
+                coverage_ratio: Math.round(coverageRatio * 100),
+                compliance_wcrs: Math.round(WCRS * 1000) / 1000,
+                supply_chain_scri: SCRI,
+                brand_risk_factor: Math.round(brandRiskFactor * 10000) / 10000,
+                incident_escalation: Math.round(incidentEscalation * 10000) / 10000,
             },
+            scenarios,
             products: {
                 total: parseInt(productStats?.total) || 0,
                 active: parseInt(productStats?.active) || 0,
@@ -1498,28 +1576,30 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             },
             scans_30d: {
                 total: totalScans,
-                authentic: parseInt(s30.authentic) || 0,
-                suspicious: parseInt(s30.suspicious) || 0,
-                counterfeit: parseInt(s30.counterfeit) || 0,
+                authentic: authentic30,
+                suspicious: suspicious30,
+                counterfeit: counterfeit30,
                 avg_trust: parseFloat(s30.avg_trust) || 0,
                 avg_fraud: parseFloat(s30.avg_fraud) || 0,
                 trend: prevTotal > 0 ? Math.round(((totalScans - prevTotal) / prevTotal) * 100) : 0,
-                fraud_trend: Math.round((fraudRate - prevFraudRate) * 10000) / 100,
+                fraud_trend: Math.round((currentFraudRate - prevFraudRate) * 10000) / 100,
             },
             fraud: {
-                total: parseInt(fa.total) || 0,
+                total: faTotal,
                 open: parseInt(fa.open) || 0,
-                critical: parseInt(fa.critical) || 0,
-                high: parseInt(fa.high) || 0,
+                critical: faCritical,
+                high: faHigh,
+                confirmation_rate: Math.round(confirmationRate * 100),
             },
             compliance: {
-                total: parseInt(cr.total) || 0,
+                total: crTotal,
                 compliant: parseInt(cr.compliant) || 0,
-                partial: parseInt(cr.partial) || 0,
-                non_compliant: parseInt(cr.non_compliant) || 0,
-                score: cr.total > 0 ? Math.round((parseInt(cr.compliant) / parseInt(cr.total)) * 100) : 0,
+                partial: crPartial,
+                non_compliant: crNonCompliant,
+                score: crTotal > 0 ? Math.round((parseInt(cr.compliant) / crTotal) * 100) : 0,
+                wcrs: Math.round(WCRS * 1000) / 1000,
             },
-            supply_chain: { events: parseInt(supplyEvents?.total) || 0 },
+            supply_chain: { events: parseInt(supplyEvents?.total) || 0, scri: SCRI },
             geo_risk: geoRisk,
             category_exposure: (categoryBreakdown || []).map(c => ({
                 category: c.category,
@@ -1531,6 +1611,8 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             financial_config: {
                 annual_revenue: annualRevenue,
                 brand_value: brandValue,
+                industry_type: industry,
+                recovery_rate: recoveryRate,
                 configured: annualRevenue > 0,
             },
         });
@@ -1762,20 +1844,29 @@ router.get('/owner/ccs/valuation', requireExecutiveAccess(), async (req, res) =>
 router.patch('/owner/org-financials', requireExecutiveAccess(), async (req, res) => {
     try {
         const tid = req.tenantId;
-        const { annual_revenue, ebitda, ev_multiple, brand_value_estimate, risk_tolerance } = req.body;
+        const {
+            annual_revenue, ebitda, ev_multiple, brand_value_estimate, risk_tolerance,
+            industry_type, estimated_units_ytd, manual_cost_per_check, recovery_rate
+        } = req.body;
 
         // Get current settings
         const org = await db.get(`SELECT settings FROM organizations WHERE id = $1`, [tid]);
         const settings = org?.settings || {};
+        const prev = settings.financials || {};
 
-        // Merge financials
+        // Merge financials (including ERQF fields)
         settings.financials = {
-            ...(settings.financials || {}),
-            annual_revenue: annual_revenue !== undefined ? Number(annual_revenue) : (settings.financials?.annual_revenue || 0),
-            ebitda: ebitda !== undefined ? Number(ebitda) : (settings.financials?.ebitda || 0),
-            ev_multiple: ev_multiple !== undefined ? Number(ev_multiple) : (settings.financials?.ev_multiple || 8),
-            brand_value_estimate: brand_value_estimate !== undefined ? Number(brand_value_estimate) : (settings.financials?.brand_value_estimate || 0),
-            risk_tolerance: risk_tolerance || settings.financials?.risk_tolerance || 'moderate',
+            ...prev,
+            annual_revenue: annual_revenue !== undefined ? Number(annual_revenue) : (prev.annual_revenue || 0),
+            ebitda: ebitda !== undefined ? Number(ebitda) : (prev.ebitda || 0),
+            ev_multiple: ev_multiple !== undefined ? Number(ev_multiple) : (prev.ev_multiple || 8),
+            brand_value_estimate: brand_value_estimate !== undefined ? Number(brand_value_estimate) : (prev.brand_value_estimate || 0),
+            risk_tolerance: risk_tolerance || prev.risk_tolerance || 'moderate',
+            // ERQF fields
+            industry_type: industry_type || prev.industry_type || 'pharmaceutical',
+            estimated_units_ytd: estimated_units_ytd !== undefined ? Number(estimated_units_ytd) : (prev.estimated_units_ytd || 0),
+            manual_cost_per_check: manual_cost_per_check !== undefined ? Number(manual_cost_per_check) : (prev.manual_cost_per_check || 5),
+            recovery_rate: recovery_rate !== undefined ? Number(recovery_rate) : (prev.recovery_rate || 0.2),
             updated_at: new Date().toISOString(),
             updated_by: req.user.id,
         };
@@ -1954,32 +2045,83 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
             platformCost = planTierCosts[orgPlan] || 0;
         }
 
-        // Financial impact calculations (per-unit based)
-        const estimatedFraudLoss = Math.round((counterfeit + suspicious * 0.3) * valuePerUnit);
+        // ═══ ERQF: Financial Performance Model ═══
+        const recoveryRate = Number(fin.recovery_rate) || 0.2;
+        const manualCostPerCheck = Number(fin.manual_cost_per_check) || 5;
+
+        // True Fraud Loss (TFL) = counterfeit × value × severity
+        const TFL = Math.round(counterfeit * valuePerUnit * (1 - recoveryRate));
+
+        // Estimated Fraud Exposure (includes suspicious weighted)
+        const faTotal = Number(fraudStats?.total_alerts) || 0;
+        const faCritHigh = (Number(fraudStats?.critical) || 0) + (Number(fraudStats?.resolved) || 0);
+        const confirmRate = faTotal > 0 ? Math.min(faCritHigh / faTotal, 1) : 0.3;
+        const estimatedFraudLoss = Math.round((counterfeit + suspicious * confirmRate) * valuePerUnit * (1 - recoveryRate));
+
+        // Revenue protected
         const revenueProtected = Math.min(Math.round(authentic * valuePerUnit), annualRevenue || authentic * valuePerUnit);
-        // Savings = INCREMENTAL value over manual processes
-        // TrustChecker improves fraud detection by ~15% vs manual inspection
-        const savingsFraudAvoided = Math.round(estimatedFraudLoss * 0.15); // 15% incremental detection improvement
-        const savingsAudit = Math.round(totalScans * 2); // $2/scan automation savings
-        const totalSavings = savingsFraudAvoided + savingsAudit;
-        const roi = platformCost > 0 ? Math.round(totalSavings / platformCost * 100) / 100 : 0;
+
+        // Incremental Detection Value (IDV)
+        // Baseline manual detection rate ~60%, AI improves to ~85% → 25% improvement
+        const baselineDetectionRate = 0.60;
+        const aiDetectionRate = 0.85;
+        const IDV = Math.round(TFL * (aiDetectionRate - baselineDetectionRate));
+
+        // Audit Cost Savings (ACS)
+        const automationRate = 0.80; // 80% of checks automated
+        const ACS = Math.round(manualCostPerCheck * automationRate * totalScans);
+
+        // Reduced Penalty Risk
+        const industry = fin.industry_type || 'pharmaceutical';
+        const avgFine = { pharmaceutical: 50000, luxury: 30000, fmcg: 15000, electronics: 25000, automotive: 40000 }[industry] || 25000;
+        const reducedPenalty = Math.round(avgFine * 0.15); // Platform reduces penalty risk by ~15%
+
+        // Total Economic Benefit (TEB)
+        const TEB = IDV + ACS + reducedPenalty;
+
+        // Risk-Adjusted ROI (RAROI)
+        const falsePositiveCost = Math.round(suspicious * 5); // $5/investigation
+        const investigationCost = Math.round(Number(fraudStats?.total_alerts || 0) * 50); // $50/case
+        const totalCost = platformCost + falsePositiveCost + investigationCost;
+        const RAROI = totalCost > 0 ? Math.round(TEB / totalCost * 100) / 100 : 0;
         const costPerVerification = totalScans > 0 ? Math.round(platformCost / totalScans * 1000) / 1000 : 0;
+
+        // Scenario modeling
+        function perfScenario(fraudMult) {
+            const sTFL = Math.round(counterfeit * fraudMult * valuePerUnit * (1 - recoveryRate));
+            const sIDV = Math.round(sTFL * (aiDetectionRate - baselineDetectionRate));
+            const sTEB = sIDV + ACS + reducedPenalty;
+            return { tfl: sTFL, idv: sIDV, teb: sTEB, raroi: totalCost > 0 ? Math.round(sTEB / totalCost * 100) / 100 : 0 };
+        }
 
         res.json({
             financial_impact: {
-                estimated_fraud_loss: estimatedFraudLoss,
+                true_fraud_loss: TFL,
+                estimated_fraud_exposure: estimatedFraudLoss,
                 revenue_protected: revenueProtected,
-                system_roi: roi,
+                system_roi: RAROI,
                 cost_per_verification: costPerVerification,
             },
             savings: {
-                fraud_avoided: savingsFraudAvoided,
-                audit_automation: savingsAudit,
-                total: totalSavings,
+                incremental_detection: IDV,
+                audit_automation: ACS,
+                reduced_penalty: reducedPenalty,
+                total_economic_benefit: TEB,
+            },
+            costs: {
+                platform_cost: platformCost,
+                false_positive_cost: falsePositiveCost,
+                investigation_cost: investigationCost,
+                total_cost: totalCost,
             },
             investment: {
                 platform_cost: platformCost,
                 total_scans_ytd: totalScans,
+            },
+            scenarios: {
+                best: perfScenario(0.5),
+                base: { tfl: TFL, idv: IDV, teb: TEB, raroi: RAROI },
+                stress: perfScenario(2.0),
             },
             performance: {
                 avg_speed_ms: Number(scanSpeed?.avg_ms || 0),
