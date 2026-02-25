@@ -1527,10 +1527,14 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         const TCAR = ERL + EBI + RFE - diversification;
 
         // ── 7. SCENARIO MODELING ──
-        function calcScenario(fraudMult, absBeta, enfMult) {
+        // ERQF Reference: Best=-20% fraud, Stress=+50% fraud
+        // β stays constant (industry property), trust level varies per scenario
+        // (varying β with high trust causes counterintuitive EBI reversal)
+        function calcScenario(fraudMult, trustDelta, enfMult) {
             const sPFraud = pFraud * fraudMult;
             const sERL = Math.round(revenueCovered * sPFraud * severity);
-            const sBRF = Math.pow(1 - trustScore / 100, absBeta);
+            const sTrust = Math.max(0, Math.min(100, trustScore + trustDelta));
+            const sBRF = Math.pow(1 - sTrust / 100, preset.beta);
             const sIE = 1 - Math.exp(-preset.k * sPFraud);
             const sEBI = Math.round(brandValue * sBRF * sIE);
             const sEnf = Math.min(enforcementProbability * enfMult, 1);
@@ -1539,9 +1543,9 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             return { erl: sERL, ebi: sEBI, rfe: sRFE, tcar: sERL + sEBI + sRFE - sDiv };
         }
         const scenarios = {
-            best: calcScenario(0.8, 1.2, 0.5),     // ERQF: -20% fraud, β=1.2, low enforcement
+            best: calcScenario(0.8, +3, 0.5),      // ERQF: -20% fraud, trust+3%, low enforcement
             base: { erl: ERL, ebi: EBI, rfe: RFE, tcar: TCAR },
-            stress: calcScenario(1.5, 2.5, 2.0),   // ERQF: +50% fraud, β=2.5, high enforcement
+            stress: calcScenario(1.5, -10, 2.0),    // ERQF: +50% fraud, trust-10%, high enforcement
         };
 
         // ── GEO RISK MAP ──
