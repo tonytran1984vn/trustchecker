@@ -10,16 +10,16 @@ import { API as api } from '../../core/api.js';
 let _data = null;
 
 export function renderPage() {
-    if (!_data) { loadData(); return loadingState(); }
-    const d = _data;
-    const e = d.emissions;
-    const f = d.financial_exposure;
-    const r = d.risk_factors;
+  if (!_data) { loadData(); return loadingState(); }
+  const d = _data;
+  const e = d.emissions;
+  const f = d.financial_exposure;
+  const r = d.risk_factors;
 
-    const statusColor = d.compliance_status === 'Pass' ? '#22c55e' : d.compliance_status === 'At Risk' ? '#f59e0b' : '#ef4444';
-    const statusIcon = d.compliance_status === 'Pass' ? '✓' : d.compliance_status === 'At Risk' ? '⚠' : '✕';
+  const statusColor = d.compliance_status === 'Pass' ? '#22c55e' : d.compliance_status === 'At Risk' ? '#f59e0b' : '#ef4444';
+  const statusIcon = d.compliance_status === 'Pass' ? '✓' : d.compliance_status === 'At Risk' ? '⚠' : '✕';
 
-    return `
+  return `
     <div class="exec-page" style="font-feature-settings:'tnum'">
       <div class="exec-header">
         <h1>${icon('leaf', 28)} Carbon Capital</h1>
@@ -40,10 +40,10 @@ export function renderPage() {
             <div class="exec-score-meta">
               <h3>Carbon Compliance Status</h3>
               <div class="exec-score-breakdown">
-                ${scoreLine('Regulatory Risk', Math.round((1 - r.regulatory_risk) * 100))}
-                ${scoreLine('Transition Risk', Math.round((1 - r.transition_risk) * 100))}
-                ${scoreLine('Reputation Risk', Math.round((1 - r.reputation_risk) * 100))}
-                ${scoreLine('Physical Risk', Math.round((1 - r.physical_risk) * 100))}
+                ${scoreLine('Regulatory Risk', Math.max(0, Math.min(100, 100 - r.regulatory_risk)))}
+                ${scoreLine('Transition Risk', Math.max(0, Math.min(100, 100 - r.transition_risk)))}
+                ${scoreLine('Reputation Risk', Math.max(0, Math.min(100, 100 - r.reputation_risk)))}
+                ${scoreLine('Physical Risk', Math.max(0, Math.min(100, 100 - r.physical_risk)))}
               </div>
               <div style="margin-top:1rem;font-size:0.82rem;color:var(--text-secondary)">
                 Maturity: <strong>${d.maturity?.level_name || 'Level 1'}</strong> · Grade: <strong style="color:${e.grade === 'A+' || e.grade === 'A' ? '#22c55e' : e.grade === 'B' ? '#f59e0b' : '#ef4444'}">${e.grade}</strong> ${e.grade_label}
@@ -80,8 +80,8 @@ export function renderPage() {
           <div class="exec-card">
             <h3 style="font-size:1.25rem;font-weight:700;margin-bottom:1.5rem">Regulatory Alignment <span style="font-weight:400;opacity:0.5;font-size:0.85rem">(${d.regulatory.aligned_count}/${d.regulatory.total_frameworks})</span></h3>
             ${d.regulatory.frameworks.length > 0
-            ? d.regulatory.frameworks.map(fw => regRow(fw)).join('')
-            : '<div style="color:var(--text-secondary);font-size:0.82rem;padding:1rem 0">No regulatory frameworks assessed</div>'}
+      ? d.regulatory.frameworks.map(fw => regRow(fw)).join('')
+      : '<div style="color:var(--text-secondary);font-size:0.82rem;padding:1rem 0">No regulatory frameworks assessed</div>'}
           </div>
         </div>
       </section>
@@ -112,21 +112,21 @@ export function renderPage() {
 }
 
 async function loadData() {
-    try {
-        const r = await api.get('/tenant/owner/ccs/carbon-summary');
-        _data = r;
-        const el = document.getElementById('main-content');
-        if (el) el.innerHTML = renderPage();
-    } catch (e) { console.error('[Carbon Summary]', e); }
+  try {
+    const r = await api.get('/tenant/owner/ccs/carbon-summary');
+    _data = r;
+    const el = document.getElementById('main-content');
+    if (el) el.innerHTML = renderPage();
+  } catch (e) { console.error('[Carbon Summary]', e); }
 }
 
 function loadingState() {
-    return `<div class="exec-page"><div style="text-align:center;padding:4rem"><div class="loading-spinner"></div><div style="margin-top:1rem;color:var(--text-secondary)">Loading carbon intelligence...</div></div></div>`;
+  return `<div class="exec-page"><div style="text-align:center;padding:4rem"><div class="loading-spinner"></div><div style="margin-top:1rem;color:var(--text-secondary)">Loading carbon intelligence...</div></div></div>`;
 }
 
 function scoreLine(label, score) {
-    const color = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444';
-    return `
+  const color = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444';
+  return `
     <div class="exec-score-line">
       <span>${label}</span>
       <div class="exec-score-bar"><div class="exec-score-fill" style="width:${score}%;background:${color}"></div></div>
@@ -135,7 +135,7 @@ function scoreLine(label, score) {
 }
 
 function kpi(label, value, isGood, color, iconName) {
-    return `
+  return `
     <div class="exec-kpi-card">
       <div class="exec-kpi-icon" style="color:${color}">${icon(iconName, 20)}</div>
       <div class="exec-kpi-value" style="font-size:1.1rem">${value}</div>
@@ -145,9 +145,9 @@ function kpi(label, value, isGood, color, iconName) {
 }
 
 function scopeBar(label, kgCO2, totalKg, color) {
-    const pct = totalKg > 0 ? Math.round(100 * kgCO2 / totalKg) : 0;
-    const tCO2 = Math.round(kgCO2 / 100) / 10;
-    return `
+  const pct = totalKg > 0 ? Math.round(100 * kgCO2 / totalKg) : 0;
+  const tCO2 = Math.round(kgCO2 / 100) / 10;
+  return `
     <div style="display:flex;align-items:center;gap:1rem;padding:0.6rem 0;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.04))">
       <div style="flex:1;font-size:0.88rem;font-weight:500">${label}</div>
       <div style="width:120px">
@@ -159,9 +159,9 @@ function scopeBar(label, kgCO2, totalKg, color) {
 }
 
 function regRow(fw) {
-    const statusColor = fw.status === 'aligned' || fw.status === 'compliant' ? '#22c55e' : fw.status === 'partial' ? '#f59e0b' : '#ef4444';
-    const statusLabel = fw.status === 'aligned' || fw.status === 'compliant' ? '✓ Aligned' : fw.status === 'partial' ? '⚠ Partial' : '✕ Gap';
-    return `
+  const statusColor = fw.status === 'aligned' || fw.status === 'compliant' ? '#22c55e' : fw.status === 'partial' ? '#f59e0b' : '#ef4444';
+  const statusLabel = fw.status === 'aligned' || fw.status === 'compliant' ? '✓ Aligned' : fw.status === 'partial' ? '⚠ Partial' : '✕ Gap';
+  return `
     <div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.04))">
       <div style="flex:1;font-size:0.9rem;font-weight:500">${fw.name || fw.id || 'Unknown'}</div>
       <div style="font-size:0.78rem;opacity:0.5">${fw.region || ''}</div>
@@ -170,7 +170,7 @@ function regRow(fw) {
 }
 
 window.refreshCarbonSummary = function () {
-    _data = null;
-    const el = document.getElementById('main-content');
-    if (el) el.innerHTML = renderPage();
+  _data = null;
+  const el = document.getElementById('main-content');
+  if (el) el.innerHTML = renderPage();
 };
