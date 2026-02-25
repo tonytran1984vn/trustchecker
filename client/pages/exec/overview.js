@@ -183,7 +183,7 @@ function renderCCS() {
 
         <!-- Individual BU Exposure Cards -->
         ${exp.per_bu.map(bu => `
-        <div class="exec-card" style="margin-bottom:0.75rem;border:none;border-left:3px solid ${bu.p_fraud > 4 ? '#ef4444' : bu.p_fraud > 2 ? '#f59e0b' : '#22c55e'}">
+        <div class="exec-card" style="margin-bottom:0.75rem">
           <h3 style="margin-bottom:0.5rem">${bu.name}
             <span style="font-size:0.62rem;opacity:0.5;font-weight:400;margin-left:6px">β=${bu.beta} · k=${bu.k} · Fine=$${(bu.avg_fine || 0).toLocaleString()} · ${Math.round((bu.revenue_weight || 0) * 100)}% revenue</span>
           </h3>
