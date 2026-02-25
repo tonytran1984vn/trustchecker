@@ -1688,17 +1688,22 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
                 const buRevCovered = buRevenue * buCoverage;
 
                 // Per-BU ERL
+                const buClusterId = bu.industry_type ? (industryMap[bu.industry_type] || 'D') : 'D';
+                const buCluster = riskClusters[buClusterId];
+                const buBeta = bu.beta || buCluster.beta.mean;
+                const buK = bu.k || buCluster.k.mean;
+                const buAvgFine = bu.avg_fine || (bu.industry_type ? (industryFines[bu.industry_type] || 25000) : 25000);
                 const buERL = Math.round(buRevCovered * buPFraud * severity);
 
-                // Per-BU EBI (with BU-specific β and k)
-                const buBRF = Math.pow(Math.max(1 - buTrust / 100, 0.001), bu.beta || 1.5);
-                const buIE = 1 - Math.exp(-(bu.k || 2.5) * buPFraud);
+                // Per-BU EBI (with cluster-resolved β and k)
+                const buBRF = Math.pow(Math.max(1 - buTrust / 100, 0.001), buBeta);
+                const buIE = 1 - Math.exp(-buK * buPFraud);
                 const buEBI = Math.round(buBrandValue * buBRF * buIE);
 
                 // Per-BU RFE
                 const buCrTotal = crTotal > 0 ? Math.round(crTotal * buWeight) : 1;
                 const buWCRS = WCRS; // Use org-level WCRS (same compliance framework)
-                const buRFE = Math.round(buWCRS * (bu.avg_fine || 25000) * enforcementProbability * Math.max(crNonCompliant * buWeight, 0.1));
+                const buRFE = Math.round(buWCRS * buAvgFine * enforcementProbability * Math.max(crNonCompliant * buWeight, 0.1));
 
                 // Per-BU TCAR (no diversification at BU level)
                 const buTCAR = buERL + buEBI + buRFE;

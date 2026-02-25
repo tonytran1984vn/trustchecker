@@ -666,17 +666,66 @@ window._renderBUModal = function () {
         <div style="border:1px solid var(--border-color,rgba(255,255,255,0.1));border-radius:8px;padding:0.75rem;margin-bottom:0.75rem;background:rgba(255,255,255,0.02)">
           <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;align-items:center">
             <input type="text" value="${bu.name || ''}" onchange="window._buRows[${idx}].name=this.value" placeholder="BU Name" style="flex:2;padding:6px;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0)">
-            <div style="display:flex;gap:0.3rem;flex:1">
-              <input type="number" value="${bu.beta || 1.5}" onchange="window._buRows[${idx}].beta=Number(this.value)" step="0.1" min="0.5" max="5" style="width:55px;padding:4px;font-size:0.8rem;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0)" title="β">
-              <input type="number" value="${bu.k || 2.5}" onchange="window._buRows[${idx}].k=Number(this.value)" step="0.5" min="0.5" max="10" style="width:55px;padding:4px;font-size:0.8rem;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0)" title="k">
-              <input type="number" value="${bu.avg_fine || 25000}" onchange="window._buRows[${idx}].avg_fine=Number(this.value)" step="5000" min="0" style="width:70px;padding:4px;font-size:0.8rem;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0)" title="Avg Fine">
-            </div>
+            <select onchange="window._setBUIndustry(${idx},this.value)" style="flex:2;padding:6px;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0);font-size:0.78rem">
+              <optgroup label="⚠️ Life-Critical (A)">
+                <option value="pharmaceutical" ${(bu.industry_type || '') === 'pharmaceutical' ? 'selected' : ''}>Pharmaceutical</option>
+                <option value="aviation" ${bu.industry_type === 'aviation' ? 'selected' : ''}>Civil Aviation</option>
+                <option value="banking_finance" ${bu.industry_type === 'banking_finance' ? 'selected' : ''}>Banking & Finance</option>
+                <option value="nuclear_energy" ${bu.industry_type === 'nuclear_energy' ? 'selected' : ''}>Nuclear Energy</option>
+                <option value="baby_food" ${bu.industry_type === 'baby_food' ? 'selected' : ''}>Baby & Infant Food</option>
+                <option value="blood_vaccine" ${bu.industry_type === 'blood_vaccine' ? 'selected' : ''}>Blood & Vaccines</option>
+                <option value="cybersecurity" ${bu.industry_type === 'cybersecurity' ? 'selected' : ''}>Cybersecurity</option>
+                <option value="life_medical_device" ${bu.industry_type === 'life_medical_device' ? 'selected' : ''}>Medical Devices</option>
+                <option value="fund_management" ${bu.industry_type === 'fund_management' ? 'selected' : ''}>Fund Management</option>
+                <option value="oil_gas" ${bu.industry_type === 'oil_gas' ? 'selected' : ''}>Oil & Gas</option>
+                <option value="waste_management" ${bu.industry_type === 'waste_management' ? 'selected' : ''}>Waste Management</option>
+              </optgroup>
+              <optgroup label="💎 Brand-Sensitive (C)">
+                <option value="luxury" ${bu.industry_type === 'luxury' ? 'selected' : ''}>Luxury Fashion</option>
+                <option value="jewelry_gems" ${bu.industry_type === 'jewelry_gems' ? 'selected' : ''}>Jewelry & Gems</option>
+                <option value="premium_wine" ${bu.industry_type === 'premium_wine' ? 'selected' : ''}>Wine & Spirits</option>
+                <option value="cosmetics_skincare" ${bu.industry_type === 'cosmetics_skincare' ? 'selected' : ''}>Cosmetics</option>
+                <option value="premium_watches" ${bu.industry_type === 'premium_watches' ? 'selected' : ''}>Watches</option>
+                <option value="luxury_auto" ${bu.industry_type === 'luxury_auto' ? 'selected' : ''}>Luxury Auto</option>
+                <option value="art_antiques" ${bu.industry_type === 'art_antiques' ? 'selected' : ''}>Art & Antiques</option>
+                <option value="premium_hospitality" ${bu.industry_type === 'premium_hospitality' ? 'selected' : ''}>5-Star Hospitality</option>
+                <option value="premium_real_estate" ${bu.industry_type === 'premium_real_estate' ? 'selected' : ''}>Premium Real Estate</option>
+                <option value="yacht_jet" ${bu.industry_type === 'yacht_jet' ? 'selected' : ''}>Yachts & Jets</option>
+              </optgroup>
+              <optgroup label="⚙️ Operational & Tech (B/D)">
+                <option value="electronics" ${bu.industry_type === 'electronics' ? 'selected' : ''}>Electronics</option>
+                <option value="telecom" ${bu.industry_type === 'telecom' ? 'selected' : ''}>Telecom</option>
+                <option value="ecommerce" ${bu.industry_type === 'ecommerce' ? 'selected' : ''}>E-Commerce</option>
+                <option value="saas" ${bu.industry_type === 'saas' ? 'selected' : ''}>SaaS</option>
+                <option value="automotive" ${bu.industry_type === 'automotive' ? 'selected' : ''}>Automotive</option>
+                <option value="logistics" ${bu.industry_type === 'logistics' ? 'selected' : ''}>Logistics</option>
+                <option value="construction" ${bu.industry_type === 'construction' ? 'selected' : ''}>Construction</option>
+                <option value="renewable_energy" ${bu.industry_type === 'renewable_energy' ? 'selected' : ''}>Renewable Energy</option>
+              </optgroup>
+              <optgroup label="🛒 Consumer & Retail (D)">
+                <option value="fmcg" ${bu.industry_type === 'fmcg' ? 'selected' : ''}>FMCG</option>
+                <option value="retail" ${bu.industry_type === 'retail' ? 'selected' : ''}>Retail</option>
+                <option value="fast_fashion" ${bu.industry_type === 'fast_fashion' ? 'selected' : ''}>Fast Fashion</option>
+                <option value="toys" ${bu.industry_type === 'toys' ? 'selected' : ''}>Children's Toys</option>
+                <option value="restaurant" ${bu.industry_type === 'restaurant' ? 'selected' : ''}>Restaurant & F&B</option>
+                <option value="furniture" ${bu.industry_type === 'furniture' ? 'selected' : ''}>Furniture</option>
+                <option value="sporting_goods" ${bu.industry_type === 'sporting_goods' ? 'selected' : ''}>Sporting Goods</option>
+              </optgroup>
+              <optgroup label="🏭 Industrial (E)">
+                <option value="mining" ${bu.industry_type === 'mining' ? 'selected' : ''}>Mining</option>
+                <option value="steel_metals" ${bu.industry_type === 'steel_metals' ? 'selected' : ''}>Steel & Metals</option>
+                <option value="heavy_chemicals" ${bu.industry_type === 'heavy_chemicals' ? 'selected' : ''}>Heavy Chemicals</option>
+                <option value="cement" ${bu.industry_type === 'cement' ? 'selected' : ''}>Cement</option>
+                <option value="shipbuilding" ${bu.industry_type === 'shipbuilding' ? 'selected' : ''}>Shipbuilding</option>
+                <option value="machinery" ${bu.industry_type === 'machinery' ? 'selected' : ''}>Machinery</option>
+              </optgroup>
+            </select>
             <div style="width:80px">
               <input type="number" value="${Math.round((bu.revenue_weight || 0) * 100)}" onchange="window._buRows[${idx}].revenue_weight=Number(this.value)/100" min="0" max="100" step="5" style="width:50px;padding:4px;font-size:0.8rem;border-radius:4px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0)"><span style="font-size:0.75rem;opacity:0.6"> %</span>
             </div>
             ${rows.length > 1 ? `<button onclick="window._buRows.splice(${idx},1);window._renderBUModal()" style="background:#ef4444;color:white;border:none;border-radius:4px;padding:4px 8px;cursor:pointer;font-size:0.75rem">✕</button>` : ''}
           </div>
-          <div style="font-size:0.7rem;opacity:0.5;margin-bottom:4px">β=${bu.beta || 1.5} · k=${bu.k || 2.5} · Fine=$${(bu.avg_fine || 25000).toLocaleString()} · Weight=${Math.round((bu.revenue_weight || 0) * 100)}%</div>
+          <div style="font-size:0.7rem;opacity:0.5;margin-bottom:4px">β=${bu.beta || '—'} · k=${bu.k || '—'} · Fine=$${(bu.avg_fine || 0).toLocaleString()} · Weight=${Math.round((bu.revenue_weight || 0) * 100)}% · Cluster ${bu._cluster || '—'}</div>
           <div style="display:flex;flex-wrap:wrap;gap:4px">
             ${cats.map(c => {
     const isSelected = (bu.categories || []).includes(c);
@@ -689,7 +738,7 @@ window._renderBUModal = function () {
           </div>
         </div>`).join('')}
 
-        <button onclick="window._buRows.push({id:'bu_'+(window._buRows.length+1),name:'Division '+(window._buRows.length+1),categories:[],beta:1.5,k:2.5,avg_fine:25000,revenue_weight:0});window._renderBUModal()" style="width:100%;padding:8px;border:1px dashed rgba(99,102,241,0.3);border-radius:8px;background:transparent;color:#818cf8;cursor:pointer;font-size:0.8rem">+ Add Business Unit</button>
+        <button onclick="window._buRows.push({id:'bu_'+(window._buRows.length+1),name:'Division '+(window._buRows.length+1),categories:[],industry_type:'fmcg',beta:1.4,k:1.5,avg_fine:15000,revenue_weight:0,_cluster:'D'});window._renderBUModal()" style="width:100%;padding:8px;border:1px dashed rgba(99,102,241,0.3);border-radius:8px;background:transparent;color:#818cf8;cursor:pointer;font-size:0.8rem">+ Add Business Unit</button>
       </div>
       <div class="ccs-modal-footer">
         <button onclick="document.getElementById('ccs-bu-modal').style.display='none'" class="ccs-btn-secondary">Cancel</button>
@@ -709,6 +758,42 @@ window._toggleBUCat = function (buIdx, cat) {
     if (!bu.categories) bu.categories = [];
     bu.categories.push(cat);
   }
+  window._renderBUModal();
+};
+
+// Set BU industry → auto-fill β, k, avgFine from cluster
+window._setBUIndustry = function (buIdx, industryType) {
+  const bu = window._buRows[buIdx];
+  if (!bu) return;
+  const clusters = {
+    A: { beta: 2.8, k: 2.2, recovery: 0.286 },
+    B: { beta: 2.5, k: 2.8, recovery: 0.429 },
+    C: { beta: 2.2, k: 1.9, recovery: 0.571 },
+    D: { beta: 1.4, k: 1.5, recovery: 0.625 },
+    E: { beta: 1.2, k: 1.25, recovery: 0.750 },
+  };
+  const map = {
+    pharmaceutical: 'A', aviation: 'A', nuclear_energy: 'A', blood_vaccine: 'A', life_medical_device: 'A', baby_food: 'A', waste_management: 'A', oil_gas: 'A',
+    banking_finance: 'B', fund_management: 'B', cybersecurity: 'B', saas: 'B', telecom: 'B',
+    luxury: 'C', jewelry_gems: 'C', premium_wine: 'C', cosmetics_skincare: 'C', premium_watches: 'C', luxury_auto: 'C', art_antiques: 'C', premium_hospitality: 'C', premium_real_estate: 'C', yacht_jet: 'C',
+    fmcg: 'D', retail: 'D', fast_fashion: 'D', toys: 'D', animal_feed: 'D', furniture: 'D', household_chemicals: 'D', sporting_goods: 'D', publishing: 'D', restaurant: 'D', electronics: 'D', electronic_parts: 'D', ecommerce: 'D', home_appliances: 'D', automotive: 'D',
+    mining: 'E', steel_metals: 'E', heavy_chemicals: 'E', wood_forestry: 'E', cement: 'E', water_utilities: 'E', shipbuilding: 'E', fertilizer_pesticide: 'E', machinery: 'E', construction: 'E', renewable_energy: 'E', logistics: 'E',
+  };
+  const fines = {
+    pharmaceutical: 50000, aviation: 500000, banking_finance: 250000, nuclear_energy: 1000000, baby_food: 200000, blood_vaccine: 500000, cybersecurity: 150000, life_medical_device: 300000,
+    fund_management: 200000, oil_gas: 400000, luxury: 30000, jewelry_gems: 50000, premium_wine: 40000, cosmetics_skincare: 60000, premium_watches: 35000, luxury_auto: 80000,
+    art_antiques: 20000, premium_hospitality: 45000, premium_real_estate: 30000, yacht_jet: 50000, electronics: 25000, electronic_parts: 20000, telecom: 80000, logistics: 15000,
+    ecommerce: 50000, saas: 40000, automotive: 75000, home_appliances: 25000, construction: 30000, renewable_energy: 20000, fmcg: 15000, retail: 10000, fast_fashion: 12000, toys: 80000,
+    animal_feed: 30000, furniture: 8000, household_chemicals: 25000, sporting_goods: 10000, publishing: 5000, restaurant: 35000, mining: 100000, steel_metals: 20000, heavy_chemicals: 150000,
+    wood_forestry: 25000, cement: 15000, waste_management: 200000, water_utilities: 80000, shipbuilding: 40000, fertilizer_pesticide: 100000, machinery: 20000,
+  };
+  const cid = map[industryType] || 'D';
+  const c = clusters[cid];
+  bu.industry_type = industryType;
+  bu.beta = c.beta;
+  bu.k = c.k;
+  bu.avg_fine = fines[industryType] || 25000;
+  bu._cluster = cid;
   window._renderBUModal();
 };
 
