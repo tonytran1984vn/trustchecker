@@ -176,6 +176,7 @@ const PAGE_LOADERS = {
     'exec-trust-report': () => import('../pages/exec/trust-report.js'),
     'exec-scm-summary': () => import('../pages/exec/scm-summary.js'),
     'exec-carbon-summary': () => import('../pages/exec/carbon-summary.js'),
+    'exec-allocation-engine': () => import('../pages/exec/allocation-engine.js'),
 
     // ─── Ops (Operational Control Layer) pages ───────────
     'ops-dashboard': () => import('../pages/ops/dashboard.js'),

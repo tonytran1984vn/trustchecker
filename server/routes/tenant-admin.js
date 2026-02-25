@@ -2947,5 +2947,163 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
     }
 });
 
+// CCS: Capital Allocation Engine — What-if Simulator for CEO
+// ═══════════════════════════════════════════════════════════════════════════════
+router.get('/owner/ccs/allocation-baseline', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+        const carbonEngine = require('../engines/carbon-engine');
+        const engineClient = require('../engines/engine-client');
+
+        const [finConfig, products, shipments, events, partners, violations, offsets,
+            scmStats, breaches, scanStats] = await Promise.all([
+                db.get(`SELECT * FROM financial_configs WHERE org_id = $1`, [tid]).catch(() => null),
+                db.all(`SELECT * FROM products WHERE org_id = $1 AND status = 'active'`, [tid]),
+                db.all(`SELECT s.* FROM shipments s JOIN batches b ON s.batch_id = b.id JOIN products p ON b.product_id = p.id WHERE p.org_id = $1`, [tid]).catch(() => []),
+                db.all(`SELECT sce.* FROM supply_chain_events sce WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                db.all(`SELECT * FROM partners WHERE org_id = $1 AND status = 'active'`, [tid]),
+                db.all(`SELECT * FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                db.get(`SELECT COUNT(*) as c FROM evidence_items WHERE entity_type = 'carbon_offset' AND entity_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]).catch(() => ({ c: 0 })),
+                db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE blockchain_seal_id IS NOT NULL) as sealed FROM supply_chain_events WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE severity = 'critical') as critical FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE result = 'authentic') as authentic FROM scan_events WHERE org_id = $1`, [tid]),
+            ]);
+
+        const scopeData = await engineClient.carbonAggregate(products, shipments, events);
+        const leaderboard = await engineClient.carbonLeaderboard(partners, shipments, violations);
+        const riskFactors = carbonEngine.calculateRiskFactors(scopeData, leaderboard);
+
+        const revenue = Number(finConfig?.annual_revenue || 10000000);
+        const ebitda = Number(finConfig?.ebitda || revenue * 0.15);
+        const evMultiple = Number(finConfig?.ev_multiple || 8);
+        const brandValue = Number(finConfig?.brand_value || revenue * 1.5);
+        const totalEmissions = Number(scopeData?.total_kgCO2e || 0);
+        const carbonPrice = 90;
+        const carbonLiability = Math.round(totalEmissions / 1000 * carbonPrice);
+        const totalScans = Number(scanStats?.total || 0);
+        const authenticScans = Number(scanStats?.authentic || 0);
+        const totalSCEvents = Number(scmStats?.total || 0);
+        const sealedSCEvents = Number(scmStats?.sealed || 0);
+        const totalBreaches = Number(breaches?.total || 0);
+        const criticalBreaches = Number(breaches?.critical || 0);
+
+        const currentEV = ebitda * evMultiple;
+        const esgPremium = Number(riskFactors?.esg_premium || 0);
+        const overallRisk = Number(riskFactors?.overall_risk || 0.15);
+
+        res.json({
+            baseline: {
+                revenue, ebitda, ev_multiple: evMultiple, current_ev: currentEV,
+                brand_value: brandValue,
+                carbon_liability: carbonLiability,
+                total_emissions_tCO2e: Math.round(totalEmissions / 1000 * 10) / 10,
+                esg_premium: esgPremium,
+                overall_risk: overallRisk,
+                scan_integrity: totalScans > 0 ? Math.round(100 * authenticScans / totalScans) : 0,
+                sc_integrity: totalSCEvents > 0 ? Math.round(100 * sealedSCEvents / totalSCEvents) : 0,
+                breach_count: totalBreaches,
+                critical_breaches: criticalBreaches,
+                partner_count: partners.length,
+                verified_partners: partners.filter(p => p.kyc_status === 'verified').length,
+                products_tracked: products.length,
+            },
+            // Investment categories with default ranges
+            investment_options: [
+                { id: 'emission_reduction', label: 'Emission Reduction', icon: '🏭', max: 5000000, step: 100000, description: 'Upgrade equipment, process optimization' },
+                { id: 'carbon_offsets', label: 'Carbon Offsets', icon: '🌱', max: 2000000, step: 50000, description: 'Purchase verified carbon credits' },
+                { id: 'renewable_shift', label: 'Renewable Energy', icon: '⚡', max: 3000000, step: 100000, description: 'Solar, wind, green energy transition' },
+                { id: 'verification_expansion', label: 'Verification System', icon: '🔍', max: 1000000, step: 50000, description: 'Expand scan coverage, blockchain sealing' },
+                { id: 'partner_compliance', label: 'Partner Compliance', icon: '🤝', max: 1000000, step: 50000, description: 'KYC programs, audit, supply chain trust' },
+                { id: 'brand_protection', label: 'Brand Protection', icon: '🛡️', max: 2000000, step: 100000, description: 'Anti-counterfeit, market surveillance' },
+            ],
+        });
+    } catch (err) {
+        console.error('[CCS] Allocation baseline error:', err);
+        res.status(500).json({ error: 'Failed to load allocation baseline' });
+    }
+});
+
+router.post('/owner/ccs/allocation-simulate', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const { investments, baseline } = req.body;
+        if (!investments || !baseline) return res.status(400).json({ error: 'Missing investments or baseline' });
+
+        const emRed = Number(investments.emission_reduction || 0);
+        const offsets = Number(investments.carbon_offsets || 0);
+        const renewable = Number(investments.renewable_shift || 0);
+        const verif = Number(investments.verification_expansion || 0);
+        const partnerComp = Number(investments.partner_compliance || 0);
+        const brandProt = Number(investments.brand_protection || 0);
+        const totalInvestment = emRed + offsets + renewable + verif + partnerComp + brandProt;
+
+        // Impact calculations (simplified models)
+        const emissionReductionPct = Math.min(0.80, (emRed / 1000000) * 0.20 + (renewable / 1000000) * 0.15);
+        const offsetReductionPct = Math.min(0.50, (offsets / 100000) * 0.05);
+        const currentEmissions = baseline.total_emissions_tCO2e || 0;
+        const newEmissions = Math.max(0, currentEmissions * (1 - emissionReductionPct) - (offsets / 90));
+        const newCarbonLiability = Math.round(newEmissions * 90);
+        const liabilityReduction = baseline.carbon_liability - newCarbonLiability;
+
+        // Risk reduction
+        const riskReduction = Math.min(0.60,
+            (emRed / 5000000) * 0.15 +
+            (offsets / 2000000) * 0.08 +
+            (renewable / 3000000) * 0.12 +
+            (verif / 1000000) * 0.10 +
+            (partnerComp / 1000000) * 0.10 +
+            (brandProt / 2000000) * 0.05
+        );
+        const newRisk = Math.max(0.02, baseline.overall_risk * (1 - riskReduction));
+
+        // ESG score improvement
+        const esgImprovement = Math.min(0.35,
+            (emRed / 5000000) * 0.10 +
+            (offsets / 2000000) * 0.05 +
+            (renewable / 3000000) * 0.08 +
+            (verif / 1000000) * 0.04 +
+            (partnerComp / 1000000) * 0.05 +
+            (brandProt / 2000000) * 0.03
+        );
+        const newEsgPremium = baseline.esg_premium + esgImprovement;
+
+        // Valuation impact
+        const newEVMultiple = baseline.ev_multiple * (1 + esgImprovement * 0.5) * (1 - (newRisk - baseline.overall_risk) * 0.3);
+        const newEV = baseline.ebitda * newEVMultiple;
+        const evChange = newEV - baseline.current_ev;
+
+        // Brand value impact
+        const brandImprovement = (brandProt / 2000000) * 0.15 + (verif / 1000000) * 0.08 + esgImprovement * 0.10;
+        const newBrandValue = Math.round(baseline.brand_value * (1 + brandImprovement));
+
+        // Integrity improvements
+        const newScanIntegrity = Math.min(100, baseline.scan_integrity + (verif / 1000000) * 15);
+        const newSCIntegrity = Math.min(100, baseline.sc_integrity + (verif / 1000000) * 20 + (partnerComp / 1000000) * 10);
+
+        // ROI calculation
+        const totalBenefits = liabilityReduction + Math.max(0, evChange) + (newBrandValue - baseline.brand_value);
+        const roi = totalInvestment > 0 ? Math.round(100 * totalBenefits / totalInvestment) : 0;
+        const paybackMonths = totalInvestment > 0 && totalBenefits > 0 ? Math.round(12 * totalInvestment / totalBenefits) : 0;
+
+        res.json({
+            total_investment: totalInvestment,
+            projections: {
+                emissions: { current: currentEmissions, projected: Math.round(newEmissions * 10) / 10, reduction_pct: Math.round(100 * (currentEmissions - newEmissions) / Math.max(1, currentEmissions)) },
+                carbon_liability: { current: baseline.carbon_liability, projected: newCarbonLiability, saved: liabilityReduction },
+                risk: { current: Math.round(baseline.overall_risk * 100), projected: Math.round(newRisk * 100), reduction: Math.round((baseline.overall_risk - newRisk) * 100) },
+                esg_premium: { current: Math.round(baseline.esg_premium * 100) / 100, projected: Math.round(newEsgPremium * 100) / 100, improvement: Math.round(esgImprovement * 100) / 100 },
+                ev_multiple: { current: Math.round(baseline.ev_multiple * 10) / 10, projected: Math.round(newEVMultiple * 10) / 10 },
+                enterprise_value: { current: baseline.current_ev, projected: Math.round(newEV), change: Math.round(evChange) },
+                brand_value: { current: baseline.brand_value, projected: newBrandValue, change: newBrandValue - baseline.brand_value },
+                scan_integrity: { current: baseline.scan_integrity, projected: Math.round(newScanIntegrity) },
+                sc_integrity: { current: baseline.sc_integrity, projected: Math.round(newSCIntegrity) },
+            },
+            roi: { percentage: roi, payback_months: paybackMonths, total_benefits: Math.round(totalBenefits) },
+        });
+    } catch (err) {
+        console.error('[CCS] Allocation simulate error:', err);
+        res.status(500).json({ error: 'Simulation failed' });
+    }
+});
+
 module.exports = router;
 
