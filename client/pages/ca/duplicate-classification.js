@@ -16,20 +16,20 @@ async function load() {
   }, 5000);
   try {
     const [classifications, scans] = await Promise.all([
-      API.get('/scm/classify?limit=100').catch(() => ({ classifications: [] })),
-      API.get('/scm/events?limit=200').catch(() => ({ events: [] })),
+      API.get('/scm/classify/duplicates?limit=100').catch(() => ({ classifications: [] })),
+      API.get('/scm/classify/duplicates/stats').catch(() => ({ breakdown: {} })),
     ]);
     const classList = Array.isArray(classifications) ? classifications : (classifications.classifications || []);
-    const scanList = Array.isArray(scans) ? scans : (scans.events || []);
+    const stats = scans.breakdown || {};
 
-    const duplicates = scanList.filter(s => s.is_duplicate || s.event_type === 'duplicate');
-    const total = duplicates.length || classList.length || 0;
-    const curiosity = classList.filter(c => c.classification === 'curiosity' || c.type === 'curiosity').length;
-    const leakage = classList.filter(c => c.classification === 'leakage' || c.type === 'leakage').length;
-    const counterfeit = classList.filter(c => c.classification === 'counterfeit' || c.type === 'counterfeit').length;
-    const unclassified = total - curiosity - leakage - counterfeit;
+    const total = classList.length || scans.total || 0;
+    const curiosity = classList.filter(c => c.classification === 'curiosity').length || stats.curiosity?.count || 0;
+    const leakage = classList.filter(c => c.classification === 'leakage' || c.classification === 'parallel_import').length || stats.leakage?.count || 0;
+    const counterfeit = classList.filter(c => c.classification === 'counterfeit').length || stats.counterfeit?.count || 0;
+    const legitRescan = classList.filter(c => c.classification === 'legitimate_rescan').length;
+    const unclassified = classList.filter(c => c.classification === 'unclassified').length || stats.unclassified?.count || 0;
 
-    data = { total, curiosity, leakage, counterfeit, unclassified: Math.max(0, unclassified), classList, duplicates };
+    data = { total, curiosity, leakage, counterfeit, legitRescan, unclassified: Math.max(0, unclassified), classList, duplicates: classList };
   } catch (e) { data = emptyData; }
   clearTimeout(timer);
   loading = false;

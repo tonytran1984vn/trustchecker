@@ -78,7 +78,7 @@ router.get('/duplicates', authMiddleware, async (req, res) => {
             LEFT JOIN products p ON se.product_id = p.id`;
         const params = [];
         const conditions = [];
-        if (orgId && req.user?.role !== 'super_admin') { conditions.push('p.org_id = ?'); params.push(orgId); }
+        if (orgId && req.user?.role !== 'super_admin') { conditions.push('(p.org_id = ? OR dc.org_id = ?)'); params.push(orgId, orgId); }
         if (classification) { conditions.push('dc.classification = ?'); params.push(classification); }
         if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
         query += ' ORDER BY dc.created_at DESC LIMIT ?';
@@ -87,8 +87,8 @@ router.get('/duplicates', authMiddleware, async (req, res) => {
         const dups = await db.prepare(query).all(...params);
         res.json(dups.map(d => ({
             ...d,
-            signals: JSON.parse(d.signals || '[]'),
-            geo_data: JSON.parse(d.geo_data || '{}')
+            signals: typeof d.signals === 'string' ? JSON.parse(d.signals || '[]') : (d.signals || []),
+            geo_data: typeof (d.geo_data || d.geoData) === 'string' ? JSON.parse(d.geo_data || d.geoData || '{}') : (d.geo_data || d.geoData || {})
         })));
     } catch (err) {
         console.error('List duplicates error:', err);

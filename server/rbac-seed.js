@@ -281,7 +281,8 @@ const SYSTEM_ROLES = [
     { name: 'mgb_member', display: 'Methodology Governance Board', type: 'system', is_system: 1, tenant_id: null, desc: 'L2 Federation — methodology governance. NOT tenant employee. Cannot access tenant data.', mfa_policy: 'required' },
     { name: 'blockchain_operator', display: 'Blockchain Anchor Authority', type: 'system', is_system: 1, tenant_id: null, desc: 'L2 Federation — anchor hashes. Federated for trust. Cannot create/modify CIP.', mfa_policy: 'required' },
     // ── L3 — Tenant (template) ────────────────────────────────────
-    { name: 'company_admin', display: 'Company Admin', type: 'system', is_system: 1, tenant_id: '__TEMPLATE__', desc: 'L3 Tenant — IAM controller, manages roles/users within boundary', mfa_policy: 'required' },
+    { name: 'org_owner', display: 'Organization Owner', type: 'system', is_system: 1, tenant_id: '__TEMPLATE__', desc: 'L3 Tenant — Legal representative. Appoints/removes Company Admin. Does not participate in daily operations.', mfa_policy: 'required' },
+    { name: 'company_admin', display: 'Company Admin', type: 'system', is_system: 1, tenant_id: '__TEMPLATE__', desc: 'L3 Tenant — Operational IAM controller. Manages roles/users/config within boundary. CANNOT grant governance permissions (SoD, compliance, risk deploy).', mfa_policy: 'required' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -289,6 +290,22 @@ const SYSTEM_ROLES = [
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const DEFAULT_BUSINESS_ROLES = [
+    // ── L3: Tenant Security Officer (enterprise optional) ─────────────────────
+    {
+        name: 'security_officer',
+        display: 'Tenant Security Officer',
+        desc: 'L3 Tenant — Monitors SoD conflicts, privilege escalation, access anomalies. Approves/rejects high-risk role assignments. Cannot modify data or approve business workflows.',
+        permissions: [
+            'dashboard:view', 'audit_log:view',
+            'trust_score:view', 'risk_radar:view',
+            'compliance:view', 'report:view',
+            // Lineage (read-only forensic)
+            'lineage:view', 'lineage:view_summary',
+            // CIE audit
+            'cie_audit:view_trail', 'cie_audit:view_sod_violations', 'cie_audit:view_change_history',
+            'cie_escalation:view_history',
+        ],
+    },
     {
         name: 'executive',
         display: 'Executive / CEO',

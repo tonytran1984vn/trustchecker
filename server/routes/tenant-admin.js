@@ -12,7 +12,7 @@ const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { authMiddleware } = require('../auth/core');
-const { requireTenantAdmin, checkPlanGuardrail, checkSoD, getPermissionsForRole } = require('../auth/rbac');
+const { requireTenantAdmin, checkPlanGuardrail, checkSoD, getPermissionsForRole, isCAForbidden, isHighRiskRole } = require('../auth/rbac');
 const { tenantGuard } = require('../middleware/tenant-middleware');
 
 // All routes require auth + tenant context + tenant admin
@@ -73,6 +73,22 @@ router.post('/roles', async (req, res) => {
                 return res.status(403).json({
                     error: `Permission "${perm}" is not available in your plan`,
                     code: 'PLAN_GUARDRAIL'
+                });
+            }
+        }
+
+        // GOV: Permission ceiling — CA cannot create roles with governance permissions
+        if (req.user.role === 'company_admin' || req.user.role === 'admin') {
+            const forbidden = permissions.filter(p => isCAForbidden(p));
+            if (forbidden.length > 0) {
+                await db.run(
+                    `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'PERMISSION_CEILING_BLOCKED', 'rbac_role', ?, ?)`,
+                    [uuidv4(), req.user.id, 'new_role', JSON.stringify({ attempted_permissions: forbidden, role_name: name })]
+                );
+                return res.status(403).json({
+                    error: 'Permission ceiling: Company Admin cannot grant governance permissions',
+                    code: 'PERMISSION_CEILING',
+                    forbidden_permissions: forbidden
                 });
             }
         }
@@ -140,6 +156,22 @@ router.put('/roles/:id', async (req, res) => {
                 const allowed = await checkPlanGuardrail(req.tenantId, perm);
                 if (!allowed) {
                     return res.status(403).json({ error: `Permission "${perm}" is not available in your plan`, code: 'PLAN_GUARDRAIL' });
+                }
+            }
+
+            // GOV: Permission ceiling enforcement on update
+            if (req.user.role === 'company_admin' || req.user.role === 'admin') {
+                const forbidden = permissions.filter(p => isCAForbidden(p));
+                if (forbidden.length > 0) {
+                    await db.run(
+                        `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'PERMISSION_CEILING_BLOCKED', 'rbac_role', ?, ?)`,
+                        [uuidv4(), req.user.id, req.params.id, JSON.stringify({ attempted_permissions: forbidden })]
+                    );
+                    return res.status(403).json({
+                        error: 'Permission ceiling: Company Admin cannot grant governance permissions',
+                        code: 'PERMISSION_CEILING',
+                        forbidden_permissions: forbidden
+                    });
                 }
             }
 
@@ -309,12 +341,77 @@ router.put('/users/:id/roles', async (req, res) => {
     try {
         const { role_ids = [], expires_at = null } = req.body;
 
+        // GOV: Block self-role elevation
+        if (req.params.id === req.user.id) {
+            await db.run(
+                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'SELF_ELEVATION_BLOCKED', 'user', ?, ?)`,
+                [uuidv4(), req.user.id, req.user.id, JSON.stringify({ attempted_roles: role_ids, reason: 'Self-role elevation is prohibited' })]
+            );
+            return res.status(403).json({
+                error: 'Self-role elevation prohibited: You cannot assign roles to yourself',
+                code: 'SELF_ELEVATION_BLOCKED'
+            });
+        }
+
         // Verify user belongs to this tenant
         const user = await db.get(
             'SELECT id, username FROM users WHERE id = ? AND org_id = ?',
             [req.params.id, req.tenantId]
         );
         if (!user) return res.status(404).json({ error: 'User not found in this tenant' });
+
+        // GOV: Check if CA is trying to assign high-risk roles — require dual-control
+        for (const roleId of role_ids) {
+            const roleInfo = await db.get('SELECT name, display_name FROM rbac_roles WHERE id = ?', [roleId]);
+            if (roleInfo && isHighRiskRole(roleInfo.name) && (req.user.role === 'company_admin' || req.user.role === 'admin')) {
+                // Ensure pending_role_approvals table exists
+                await db.run(`CREATE TABLE IF NOT EXISTS pending_role_approvals (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    role_id TEXT NOT NULL,
+                    role_name TEXT NOT NULL,
+                    requested_by TEXT NOT NULL,
+                    tenant_id TEXT NOT NULL,
+                    status TEXT DEFAULT 'pending',
+                    approved_by TEXT,
+                    expires_at TEXT,
+                    reason TEXT,
+                    created_at TEXT DEFAULT (NOW()),
+                    resolved_at TEXT
+                )`);
+
+                // Create pending approval instead of immediate assignment
+                const approvalId = uuidv4();
+                await db.run(
+                    `INSERT INTO pending_role_approvals (id, user_id, role_id, role_name, requested_by, tenant_id, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [approvalId, req.params.id, roleId, roleInfo.name, req.user.id, req.tenantId, expires_at]
+                );
+
+                // Audit log
+                await db.run(
+                    `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'HIGH_RISK_ROLE_PENDING', 'pending_approval', ?, ?)`,
+                    [uuidv4(), req.user.id, approvalId, JSON.stringify({
+                        role: roleInfo.name, display: roleInfo.display_name,
+                        target_user: user.username, severity: 'high',
+                        requires: 'org_owner or security_officer approval'
+                    })]
+                );
+
+                // Remove this role from immediate assignment list
+                role_ids.splice(role_ids.indexOf(roleId), 1);
+
+                // If all roles were high-risk, return pending status
+                if (role_ids.length === 0) {
+                    return res.status(202).json({
+                        message: 'High-risk role assignment requires approval',
+                        code: 'DUAL_CONTROL_PENDING',
+                        approval_id: approvalId,
+                        pending_role: roleInfo.display_name,
+                        requires_approval_from: 'org_owner or security_officer'
+                    });
+                }
+            }
+        }
 
         // Verify all roles belong to this tenant
         for (const roleId of role_ids) {
@@ -429,6 +526,844 @@ router.get('/audit', async (req, res) => {
     } catch (err) {
         console.error('[TenantAdmin] Audit error:', err);
         res.status(500).json({ error: 'Failed to load audit logs' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DUAL-CONTROL APPROVAL SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── GET /approvals — List pending role approvals ──────────────────────────────
+router.get('/approvals', async (req, res) => {
+    try {
+        const approvals = await db.all(
+            `SELECT pa.*, 
+                    u.username as target_user, u.email as target_email,
+                    req_u.username as requester_name
+             FROM pending_role_approvals pa
+             LEFT JOIN users u ON u.id = pa.user_id
+             LEFT JOIN users req_u ON req_u.id = pa.requested_by
+             WHERE pa.tenant_id = ?
+             ORDER BY pa.created_at DESC
+             LIMIT 50`,
+            [req.tenantId]
+        );
+        res.json({ approvals });
+    } catch (err) {
+        // Table may not exist yet
+        res.json({ approvals: [] });
+    }
+});
+
+// ─── POST /approvals/:id/approve — Approve high-risk role assignment ─────────
+router.post('/approvals/:id/approve', async (req, res) => {
+    try {
+        // Only org_owner or security_officer can approve
+        const approverRole = req.user.role;
+        if (!['org_owner', 'security_officer', 'super_admin', 'admin'].includes(approverRole)) {
+            return res.status(403).json({
+                error: 'Only org_owner or security_officer can approve high-risk role assignments',
+                code: 'DUAL_CONTROL_DENIED'
+            });
+        }
+
+        const approval = await db.get(
+            'SELECT * FROM pending_role_approvals WHERE id = ? AND tenant_id = ? AND status = ?',
+            [req.params.id, req.tenantId, 'pending']
+        );
+        if (!approval) return res.status(404).json({ error: 'Approval not found or already resolved' });
+
+        // Cannot approve own request
+        if (approval.requested_by === req.user.id) {
+            return res.status(403).json({
+                error: 'Cannot approve your own request (dual-control)',
+                code: 'DUAL_CONTROL_SELF_APPROVE'
+            });
+        }
+
+        // Execute the role assignment
+        await db.run(
+            'INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id, assigned_by, expires_at) VALUES (?, ?, ?, ?)',
+            [approval.user_id, approval.role_id, req.user.id, approval.expires_at]
+        );
+
+        // Update legacy role column
+        await db.run('UPDATE users SET role = ? WHERE id = ?', [approval.role_name, approval.user_id]);
+
+        // Mark approval as approved
+        await db.run(
+            `UPDATE pending_role_approvals SET status = 'approved', approved_by = ?, resolved_at = NOW() WHERE id = ?`,
+            [req.user.id, req.params.id]
+        );
+
+        // Audit
+        await db.run(
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'HIGH_RISK_ROLE_APPROVED', 'pending_approval', ?, ?)`,
+            [uuidv4(), req.user.id, req.params.id, JSON.stringify({
+                role: approval.role_name, target_user_id: approval.user_id,
+                approver: req.user.username, severity: 'high'
+            })]
+        );
+
+        if (typeof db.save === 'function') await db.save();
+        res.json({ message: 'Role approved and assigned', approval_id: req.params.id, role: approval.role_name });
+    } catch (err) {
+        console.error('[TenantAdmin] Approve error:', err);
+        res.status(500).json({ error: 'Failed to approve' });
+    }
+});
+
+// ─── POST /approvals/:id/reject — Reject high-risk role assignment ──────────
+router.post('/approvals/:id/reject', async (req, res) => {
+    try {
+        const approverRole = req.user.role;
+        if (!['org_owner', 'security_officer', 'super_admin', 'admin'].includes(approverRole)) {
+            return res.status(403).json({ error: 'Only org_owner or security_officer can reject', code: 'DUAL_CONTROL_DENIED' });
+        }
+
+        const approval = await db.get(
+            'SELECT * FROM pending_role_approvals WHERE id = ? AND tenant_id = ? AND status = ?',
+            [req.params.id, req.tenantId, 'pending']
+        );
+        if (!approval) return res.status(404).json({ error: 'Approval not found or already resolved' });
+
+        const { reason = '' } = req.body;
+
+        await db.run(
+            `UPDATE pending_role_approvals SET status = 'rejected', approved_by = ?, reason = ?, resolved_at = NOW() WHERE id = ?`,
+            [req.user.id, reason, req.params.id]
+        );
+
+        await db.run(
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'HIGH_RISK_ROLE_REJECTED', 'pending_approval', ?, ?)`,
+            [uuidv4(), req.user.id, req.params.id, JSON.stringify({
+                role: approval.role_name, target_user_id: approval.user_id,
+                rejector: req.user.username, reason, severity: 'high'
+            })]
+        );
+
+        if (typeof db.save === 'function') await db.save();
+        res.json({ message: 'Role assignment rejected', approval_id: req.params.id });
+    } catch (err) {
+        console.error('[TenantAdmin] Reject error:', err);
+        res.status(500).json({ error: 'Failed to reject' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GOVERNANCE DASHBOARD (Operational Monitoring for CA)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get('/governance/dashboard', async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        // Pending approvals
+        let pendingCount = 0;
+        try {
+            const p = await db.get('SELECT COUNT(*) as c FROM pending_role_approvals WHERE tenant_id = ? AND status = ?', [tid, 'pending']);
+            pendingCount = p?.c || 0;
+        } catch (_) { /* table may not exist */ }
+
+        // SoD conflict warnings (users with conflicting roles)
+        const sodWarnings = [];
+        const users = await db.all('SELECT id, username FROM users WHERE org_id = ?', [tid]);
+        const { SOD_CONFLICTS } = require('../auth/rbac');
+        for (const u of users.slice(0, 50)) {
+            const perms = await db.all(`
+                SELECT DISTINCT p.resource || ':' || p.action AS perm
+                FROM rbac_user_roles ur
+                JOIN rbac_role_permissions rp ON rp.role_id = ur.role_id
+                JOIN rbac_permissions p ON p.id = rp.permission_id
+                WHERE ur.user_id = ?`, [u.id]);
+            const permSet = new Set(perms.map(r => r.perm));
+            for (const [p1, p2] of SOD_CONFLICTS) {
+                if (permSet.has(p1) && permSet.has(p2)) {
+                    sodWarnings.push({ user: u.username, conflict: [p1, p2] });
+                }
+            }
+        }
+
+        // Recent high-severity audit events
+        const highSeverityEvents = await db.all(
+            `SELECT al.*, u.username as actor_name FROM audit_log al
+             LEFT JOIN users u ON u.id = al.actor_id
+             WHERE al.action IN ('SELF_ELEVATION_BLOCKED', 'PERMISSION_CEILING_BLOCKED', 'HIGH_RISK_ROLE_PENDING', 'HIGH_RISK_ROLE_APPROVED', 'HIGH_RISK_ROLE_REJECTED')
+             AND al.actor_id IN (SELECT id FROM users WHERE org_id = ?)
+             ORDER BY al.created_at DESC LIMIT 20`,
+            [tid]
+        );
+
+        // Active user count
+        const userCount = await db.get('SELECT COUNT(*) as c FROM users WHERE org_id = ?', [tid]);
+
+        // Role distribution
+        const roleDistribution = await db.all(
+            `SELECT r.display_name, r.name, COUNT(ur.user_id) as count
+             FROM rbac_roles r
+             LEFT JOIN rbac_user_roles ur ON ur.role_id = r.id
+             WHERE r.tenant_id = ?
+             GROUP BY r.id
+             ORDER BY count DESC`,
+            [tid]
+        );
+
+        res.json({
+            pending_approvals: pendingCount,
+            sod_warnings: sodWarnings,
+            sod_warning_count: sodWarnings.length,
+            high_severity_events: highSeverityEvents,
+            total_users: userCount?.c || 0,
+            role_distribution: roleDistribution,
+        });
+    } catch (err) {
+        console.error('[TenantAdmin] Governance dashboard error:', err);
+        res.status(500).json({ error: 'Failed to load governance data' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ORG OWNER: APPOINT COMPANY ADMIN
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// POST /api/tenant/appoint-admin — Org Owner appoints Company Admin by email
+router.post('/appoint-admin', async (req, res) => {
+    try {
+        // Only org_owner (or super_admin) can appoint
+        const callerRole = req.user.role;
+        if (!['org_owner', 'super_admin'].includes(callerRole)) {
+            return res.status(403).json({
+                error: 'Only org_owner can appoint Company Admins',
+                code: 'APPOINT_DENIED',
+            });
+        }
+
+        const { email, name } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+
+        const tenantId = req.tenantId;
+
+        // Check if already a company_admin in this org
+        const existingCA = await db.get(
+            `SELECT id FROM users WHERE email = ? AND org_id = ? AND role = 'company_admin'`,
+            [email, tenantId]
+        );
+        if (existingCA) {
+            return res.status(409).json({ error: 'This user is already a Company Admin', code: 'ALREADY_CA' });
+        }
+
+        let user = await db.get('SELECT id, email, org_id FROM users WHERE email = ?', [email]);
+        let created = false;
+        const tempPassword = 'Admin@' + Math.random().toString(36).substring(2, 10) + '!';
+
+        if (!user) {
+            // Create new user as company_admin
+            const userId = uuidv4();
+            const displayName = name || email.split('@')[0];
+            const passwordHash = await bcrypt.hash(tempPassword, 12);
+
+            await db.run(
+                `INSERT INTO users (id, username, email, password_hash, role, org_id, user_type, must_change_password, created_at)
+                 VALUES (?, ?, ?, ?, 'company_admin', ?, 'tenant', 1, datetime('now'))`,
+                [userId, displayName, email, passwordHash, tenantId]
+            );
+            user = { id: userId, email };
+            created = true;
+        } else {
+            // Promote existing user to company_admin
+            if (user.org_id && user.org_id !== tenantId) {
+                return res.status(409).json({ error: 'User belongs to a different organization', code: 'WRONG_ORG' });
+            }
+            await db.run('UPDATE users SET role = ?, org_id = ? WHERE id = ?', ['company_admin', tenantId, user.id]);
+        }
+
+        // Assign company_admin RBAC role
+        const caRole = await db.get(
+            `SELECT id FROM rbac_roles WHERE tenant_id = ? AND name = 'company_admin'`, [tenantId]
+        );
+        if (caRole) {
+            await db.run(
+                `INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id, assigned_by) VALUES (?, ?, ?)`,
+                [user.id, caRole.id, req.user.id]
+            );
+        }
+
+        // Audit
+        await db.run(
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'CA_APPOINTED', 'user', ?, ?)`,
+            [uuidv4(), req.user.id, user.id, JSON.stringify({
+                email, appointed_by: req.user.email, created,
+                severity: 'high',
+            })]
+        );
+
+        if (typeof db.save === 'function') await db.save();
+
+        res.status(201).json({
+            user_id: user.id,
+            email,
+            role: 'company_admin',
+            created,
+            temp_password: created ? tempPassword : undefined,
+            must_change_password: created,
+            message: created
+                ? `Company Admin account created for ${email}. Temporary password provided.`
+                : `${email} promoted to Company Admin.`,
+        });
+    } catch (err) {
+        console.error('[TenantAdmin] Appoint admin error:', err);
+        res.status(500).json({ error: 'Failed to appoint Company Admin' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ORG OWNER — STRATEGIC GOVERNANCE ENDPOINTS
+// "See everything, touch nothing operational"
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function requireOrgOwner() {
+    return (req, res, next) => {
+        if (!['org_owner', 'super_admin'].includes(req.user.role)) {
+            return res.status(403).json({ error: 'Org Owner access required', code: 'OWNER_ONLY' });
+        }
+        next();
+    };
+}
+
+// ─── 1. Governance Overview (Enhanced Dashboard) ─────────────────────────────
+router.get('/owner/dashboard', requireOrgOwner(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [userCount, roleDistribution, highRiskCount, pendingApprovals,
+            sodWarnings, suspiciousAlerts, carbonMints, riskModelVersion,
+            selfElevationCount, inactivePrivCount, recentCritical] = await Promise.all([
+                db.get(`SELECT COUNT(*) as c FROM users WHERE org_id = $1`, [tid]),
+                db.all(`SELECT role, COUNT(*) as count FROM users WHERE org_id = $1 GROUP BY role ORDER BY count DESC`, [tid]),
+                db.get(`SELECT COUNT(*) as c FROM users WHERE org_id = $1 AND role IN ('compliance_officer','risk_officer','risk_committee','security_officer','org_owner')`, [tid]),
+                db.get(`SELECT COUNT(*) as c FROM pending_role_approvals WHERE tenant_id = $1 AND status = 'pending'`, [tid]).catch(() => ({ c: 0 })),
+                db.all(`SELECT u.email, array_agg(ur.role_id) as roles FROM rbac_user_roles ur JOIN users u ON u.id = ur.user_id WHERE u.org_id = $1 GROUP BY u.email HAVING COUNT(*) > 3 LIMIT 10`, [tid]).catch(() => []),
+                db.all(`SELECT action, details, created_at FROM audit_log WHERE entity_type IN ('session','security') AND actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY created_at DESC LIMIT 10`, [tid]).catch(() => []),
+                db.get(`SELECT COUNT(*) as c FROM audit_log WHERE action = 'CARBON_MINT' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) AND created_at > NOW() - INTERVAL '30 days'`, [tid]).catch(() => ({ c: 0 })),
+                db.get(`SELECT details FROM audit_log WHERE action = 'RISK_MODEL_DEPLOY' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY created_at DESC LIMIT 1`, [tid]).catch(() => null),
+                // NEW: Self-elevation attempt count (30d)
+                db.get(`SELECT COUNT(*) as c FROM audit_log WHERE action = 'SELF_ELEVATION_BLOCKED' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) AND created_at > NOW() - INTERVAL '30 days'`, [tid]).catch(() => ({ c: 0 })),
+                // NEW: Inactive privileged accounts count
+                db.get(`SELECT COUNT(*) as c FROM users WHERE org_id = $1 AND role IN ('company_admin','admin','org_owner','security_officer','compliance_officer','risk_officer') AND (last_login IS NULL OR last_login < NOW() - INTERVAL '30 days')`, [tid]).catch(() => ({ c: 0 })),
+                // NEW: Last 5 critical actions for quick view
+                db.all(`SELECT al.action, al.created_at, u.email as actor_email FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id WHERE al.action IN ('TENANT_FREEZE','FORCE_REAUTH','REVOKE_ALL_SESSIONS','ROLE_SUSPENDED','CA_APPOINTED','ROLE_APPOINTED','HIGH_RISK_ROLE_APPROVED','SELF_ELEVATION_BLOCKED') AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1)) ORDER BY al.created_at DESC LIMIT 5`, [tid]).catch(() => []),
+            ]);
+
+        // Compute Privilege Risk Score (0-100)
+        const hrCount = highRiskCount?.c || 0;
+        const total = userCount?.c || 1;
+        const sodCount = (sodWarnings || []).length;
+        const inactiveCount = inactivePrivCount?.c || 0;
+        const selfElevations = selfElevationCount?.c || 0;
+        const privilege_risk_score = Math.min(100, Math.round(
+            (hrCount / total) * 30 +           // High-risk role density
+            sodCount * 15 +                     // Each SoD violation
+            inactiveCount * 10 +                // Inactive privileged accounts
+            selfElevations * 5 +                // Self-elevation attempts
+            (pendingApprovals?.c || 0) * 3      // Unresolved approvals
+        ));
+
+        res.json({
+            total_users: userCount?.c || 0,
+            role_distribution: roleDistribution,
+            high_risk_role_count: hrCount,
+            pending_approvals: pendingApprovals?.c || 0,
+            sod_warnings: sodWarnings,
+            sod_violation_count: sodCount,
+            suspicious_alerts: suspiciousAlerts,
+            carbon_mints_30d: carbonMints?.c || 0,
+            risk_model_version: (() => { try { const d = riskModelVersion?.details; if (!d) return 'N/A'; const obj = typeof d === 'string' ? JSON.parse(d) : d; return obj.version || 'N/A'; } catch { return 'N/A'; } })(),
+            // Enhanced fields
+            privilege_risk_score,
+            inactive_privileged_count: inactiveCount,
+            self_elevation_attempts_30d: selfElevations,
+            recent_critical_5: recentCritical,
+        });
+    } catch (err) {
+        console.error('[OwnerAPI] Dashboard error:', err);
+        res.status(500).json({ error: 'Failed to load governance dashboard' });
+    }
+});
+
+// ─── 2. Access Oversight ─────────────────────────────────────────────────────
+router.get('/owner/access-oversight', requireOrgOwner(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [roleMatrix, escalationHistory, riskAccounts, inactivePrivileged] = await Promise.all([
+            // Role matrix (read-only)
+            db.all(`SELECT u.id, u.email, u.username, u.role, u.last_login, u.created_at
+                    FROM users u WHERE u.org_id = $1 ORDER BY u.role, u.email`, [tid]),
+            // Privilege escalation history (role changes)
+            db.all(`SELECT al.actor_id, al.action, al.entity_id, al.details, al.created_at,
+                           u.email as actor_email
+                    FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
+                    WHERE al.action IN ('ROLE_CHANGED','CA_APPOINTED','ROLE_ASSIGNED','SELF_ELEVATION_BLOCKED','PERMISSION_CEILING_BLOCKED')
+                    AND al.entity_id IN (SELECT id FROM users WHERE org_id = $1)
+                    ORDER BY al.created_at DESC LIMIT 50`, [tid]),
+            // Highest-risk accounts (most permissions + roles)
+            db.all(`SELECT u.email, u.role, u.last_login,
+                           COUNT(DISTINCT ur.role_id) as role_count
+                    FROM users u LEFT JOIN rbac_user_roles ur ON ur.user_id = u.id
+                    WHERE u.org_id = $1 GROUP BY u.id, u.email, u.role, u.last_login
+                    ORDER BY role_count DESC LIMIT 10`, [tid]),
+            // Inactive privileged accounts (no login in 30+ days with admin-level roles)
+            db.all(`SELECT email, role, last_login FROM users
+                    WHERE org_id = $1 AND role IN ('company_admin','admin','org_owner','security_officer','compliance_officer','risk_officer')
+                    AND (last_login IS NULL OR last_login < NOW() - INTERVAL '30 days')`, [tid]),
+        ]);
+
+        res.json({ role_matrix: roleMatrix, escalation_history: escalationHistory, risk_accounts: riskAccounts, inactive_privileged: inactivePrivileged });
+    } catch (err) {
+        console.error('[OwnerAPI] Access oversight error:', err);
+        res.status(500).json({ error: 'Failed to load access oversight' });
+    }
+});
+
+// ─── 3. Critical Action Log ──────────────────────────────────────────────────
+router.get('/owner/critical-actions', requireOrgOwner(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+        const criticalActions = await db.all(
+            `SELECT al.id, al.actor_id, al.action, al.entity_type, al.entity_id, al.details, al.created_at,
+                    u.email as actor_email
+             FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
+             WHERE al.action IN (
+                 'RISK_MODEL_DEPLOY','CARBON_MINT','SCHEMA_CHANGE','REGULATORY_EXPORT',
+                 'CA_APPOINTED','ORG_CREATED','TENANT_FREEZE','FORCE_REAUTH',
+                 'REVOKE_ALL_SESSIONS','ROLE_SUSPENDED','EMERGENCY_AUDIT_EXPORT',
+                 'PERMISSION_CEILING_BLOCKED','SELF_ELEVATION_BLOCKED','NEW_IP_LOGIN','ROLE_EXPIRED'
+             )
+             AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
+             ORDER BY al.created_at DESC LIMIT 100`,
+            [tid]
+        );
+
+        res.json({ actions: criticalActions, total: criticalActions.length });
+    } catch (err) {
+        console.error('[OwnerAPI] Critical actions error:', err);
+        res.status(500).json({ error: 'Failed to load critical actions' });
+    }
+});
+
+// ─── 4. Emergency Controls ───────────────────────────────────────────────────
+router.post('/owner/emergency', requireOrgOwner(), async (req, res) => {
+    try {
+        const { action, justification, target_role, target_user_id } = req.body;
+        const tid = req.tenantId;
+
+        if (!justification || justification.length < 10) {
+            return res.status(400).json({ error: 'Justification is required (min 10 chars)', code: 'JUSTIFICATION_REQUIRED' });
+        }
+
+        const VALID_ACTIONS = ['TENANT_FREEZE', 'FORCE_REAUTH', 'REVOKE_ALL_SESSIONS', 'SUSPEND_ROLE', 'EMERGENCY_AUDIT_EXPORT'];
+        if (!VALID_ACTIONS.includes(action)) {
+            return res.status(400).json({ error: 'Invalid emergency action', valid_actions: VALID_ACTIONS });
+        }
+
+        let result = {};
+
+        if (action === 'TENANT_FREEZE') {
+            await db.run(`UPDATE organizations SET settings = jsonb_set(COALESCE(settings::jsonb, '{}'::jsonb), '{frozen}', 'true') WHERE id = $1`, [tid]);
+            result = { message: 'Tenant frozen — all write operations blocked', frozen: true };
+        } else if (action === 'FORCE_REAUTH') {
+            const revoked = await db.run(`UPDATE sessions SET revoked = true WHERE user_id IN (SELECT id FROM users WHERE org_id = $1) AND revoked = false`, [tid]);
+            result = { message: 'All user sessions invalidated — re-authentication required', sessions_revoked: true };
+        } else if (action === 'REVOKE_ALL_SESSIONS') {
+            await db.run(`UPDATE sessions SET revoked = true WHERE user_id IN (SELECT id FROM users WHERE org_id = $1) AND revoked = false`, [tid]);
+            result = { message: 'All active sessions revoked', sessions_revoked: true };
+        } else if (action === 'SUSPEND_ROLE') {
+            if (!target_role) return res.status(400).json({ error: 'target_role is required for SUSPEND_ROLE' });
+            await db.run(`UPDATE users SET role = 'viewer' WHERE org_id = $1 AND role = $2`, [tid, target_role]);
+            result = { message: `All ${target_role} users demoted to viewer`, suspended_role: target_role };
+        } else if (action === 'EMERGENCY_AUDIT_EXPORT') {
+            const logs = await db.all(
+                `SELECT al.* FROM audit_log al WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY al.created_at DESC LIMIT 1000`, [tid]
+            );
+            result = { message: 'Emergency audit export ready', log_count: logs.length, logs };
+        }
+
+        // Immutable audit log
+        await db.run(
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES ($1, $2, $3, 'emergency', $4, $5)`,
+            [uuidv4(), req.user.id, action, tid, JSON.stringify({
+                justification, target_role, target_user_id,
+                severity: 'critical',
+                triggered_by: req.user.email,
+            })]
+        );
+
+        if (typeof db.save === 'function') await db.save();
+        res.json({ success: true, action, ...result });
+    } catch (err) {
+        console.error('[OwnerAPI] Emergency action error:', err);
+        res.status(500).json({ error: 'Emergency action failed' });
+    }
+});
+
+// ─── 5. Appoint (CA or Security Officer) ─────────────────────────────────────
+router.post('/owner/appoint', requireOrgOwner(), async (req, res) => {
+    try {
+        const { email, name, role: targetRole = 'company_admin' } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email is required' });
+
+        const APPOINTABLE = ['company_admin', 'security_officer'];
+        if (!APPOINTABLE.includes(targetRole)) {
+            return res.status(400).json({ error: `Can only appoint: ${APPOINTABLE.join(', ')}`, code: 'INVALID_ROLE' });
+        }
+
+        const tid = req.tenantId;
+        let user = await db.get('SELECT id, email, org_id FROM users WHERE email = $1', [email]);
+        let created = false;
+        const tempPassword = 'Appoint@' + Math.random().toString(36).substring(2, 10) + '!';
+
+        if (!user) {
+            const userId = uuidv4();
+            const displayName = name || email.split('@')[0];
+            const passwordHash = await bcrypt.hash(tempPassword, 12);
+            await db.run(
+                `INSERT INTO users (id, username, email, password_hash, role, org_id, user_type, must_change_password, created_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, 'tenant', true, NOW())`,
+                [userId, displayName, email, passwordHash, targetRole, tid]
+            );
+            user = { id: userId, email };
+            created = true;
+        } else {
+            if (user.org_id && user.org_id !== tid) {
+                return res.status(409).json({ error: 'User belongs to a different organization' });
+            }
+            await db.run('UPDATE users SET role = $1, org_id = $2 WHERE id = $3', [targetRole, tid, user.id]);
+        }
+
+        await db.run(
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES ($1, $2, 'ROLE_APPOINTED', 'user', $3, $4)`,
+            [uuidv4(), req.user.id, user.id, JSON.stringify({
+                email, role: targetRole, appointed_by: req.user.email, created, severity: 'high',
+            })]
+        );
+
+        if (typeof db.save === 'function') await db.save();
+
+        res.status(201).json({
+            user_id: user.id, email, role: targetRole, created,
+            temp_password: created ? tempPassword : undefined,
+            message: created ? `${targetRole} account created for ${email}` : `${email} promoted to ${targetRole}`,
+        });
+    } catch (err) {
+        console.error('[OwnerAPI] Appoint error:', err);
+        res.status(500).json({ error: 'Failed to appoint' });
+    }
+});
+
+// ─── 6. Privilege & Access Governance ────────────────────────────────────────
+router.get('/owner/privilege-governance', requireOrgOwner(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [recentRoleAssignments, roleExpirations, selfElevationLog,
+            highRiskUsers, sodConflicts] = await Promise.all([
+                // Recent role assignments (who got what, when, by whom)
+                db.all(`SELECT al.action, al.details, al.created_at,
+                               u.email as actor_email, target.email as target_email
+                        FROM audit_log al
+                        LEFT JOIN users u ON u.id = al.actor_id
+                        LEFT JOIN users target ON target.id = al.entity_id
+                        WHERE al.action IN ('ROLES_ASSIGNED','HIGH_RISK_ROLE_APPROVED','HIGH_RISK_ROLE_REJECTED','HIGH_RISK_ROLE_PENDING','ROLE_APPOINTED','CA_APPOINTED')
+                        AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
+                        ORDER BY al.created_at DESC LIMIT 30`, [tid]).catch(() => []),
+                // Role expiration tracking
+                db.all(`SELECT ur.expires_at, r.name as role_name, r.display_name, u.email
+                        FROM rbac_user_roles ur
+                        JOIN rbac_roles r ON r.id = ur.role_id
+                        JOIN users u ON u.id = ur.user_id
+                        WHERE r.tenant_id = $1 AND ur.expires_at IS NOT NULL
+                        ORDER BY ur.expires_at ASC LIMIT 20`, [tid]).catch(() => []),
+                // Self-assignment attempt log
+                db.all(`SELECT al.created_at, al.details, u.email as actor_email
+                        FROM audit_log al
+                        LEFT JOIN users u ON u.id = al.actor_id
+                        WHERE al.action IN ('SELF_ELEVATION_BLOCKED','PERMISSION_CEILING_BLOCKED')
+                        AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
+                        ORDER BY al.created_at DESC LIMIT 20`, [tid]).catch(() => []),
+                // High-risk role mapping
+                db.all(`SELECT u.email, u.username, u.role, u.last_login, u.created_at,
+                               COUNT(DISTINCT ur.role_id) as role_count
+                        FROM users u
+                        LEFT JOIN rbac_user_roles ur ON ur.user_id = u.id
+                        WHERE u.org_id = $1 AND u.role IN ('compliance_officer','risk_officer','risk_committee','security_officer','org_owner','carbon_officer','company_admin')
+                        GROUP BY u.id, u.email, u.username, u.role, u.last_login, u.created_at
+                        ORDER BY role_count DESC`, [tid]).catch(() => []),
+                // SoD conflict report
+                db.all(`SELECT u.email, array_agg(ur.role_id) as roles, COUNT(DISTINCT ur.role_id) as role_count
+                        FROM rbac_user_roles ur
+                        JOIN users u ON u.id = ur.user_id
+                        WHERE u.org_id = $1
+                        GROUP BY u.id, u.email
+                        HAVING COUNT(DISTINCT ur.role_id) > 2
+                        ORDER BY role_count DESC LIMIT 15`, [tid]).catch(() => []),
+            ]);
+
+        res.json({
+            recent_role_assignments: recentRoleAssignments,
+            role_expirations: roleExpirations,
+            self_elevation_log: selfElevationLog,
+            high_risk_users: highRiskUsers,
+            sod_conflicts: sodConflicts,
+        });
+    } catch (err) {
+        console.error('[OwnerAPI] Privilege governance error:', err);
+        res.status(500).json({ error: 'Failed to load privilege governance data' });
+    }
+});
+
+// ─── 7. Risk & Integrity Monitoring ─────────────────────────────────────────
+router.get('/owner/risk-monitoring', requireOrgOwner(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [riskSignals, anomalies, newIpLogins] = await Promise.all([
+            // Risk signals: suspicious and security-related events
+            db.all(`SELECT al.id, al.actor_id, al.action, al.entity_type, al.details, al.created_at,
+                           u.email as actor_email
+                    FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
+                    WHERE al.action IN (
+                        'SELF_ELEVATION_BLOCKED','PERMISSION_CEILING_BLOCKED',
+                        'NEW_IP_LOGIN','ROLE_EXPIRED','SOD_CONFLICT_DETECTED'
+                    )
+                    AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
+                    ORDER BY al.created_at DESC LIMIT 50`, [tid]).catch(() => []),
+            // Anomalous patterns: failed logins, unusual hours
+            db.all(`SELECT al.action, al.details, al.created_at, u.email as actor_email
+                    FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
+                    WHERE al.action IN ('LOGIN_FAILED','SUSPICIOUS_ACCESS','RATE_LIMIT_HIT','SESSION_HIJACK_DETECTED')
+                    AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
+                    ORDER BY al.created_at DESC LIMIT 30`, [tid]).catch(() => []),
+            // New IP logins
+            db.all(`SELECT al.details, al.created_at, u.email as actor_email
+                    FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
+                    WHERE al.action = 'NEW_IP_LOGIN'
+                    AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
+                    ORDER BY al.created_at DESC LIMIT 20`, [tid]).catch(() => []),
+        ]);
+
+        res.json({
+            risk_signals: riskSignals,
+            anomalies: anomalies,
+            new_ip_logins: newIpLogins,
+            total_signals: riskSignals.length + anomalies.length,
+        });
+    } catch (err) {
+        console.error('[OwnerAPI] Risk monitoring error:', err);
+        res.status(500).json({ error: 'Failed to load risk monitoring data' });
+    }
+});
+
+// ─── 8. Governance Activity Log (Meta-Governance) ───────────────────────────
+router.get('/owner/governance-log', requireOrgOwner(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [governanceActions, emergencyLog, appointmentHistory] = await Promise.all([
+            // All governance-level actions (immutable trail)
+            db.all(`SELECT al.id, al.actor_id, al.action, al.entity_type, al.entity_id, al.details, al.created_at,
+                           u.email as actor_email
+                    FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
+                    WHERE al.action IN (
+                        'CA_APPOINTED','ROLE_APPOINTED','ROLES_ASSIGNED',
+                        'HIGH_RISK_ROLE_APPROVED','HIGH_RISK_ROLE_REJECTED','HIGH_RISK_ROLE_PENDING',
+                        'ROLE_CHANGED','ROLE_SUSPENDED','USER_CREATED','USER_REMOVED',
+                        'RISK_MODEL_DEPLOY','SCHEMA_CHANGE','REGULATORY_EXPORT',
+                        'CARBON_MINT','ORG_CREATED'
+                    )
+                    AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
+                    ORDER BY al.created_at DESC LIMIT 100`, [tid]).catch(() => []),
+            // Emergency / break-glass events
+            db.all(`SELECT al.id, al.action, al.details, al.created_at, u.email as actor_email
+                    FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
+                    WHERE al.entity_type = 'emergency'
+                    AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id = $1)
+                    ORDER BY al.created_at DESC LIMIT 50`, [tid]).catch(() => []),
+            // CA/SO appointment history
+            db.all(`SELECT al.action, al.details, al.created_at, u.email as actor_email, target.email as target_email
+                    FROM audit_log al
+                    LEFT JOIN users u ON u.id = al.actor_id
+                    LEFT JOIN users target ON target.id = al.entity_id
+                    WHERE al.action IN ('CA_APPOINTED','ROLE_APPOINTED')
+                    AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
+                    ORDER BY al.created_at DESC LIMIT 30`, [tid]).catch(() => []),
+        ]);
+
+        res.json({
+            governance_actions: governanceActions,
+            emergency_log: emergencyLog,
+            appointment_history: appointmentHistory,
+            total_entries: governanceActions.length,
+        });
+    } catch (err) {
+        console.error('[OwnerAPI] Governance log error:', err);
+        res.status(500).json({ error: 'Failed to load governance log' });
+    }
+});
+
+// ─── 9. Financial & Plan (Org-level — by org_id) ────────────────────────────
+router.get('/owner/financial', requireOrgOwner(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [orgPlan, orgInvoices, orgUsage, orgInfo] = await Promise.all([
+            // Active billing plan for any user in this org
+            db.get(`SELECT bp.* FROM billing_plans bp
+                    JOIN users u ON u.id = bp.user_id
+                    WHERE u.org_id = $1 AND bp.status = 'active'
+                    ORDER BY bp.started_at DESC LIMIT 1`, [tid]).catch(() => null),
+            // All invoices for users in this org
+            db.all(`SELECT i.* FROM invoices i
+                    JOIN users u ON u.id = i.user_id
+                    WHERE u.org_id = $1
+                    ORDER BY i.created_at DESC`, [tid]).catch(() => []),
+            // Usage stats (org-wide)
+            Promise.all([
+                db.get(`SELECT COUNT(*) as c FROM scan_events WHERE scanned_at >= date_trunc('month', NOW())`).catch(() => ({ c: 0 })),
+                db.get(`SELECT COALESCE(SUM(file_size), 0) as s FROM evidence_items`).catch(() => ({ s: 0 })),
+                db.get(`SELECT COUNT(*) as c FROM audit_log WHERE created_at >= date_trunc('month', NOW()) AND actor_id IN (SELECT id FROM users WHERE org_id = $1)`, [tid]).catch(() => ({ c: 0 })),
+            ]),
+            // Org info
+            db.get(`SELECT name, plan, settings FROM organizations WHERE id = $1`, [tid]).catch(() => null),
+        ]);
+
+        const plan = orgPlan || {};
+        const isEnterprise = (plan.plan_name === 'enterprise') || (orgInfo?.plan === 'enterprise');
+
+        // Build usage object
+        const [scans, evidence, apiCalls] = orgUsage;
+        const usage = {
+            scans: { used: scans?.c || 0, limit: isEnterprise ? '∞' : (plan.scan_limit || 100) },
+            api_calls: { used: apiCalls?.c || 0, limit: isEnterprise ? '∞' : (plan.api_limit || 500) },
+            storage_mb: {
+                used: Math.round((evidence?.s || 0) / (1024 * 1024) * 100) / 100,
+                limit: isEnterprise ? '∞' : (plan.storage_mb || 50),
+            },
+        };
+
+        const totalPaid = (orgInvoices || []).filter(i => i.status === 'paid').reduce((s, i) => s + (i.amount || 0), 0);
+
+        res.json({
+            plan: {
+                plan_name: plan.plan_name || orgInfo?.plan || 'free',
+                price_monthly: plan.price_monthly || 0,
+                billing_cycle: plan.billing_cycle || 'monthly',
+                sla_level: plan.sla_level || null,
+                scan_limit: plan.scan_limit || 0,
+                api_limit: plan.api_limit || 0,
+                storage_mb: plan.storage_mb || 0,
+                status: plan.status || 'active',
+                started_at: plan.started_at,
+            },
+            period: new Date().toISOString().substring(0, 7),
+            usage,
+            invoices: orgInvoices || [],
+            total_paid: totalPaid,
+            org_name: orgInfo?.name || '',
+        });
+    } catch (err) {
+        console.error('[OwnerAPI] Financial error:', err);
+        res.status(500).json({ error: 'Failed to load financial data' });
+    }
+});
+
+// ─── 10. Compliance & Legal (Org-level — by org_id) ─────────────────────────
+router.get('/owner/compliance', requireOrgOwner(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [retentionPolicies, complianceRecords, gdprActivity, consentStats, orgSettings] = await Promise.all([
+            // Retention policies created by org users (or all if table has no tenant scope)
+            db.all(`SELECT drp.* FROM data_retention_policies drp
+                    WHERE drp.created_by IN (SELECT id FROM users WHERE org_id = $1)
+                    ORDER BY drp.created_at DESC`, [tid]).catch(() => []),
+            // Compliance records linked to org's products
+            db.all(`SELECT cr.* FROM compliance_records cr
+                    WHERE cr.entity_id IN (SELECT id FROM products WHERE org_id = $1)
+                    ORDER BY cr.created_at DESC LIMIT 50`, [tid]).catch(() => []),
+            // GDPR activity for org users
+            db.all(`SELECT al.action, al.created_at, al.details, u.email as actor_email
+                    FROM audit_log al
+                    LEFT JOIN users u ON u.id = al.actor_id
+                    WHERE al.action IN ('GDPR_EXPORT','GDPR_DATA_EXPORT','GDPR_DELETION','CONSENT_GIVEN','RETENTION_EXECUTED')
+                    AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
+                    ORDER BY al.created_at DESC LIMIT 30`, [tid]).catch(() => []),
+            // Consent stats for this org
+            Promise.all([
+                db.get(`SELECT COUNT(*) as c FROM users WHERE org_id = $1`, [tid]).catch(() => ({ c: 0 })),
+                db.get(`SELECT COUNT(DISTINCT al.actor_id) as c FROM audit_log al
+                        WHERE al.action = 'CONSENT_GIVEN'
+                        AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)`, [tid]).catch(() => ({ c: 0 })),
+            ]),
+            // Org settings for compliance context
+            db.get(`SELECT name, plan, settings, feature_flags FROM organizations WHERE id = $1`, [tid]).catch(() => null),
+        ]);
+
+        const [totalUsers, consentedUsers] = consentStats;
+        const totalU = totalUsers?.c || 0;
+        const consentedU = consentedUsers?.c || 0;
+        const consentRate = totalU > 0 ? Math.round((consentedU / totalU) * 100) : 0;
+
+        // Default retention policies if none exist for this org
+        const retention = retentionPolicies.length > 0 ? retentionPolicies : [
+            { id: 'default-1', table_name: 'audit_log', name: 'Audit Log', retention_days: 730, action: 'archive', is_active: true, is_default: true },
+            { id: 'default-2', table_name: 'scan_events', name: 'Scan Events', retention_days: 365, action: 'archive', is_active: true, is_default: true },
+            { id: 'default-3', table_name: 'fraud_alerts', name: 'Fraud Alerts', retention_days: 365, action: 'archive', is_active: true, is_default: true },
+            { id: 'default-4', table_name: 'usage_metrics', name: 'Usage Metrics', retention_days: 180, action: 'delete', is_active: true, is_default: true },
+            { id: 'default-5', table_name: 'webhook_events', name: 'Webhook Events', retention_days: 90, action: 'delete', is_active: true, is_default: true },
+        ];
+
+        // Compliance score computation
+        const hasRetention = retention.length > 0;
+        const hasRecords = complianceRecords.length > 0;
+        const compliantRecords = complianceRecords.filter(r => r.status === 'compliant').length;
+        const totalRecords = complianceRecords.length;
+        const recordScore = totalRecords > 0 ? Math.round((compliantRecords / totalRecords) * 100) : 0;
+        const complianceScore = Math.round(
+            (hasRetention ? 30 : 0) +
+            (consentRate > 50 ? 20 : consentRate > 0 ? 10 : 0) +
+            (recordScore * 0.5)
+        );
+
+        // Framework breakdown
+        const frameworks = {};
+        complianceRecords.forEach(r => {
+            if (!frameworks[r.framework]) frameworks[r.framework] = { total: 0, compliant: 0, partial: 0, non_compliant: 0 };
+            frameworks[r.framework].total++;
+            if (r.status === 'compliant') frameworks[r.framework].compliant++;
+            else if (r.status === 'partial') frameworks[r.framework].partial++;
+            else frameworks[r.framework].non_compliant++;
+        });
+
+        res.json({
+            compliance_score: complianceScore,
+            consent: { total_users: totalU, consented: consentedU, rate: consentRate },
+            retention_policies: retention,
+            compliance_records: complianceRecords,
+            frameworks: Object.entries(frameworks).map(([name, data]) => ({ framework: name, ...data })),
+            gdpr_activity: gdprActivity,
+            summary: {
+                total_records: totalRecords,
+                compliant: compliantRecords,
+                partial: complianceRecords.filter(r => r.status === 'partial').length,
+                non_compliant: complianceRecords.filter(r => r.status !== 'compliant' && r.status !== 'partial').length,
+            },
+            org_plan: orgSettings?.plan || 'free',
+        });
+    } catch (err) {
+        console.error('[OwnerAPI] Compliance error:', err);
+        res.status(500).json({ error: 'Failed to load compliance data' });
     }
 });
 

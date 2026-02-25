@@ -36,7 +36,7 @@ function renderContent() {
 
   return `
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('scroll', 28)} Code Audit Log</h1><div class="sa-title-actions"><button class="btn btn-outline btn-sm">Export Signed Audit</button></div></div>
+      <div class="sa-page-title"><h1>${icon('scroll', 28)} Code Audit Log</h1><div class="sa-title-actions"><button class="btn btn-outline btn-sm" onclick="window.__exportSignedAudit && window.__exportSignedAudit()">Export Signed Audit</button></div></div>
 
       <div class="sa-metrics-row" style="margin-bottom:1.5rem">
         ${m('Total Actions', String(list.length), 'All audit entries', 'blue', 'scroll')}
@@ -68,5 +68,58 @@ function renderContent() {
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
 
 export function renderPage() {
+  // Register export function on window
+  window.__exportSignedAudit = async () => {
+    try {
+      // Try server-side export first
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const base = window.__apiBase || '/trustchecker/api';
+      const resp = await fetch(`${base}/audit-log/export`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (resp.ok) {
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `audit-log-signed-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return;
+      }
+    } catch (e) { console.log('Server export failed, falling back to client-side'); }
+
+    // Fallback: client-side CSV generation
+    if (!logs || logs.length === 0) {
+      alert('No audit data to export');
+      return;
+    }
+    const header = 'Timestamp,Action,Actor,Resource,Severity,IP Address,Details\n';
+    const rows = logs.map(l => {
+      const details = typeof l.details === 'string' ? l.details : JSON.stringify(l.details || {});
+      const ts = l.created_at || l.timestamp || '';
+      return `"${ts}","${l.action || ''}","${l.actor_email || l.actor_id || ''}","${l.resource || ''}","${l.severity || 'info'}","${l.ip_address || ''}","${details.replace(/"/g, '""')}"`;
+    }).join('\n');
+
+    // Generate simple hash signature for integrity
+    const content = header + rows;
+    const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(content));
+    const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const footer = `\n\n# SIGNED AUDIT EXPORT\n# Generated: ${new Date().toISOString()}\n# Records: ${logs.length}\n# SHA-256: ${hashHex}\n# Exported by: ${localStorage.getItem('userEmail') || 'admin'}\n`;
+
+    const blob = new Blob([content + footer], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-log-signed-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return `<div id="code-audit-log-root">${renderContent()}</div>`;
 }

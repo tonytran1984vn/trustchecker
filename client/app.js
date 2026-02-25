@@ -844,8 +844,21 @@ async function doLogin() {
     await Promise.all([loadFeatureFlags(), loadBranding()]);
 
     connectWS();
-    navigate('dashboard');
-    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Welcome back, ' + escapeHTML(res.user.email), 'success');
+    // Role-aware landing page
+    const landingPage = {
+      org_owner: 'owner-governance', super_admin: 'control-tower',
+      executive: 'exec-overview', ops_manager: 'ops-dashboard',
+    }[res.user.role] || 'dashboard';
+    navigate(landingPage);
+    showToast('✓ Welcome back, ' + escapeHTML(res.user.email), 'success');
+
+    // P3: Security warnings from backend
+    if (res.security_warning) {
+      setTimeout(() => showToast('🌐 ' + res.security_warning.message, 'warning'), 1500);
+    }
+    if (res.expired_roles && res.expired_roles.length > 0) {
+      setTimeout(() => showToast('⏰ Expired roles removed: ' + res.expired_roles.join(', '), 'info'), 2500);
+    }
   } catch (e) {
     errEl.style.display = 'block';
     errEl.textContent = e.message;
@@ -863,7 +876,8 @@ async function doMfaVerify() {
     State.user = res.user;
     localStorage.setItem('tc_user', JSON.stringify(res.user));
     connectWS();
-    navigate('dashboard');
+    const landingPage = { org_owner: 'owner-governance', super_admin: 'control-tower', executive: 'exec-overview' }[res.user.role] || 'dashboard';
+    navigate(landingPage);
     showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Welcome back, ' + escapeHTML(res.user.email) + ' (MFA verified)', 'success');
   } catch (e) {
     errEl.style.display = 'block';
@@ -985,7 +999,14 @@ function renderSidebar() {
       'compliance', 'anomaly', 'reports',
     ],
     // L3: Tenant Governance
+    org_owner: '*', // legal representative — full tenant oversight
+    company_admin: '*', // operational tenant admin
     admin: '*', // company admin sees everything within tenant
+    security_officer: [
+      'dashboard', 'fraud', 'evidence',
+      'scm-leaks', 'scm-trustgraph',
+      'compliance', 'anomaly', 'reports',
+    ],
     executive: [
       'dashboard', 'stakeholder',
       'scm-dashboard',

@@ -68,11 +68,15 @@ router.get('/all', requireSuperAdmin(), async (req, res) => {
 });
 
 // ─── Create Organization (super_admin only) ──────────────────────────────────
+// GOV: Auto-creates org_owner account. Org Owner then appoints Company Admin.
 router.post('/', requireSuperAdmin(), async (req, res) => {
     try {
-        const { name, plan = 'free', owner_email } = req.body;
+        const { name, plan = 'free', owner_email, owner_name } = req.body;
         if (!name || name.length < 2) {
             return res.status(400).json({ error: 'Organization name is required (min 2 chars)' });
+        }
+        if (!owner_email) {
+            return res.status(400).json({ error: 'Org Owner email is required' });
         }
 
         const slug = name.toLowerCase()
@@ -92,22 +96,69 @@ router.post('/', requireSuperAdmin(), async (req, res) => {
              VALUES (?, ?, ?, ?, '{}', ?, datetime('now'), datetime('now'))`
         ).run(id, name, slug, plan, req.user.id);
 
-        // If owner_email is provided, link that user to the new org as admin
-        if (owner_email) {
-            const ownerUser = await db.prepare('SELECT id FROM users WHERE email = ?').get(owner_email);
-            if (ownerUser) {
-                await db.prepare('UPDATE users SET org_id = ?, role = ? WHERE id = ?')
-                    .run(id, 'admin', ownerUser.id);
-            }
+        // ── Auto-create or assign Org Owner ──────────────────────────────
+        let ownerUser = await db.prepare('SELECT id, email FROM users WHERE email = ?').get(owner_email);
+        let ownerCreated = false;
+        const tempPassword = 'Change@' + Math.random().toString(36).substring(2, 10) + '!';
+
+        if (!ownerUser) {
+            const bcrypt = require('bcryptjs');
+            const ownerId = uuidv4();
+            const displayName = owner_name || owner_email.split('@')[0];
+            const passwordHash = await bcrypt.hash(tempPassword, 12);
+
+            await db.prepare(
+                `INSERT INTO users (id, username, email, password_hash, role, org_id, user_type, must_change_password, created_at)
+                 VALUES (?, ?, ?, ?, 'org_owner', ?, 'tenant', 1, datetime('now'))`
+            ).run(ownerId, displayName, owner_email, passwordHash, id);
+            ownerUser = { id: ownerId, email: owner_email };
+            ownerCreated = true;
+        } else {
+            await db.prepare('UPDATE users SET org_id = ?, role = ? WHERE id = ?')
+                .run(id, 'org_owner', ownerUser.id);
+        }
+
+        // ── Seed RBAC roles for new org ──────────────────────────────────
+        const templateRoles = await db.all(
+            `SELECT * FROM rbac_roles WHERE tenant_id = '__TEMPLATE__' AND is_system = 1`
+        );
+        for (const tmpl of templateRoles) {
+            const roleId = uuidv4();
+            await db.run(
+                `INSERT OR IGNORE INTO rbac_roles (id, tenant_id, name, display_name, type, is_system, description, mfa_policy)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [roleId, id, tmpl.name, tmpl.display_name, 'system', 1, tmpl.description, tmpl.mfa_policy]
+            );
+        }
+
+        // Assign org_owner RBAC role
+        const ownerRole = await db.get(
+            `SELECT id FROM rbac_roles WHERE tenant_id = ? AND name = 'org_owner'`, [id]
+        );
+        if (ownerRole) {
+            await db.run(
+                `INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id, assigned_by) VALUES (?, ?, ?)`,
+                [ownerUser.id, ownerRole.id, req.user.id]
+            );
         }
 
         // Audit
         await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
-            .run(uuidv4(), req.user.id, 'ORG_CREATED', 'organization', id, JSON.stringify({ name, slug, plan }));
+            .run(uuidv4(), req.user.id, 'ORG_CREATED', 'organization', id, JSON.stringify({
+                name, slug, plan, org_owner_email: owner_email, org_owner_created: ownerCreated,
+            }));
+
+        if (typeof db.save === 'function') await db.save();
 
         res.status(201).json({
             id, name, slug, plan,
-            message: 'Organization created successfully',
+            org_owner: {
+                id: ownerUser.id, email: owner_email,
+                created: ownerCreated,
+                temp_password: ownerCreated ? tempPassword : undefined,
+                must_change_password: ownerCreated,
+            },
+            message: 'Organization created with Org Owner',
         });
     } catch (err) {
         console.error('[org] Create error:', err.message);
@@ -213,10 +264,10 @@ router.put('/', requirePermission('tenant:settings_update'), async (req, res) =>
 
         if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
-        updates.push("updated_at = datetime('now')");
+        updates.push("updated_at = NOW()");
         params.push(orgId);
 
-        await db.prepare(`UPDATE organizations SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+        await db.run(`UPDATE organizations SET ${updates.join(', ')} WHERE id = ?`, params);
         res.json({ message: 'Organization updated successfully' });
     } catch (err) {
         console.error('[org] Update error:', err.message);

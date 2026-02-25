@@ -68,7 +68,7 @@ router.get('/format-rules', async (req, res) => {
             FROM format_rules fr
             WHERE ${whereClause}
             ORDER BY fr.created_at DESC
-        `, ...params);
+        `, params);
         res.json({ rules, total: rules.length });
     } catch (err) {
         console.error('List format rules error:', err);
@@ -88,7 +88,7 @@ router.post('/format-rules', async (req, res) => {
         await db.run(`
             INSERT INTO format_rules (id, name, prefix, pattern, separator, code_length, charset, check_digit_algo, description, example, tenant_id, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [id, name, prefix || '', pattern || '', separator || '-', parseInt(code_length) || 24, charset || 'ALPHANUMERIC_UPPER', check_digit_algo || 'HMAC-SHA256', description || '', example, req.user?.orgId || null, req.user?.id || null]);
+        `, [id, name, prefix || '', pattern || '', separator || '-', parseInt(code_length) || 24, charset || 'ALPHANUMERIC_UPPER', check_digit_algo || 'HMAC-SHA256', description || '', example, req.user?.org_id || req.user?.orgId || null, req.user?.id || null]);
 
         // Audit log
         await db.run(`INSERT INTO format_rules_audit (id, rule_id, action, changes, actor_id, actor_name) VALUES (?, ?, 'created', ?, ?, ?)`,
@@ -118,7 +118,7 @@ router.put('/format-rules/:id', async (req, res) => {
         const example = generateExample(prefix || existing.prefix, separator || existing.separator, parseInt(code_length) || existing.code_length, charset || existing.charset);
 
         await db.run(`
-            UPDATE format_rules SET name=?, prefix=?, pattern=?, separator=?, code_length=?, charset=?, check_digit_algo=?, description=?, example=?, status=?, updated_at=datetime('now')
+            UPDATE format_rules SET name=?, prefix=?, pattern=?, separator=?, code_length=?, charset=?, check_digit_algo=?, description=?, example=?, status=?, updated_at=NOW()
             WHERE id=?
         `, [name || existing.name, prefix ?? existing.prefix, pattern ?? existing.pattern, separator || existing.separator,
         parseInt(code_length) || existing.code_length, charset || existing.charset, check_digit_algo || existing.check_digit_algo,
@@ -144,7 +144,7 @@ router.delete('/format-rules/:id', async (req, res) => {
         const existing = await db.get('SELECT * FROM format_rules WHERE id = ?', [req.params.id]);
         if (!existing) return res.status(404).json({ error: 'Rule not found' });
 
-        await db.run(`UPDATE format_rules SET status='deleted', updated_at=datetime('now') WHERE id=?`, [req.params.id]);
+        await db.run(`UPDATE format_rules SET status='deleted', updated_at=NOW() WHERE id=?`, [req.params.id]);
         await db.run(`INSERT INTO format_rules_audit (id, rule_id, action, changes, actor_id, actor_name) VALUES (?, ?, 'deleted', '{}', ?, ?)`,
             [uuidv4(), req.params.id, req.user?.id || '', req.user?.username || '']);
 
@@ -426,7 +426,7 @@ router.post('/generation-limits', authMiddleware, requirePermission('settings:up
         const existing = await db.prepare('SELECT id FROM generation_limits WHERE tenant_id = ?').get(tenant_id);
         if (existing) {
             await db.prepare(`
-                UPDATE generation_limits SET max_per_hour = ?, max_per_day = ?, max_per_month = ?, max_batch_size = ?, updated_at = datetime('now')
+                UPDATE generation_limits SET max_per_hour = ?, max_per_day = ?, max_per_month = ?, max_batch_size = ?, updated_at = NOW()
                 WHERE tenant_id = ?
             `).run(max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000, tenant_id);
             return res.json({ id: existing.id, tenant_id, status: 'updated' });
@@ -434,7 +434,7 @@ router.post('/generation-limits', authMiddleware, requirePermission('settings:up
 
         await db.prepare(`
             INSERT INTO generation_limits (id, tenant_id, max_per_hour, max_per_day, max_per_month, max_batch_size, current_hour, current_day, current_month, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, datetime('now'), datetime('now'))
+            VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, NOW(), NOW())
         `).run(id, tenant_id, max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000);
 
         res.status(201).json({ id, tenant_id, status: 'created' });
@@ -545,7 +545,7 @@ router.post('/registry/register', authMiddleware, async (req, res) => {
                 const id = uuidv4();
                 await db.prepare(`
                     INSERT INTO code_registry (id, tenant_id, hmac_hash, code_prefix, collision_detected, created_at)
-                    VALUES (?, ?, ?, ?, 0, datetime('now'))
+                    VALUES (?, ?, ?, ?, 0, NOW())
                 `).run(id, tenant_id, hmacHash, code.substring(0, 6));
                 registered++;
             }
@@ -553,7 +553,7 @@ router.post('/registry/register', authMiddleware, async (req, res) => {
 
         // Update generation counters
         await db.prepare(`
-            UPDATE generation_limits SET current_hour = current_hour + ?, current_day = current_day + ?, current_month = current_month + ?, updated_at = datetime('now')
+            UPDATE generation_limits SET current_hour = current_hour + ?, current_day = current_day + ?, current_month = current_month + ?, updated_at = NOW()
             WHERE tenant_id = ?
         `).run(registered, registered, registered, tenant_id);
 

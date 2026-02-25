@@ -3,14 +3,15 @@
  * ═══════════════════════════════════════════════════════════════════
  * "See everything, touch nothing operational."
  *
- * 7 Modules:
- *   1. Governance Dashboard — strategic KPIs, risk heatmap
+ * 8 Modules (Governance-Grade Architecture):
+ *   1. Governance Overview — strategic KPIs, privilege risk score, SoD
  *   2. Ownership & Authority — appoint CA/SO, emergency controls
- *   3. Access Oversight — read-only role matrix, escalation history
- *   4. Governance & Risk — SoD monitor, critical action log
- *   5. Financial & Plan — billing, usage, invoices
- *   6. Compliance & Legal — GDPR, retention, evidence integrity
+ *   3. Privilege & Access Governance — role tracking, self-elevation log
+ *   4. Risk & Integrity Monitoring — anomaly detection, risk signals
+ *   5. Compliance & Legal — GDPR, retention, evidence integrity
+ *   6. Financial & Plan — billing, usage, invoices
  *   7. Emergency Controls — freeze, reauth, revoke, suspend
+ *   8. Governance Activity Log — meta-governance, break-glass log
  */
 import { State, render } from '../../core/state.js';
 import { API } from '../../core/api.js';
@@ -20,19 +21,26 @@ import { icon } from '../../core/icons.js';
 // ─── State ──────────────────────────────────────────────────
 let _ownerData = {};
 let _accessData = {};
+let _privilegeData = {};
+let _riskData = {};
+let _govLogData = {};
 let _criticalActions = [];
 let _activeTab = 'dashboard';
 let _riskLoaded = false;
+let _privilegeLoaded = false;
+let _riskMonLoaded = false;
+let _govLogLoaded = false;
 
 // ─── Tab Registry ───────────────────────────────────────────
 const OWNER_TABS = [
-  { id: 'dashboard', label: 'Governance Dashboard', icon: '📊' },
+  { id: 'dashboard', label: 'Governance Overview', icon: '📊' },
   { id: 'authority', label: 'Ownership & Authority', icon: '🔑' },
-  { id: 'access', label: 'Access Oversight', icon: '👁️' },
-  { id: 'risk', label: 'Governance & Risk', icon: '⚖️' },
-  { id: 'financial', label: 'Financial & Plan', icon: '💰' },
+  { id: 'privilege', label: 'Privilege & Access', icon: '🛡️' },
+  { id: 'risk', label: 'Risk & Integrity', icon: '⚠️' },
   { id: 'compliance', label: 'Compliance & Legal', icon: '📋' },
+  { id: 'financial', label: 'Financial & Plan', icon: '💰' },
   { id: 'emergency', label: 'Emergency Controls', icon: '🚨' },
+  { id: 'govlog', label: 'Activity Log', icon: '📜' },
 ];
 
 // ─── Entry Point ────────────────────────────────────────────
@@ -44,52 +52,34 @@ export function renderPage() {
   setTimeout(() => loadOwnerData(), 50);
 
   return `
-    <div style="display:flex;flex-direction:column;gap:0">
-      <div style="display:flex;gap:4px;padding:0 0 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-        ${OWNER_TABS.map(t => `
-          <button onclick="window._ownerTab('${t.id}')"
-            id="owner-tab-${t.id}"
-            style="padding:6px 14px;font-size:0.72rem;border-radius:8px;font-weight:600;cursor:pointer;
-              ${_activeTab === t.id
-      ? 'background:#6d28d9;color:#fff;border:2px solid #6d28d9;box-shadow:0 2px 8px rgba(109,40,217,0.3)'
-      : 'background:var(--surface);color:var(--text);border:1px solid var(--border)'}"
-          >${t.icon} ${t.label}</button>
-        `).join('')}
-      </div>
-      <div id="owner-content" style="padding-top:16px">
-        <div class="loading"><div class="spinner"></div></div>
-      </div>
+    <div id="owner-content">
+      <div class="loading"><div class="spinner"></div></div>
     </div>
   `;
 }
 
 window._ownerTab = function (tab) {
   _activeTab = tab;
+  window._activeOwnerTab = tab;
+  // Re-render sidebar to update active highlight
+  try { const sb = document.querySelector('.sidebar'); if (sb && typeof renderSidebar === 'function') { /* sidebar re-renders via navigate */ } } catch (_) { }
   // Show loading state immediately for tabs that need data
   const el = document.getElementById('owner-content');
-  if (el && ['access', 'risk', 'financial', 'compliance'].includes(tab)) {
+  if (el && ['privilege', 'risk', 'financial', 'compliance', 'govlog'].includes(tab)) {
     el.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
             <div class="spinner"></div>
             <div style="font-size:0.78rem;color:var(--text-muted)">Loading ${OWNER_TABS.find(t => t.id === tab)?.label || tab}…</div>
         </div>`;
   }
-  // Update tab visual immediately
-  OWNER_TABS.forEach(t => {
-    const btn = document.getElementById(`owner-tab-${t.id}`);
-    if (btn) {
-      btn.style.background = t.id === _activeTab ? '#6d28d9' : 'var(--surface)';
-      btn.style.color = t.id === _activeTab ? '#fff' : 'var(--text)';
-      btn.style.borderColor = t.id === _activeTab ? '#6d28d9' : 'var(--border)';
-      btn.style.boxShadow = t.id === _activeTab ? '0 2px 8px rgba(109,40,217,0.3)' : 'none';
-    }
-  });
   // Load data or render immediately for static tabs
   if (tab === 'dashboard') { if (_ownerData.total_users !== undefined) renderOwnerContent(); loadOwnerData(); }
-  else if (tab === 'access') loadAccessData();
-  else if (tab === 'risk') { _riskLoaded = false; loadCriticalActions(); }
+  else if (tab === 'privilege') loadPrivilegeData();
+  else if (tab === 'risk') { _riskMonLoaded = false; loadRiskMonitoring(); }
+  else if (tab === 'govlog') loadGovernanceLog();
   else renderOwnerContent();
 };
 
+// ─── Data Loaders ───────────────────────────────────────────
 async function loadOwnerData() {
   try {
     _ownerData = await API.get('/tenant/owner/dashboard');
@@ -101,68 +91,71 @@ async function loadOwnerData() {
   }
 }
 
-async function loadAccessData() {
+async function loadPrivilegeData() {
   try {
-    _accessData = await API.get('/tenant/owner/access-oversight');
+    _privilegeData = await API.get('/tenant/owner/privilege-governance');
+    _privilegeLoaded = true;
     renderOwnerContent();
-  } catch (e) { _accessData = {}; renderOwnerContent(); }
+  } catch (e) { _privilegeData = {}; _privilegeLoaded = true; renderOwnerContent(); }
 }
 
-async function loadCriticalActions() {
+async function loadRiskMonitoring() {
   try {
-    const res = await API.get('/tenant/owner/critical-actions');
-    _criticalActions = res.actions || [];
-  } catch (e) { _criticalActions = []; }
-  _riskLoaded = true;
-  renderOwnerContent();
+    _riskData = await API.get('/tenant/owner/risk-monitoring');
+    _riskMonLoaded = true;
+    renderOwnerContent();
+  } catch (e) { _riskData = {}; _riskMonLoaded = true; renderOwnerContent(); }
+}
+
+async function loadGovernanceLog() {
+  try {
+    _govLogData = await API.get('/tenant/owner/governance-log');
+    _govLogLoaded = true;
+    renderOwnerContent();
+  } catch (e) { _govLogData = {}; _govLogLoaded = true; renderOwnerContent(); }
 }
 
 function renderOwnerContent() {
   const el = document.getElementById('owner-content');
   if (!el) return;
 
-  // Update tab styles (consistent with _ownerTab)
-  OWNER_TABS.forEach(t => {
-    const btn = document.getElementById(`owner-tab-${t.id}`);
-    if (btn) {
-      btn.style.background = t.id === _activeTab ? '#6d28d9' : 'var(--surface)';
-      btn.style.color = t.id === _activeTab ? '#fff' : 'var(--text)';
-      btn.style.borderColor = t.id === _activeTab ? '#6d28d9' : 'var(--border)';
-      btn.style.boxShadow = t.id === _activeTab ? '0 2px 8px rgba(109,40,217,0.3)' : 'none';
-    }
-  });
-
   const renderers = {
-    dashboard: renderDashboard,
+    dashboard: renderOverview,
     authority: renderAuthority,
-    access: renderAccess,
-    risk: renderRisk,
-    financial: renderFinancial,
+    privilege: renderPrivilege,
+    risk: renderRiskMonitoring,
     compliance: renderCompliance,
+    financial: renderFinancial,
     emergency: renderEmergency,
+    govlog: renderGovernanceLog,
   };
-  el.innerHTML = (renderers[_activeTab] || renderDashboard)();
+  el.innerHTML = (renderers[_activeTab] || renderOverview)();
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 1. GOVERNANCE DASHBOARD
+// 1. GOVERNANCE OVERVIEW (Enhanced Strategic Dashboard)
 // ═══════════════════════════════════════════════════════════════
-function renderDashboard() {
+function renderOverview() {
   const d = _ownerData;
   if (d.total_users === undefined) {
     return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
             <div class="spinner"></div>
-            <div style="font-size:0.78rem;color:var(--text-muted)">Loading Governance Dashboard…</div>
+            <div style="font-size:0.78rem;color:var(--text-muted)">Loading Governance Overview…</div>
         </div>`;
   }
 
   const kpi = (label, value, color, desc, tooltip) => `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;flex:1;min-width:160px;position:relative"
+    <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px;flex:1;min-width:140px;position:relative"
          ${tooltip ? `title="${tooltip}"` : ''}>
       <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">${label}</div>
       <div style="font-size:1.8rem;font-weight:800;color:${color}">${value}</div>
       <div style="font-size:0.68rem;color:var(--text-muted);margin-top:4px">${desc}</div>
     </div>`;
+
+  // Privilege Risk Score gauge
+  const riskScore = d.privilege_risk_score || 0;
+  const riskColor = riskScore <= 20 ? '#10b981' : riskScore <= 50 ? '#f59e0b' : '#ef4444';
+  const riskLabel = riskScore <= 20 ? 'Low' : riskScore <= 50 ? 'Moderate' : 'High';
 
   // Role distribution with proportional bars
   const roles = d.role_distribution || [];
@@ -177,49 +170,45 @@ function renderDashboard() {
         <div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden">
           <div style="width:${pct}%;height:100%;background:${roleColor};border-radius:4px;transition:width 0.3s ease"></div>
         </div>
-        <div style="width:40px;text-align:right;font-size:0.72rem;font-weight:700;color:var(--text)">${r.count}</div>
+        <div style="width:40px;text-align:right;font-size:0.72rem;font-weight:700">${r.count}</div>
       </div>`;
   }).join('');
 
-  const alerts = (d.suspicious_alerts || []).map(a => {
-    let det = {};
-    try { det = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {}; } catch (_) { }
-    return `
-      <div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border);font-size:0.72rem">
-        <span style="font-weight:600">${a.action}</span>
-        <span style="color:var(--text-muted)">${timeAgo(a.created_at)}</span>
-      </div>`;
-  }).join('') || '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.72rem">No alerts</div>';
-
-  // Carbon mints trend text
-  const carbonVal = d.carbon_mints_30d || 0;
-  const carbonDesc = carbonVal > 0 ? `${carbonVal} this month • Active` : '0 this month • No activity';
-
-  // Risk model tooltip
-  const riskVer = d.risk_model_version || 'N/A';
-  const riskTooltip = riskVer !== 'N/A' ? `Model ${riskVer} — Click Governance & Risk for details` : 'No risk model deployed yet';
+  // Recent critical (last 5)
+  const recentCritical = (d.recent_critical_5 || []).map(a => `
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
+      <span><span style="padding:2px 8px;border-radius:4px;background:${actionColor(a.action)};color:#fff;font-size:0.68rem">${a.action}</span></span>
+      <span style="color:var(--text-muted)">${a.actor_email || '—'} · ${timeAgo(a.created_at)}</span>
+    </div>
+  `).join('') || '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:0.72rem">No recent critical actions</div>';
 
   return `
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px">
-      ${kpi('Total Users', d.total_users || 0, 'var(--primary)', `${d.total_users || 0} organization members`)}
-      ${kpi('High-Risk Roles', d.high_risk_role_count || 0, '#ef4444', `${d.high_risk_role_count || 0} privileged accounts`, `Includes: compliance_officer, risk_officer, risk_committee, security_officer, org_owner`)}
+      ${kpi('Privilege Risk', `${riskScore}`, riskColor, riskLabel, 'Computed: high-risk density + SoD + inactive + self-elevation attempts')}
+      ${kpi('Total Users', d.total_users || 0, 'var(--text-primary, #1e293b)', `${d.total_users || 0} organization members`)}
+      ${kpi('High-Risk Roles', d.high_risk_role_count || 0, '#ef4444', `${d.high_risk_role_count || 0} privileged accounts`)}
+      ${kpi('SoD Violations', d.sod_violation_count || 0, d.sod_violation_count > 0 ? '#ef4444' : '#10b981', d.sod_violation_count > 0 ? 'Conflicts detected' : 'No conflicts')}
       ${kpi('Pending Approvals', d.pending_approvals || 0, '#f59e0b', 'Dual-control queue')}
-      ${kpi('Carbon Mints (30d)', carbonVal, '#10b981', carbonDesc)}
-      ${kpi('Risk Model', riskVer, '#8b5cf6', riskVer !== 'N/A' ? `Version ${riskVer}` : 'Not deployed', riskTooltip)}
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
       <div class="card">
         <div class="card-header">
           <div class="card-title">📊 Role Distribution</div>
-          <div style="font-size:0.68rem;color:var(--text-muted)">${roles.length} roles • ${d.total_users || 0} total members</div>
+          <div style="font-size:0.68rem;color:var(--text-muted)">${roles.length} roles · ${d.total_users || 0} members</div>
         </div>
         <div class="card-body">${roleDist || '<div style="color:var(--text-muted)">No data</div>'}</div>
       </div>
       <div class="card">
-        <div class="card-header"><div class="card-title">🔔 Suspicious Activity</div></div>
-        <div class="card-body" style="max-height:300px;overflow-y:auto">${alerts}</div>
+        <div class="card-header"><div class="card-title">⚡ Recent Critical Actions</div></div>
+        <div class="card-body" style="max-height:260px;overflow-y:auto">${recentCritical}</div>
       </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+      ${kpi('Carbon Mints (30d)', d.carbon_mints_30d || 0, '#10b981', d.carbon_mints_30d > 0 ? 'Active' : 'No activity')}
+      ${kpi('Risk Model', d.risk_model_version || 'N/A', '#8b5cf6', d.risk_model_version !== 'N/A' ? `Version ${d.risk_model_version}` : 'Not deployed')}
+      ${kpi('Self-Elevation (30d)', d.self_elevation_attempts_30d || 0, d.self_elevation_attempts_30d > 0 ? '#f59e0b' : '#10b981', 'Blocked attempts')}
     </div>
 
     ${(d.sod_warnings || []).length > 0 ? `
@@ -246,7 +235,7 @@ function renderAuthority() {
         </p>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px">
             <h4 style="margin:0 0 12px;color:#3b82f6">🔧 Appoint Company Admin</h4>
             <div class="input-group" style="margin-bottom:8px">
               <label>Email</label>
@@ -259,7 +248,7 @@ function renderAuthority() {
             <button class="btn btn-sm" style="background:#3b82f6;color:#fff;border:none" onclick="window._ownerAppoint('company_admin')">✓ Appoint CA</button>
           </div>
 
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px">
             <h4 style="margin:0 0 12px;color:#ef4444">🛡️ Appoint Security Officer</h4>
             <div class="input-group" style="margin-bottom:8px">
               <label>Email</label>
@@ -303,219 +292,275 @@ window._ownerAppoint = async function (role) {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// 3. ACCESS OVERSIGHT (Read-Only)
+// 3. PRIVILEGE & ACCESS GOVERNANCE (NEW)
 // ═══════════════════════════════════════════════════════════════
-function renderAccess() {
-  const d = _accessData;
-  if (!d.role_matrix) return '<div class="loading"><div class="spinner"></div></div>';
+function renderPrivilege() {
+  if (!_privilegeLoaded) {
+    return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
+            <div class="spinner"></div>
+            <div style="font-size:0.78rem;color:var(--text-muted)">Loading Privilege & Access Governance…</div>
+        </div>`;
+  }
+  const d = _privilegeData;
 
-  const matrix = (d.role_matrix || []).map(u => `
+  // High-risk role mapping table
+  const highRiskRows = (d.high_risk_users || []).map(u => `
     <tr>
       <td style="font-weight:600;font-size:0.72rem">${esc(u.username || u.email)}</td>
-      <td style="font-family:'JetBrains Mono';font-size:0.68rem">${esc(u.email)}</td>
-      <td><span class="role-badge role-${u.role}">${(u.role || '').replace(/_/g, ' ')}</span></td>
-      <td style="font-size:0.68rem;color:var(--text-muted)">${u.last_login ? timeAgo(u.last_login) : 'Never'}</td>
-    </tr>
-  `).join('');
+      <td><span class="role-badge role-${u.role}">${toTitleCase((u.role || '').replace(/_/g, ' '))}</span></td>
+      <td style="font-size:0.72rem;text-align:center;font-weight:700">${u.role_count || 0}</td>
+      <td style="font-size:0.68rem;color:var(--text-muted)">${u.last_login ? timeAgo(u.last_login) : '⚠️ Never'}</td>
+    </tr>`).join('');
 
-  const escalations = (d.escalation_history || []).slice(0, 20).map(e => {
-    let det = {};
-    try { det = typeof e.details === 'string' ? JSON.parse(e.details) : e.details || {}; } catch (_) { }
+  // Recent role assignments
+  const roleAssignments = (d.recent_role_assignments || []).slice(0, 15).map(a => {
+    let det = {}; try { det = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {}; } catch (_) { }
     return `
-      <tr>
-        <td style="font-size:0.72rem">${esc(e.actor_email || e.actor_id?.substring(0, 8))}</td>
-        <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;background:var(--border)">${e.action}</span></td>
-        <td style="font-size:0.68rem;color:var(--text-muted)">${det.email || e.entity_id?.substring(0, 8) || '—'}</td>
-        <td style="font-size:0.68rem;color:var(--text-muted)">${timeAgo(e.created_at)}</td>
-      </tr>`;
+    <tr>
+      <td style="font-size:0.68rem;color:var(--text-muted)">${timeAgo(a.created_at)}</td>
+      <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(a.action)}">${a.action}</span></td>
+      <td style="font-size:0.72rem">${esc(a.actor_email || '—')}</td>
+      <td style="font-size:0.72rem">${esc(a.target_email || det.email || '—')}</td>
+      <td style="font-size:0.68rem;color:var(--text-muted)">${det.role || det.role_name || '—'}</td>
+    </tr>`;
   }).join('');
 
-  const riskAccounts = (d.risk_accounts || []).slice(0, 5).map(r => `
+  // Self-elevation log
+  const selfLog = (d.self_elevation_log || []).map(e => {
+    let det = {}; try { det = typeof e.details === 'string' ? JSON.parse(e.details) : e.details || {}; } catch (_) { }
+    return `
     <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
-      <span style="font-weight:600">${esc(r.email)}</span>
-      <span><span class="role-badge role-${r.role}">${r.role}</span> — ${r.role_count} roles</span>
-    </div>
-  `).join('');
+      <span>🚫 <strong>${esc(e.actor_email || '—')}</strong> — ${det.reason || 'Self-elevation blocked'}</span>
+      <span style="color:var(--text-muted)">${timeAgo(e.created_at)}</span>
+    </div>`;
+  }).join('') || '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:0.72rem">✅ No self-elevation attempts</div>';
 
-  const inactive = (d.inactive_privileged || []).map(i => `
+  // Role expirations
+  const expirations = (d.role_expirations || []).map(r => `
     <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
-      <span>${esc(i.email)}</span>
-      <span style="color:#ef4444">${i.role} — ${i.last_login ? timeAgo(i.last_login) : '⚠️ Never logged in'}</span>
-    </div>
-  `).join('');
+      <span>${esc(r.email)} — <strong>${toTitleCase((r.role_name || '').replace(/_/g, ' '))}</strong></span>
+      <span style="color:${new Date(r.expires_at) < new Date(Date.now() + 7 * 86400000) ? '#ef4444' : '#f59e0b'}">${new Date(r.expires_at).toLocaleDateString()}</span>
+    </div>`).join('') || '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:0.72rem">No expiring roles</div>';
 
   return `
-    <div class="card" style="margin-bottom:16px">
-      <div class="card-header"><div class="card-title">👁️ Role Matrix (Read-Only)</div></div>
-      <div class="card-body" style="max-height:350px;overflow-y:auto">
-        <table class="data-table"><thead><tr><th>User</th><th>Email</th><th>Role</th><th>Last Login</th></tr></thead>
-        <tbody>${matrix}</tbody></table>
+    <div class="card" style="margin-bottom:16px;border-left:4px solid #8b5cf6">
+      <div class="card-header">
+        <div class="card-title">🛡️ High-Risk Role Mapping</div>
+        <div style="font-size:0.68rem;color:var(--text-muted)">Read-only · ${(d.high_risk_users || []).length} privileged accounts</div>
+      </div>
+      <div class="card-body" style="max-height:280px;overflow-y:auto">
+        <table class="data-table"><thead><tr><th>User</th><th>Role</th><th>Roles</th><th>Last Login</th></tr></thead>
+        <tbody>${highRiskRows || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">No high-risk accounts</td></tr>'}</tbody></table>
       </div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
       <div class="card">
-        <div class="card-header"><div class="card-title">🏆 Highest-Risk Accounts</div></div>
-        <div class="card-body">${riskAccounts || '<div style="color:var(--text-muted);font-size:0.72rem">No data</div>'}</div>
+        <div class="card-header"><div class="card-title">🚫 Self-Elevation Blocks</div></div>
+        <div class="card-body" style="max-height:220px;overflow-y:auto">${selfLog}</div>
       </div>
-      <div class="card" style="border-color:${(d.inactive_privileged || []).length > 0 ? '#f59e0b' : 'var(--border)'}">
-        <div class="card-header"><div class="card-title">💤 Inactive Privileged Accounts</div></div>
-        <div class="card-body">${inactive || '<div style="color:var(--text-muted);font-size:0.72rem">All active</div>'}</div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">⏰ Role Expirations</div></div>
+        <div class="card-body" style="max-height:220px;overflow-y:auto">${expirations}</div>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-header"><div class="card-title">📜 Privilege Escalation History</div></div>
+      <div class="card-header">
+        <div class="card-title">📋 Recent Role Assignments</div>
+        <div style="font-size:0.68rem;color:var(--text-muted)">Immutable audit trail</div>
+      </div>
       <div class="card-body" style="max-height:300px;overflow-y:auto">
-        <table class="data-table"><thead><tr><th>Actor</th><th>Action</th><th>Target</th><th>When</th></tr></thead>
-        <tbody>${escalations || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">No escalations</td></tr>'}</tbody></table>
+        <table class="data-table"><thead><tr><th>When</th><th>Action</th><th>By</th><th>Target</th><th>Role</th></tr></thead>
+        <tbody>${roleAssignments || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">No role assignments</td></tr>'}</tbody></table>
       </div>
     </div>
   `;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 4. GOVERNANCE & RISK VIEW
+// 4. RISK & INTEGRITY MONITORING (SPLIT from old Governance & Risk)
 // ═══════════════════════════════════════════════════════════════
-function renderRisk() {
-  const actions = _criticalActions;
-  if (!_riskLoaded) {
+function renderRiskMonitoring() {
+  if (!_riskMonLoaded) {
     return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
             <div class="spinner"></div>
-            <div style="font-size:0.78rem;color:var(--text-muted)">Loading Governance & Risk…</div>
+            <div style="font-size:0.78rem;color:var(--text-muted)">Loading Risk & Integrity Monitoring…</div>
         </div>`;
   }
+  const d = _riskData;
 
-  const severityColor = (action) => {
-    if (['TENANT_FREEZE', 'FORCE_REAUTH', 'REVOKE_ALL_SESSIONS'].includes(action)) return '#ef4444';
-    if (['SELF_ELEVATION_BLOCKED', 'PERMISSION_CEILING_BLOCKED'].includes(action)) return '#f59e0b';
-    if (['NEW_IP_LOGIN', 'ROLE_EXPIRED'].includes(action)) return '#f97316';
-    return '#6b7280';
-  };
-
-  const rows = actions.map(a => {
-    let det = {};
-    try { det = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {}; } catch (_) { }
+  const signalRows = (d.risk_signals || []).map(s => {
+    let det = {}; try { det = typeof s.details === 'string' ? JSON.parse(s.details) : s.details || {}; } catch (_) { }
     return `
-      <tr>
-        <td style="font-size:0.72rem;color:var(--text-muted)">${timeAgo(a.created_at)}</td>
-        <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${severityColor(a.action)}">${a.action}</span></td>
-        <td style="font-size:0.72rem">${esc(a.actor_email || '—')}</td>
-        <td style="font-size:0.68rem;color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${det.justification || det.message || det.email || '—'}</td>
-      </tr>`;
+    <tr>
+      <td style="font-size:0.72rem;color:var(--text-muted)">${timeAgo(s.created_at)}</td>
+      <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(s.action)}">${s.action}</span></td>
+      <td style="font-size:0.72rem">${esc(s.actor_email || '—')}</td>
+      <td style="font-size:0.68rem;color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${det.reason || det.message || det.ip || '—'}</td>
+    </tr>`;
   }).join('');
 
+  const anomalyRows = (d.anomalies || []).map(a => {
+    let det = {}; try { det = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {}; } catch (_) { }
+    return `
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
+      <span><span style="background:#ef444420;color:#ef4444;padding:2px 8px;border-radius:4px;font-size:0.68rem">${a.action}</span> ${esc(a.actor_email || '—')}</span>
+      <span style="color:var(--text-muted)">${timeAgo(a.created_at)}</span>
+    </div>`;
+  }).join('') || '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.72rem">✅ No anomalies detected</div>';
+
+  const ipRows = (d.new_ip_logins || []).map(ip => {
+    let det = {}; try { det = typeof ip.details === 'string' ? JSON.parse(ip.details) : ip.details || {}; } catch (_) { }
+    return `
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
+      <span>🌐 <strong>${esc(ip.actor_email || '—')}</strong> — ${det.ip || det.new_ip || 'Unknown IP'}</span>
+      <span style="color:var(--text-muted)">${timeAgo(ip.created_at)}</span>
+    </div>`;
+  }).join('') || '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:0.72rem">No new IP logins</div>';
+
   return `
-    <div class="card" style="border-left:4px solid #8b5cf6">
-      <div class="card-header">
-        <div class="card-title">⚖️ Critical Action Log</div>
-        <div style="font-size:0.68rem;color:var(--text-muted)">Immutable • Read-only • ${actions.length} entries</div>
+    <div style="display:flex;gap:12px;margin-bottom:16px">
+      <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px;flex:1">
+        <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">Total Risk Signals</div>
+        <div style="font-size:1.8rem;font-weight:800;color:${(d.total_signals || 0) > 0 ? '#ef4444' : '#10b981'}">${d.total_signals || 0}</div>
       </div>
-      <div class="card-body" style="max-height:500px;overflow-y:auto">
-        <table class="data-table">
-          <thead><tr><th>When</th><th>Action</th><th>Actor</th><th>Details</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">No critical actions recorded</td></tr>'}</tbody>
-        </table>
+      <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px;flex:1">
+        <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">Anomalies</div>
+        <div style="font-size:1.8rem;font-weight:800;color:${(d.anomalies || []).length > 0 ? '#f59e0b' : '#10b981'}">${(d.anomalies || []).length}</div>
+      </div>
+      <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px;flex:1">
+        <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">New IP Logins</div>
+        <div style="font-size:1.8rem;font-weight:800">${(d.new_ip_logins || []).length}</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;border-left:4px solid #ef4444">
+      <div class="card-header">
+        <div class="card-title">⚠️ Risk Signal Feed</div>
+        <div style="font-size:0.68rem;color:var(--text-muted)">Immutable · Read-only · ${(d.risk_signals || []).length} signals</div>
+      </div>
+      <div class="card-body" style="max-height:350px;overflow-y:auto">
+        <table class="data-table"><thead><tr><th>When</th><th>Signal</th><th>Actor</th><th>Details</th></tr></thead>
+        <tbody>${signalRows || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted)">No risk signals</td></tr>'}</tbody></table>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card">
+        <div class="card-header"><div class="card-title">📡 Anomaly Detection</div></div>
+        <div class="card-body" style="max-height:250px;overflow-y:auto">${anomalyRows}</div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">🌐 New IP Logins</div></div>
+        <div class="card-body" style="max-height:250px;overflow-y:auto">${ipRows}</div>
       </div>
     </div>
   `;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 5. FINANCIAL & PLAN CONTROL
-// ═══════════════════════════════════════════════════════════════
-function renderFinancial() {
-  setTimeout(async () => {
-    try {
-      const [plan, usage, invoices] = await Promise.all([
-        API.get('/billing/plan').catch(() => ({ plan: null })),
-        API.get('/billing/usage').catch(() => ({ period: null, usage: {} })),
-        API.get('/billing/invoices').catch(() => ({ invoices: [] })),
-      ]);
-      const el = document.getElementById('owner-billing-content');
-      if (!el) return;
-      el.innerHTML = `
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
-            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase">Current Plan</div>
-            <div style="font-size:1.5rem;font-weight:800;color:var(--primary);margin-top:6px">${plan.plan?.name || 'N/A'}</div>
-          </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
-            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase">Period</div>
-            <div style="font-size:1rem;font-weight:600;margin-top:6px">${usage.period?.start || 'N/A'}</div>
-          </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
-            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase">Invoices</div>
-            <div style="font-size:1.5rem;font-weight:800;margin-top:6px">${(invoices.invoices || []).length}</div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header"><div class="card-title">📊 Usage</div></div>
-          <div class="card-body">
-            ${Object.entries(usage.usage || {}).map(([k, v]) => `
-              <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
-                <span style="font-weight:600">${k.replace(/_/g, ' ')}</span>
-                <span>${v.used || 0} / ${v.limit === -1 ? '∞' : v.limit || 0}</span>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      `;
-    } catch (e) {
-      const el = document.getElementById('owner-billing-content');
-      if (el) el.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;padding:40px 20px;gap:12px">
-        <div style="font-size:2rem">💰</div>
-        <div style="font-size:0.82rem;font-weight:600;color:var(--text)">Financial data unavailable</div>
-        <div style="font-size:0.72rem;color:var(--text-muted)">Billing services are temporarily unreachable. Please try again later.</div>
-      </div>`;
-    }
-  }, 50);
-
-  return `<div id="owner-billing-content"><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
-    <div class="spinner"></div>
-    <div style="font-size:0.78rem;color:var(--text-muted)">Loading Financial & Plan…</div>
-  </div></div>`;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// 6. COMPLIANCE & LEGAL VIEW
+// 5. COMPLIANCE & LEGAL VIEW
 // ═══════════════════════════════════════════════════════════════
 function renderCompliance() {
   setTimeout(async () => {
     try {
-      const [compStats, compRecords, retention] = await Promise.all([
-        API.get('/compliance/stats').catch(() => ({})),
-        API.get('/compliance/records').catch(() => ({ records: [] })),
-        API.get('/compliance/retention').catch(() => ({ policies: [] })),
-      ]);
+      const data = await API.get('/tenant/owner/compliance').catch(() => null);
       const el = document.getElementById('owner-compliance-content');
       if (!el) return;
+      if (!data) throw new Error('No data');
 
-      const stats = compStats || {};
+      const score = data.compliance_score || 0;
+      const scoreColor = score >= 80 ? '#10b981' : score >= 50 ? '#f59e0b' : '#ef4444';
+      const consent = data.consent || {};
+      const retention = data.retention_policies || [];
+      const records = data.compliance_records || [];
+      const frameworks = data.frameworks || [];
+      const gdprAct = data.gdpr_activity || [];
+      const summary = data.summary || {};
+
+      // Framework rows
+      const fwRows = frameworks.map(fw => {
+        const pct = fw.total > 0 ? Math.round((fw.compliant / fw.total) * 100) : 0;
+        const color = pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+        return `<tr>
+          <td style="font-size:0.72rem;font-weight:600">${esc(fw.framework)}</td>
+          <td style="font-size:0.72rem;text-align:center">${fw.total}</td>
+          <td style="font-size:0.72rem;text-align:center;color:#10b981;font-weight:700">${fw.compliant}</td>
+          <td style="font-size:0.72rem;text-align:center;color:#f59e0b">${fw.partial}</td>
+          <td style="font-size:0.72rem;text-align:center;color:#ef4444">${fw.non_compliant}</td>
+          <td><div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;width:80px">
+            <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
+          </div></td>
+        </tr>`;
+      }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No compliance records</td></tr>';
+
+      // Retention rows
+      const retRows = retention.map(p => {
+        const actionColor = p.action === 'archive' ? '#3b82f6' : p.action === 'delete' ? '#ef4444' : '#f59e0b';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
+          <span style="font-weight:600">${esc(p.name || p.table_name)}</span>
+          <div style="display:flex;gap:12px;align-items:center">
+            <span style="font-size:0.68rem;padding:2px 8px;border-radius:10px;background:${actionColor}22;color:${actionColor};font-weight:600">${p.action}</span>
+            <span style="color:var(--text-muted)">${p.retention_days} days</span>
+            <span style="font-size:0.68rem;padding:2px 8px;border-radius:10px;background:${p.is_active ? '#10b98122' : '#ef444422'};color:${p.is_active ? '#10b981' : '#ef4444'};font-weight:600">${p.is_active ? 'active' : 'inactive'}</span>
+            ${p.is_default ? '<span style="font-size:0.62rem;color:var(--text-muted)">(default)</span>' : ''}
+          </div>
+        </div>`;
+      }).join('');
+
+      // GDPR activity rows
+      const gdprRows = gdprAct.map(a => `<tr>
+        <td style="font-size:0.72rem;color:var(--text-muted)">${timeAgo(a.created_at)}</td>
+        <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(a.action)}">${a.action}</span></td>
+        <td style="font-size:0.72rem">${esc(a.actor_email || '—')}</td>
+      </tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No GDPR activity recorded</td></tr>';
+
       el.innerHTML = `
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
-            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase">GDPR Compliance</div>
-            <div style="font-size:1.5rem;font-weight:800;color:${(stats.compliance_score || 0) >= 80 ? '#10b981' : '#ef4444'}">${stats.compliance_score || 0}%</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+          <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px">
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase">Compliance Score</div>
+            <div style="font-size:1.5rem;font-weight:800;color:${scoreColor};margin-top:6px">${score}%</div>
           </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px">
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase">Consent Rate</div>
+            <div style="font-size:1.5rem;font-weight:800;margin-top:6px">${consent.rate || 0}%</div>
+            <div style="font-size:0.68rem;color:var(--text-muted);margin-top:2px">${consent.consented || 0} / ${consent.total_users || 0} users</div>
+          </div>
+          <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px">
             <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase">Retention Policies</div>
-            <div style="font-size:1.5rem;font-weight:800">${(retention.policies || []).length}</div>
+            <div style="font-size:1.5rem;font-weight:800;margin-top:6px">${retention.length}</div>
           </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px">
             <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase">Compliance Records</div>
-            <div style="font-size:1.5rem;font-weight:800">${(compRecords.records || []).length}</div>
+            <div style="font-size:1.5rem;font-weight:800;margin-top:6px">${summary.total_records || 0}</div>
+            <div style="font-size:0.68rem;color:var(--text-muted);margin-top:2px">✅ ${summary.compliant || 0} · ⚠️ ${summary.partial || 0} · ❌ ${summary.non_compliant || 0}</div>
           </div>
         </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div class="card">
+            <div class="card-header"><div class="card-title">📋 Framework Compliance</div></div>
+            <div class="card-body">
+              <table class="data-table">
+                <thead><tr><th>Framework</th><th style="text-align:center">Total</th><th style="text-align:center">✅</th><th style="text-align:center">⚠️</th><th style="text-align:center">❌</th><th>Progress</th></tr></thead>
+                <tbody>${fwRows}</tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">🗂️ Data Retention Policies</div></div>
+            <div class="card-body" style="max-height:300px;overflow-y:auto">${retRows || '<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No policies</div>'}</div>
+          </div>
+        </div>
+
         <div class="card">
-          <div class="card-header"><div class="card-title">📋 Data Retention Policies</div></div>
-          <div class="card-body">
-            ${(retention.policies || []).length > 0 ? retention.policies.map(p => `
-              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
-                <span style="font-weight:600">${esc(p.name || p.type)}</span>
-                <span style="color:var(--text-muted)">${p.retention_days || 0} days — ${p.status || 'active'}</span>
-              </div>
-            `).join('') : '<div style="color:var(--text-muted);text-align:center;padding:20px;font-size:0.72rem">No policies configured</div>'}
+          <div class="card-header"><div class="card-title">🇪🇺 GDPR Activity Log</div></div>
+          <div class="card-body" style="max-height:250px;overflow-y:auto">
+            <table class="data-table">
+              <thead><tr><th>When</th><th>Action</th><th>User</th></tr></thead>
+              <tbody>${gdprRows}</tbody>
+            </table>
           </div>
         </div>
       `;
@@ -523,8 +568,8 @@ function renderCompliance() {
       const el = document.getElementById('owner-compliance-content');
       if (el) el.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;padding:40px 20px;gap:12px">
         <div style="font-size:2rem">📋</div>
-        <div style="font-size:0.82rem;font-weight:600;color:var(--text)">Compliance data unavailable</div>
-        <div style="font-size:0.72rem;color:var(--text-muted)">Compliance services are temporarily unreachable. Please try again later.</div>
+        <div style="font-size:0.82rem;font-weight:600">Compliance data unavailable</div>
+        <div style="font-size:0.72rem;color:var(--text-muted)">Compliance services are temporarily unreachable.</div>
       </div>`;
     }
   }, 50);
@@ -532,6 +577,133 @@ function renderCompliance() {
   return `<div id="owner-compliance-content"><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
     <div class="spinner"></div>
     <div style="font-size:0.78rem;color:var(--text-muted)">Loading Compliance & Legal…</div>
+  </div></div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 6. FINANCIAL & PLAN CONTROL
+// ═══════════════════════════════════════════════════════════════
+function renderFinancial() {
+  setTimeout(async () => {
+    try {
+      const data = await API.get('/tenant/owner/financial').catch(() => null);
+      const el = document.getElementById('owner-billing-content');
+      if (!el) return;
+      if (!data) throw new Error('No data');
+
+      const p = data.plan || {};
+      const planName = toTitleCase((p.plan_name || 'N/A').replace(/_/g, ' '));
+      const billingCycle = p.billing_cycle || 'monthly';
+      const price = p.price_monthly || 0;
+      const sla = p.sla_level ? toTitleCase(p.sla_level) : '—';
+      const period = data.period || new Date().toISOString().substring(0, 7);
+      const allInvoices = data.invoices || [];
+      const totalPaid = data.total_paid || allInvoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.amount || 0), 0);
+
+      // Usage bars
+      const usageEntries = Object.entries(data.usage || {});
+      const usageBars = usageEntries.map(([k, v]) => {
+        const isUnlimited = v.limit === '∞' || v.limit === -1;
+        const pct = isUnlimited ? 5 : (v.limit > 0 ? Math.min(100, Math.round((v.used / v.limit) * 100)) : 0);
+        const barColor = pct >= 90 ? '#ef4444' : pct >= 70 ? '#f59e0b' : '#10b981';
+        return `
+          <div style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:4px">
+              <span style="font-weight:600;text-transform:capitalize">${k.replace(/_/g, ' ')}</span>
+              <span>${v.used || 0} / ${isUnlimited ? '∞' : v.limit || 0}${isUnlimited ? ' (Unlimited)' : ''}</span>
+            </div>
+            <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+              <div style="width:${pct}%;height:100%;background:${barColor};border-radius:4px;transition:width 0.3s"></div>
+            </div>
+          </div>`;
+      }).join('') || '<div style="text-align:center;color:var(--text-muted);font-size:0.72rem;padding:12px">No usage data</div>';
+
+      // Invoice rows
+      const invoiceRows = allInvoices.map(inv => {
+        const statusColor = inv.status === 'paid' ? '#10b981' : inv.status === 'pending' ? '#f59e0b' : '#ef4444';
+        const pStart = inv.period_start ? new Date(inv.period_start).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : '—';
+        const pEnd = inv.period_end ? new Date(inv.period_end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+        const created = inv.created_at ? new Date(inv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+        return `
+          <tr>
+            <td style="font-size:0.72rem;color:var(--text-muted)">${created}</td>
+            <td style="font-size:0.72rem;font-weight:600">${toTitleCase((inv.plan_name || '').replace(/_/g, ' '))}</td>
+            <td style="font-size:0.72rem;font-weight:700">$${(inv.amount || 0).toLocaleString()}</td>
+            <td style="font-size:0.72rem">${inv.currency || 'USD'}</td>
+            <td style="font-size:0.72rem">${pStart} — ${pEnd}</td>
+            <td><span style="font-size:0.68rem;padding:2px 10px;border-radius:12px;color:#fff;background:${statusColor};font-weight:600">${(inv.status || 'unknown').toUpperCase()}</span></td>
+          </tr>`;
+      }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;font-size:0.72rem">No invoices</td></tr>';
+
+      el.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+          <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px">
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase">Current Plan</div>
+            <div style="font-size:1.4rem;font-weight:800;color:#8b5cf6;margin-top:6px">${planName}</div>
+            <div style="font-size:0.68rem;color:var(--text-muted);margin-top:4px">${billingCycle} · SLA: ${sla}</div>
+          </div>
+          <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px">
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase">Monthly Cost</div>
+            <div style="font-size:1.4rem;font-weight:800;color:var(--text-primary,#1e293b);margin-top:6px">$${price.toLocaleString()}</div>
+            <div style="font-size:0.68rem;color:var(--text-muted);margin-top:4px">per month</div>
+          </div>
+          <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px">
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase">Current Period</div>
+            <div style="font-size:1.1rem;font-weight:700;margin-top:6px">${period}</div>
+            <div style="font-size:0.68rem;color:var(--text-muted);margin-top:4px">billing cycle</div>
+          </div>
+          <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px">
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase">Total Paid</div>
+            <div style="font-size:1.4rem;font-weight:800;color:#10b981;margin-top:6px">$${totalPaid.toLocaleString()}</div>
+            <div style="font-size:0.68rem;color:var(--text-muted);margin-top:4px">${allInvoices.length} invoices</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div class="card">
+            <div class="card-header"><div class="card-title">📊 Usage This Period</div></div>
+            <div class="card-body">${usageBars}</div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">📋 Plan Features</div></div>
+            <div class="card-body">
+              <div style="display:flex;flex-direction:column;gap:6px;font-size:0.72rem">
+                <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>Scan Limit</span><span style="font-weight:700">${p.scan_limit ? p.scan_limit.toLocaleString() : '∞'}</span></div>
+                <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>API Limit</span><span style="font-weight:700">${p.api_limit ? p.api_limit.toLocaleString() : '∞'}</span></div>
+                <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>Storage</span><span style="font-weight:700">${p.storage_mb ? (p.storage_mb / 1000).toFixed(0) + ' GB' : '∞'}</span></div>
+                <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>Billing Cycle</span><span style="font-weight:700">${toTitleCase(billingCycle)}</span></div>
+                <div style="display:flex;justify-content:space-between;padding:4px 0"><span>SLA Level</span><span style="font-weight:700;color:#8b5cf6">${sla}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🧾 Invoice History</div>
+            <div style="font-size:0.68rem;color:var(--text-muted)">${allInvoices.length} invoices · Total: $${totalPaid.toLocaleString()}</div>
+          </div>
+          <div class="card-body" style="max-height:350px;overflow-y:auto">
+            <table class="data-table">
+              <thead><tr><th>Date</th><th>Plan</th><th>Amount</th><th>Currency</th><th>Period</th><th>Status</th></tr></thead>
+              <tbody>${invoiceRows}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    } catch (e) {
+      const el = document.getElementById('owner-billing-content');
+      if (el) el.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;padding:40px 20px;gap:12px">
+        <div style="font-size:2rem">💰</div>
+        <div style="font-size:0.82rem;font-weight:600">Financial data unavailable</div>
+        <div style="font-size:0.72rem;color:var(--text-muted)">Billing services are temporarily unreachable.</div>
+      </div>`;
+    }
+  }, 50);
+
+  return `<div id="owner-billing-content"><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
+    <div class="spinner"></div>
+    <div style="font-size:0.78rem;color:var(--text-muted)">Loading Financial & Plan…</div>
   </div></div>`;
 }
 
@@ -551,7 +723,7 @@ function renderEmergency() {
     <div class="card" style="border-left:4px solid #ef4444;margin-bottom:16px">
       <div class="card-header">
         <div class="card-title" style="color:#ef4444">🚨 Emergency Controls</div>
-        <div style="font-size:0.68rem;color:var(--text-muted)">All actions are logged with justification • Immutable audit trail</div>
+        <div style="font-size:0.68rem;color:var(--text-muted)">All actions are logged with justification · Immutable audit trail</div>
       </div>
       <div class="card-body">
         <div style="background:#ef444410;border:1px solid #ef4444;border-radius:8px;padding:12px;margin-bottom:16px;font-size:0.72rem;color:#ef4444">
@@ -564,7 +736,7 @@ function renderEmergency() {
         </div>
 
         ${actions.map(a => `
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--surface)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--bg-card,#fff)">
             <div>
               <div style="font-weight:700;font-size:0.82rem">${a.icon} ${a.label}</div>
               <div style="font-size:0.68rem;color:var(--text-muted)">${a.desc}</div>
@@ -602,6 +774,80 @@ window._ownerEmergency = async function (action, needsRole = false) {
   }
 };
 
+// ═══════════════════════════════════════════════════════════════
+// 8. GOVERNANCE ACTIVITY LOG (NEW — Meta-Governance)
+// ═══════════════════════════════════════════════════════════════
+function renderGovernanceLog() {
+  if (!_govLogLoaded) {
+    return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
+            <div class="spinner"></div>
+            <div style="font-size:0.78rem;color:var(--text-muted)">Loading Governance Activity Log…</div>
+        </div>`;
+  }
+  const d = _govLogData;
+
+  // Main governance timeline
+  const govRows = (d.governance_actions || []).map(a => {
+    let det = {}; try { det = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {}; } catch (_) { }
+    return `
+    <tr>
+      <td style="font-size:0.72rem;color:var(--text-muted)">${timeAgo(a.created_at)}</td>
+      <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(a.action)}">${a.action}</span></td>
+      <td style="font-size:0.72rem">${esc(a.actor_email || '—')}</td>
+      <td style="font-size:0.68rem;color:var(--text-muted);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${det.email || det.role || det.justification || '—'}</td>
+      <td style="font-size:0.68rem;color:${det.severity === 'critical' ? '#ef4444' : det.severity === 'high' ? '#f59e0b' : 'var(--text-muted)'}">${det.severity || 'normal'}</td>
+    </tr>`;
+  }).join('');
+
+  // Emergency / break-glass
+  const emergencyRows = (d.emergency_log || []).map(e => {
+    let det = {}; try { det = typeof e.details === 'string' ? JSON.parse(e.details) : e.details || {}; } catch (_) { }
+    return `
+    <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
+      <div>
+        <span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:700">${e.action}</span>
+        <strong style="margin-left:8px">${esc(e.actor_email || '—')}</strong>
+        <div style="font-size:0.68rem;color:var(--text-muted);margin-top:4px">${det.justification || '—'}</div>
+      </div>
+      <span style="color:var(--text-muted);white-space:nowrap;margin-left:12px">${timeAgo(e.created_at)}</span>
+    </div>`;
+  }).join('') || '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.72rem">✅ No emergency actions recorded</div>';
+
+  // Appointment history
+  const appointRows = (d.appointment_history || []).map(a => {
+    let det = {}; try { det = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {}; } catch (_) { }
+    return `
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
+      <span>👑 <strong>${esc(a.actor_email || '—')}</strong> appointed <strong>${esc(a.target_email || det.email || '—')}</strong> as ${toTitleCase((det.role || '—').replace(/_/g, ' '))}</span>
+      <span style="color:var(--text-muted)">${timeAgo(a.created_at)}</span>
+    </div>`;
+  }).join('') || '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:0.72rem">No appointment history</div>';
+
+  return `
+    <div class="card" style="margin-bottom:16px;border-left:4px solid #06b6d4">
+      <div class="card-header">
+        <div class="card-title">📜 Governance Activity Timeline</div>
+        <div style="font-size:0.68rem;color:var(--text-muted)">Immutable · ${d.total_entries || 0} entries · Read-only</div>
+      </div>
+      <div class="card-body" style="max-height:400px;overflow-y:auto">
+        <table class="data-table"><thead><tr><th>When</th><th>Action</th><th>Actor</th><th>Details</th><th>Severity</th></tr></thead>
+        <tbody>${govRows || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">No governance actions recorded</td></tr>'}</tbody></table>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="card" style="border-color:#ef4444">
+        <div class="card-header"><div class="card-title" style="color:#ef4444">🚨 Emergency / Break-Glass Log</div></div>
+        <div class="card-body" style="max-height:300px;overflow-y:auto">${emergencyRows}</div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">👑 Appointment History</div></div>
+        <div class="card-body" style="max-height:300px;overflow-y:auto">${appointRows}</div>
+      </div>
+    </div>
+  `;
+}
+
 // ─── Helpers ────────────────────────────────────────────────
 function esc(s) { return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function timeAgo(d) {
@@ -631,5 +877,15 @@ function getRoleColor(role) {
     auditor: '#6366f1', developer: '#8b5cf6', ops_manager: '#0ea5e9',
     nft_manager: '#a855f7', kyc_analyst: '#14b8a6',
   };
-  return colors[role] || 'var(--primary)';
+  return colors[role] || 'var(--primary, #3b82f6)';
+}
+
+/** Action color by severity */
+function actionColor(action) {
+  if (['TENANT_FREEZE', 'FORCE_REAUTH', 'REVOKE_ALL_SESSIONS', 'ROLE_SUSPENDED', 'SESSION_HIJACK_DETECTED'].includes(action)) return '#ef4444';
+  if (['SELF_ELEVATION_BLOCKED', 'PERMISSION_CEILING_BLOCKED', 'HIGH_RISK_ROLE_REJECTED', 'LOGIN_FAILED'].includes(action)) return '#f59e0b';
+  if (['HIGH_RISK_ROLE_PENDING', 'NEW_IP_LOGIN', 'ROLE_EXPIRED', 'SUSPICIOUS_ACCESS'].includes(action)) return '#f97316';
+  if (['CA_APPOINTED', 'ROLE_APPOINTED', 'HIGH_RISK_ROLE_APPROVED', 'ROLES_ASSIGNED'].includes(action)) return '#3b82f6';
+  if (['CARBON_MINT', 'RISK_MODEL_DEPLOY', 'ORG_CREATED'].includes(action)) return '#10b981';
+  return '#6b7280';
 }

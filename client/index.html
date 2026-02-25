@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <script>
     // Dynamic base path for SPA sub-routes (e.g. /sa-tenant-detail/UUID)
-    (function() {
+    (function () {
       var p = window.location.pathname;
       var base = '/';
       if (p.indexOf('/trustchecker') === 0) base = '/trustchecker/';
@@ -67,7 +67,7 @@
   <div id="app" role="main"></div>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" crossorigin="anonymous"></script>
   <!-- v9.6: Modular architecture via ES6 modules -->
-  <script type="module" src="main.js"></script>
+  <script type="module" src="main.js?v=10.3"></script>
   <!-- Legacy fallback (kept for reference, not loaded): <script src="app.js"></script> -->
   <script>
     // Service Worker: force update old SWs, then re-register fresh

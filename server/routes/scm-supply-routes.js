@@ -101,7 +101,13 @@ router.put('/routes/:id', authMiddleware, requireRole('admin'), async (req, res)
 // ─── GET /api/scm/channel-rules – List channel integrity rules ───────────────
 router.get('/channel-rules', authMiddleware, async (req, res) => {
     try {
-        const rules = await db.prepare('SELECT * FROM channel_rules ORDER BY created_at DESC').all();
+        const orgId = req.user?.org_id;
+        let rules;
+        if (orgId && req.user?.role !== 'super_admin') {
+            rules = await db.prepare('SELECT * FROM channel_rules WHERE org_id = ? ORDER BY created_at DESC').all(orgId);
+        } else {
+            rules = await db.prepare('SELECT * FROM channel_rules ORDER BY created_at DESC').all();
+        }
         res.json(rules);
     } catch (err) {
         console.error('List channel rules error:', err);
@@ -129,6 +135,7 @@ router.post('/channel-rules', authMiddleware, requireRole('admin'), async (req, 
 router.get('/route-breaches', authMiddleware, async (req, res) => {
     try {
         const { route_id, severity, limit = 50 } = req.query;
+        const orgId = req.user?.org_id;
         let query = `
             SELECT rb.*, sr.name as route_name, cr.name as rule_name
             FROM route_breaches rb
@@ -137,6 +144,7 @@ router.get('/route-breaches', authMiddleware, async (req, res) => {
         `;
         const conditions = [];
         const params = [];
+        if (orgId && req.user?.role !== 'super_admin') { conditions.push('sr.org_id = ?'); params.push(orgId); }
         if (route_id) { conditions.push('rb.route_id = ?'); params.push(route_id); }
         if (severity) { conditions.push('rb.severity = ?'); params.push(severity); }
         if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');

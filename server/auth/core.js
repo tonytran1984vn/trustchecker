@@ -22,14 +22,18 @@ const LOCKOUT_MINUTES = 15;
 const ROLE_HIERARCHY = {
     // L5: Platform Layer
     super_admin: 5, platform_security: 5, data_gov_officer: 5,
+    global_risk_committee: 5, change_management_officer: 5, incident_response_lead: 5,
     // L4: Global Governance
     ggc_member: 4, risk_committee: 4, compliance_officer: 4, ivu_validator: 4,
     // L3: Tenant Governance
-    admin: 3, executive: 3, carbon_officer: 3,
+    org_owner: 3, admin: 3, company_admin: 3, executive: 3, carbon_officer: 3, security_officer: 3,
     // L2: Operational
-    ops_manager: 2, risk_officer: 2, scm_analyst: 2,
+    ops_manager: 2, risk_officer: 2, scm_analyst: 2, disclosure_officer: 2,
     // L1: Technical Execution
-    developer: 1, blockchain_operator: 1, operator: 1, auditor: 1, viewer: 1
+    developer: 1, blockchain_operator: 1, operator: 1, auditor: 1, viewer: 1,
+    data_steward: 1, legal_counsel: 1, board_observer: 1, supplier_contributor: 1,
+    esg_reporting_manager: 1, external_auditor: 1, financial_viewer: 1, public_verifier: 1,
+    internal_reviewer: 1, export_officer: 1, mgb_member: 1, ivu_registry_admin: 1,
 };
 
 // ─── Middleware: Verify JWT ──────────────────────────────────────────────────
@@ -48,7 +52,7 @@ async function authMiddleware(req, res, next) {
         // Update session last_active (non-blocking — don't kill auth if this fails)
         if (decoded.session_id) {
             try {
-                await db.prepare("UPDATE sessions SET last_active = datetime('now') WHERE id = ? AND revoked = 0")
+                await db.prepare("UPDATE sessions SET last_active = NOW() WHERE id = ? AND revoked = false")
                     .run(decoded.session_id);
             } catch (sessionErr) {
                 console.warn(`[Auth] Session update failed (non-critical): ${sessionErr.message}`);
@@ -146,9 +150,82 @@ async function createSession(userId, req) {
     const sessionId = uuidv4();
     const ip = req.ip || req.connection?.remoteAddress || 'unknown';
     const ua = req.headers['user-agent'] || 'unknown';
-    await db.prepare('INSERT INTO sessions (id, user_id, ip_address, user_agent) VALUES (?, ?, ?, ?)')
-        .run(sessionId, userId, ip, ua);
+
+    // Generate device fingerprint hash from User-Agent + accept-language + screen info
+    const fpSource = [ua, req.headers['accept-language'] || '', req.headers['sec-ch-ua'] || ''].join('|');
+    const deviceFingerprint = crypto.createHash('sha256').update(fpSource).digest('hex').substring(0, 16);
+
+    try {
+        await db.prepare('INSERT INTO sessions (id, user_id, ip_address, user_agent, device_fingerprint) VALUES (?, ?, ?, ?, ?)')
+            .run(sessionId, userId, ip, ua, deviceFingerprint);
+    } catch (e) {
+        // Fallback without device_fingerprint if column doesn't exist yet
+        await db.prepare('INSERT INTO sessions (id, user_id, ip_address, user_agent) VALUES (?, ?, ?, ?)')
+            .run(sessionId, userId, ip, ua);
+    }
     return sessionId;
+}
+
+// ─── Helper: IP Anomaly Detection ────────────────────────────────────────────
+
+async function checkIPAnomaly(userId, currentIP) {
+    try {
+        // Get distinct IPs from last 30 sessions
+        const knownIPs = await db.all(
+            `SELECT ip_address FROM (SELECT DISTINCT ON (ip_address) ip_address, last_active FROM sessions WHERE user_id = ? AND revoked = false ORDER BY ip_address, last_active DESC) sub ORDER BY last_active DESC LIMIT 30`,
+            [userId]
+        ).catch(() => []);
+        const knownSet = new Set(knownIPs.map(r => r.ip_address));
+
+        if (knownSet.size === 0) return { anomaly: false, reason: 'first_login' };
+        if (knownSet.has(currentIP)) return { anomaly: false, reason: 'known_ip' };
+
+        // New IP detected — log it
+        await db.run(
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'NEW_IP_LOGIN', 'session', ?, ?)`,
+            [uuidv4(), userId, uuidv4(), JSON.stringify({
+                new_ip: currentIP,
+                known_ips: [...knownSet].slice(0, 5),
+                severity: 'warning',
+                message: 'Login from previously unseen IP address'
+            })]
+        );
+
+        return { anomaly: true, reason: 'new_ip', ip: currentIP };
+    } catch (_) {
+        return { anomaly: false, reason: 'check_failed' };
+    }
+}
+
+// ─── Helper: Cleanup Expired Roles ───────────────────────────────────────────
+
+async function cleanupExpiredRoles(userId) {
+    try {
+        const expired = await db.all(
+            `SELECT ur.role_id, r.name FROM rbac_user_roles ur
+             JOIN rbac_roles r ON r.id = ur.role_id
+             WHERE ur.user_id = ? AND ur.expires_at IS NOT NULL AND ur.expires_at < NOW()`,
+            [userId]
+        );
+        if (expired.length > 0) {
+            await db.run(
+                `DELETE FROM rbac_user_roles WHERE user_id = ? AND expires_at IS NOT NULL AND expires_at < NOW()`,
+                [userId]
+            );
+            // Audit log
+            await db.run(
+                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'ROLE_EXPIRED', 'user', ?, ?)`,
+                [uuidv4(), 'system', userId, JSON.stringify({
+                    expired_roles: expired.map(r => r.name),
+                    count: expired.length,
+                    severity: 'info'
+                })]
+            );
+        }
+        return expired;
+    } catch (_) {
+        return [];
+    }
 }
 
 // Re-export RBAC middleware for convenience
@@ -159,5 +236,7 @@ module.exports = {
     ROLE_HIERARCHY,
     authMiddleware, requireRole,
     requirePermission, requireConstitutional, requirePlatformAdmin, requireTenantAdmin,
-    generateTokenPair, enrichUserWithOrg, createSession
+    generateTokenPair, enrichUserWithOrg, createSession,
+    // P3: Advanced Security
+    checkIPAnomaly, cleanupExpiredRoles,
 };

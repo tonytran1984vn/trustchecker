@@ -11,17 +11,24 @@ import { escapeHTML } from '../utils/sanitize.js';
 let _showCreate = false;
 
 export function renderPage() {
-  if (!['admin', 'super_admin', 'company_admin'].includes(State.user?.role)) {
+  if (!['admin', 'super_admin', 'company_admin', 'org_owner'].includes(State.user?.role)) {
     return '<div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">Admin access required</div></div>';
   }
+  const isOrgOwner = ['org_owner', 'super_admin'].includes(State.user?.role);
+  // Auto-load after DOM insert (works as tab in workspace)
+  setTimeout(() => loadAdminUsers(), 50);
   return `
     <div class="card">
       <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
         <div class="card-title">👥 User Management</div>
-        <button class="btn btn-primary btn-sm" onclick="window._umShowCreate()">+ Create User</button>
+        <div style="display:flex;gap:8px">
+          ${isOrgOwner ? '<button class="btn btn-sm" style="background:#8b5cf6;color:#fff;border:none" onclick="window._umShowAppoint()">👑 Appoint Admin</button>' : ''}
+          <button class="btn btn-primary btn-sm" onclick="window._umShowCreate()">+ Create User</button>
+        </div>
       </div>
       <div class="card-body">
         <div id="create-user-modal"></div>
+        <div id="appoint-admin-modal"></div>
         <div id="admin-users-list">
           <div class="loading"><div class="spinner"></div></div>
         </div>
@@ -59,7 +66,7 @@ export async function loadAdminUsers() {
               <td>
                 <select class="input" style="width:130px;padding:4px 8px;font-size:0.72rem"
                   onchange="window._umChangeRole('${escapeHTML(u.id)}', this.value)" ${isSelf ? 'disabled' : ''}>
-                  ${['company_admin', 'admin', 'manager', 'operator', 'viewer', 'executive', 'ops_manager', 'risk_officer', 'compliance_officer', 'developer'].map(r =>
+                  ${['org_owner', 'company_admin', 'admin', 'security_officer', 'manager', 'operator', 'viewer', 'executive', 'ops_manager', 'risk_officer', 'compliance_officer', 'developer'].map(r =>
         `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r.replace(/_/g, ' ')}</option>`
       ).join('')}
                 </select>
@@ -199,6 +206,54 @@ window._umDelete = async function (userId, username) {
     showToast(`✓ User ${username} deleted`, 'success');
     loadAdminUsers();
   } catch (e) { showToast('✗ ' + e.message, 'error'); }
+};
+
+// ─── Appoint Company Admin (Org Owner only) ─────────────────
+window._umShowAppoint = function () {
+  const el = document.getElementById('appoint-admin-modal');
+  if (!el) return;
+  el.innerHTML = `
+    <div style="background:var(--surface);border:1px solid #8b5cf6;border-radius:12px;padding:20px;margin-bottom:16px">
+      <h3 style="margin:0 0 12px;color:#8b5cf6">👑 Appoint Company Admin</h3>
+      <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:12px">Enter the email address. A new account will be created if the user doesn't exist.</p>
+      <div class="input-group" style="margin-bottom:8px">
+        <label>Email</label>
+        <input class="input" id="appoint-email" type="email" placeholder="admin@company.com">
+      </div>
+      <div class="input-group" style="margin-bottom:12px">
+        <label>Display Name (optional)</label>
+        <input class="input" id="appoint-name" type="text" placeholder="John Doe">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" style="background:#8b5cf6;color:#fff;border:none" onclick="window._umDoAppoint()">✓ Appoint</button>
+        <button class="btn btn-ghost btn-sm" onclick="window._umHideAppoint()">Cancel</button>
+      </div>
+    </div>
+  `;
+};
+
+window._umHideAppoint = function () {
+  const el = document.getElementById('appoint-admin-modal');
+  if (el) el.innerHTML = '';
+};
+
+window._umDoAppoint = async function () {
+  const email = document.getElementById('appoint-email')?.value;
+  const name = document.getElementById('appoint-name')?.value;
+  if (!email) { showToast('Email is required', 'error'); return; }
+  try {
+    const res = await API.post('/tenant/appoint-admin', { email, name });
+    let msg = `✓ ${res.message}`;
+    if (res.temp_password) {
+      msg += ` — Temp password: ${res.temp_password}`;
+    }
+    showToast(msg, 'success');
+    window._umHideAppoint();
+    loadAdminUsers();
+  } catch (e) {
+    const data = e.response?.data || {};
+    showToast(`✗ ${data.error || e.message}`, 'error');
+  }
 };
 
 // Window exports

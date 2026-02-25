@@ -119,7 +119,12 @@ async function boot() {
   // Init i18n
   await initI18n();
 
-  // Initial render (login screen or dashboard)
+  // Set correct page for role BEFORE first render (prevents dashboard flash)
+  if (State.user && API.token) {
+    State.page = getPageFromURL();
+  }
+
+  // Initial render (login screen or role-appropriate page)
   render();
 
   // If already logged in, load feature flags + branding and connect WS

@@ -7,6 +7,7 @@ import { timeAgo } from '../utils/helpers.js';
 import { escapeHTML } from '../utils/sanitize.js';
 
 export function renderPage() {
+  setTimeout(() => loadSettingsData(), 50);
   return `
     <div class="settings-grid">
       <!-- MFA Section -->

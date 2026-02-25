@@ -167,9 +167,9 @@ function setupHealth(app, { config, db, redis, wss, waf, apiGateway, metrics, sl
     const express = require('express');
     const fs = require('fs');
 
-    // No-cache for HTML and service worker (prevent stale SW cache)
+    // No-cache for HTML, JS modules, and service worker (prevent stale cache)
     app.use((req, res, next) => {
-        if (req.path === '/sw.js' || req.path.endsWith('.html') || req.path === '/') {
+        if (req.path === '/sw.js' || req.path.endsWith('.html') || req.path.endsWith('.js') || req.path === '/') {
             res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
             res.setHeader('Pragma', 'no-cache');
             res.setHeader('Expires', '0');

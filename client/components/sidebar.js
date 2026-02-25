@@ -15,7 +15,8 @@ import { icon } from '../core/icons.js';
 // ═══════════════════════════════════════════════════════════════
 
 const ROLE_VISIBILITY = {
-  // Full tenant access — Company Admin sees all 6 domains
+  // Full tenant access — Company Admin / Org Owner sees all 6 domains
+  org_owner: null,
   admin: null,
   company_admin: null,
 
@@ -267,6 +268,16 @@ const SUPERADMIN_NAV = [
   { id: 'sa-carbon', icon: icon('globe'), label: 'Carbon / CIE' },
 ];
 
+// ── Company Admin: Flat nav (matching SA style) ────────────────
+const COMPANY_ADMIN_NAV = [
+  { id: 'dashboard', icon: icon('dashboard'), label: 'Dashboard' },
+  { id: 'ca-operations', icon: icon('products'), label: 'Operations' },
+  { id: 'ca-risk', icon: icon('alert'), label: 'Risk' },
+  { id: 'ca-identity', icon: icon('key'), label: 'Identity' },
+  { id: 'ca-governance', icon: icon('shield'), label: 'Governance' },
+  { id: 'ca-settings', icon: icon('settings'), label: 'Settings' },
+];
+
 // ═══════════════════════════════════════════════════════════════
 // COMPANY ADMIN — FORTUNE 100 ENTERPRISE LAYOUT (IA v3.0)
 // Structure: Control & Accountability — 6 Institutional Domains
@@ -352,7 +363,9 @@ const ROLE_LABELS = {
   super_admin: 'Platform Control',
   platform_security: 'Security Officer',
   data_gov_officer: 'Data Governance',
+  org_owner: 'Org Owner',
   company_admin: 'Company Admin',
+  security_officer: 'Security Officer',
   executive: 'Executive',
   ops_manager: 'Ops Control',
   risk_officer: 'Risk Control',
@@ -375,7 +388,9 @@ const ROLE_THEMES = {
   super_admin: { color: '#f59e0b', icon: 'shield' },
   platform_security: { color: '#dc2626', icon: 'lock' },
   data_gov_officer: { color: '#7c3aed', icon: 'scroll' },
+  org_owner: { color: '#8b5cf6', icon: 'shield' },
   company_admin: { color: '#3b82f6', icon: 'users' },
+  security_officer: { color: '#ef4444', icon: 'lock' },
   executive: { color: '#6366f1', icon: 'dashboard' },
   ops_manager: { color: '#14b8a6', icon: 'workflow' },
   risk_officer: { color: '#ef4444', icon: 'alertTriangle' },
@@ -488,7 +503,7 @@ function isIT() {
 
 function getRoleConfig() {
   const role = getUserRole();
-  if (role === 'super_admin' || role === 'executive' || role === 'ops_manager' || role === 'risk_officer' || role === 'compliance_officer' || role === 'developer') return null;
+  if (role === 'super_admin' || role === 'executive' || role === 'ops_manager' || role === 'risk_officer' || role === 'compliance_officer' || role === 'developer' || role === 'org_owner' || role === 'security_officer') return null;
   const config = ROLE_VISIBILITY[role];
   if (config === undefined) return ROLE_VISIBILITY.operator;
   return config;
@@ -1169,7 +1184,113 @@ function renderSuperAdminSidebar() {
 // TENANT SIDEBAR (Company Admin, ops, risk, etc.)
 // ═══════════════════════════════════════════════════════════════
 
+function isCompanyAdmin() {
+  const role = getUserRole();
+  return role === 'company_admin' || role === 'admin';
+}
+
+function isOrgOwner() {
+  return getUserRole() === 'org_owner';
+}
+
+function renderOrgOwnerSidebar() {
+  const brandName = State.branding?.app_name || 'TrustChecker';
+  const orgName = State.org?.name || '';
+  const versionLabel = `v10.0 • Governance`;
+
+  const ownerNav = [
+    { id: 'owner-governance', icon: icon('grid', 16), label: 'Governance Overview', hash: 'dashboard' },
+    { id: 'owner-governance', icon: icon('shield', 16), label: 'Ownership & Authority', hash: 'authority' },
+    { id: 'owner-governance', icon: icon('eye', 16), label: 'Privilege & Access', hash: 'privilege' },
+    { id: 'owner-governance', icon: icon('alertTriangle', 16), label: 'Risk & Integrity', hash: 'risk' },
+    { id: 'owner-governance', icon: icon('scroll', 16), label: 'Compliance & Legal', hash: 'compliance' },
+    { id: 'owner-governance', icon: icon('creditCard', 16), label: 'Financial & Plan', hash: 'financial' },
+    { id: 'owner-governance', icon: icon('clock', 16), label: 'Activity Log', hash: 'govlog' },
+    { id: 'owner-governance', icon: icon('zap', 16), label: 'Emergency Controls', hash: 'emergency' },
+  ];
+
+  const navHtml = ownerNav.map((n, i) => {
+    const currentTab = window._activeOwnerTab || 'dashboard';
+    const active = State.page === n.id && n.hash === currentTab;
+    return `
+      <div class="nav-item ${active ? 'active' : ''}" data-owner-tab="${n.hash}"
+        onclick="document.querySelectorAll('[data-owner-tab]').forEach(e=>e.classList.remove('active'));this.classList.add('active');window._activeOwnerTab='${n.hash}';window._ownerTab&&window._ownerTab('${n.hash}')"
+        style="cursor:pointer">
+        <span class="nav-icon">${n.icon}</span>
+        <span>${n.label}</span>
+      </div>`;
+  }).join('');
+
+  return `
+    <nav class="sidebar sidebar-ca" role="navigation" aria-label="Governance navigation"
+      style="--sidebar-accent:#8b5cf6">
+      <div class="sidebar-header">
+        <div class="sidebar-logo" onclick="goHome()" style="cursor:pointer">
+          <div class="logo-icon" style="background:#8b5cf6;color:#fff;border-radius:8px;padding:4px">${icon('shield', 22)}</div>
+          <div>
+            <div class="logo-text">${brandName}</div>
+            <div class="logo-version">${versionLabel}</div>
+          </div>
+        </div>
+        ${orgName ? `<div class="sidebar-org"><span style="font-size:11px;color:var(--text-secondary)">${icon('building', 12)} ${orgName}</span></div>` : ''}
+      </div>
+      <div class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-label" style="color:#8b5cf6">👑 GOVERNANCE AUTHORITY</div>
+          ${navHtml}
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="user-avatar" style="background:#8b5cf6;color:#fff">${(State.user?.email || 'O')[0].toUpperCase()}</div>
+        <div class="user-info">
+          <div class="user-name">${State.user?.email || 'User'}</div>
+          <div class="user-role"><span class="role-badge" style="background:#8b5cf615;color:#8b5cf6;border:1px solid #8b5cf640">org_owner</span></div>
+        </div>
+        <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
+      </div>
+    </nav>
+  `;
+}
+
+function renderCompanyAdminSidebar() {
+  const brandName = State.branding?.app_name || 'TrustChecker';
+  const role = getUserRole();
+
+  // Flat nav items — matching SA style
+  const navItems = COMPANY_ADMIN_NAV.map(n => renderNavItem(n)).join('');
+
+  return `
+    <nav class="sidebar sidebar-ca" role="navigation" aria-label="Company navigation">
+      <div class="sidebar-header">
+        <div class="sidebar-logo" onclick="goHome()" style="cursor:pointer" title="Go to dashboard">
+          <div class="logo-icon ca-logo-icon">${icon('shield', 22)}</div>
+          <div>
+            <div class="logo-text">${brandName}</div>
+            <div class="logo-version ca-badge">Company Admin</div>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-nav">
+        ${navItems}
+      </div>
+      <div class="sidebar-footer">
+        <div class="user-avatar role-${role}">${(State.user?.email || State.user?.username || 'U')[0].toUpperCase()}</div>
+        <div class="user-info">
+          <div class="user-name">${State.user?.email || State.user?.username || 'User'}</div>
+          <div class="user-role"><span class="role-badge role-${role}">${role}</span></div>
+        </div>
+        <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
+      </div>
+    </nav>
+  `;
+}
+
 function renderTenantSidebar() {
+  // Org Owner → dedicated governance sidebar
+  if (isOrgOwner()) return renderOrgOwnerSidebar();
+  // Company Admin / Admin → flat nav (matching SA style)
+  if (isCompanyAdmin()) return renderCompanyAdminSidebar();
+
   const orgName = State.org?.name || '';
   const planLabel = PLAN_NAMES[State.plan] || State.plan;
   const brandName = State.branding?.app_name || 'TrustChecker';
@@ -1243,6 +1364,7 @@ function renderTenantSidebar() {
 export function renderSidebar() {
   let html;
   if (isSuperAdmin()) html = renderSuperAdminSidebar();
+  else if (isOrgOwner()) html = renderOrgOwnerSidebar();
   else if (isExecutive()) html = renderExecutiveSidebar();
   else if (isOps()) html = renderOpsSidebar();
   else if (isRisk()) html = renderRiskSidebar();
@@ -1270,6 +1392,9 @@ function goHome() {
     compliance_officer: 'compliance-dashboard',
     developer: 'it-authentication',
     ggc_member: 'green-finance',
+    org_owner: 'owner-governance',
+    company_admin: 'dashboard',
+    security_officer: 'ca-governance',
     risk_committee: 'hardening',
     ivu_validator: 'mrmf',
     scm_analyst: 'dashboard',

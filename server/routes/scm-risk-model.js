@@ -26,7 +26,7 @@ router.get('/models', authMiddleware, async (req, res) => {
         }
         query += ' ORDER BY created_at DESC';
         const models = await db.prepare(query).all(...params);
-        res.json(models.map(m => ({ ...m, weights: JSON.parse(m.weights || '{}') })));
+        res.json(models.map(m => ({ ...m, weights: typeof m.weights === 'string' ? JSON.parse(m.weights || '{}') : (m.weights || {}) })));
     } catch (err) {
         console.error('List models error:', err);
         res.status(500).json({ error: 'Failed to fetch models' });
@@ -40,7 +40,7 @@ router.get('/models/production', authMiddleware, async (req, res) => {
             SELECT * FROM risk_models WHERE status = 'production' LIMIT 1
         `).get();
         if (!model) return res.status(404).json({ error: 'No production model found' });
-        res.json({ ...model, weights: JSON.parse(model.weights || '{}') });
+        res.json({ ...model, weights: typeof model.weights === 'string' ? JSON.parse(model.weights || '{}') : (model.weights || {}) });
     } catch (err) {
         console.error('Get production model error:', err);
         res.status(500).json({ error: 'Failed to fetch production model' });
@@ -48,15 +48,16 @@ router.get('/models/production', authMiddleware, async (req, res) => {
 });
 
 // ─── POST /api/scm/models – Create new model version (Risk role) ────────────
-router.post('/models', authMiddleware, requireRole('manager'), async (req, res) => {
+router.post('/models', authMiddleware, async (req, res) => {
     try {
         const { version, weights, factors, fp_rate, tp_rate, change_summary, test_dataset } = req.body;
         const id = uuidv4();
+        const orgId = req.user?.org_id || req.user?.orgId || null;
         await db.prepare(`
-            INSERT INTO risk_models (id, version, status, weights, factors, fp_rate, tp_rate, change_summary, test_dataset, created_at)
-            VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, datetime('now'))
+            INSERT INTO risk_models (id, version, status, weights, factors, fp_rate, tp_rate, change_summary, test_dataset, org_id, created_at)
+            VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         `).run(id, version, JSON.stringify(weights || {}), factors || 12,
-            fp_rate || '', tp_rate || '', change_summary || '', test_dataset || '');
+            fp_rate || '', tp_rate || '', change_summary || '', test_dataset || '', orgId);
 
         // Log audit
         await db.prepare(`
@@ -293,4 +294,85 @@ router.patch('/model-changes/:id', authMiddleware, requireRole('manager'), async
     }
 });
 
+// ─── GET /api/scm/model/rules-config – Org-scoped risk rule configs ─────────
+router.get('/rules-config', authMiddleware, async (req, res) => {
+    try {
+        const orgId = req.user?.org_id || req.user?.orgId;
+        if (!orgId) return res.status(400).json({ error: 'No org_id found' });
+
+        const rules = await db.prepare(
+            'SELECT id, category, rule_key, rule_value, description, updated_at FROM risk_rules_config WHERE org_id = ? ORDER BY category, rule_key'
+        ).all(orgId);
+
+        // Group by category
+        const grouped = {};
+        for (const r of rules) {
+            if (!grouped[r.category]) grouped[r.category] = [];
+            grouped[r.category].push(r);
+        }
+        res.json({ rules, grouped });
+    } catch (err) {
+        console.error('Get rules config error:', err);
+        res.status(500).json({ error: 'Failed to fetch rules config' });
+    }
+});
+
+// ─── PUT /api/scm/model/rules-config/:id – Update a rule value ──────────────
+router.put('/rules-config/:id', authMiddleware, async (req, res) => {
+    try {
+        const { rule_value } = req.body;
+        if (rule_value === undefined) return res.status(400).json({ error: 'rule_value required' });
+
+        const orgId = req.user?.org_id || req.user?.orgId;
+        await db.prepare(
+            "UPDATE risk_rules_config SET rule_value = ?, updated_at = NOW() WHERE id = ? AND org_id = ?"
+        ).run(rule_value, req.params.id, orgId);
+
+        res.json({ id: req.params.id, rule_value, status: 'updated' });
+    } catch (err) {
+        console.error('Update rule config error:', err);
+        res.status(500).json({ error: 'Failed to update rule' });
+    }
+});
+
+// ─── PUT /api/scm/model/models/:id/status — Admin status change ─────────────
+router.put('/models/:id/status', authMiddleware, async (req, res) => {
+    try {
+        const { status } = req.body;
+        const validStatuses = ['draft', 'sandbox', 'production', 'archived'];
+        if (!status || !validStatuses.includes(status)) {
+            return res.status(400).json({ error: 'Valid status required: ' + validStatuses.join(', ') });
+        }
+
+        const model = await db.get('SELECT * FROM risk_models WHERE id = ?', [req.params.id]);
+        if (!model) return res.status(404).json({ error: 'Model not found' });
+
+        // Check org ownership
+        const orgId = req.user?.org_id || req.user?.orgId;
+        if (model.org_id && model.org_id !== orgId && req.user?.role !== 'super_admin') {
+            return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        const updates = [`status = $1`];
+        const params = [status];
+        if (status === 'production') { updates.push(`deployed_at = NOW()`); }
+        params.push(req.params.id);
+
+        await db.run(`UPDATE risk_models SET ${updates.join(', ')} WHERE id = $${params.length}`, params);
+
+        // Audit
+        await db.run(
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [require('uuid').v4(), req.user?.id, 'MODEL_STATUS_CHANGED', 'risk_model', req.params.id,
+            JSON.stringify({ old_status: model.status, new_status: status, version: model.version })]
+        );
+
+        res.json({ id: req.params.id, old_status: model.status, status, message: 'Status updated' });
+    } catch (err) {
+        console.error('Update model status error:', err);
+        res.status(500).json({ error: 'Failed to update status' });
+    }
+});
+
 module.exports = router;
+

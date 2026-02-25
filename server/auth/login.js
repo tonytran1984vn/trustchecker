@@ -12,7 +12,8 @@ const db = require('../db');
 const { eventBus, EVENT_TYPES } = require('../events');
 const {
     JWT_SECRET, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES,
-    generateTokenPair, enrichUserWithOrg, createSession
+    generateTokenPair, enrichUserWithOrg, createSession,
+    checkIPAnomaly, cleanupExpiredRoles
 } = require('./core');
 const { validate, schemas } = require('../middleware/validate');
 
@@ -185,16 +186,38 @@ router.post('/login', validate(schemas.login), async (req, res) => {
         // Issue tokens directly
         await db.prepare("UPDATE users SET last_login = datetime('now'), failed_attempts = 0, locked_until = NULL WHERE id = ?").run(user.id);
         await enrichUserWithOrg(user);
+
+        // P3: IP Anomaly Detection
+        const loginIP = req.ip || req.connection?.remoteAddress || 'unknown';
+        const ipCheck = await checkIPAnomaly(user.id, loginIP);
+
+        // P3: Time-bound privilege — cleanup expired roles
+        const expiredRoles = await cleanupExpiredRoles(user.id);
+
         const sessionId = await createSession(user.id, req);
         const { accessToken, refreshToken } = await generateTokenPair(user, sessionId);
 
         eventBus.emitEvent(EVENT_TYPES.USER_LOGIN, { email: user.email });
 
-        res.json({
+        const response = {
             token: accessToken,
             refresh_token: refreshToken,
             user: { id: user.id, email: user.email, role: user.role, plan: user.plan || 'free' }
-        });
+        };
+
+        // Include security warnings in response
+        if (ipCheck.anomaly) {
+            response.security_warning = {
+                type: 'new_ip_detected',
+                message: 'Login from a new IP address detected',
+                ip: ipCheck.ip
+            };
+        }
+        if (expiredRoles.length > 0) {
+            response.expired_roles = expiredRoles.map(r => r.name);
+        }
+
+        res.json(response);
     } catch (err) {
         console.error('Login error:', err);
         res.status(500).json({ error: 'Login failed' });

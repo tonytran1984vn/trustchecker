@@ -15,6 +15,55 @@
 
 const db = require('../db');
 
+// ─── CA Permission Ceiling ───────────────────────────────────────────────────
+// Governance/sensitive permissions that Company Admin CANNOT grant or hold.
+// Enforces: "Control the system, not the decisions."
+const CA_FORBIDDEN_PERMISSIONS = new Set([
+    // Carbon governance — only compliance_officer / carbon_officer
+    'carbon_credit:approve_mint', 'carbon_credit:anchor',
+    'cie_passport:approve', 'cie_passport:seal', 'cie_passport:validate',
+    'cie_methodology:propose', 'cie_methodology:vote', 'cie_methodology:freeze', 'cie_methodology:publish',
+    'cie_disclosure:sign_off', 'cie_disclosure:certify_csrd',
+    // Risk governance — only risk_committee / risk_officer
+    'risk_model:deploy', 'risk_model:approve', 'risk_model:validate',
+    'model_certification:issue',
+    // Compliance governance — only compliance_officer
+    'compliance:freeze', 'regulatory_export:approve', 'gdpr_masking:execute',
+    // Graph governance — only ggc_member / risk_committee
+    'graph_schema:approve', 'graph_schema:deploy',
+    'graph_weight:approve', 'graph_override:approve',
+    // Evidence sealing — integrity chain
+    'evidence:seal', 'evidence:freeze',
+    // LRGF override
+    'lrgf_case:override',
+    // Fraud case approval
+    'fraud_case:approve',
+]);
+
+// Roles that require elevated oversight when assigned
+const HIGH_RISK_ROLES = new Set([
+    'compliance_officer', 'risk_officer', 'risk_committee',
+    'ggc_member', 'ivu_validator', 'carbon_officer',
+    'disclosure_officer', 'company_admin', 'org_owner',
+]);
+
+/**
+ * Check if a permission is forbidden for Company Admin to assign.
+ */
+function isCAForbidden(permission) {
+    if (CA_FORBIDDEN_PERMISSIONS.has(permission)) return true;
+    // Block all platform-level permissions
+    if (permission.startsWith('platform:')) return true;
+    return false;
+}
+
+/**
+ * Check if a role name is high-risk (requires additional oversight).
+ */
+function isHighRiskRole(roleName) {
+    return HIGH_RISK_ROLES.has(roleName);
+}
+
 // ─── SoD Conflict Matrix ─────────────────────────────────────────────────────
 // Pairs of permissions that should NOT be held by the same user
 const SOD_CONFLICTS = [
@@ -338,7 +387,7 @@ function requireTenantAdmin() {
             'tenant:settings:update'
         ], req);
 
-        if (!has && req.user.role !== 'admin' && req.user.role !== 'company_admin') {
+        if (!has && req.user.role !== 'admin' && req.user.role !== 'company_admin' && req.user.role !== 'org_owner') {
             return res.status(403).json({ error: 'Tenant admin access required', code: 'TENANT_ADMIN_ONLY' });
         }
         next();
@@ -360,4 +409,9 @@ module.exports = {
     requirePlatformAdmin,
     requireTenantAdmin,
     SOD_CONFLICTS,
+    // Governance hardening
+    CA_FORBIDDEN_PERMISSIONS,
+    HIGH_RISK_ROLES,
+    isCAForbidden,
+    isHighRiskRole,
 };

@@ -19,6 +19,21 @@ let _newRole = { name: '', display_name: '', description: '' };
 let _showCreateModal = false;
 let _auditLogs = [];
 
+// GOV: Permission Ceiling — permissions CA cannot grant (mirrors backend CA_FORBIDDEN_PERMISSIONS)
+const CA_FORBIDDEN_PERMS = new Set([
+  'carbon_credit:approve_mint', 'carbon_credit:anchor',
+  'cie_passport:approve', 'cie_passport:seal', 'cie_passport:validate',
+  'cie_methodology:propose', 'cie_methodology:vote', 'cie_methodology:freeze', 'cie_methodology:publish',
+  'cie_disclosure:sign_off', 'cie_disclosure:certify_csrd',
+  'risk_model:deploy', 'risk_model:approve', 'risk_model:validate',
+  'model_certification:issue',
+  'compliance:freeze', 'regulatory_export:approve', 'gdpr_masking:execute',
+  'graph_schema:approve', 'graph_schema:deploy',
+  'graph_weight:approve', 'graph_override:approve',
+  'evidence:seal', 'evidence:freeze',
+  'lrgf_case:override', 'fraud_case:approve',
+]);
+
 // ─── PAGE ACCESS CHECK ──────────────────────────────────────
 function hasRoleAccess() {
   const role = State.user?.role;
@@ -36,6 +51,8 @@ export function renderPage() {
     return `<div class="empty-state"><div class="empty-icon">🔒</div>
       <div class="empty-text">Company Admin access required</div></div>`;
   }
+  // Auto-load after DOM insert (works as tab in workspace)
+  setTimeout(() => loadRoleManager(), 50);
 
   return `
     <div class="card" style="margin-bottom:0">
@@ -142,6 +159,12 @@ function renderPermissionMatrix() {
         if (!match) return '<td style="text-align:center;padding:6px;color:var(--border)">—</td>';
         const key = `${g.resource}:${match.action}`;
         const checked = _editPerms[key] ? 'checked' : '';
+        const forbidden = CA_FORBIDDEN_PERMS.has(key);
+        if (forbidden) {
+          return `<td style="text-align:center;padding:6px" title="🔒 Governance permission — requires org_owner">
+            <span style="color:#ef4444;font-size:0.75rem;cursor:not-allowed" title="Permission ceiling: CA cannot grant this permission">🔒</span>
+          </td>`;
+        }
         return `<td style="text-align:center;padding:6px">
           <label style="cursor:pointer" title="${escapeHTML(match.description || key)}">
             <input type="checkbox" ${checked} ${role.is_system ? 'disabled' : ''}
@@ -357,11 +380,16 @@ async function savePermissions() {
   const perms = Object.entries(_editPerms).filter(([_, v]) => v).map(([k]) => k);
   try {
     await API.put(`/tenant/roles/${_editingRole.id}`, { permissions: perms });
-    showToast(`<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Saved ${perms.length} permissions for ${_editingRole.display_name}`, 'success');
+    showToast(`✓ Saved ${perms.length} permissions for ${_editingRole.display_name}`, 'success');
     await loadRoleManager();
-    editRole(_editingRole.id); // Re-enter edit to show updated state
+    editRole(_editingRole.id);
   } catch (err) {
-    showToast(`<span class="status-icon status-fail" aria-label="Fail">✗</span> ${err.message || 'Failed to save'}`, 'error');
+    const data = err.response?.data || {};
+    if (data.code === 'PERMISSION_CEILING') {
+      showToast(`🔒 Permission Ceiling: Cannot grant governance permissions — ${(data.forbidden_permissions || []).join(', ')}`, 'error');
+    } else {
+      showToast(`✗ ${data.error || err.message || 'Failed to save'}`, 'error');
+    }
   }
 }
 
@@ -436,12 +464,24 @@ async function doAssign(userId) {
   const checkboxes = document.querySelectorAll('.rbac-assign-cb:checked');
   const roleIds = Array.from(checkboxes).map(cb => cb.value);
   try {
-    await API.put(`/tenant/users/${userId}/roles`, { role_ids: roleIds });
-    showToast(`<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Roles updated`, 'success');
+    const res = await API.put(`/tenant/users/${userId}/roles`, { role_ids: roleIds });
+    // Handle dual-control pending response (HTTP 202)
+    if (res.code === 'DUAL_CONTROL_PENDING') {
+      showToast(`⏳ ${res.pending_role} requires approval from ${res.requires_approval_from}`, 'warning');
+    } else {
+      showToast('✓ Roles updated', 'success');
+    }
     State.modal = null;
     await loadRoleManager();
   } catch (err) {
-    showToast(`<span class="status-icon status-fail" aria-label="Fail">✗</span> ${err.message || 'Assignment failed'}`, 'error');
+    const data = err.response?.data || {};
+    if (data.code === 'SELF_ELEVATION_BLOCKED') {
+      showToast('🚫 You cannot assign roles to yourself', 'error');
+    } else if (data.code === 'SOD_CONFLICT') {
+      showToast(`⚠️ SoD Conflict: ${data.error}`, 'error');
+    } else {
+      showToast(`✗ ${data.error || err.message || 'Assignment failed'}`, 'error');
+    }
   }
 }
 

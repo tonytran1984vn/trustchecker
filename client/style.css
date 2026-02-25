@@ -3520,6 +3520,45 @@ html {
   border-left-color: #d4af37;
 }
 
+/* ── Company Admin Sidebar (CA) — Blue enterprise theme ─────── */
+.sidebar-ca {
+  background: linear-gradient(180deg, #0a1628 0%, #0d1f3c 100%);
+  border-right: 1px solid rgba(59, 130, 246, 0.15);
+}
+
+.sidebar-ca .sidebar-header {
+  border-bottom-color: rgba(59, 130, 246, 0.2);
+}
+
+.ca-logo-icon {
+  background: linear-gradient(135deg, #3b82f6, #60a5fa) !important;
+  color: #0a1628 !important;
+}
+
+.ca-badge {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.sidebar-ca .nav-item:hover {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.sidebar-ca .nav-item.active {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+}
+
+.sidebar-ca .nav-item.active::before {
+  background: #3b82f6;
+}
+
 /* ── SA Page Layout ─────────────────────────────────────────── */
 .sa-page,
 .sa-control-tower {
@@ -8531,6 +8570,21 @@ html {
 [data-theme="light"] .sidebar-sa {
   background: #FFFFFF !important;
   border-right: 1px solid #E3E6ED !important;
+}
+
+/* Dark: Sidebar CA-specific */
+:root:not([data-theme="light"]) .sidebar-ca {
+  background: #0f111a !important;
+  border-right: 1px solid #222834 !important;
+}
+
+[data-theme="light"] .sidebar-ca {
+  background: #FFFFFF !important;
+  border-right: 1px solid #E3E6ED !important;
+}
+
+[data-theme="light"] .ca-badge {
+  background: linear-gradient(90deg, #2563eb, #3b82f6);
 }
 
 /* ── PHX Component Dark Mode Overrides (hardcoded light values) ── */
