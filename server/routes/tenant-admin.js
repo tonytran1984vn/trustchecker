@@ -1895,7 +1895,7 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
     try {
         const tid = req.tenantId;
 
-        const [scanStats, fraudStats, productStats, scanSpeed, orgInfo] = await Promise.all([
+        const [scanStats, fraudStats, productStats, scanSpeed, orgInfo, billingPlan] = await Promise.all([
             // Scan volume
             db.get(`SELECT COUNT(*) as total_scans,
                     COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
@@ -1919,22 +1919,46 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
                     AND scanned_at >= NOW() - INTERVAL '30 days'
                     AND response_time_ms > 0`, [tid]),
             // Org settings for financials
-            db.get(`SELECT settings FROM organizations WHERE id = $1`, [tid]),
+            db.get(`SELECT settings, plan FROM organizations WHERE id = $1`, [tid]),
+            // Actual billing plan cost
+            db.get(`SELECT bp.price_monthly, bp.billing_cycle, bp.plan_name
+                    FROM billing_plans bp
+                    JOIN users u ON u.id = bp.user_id
+                    WHERE u.org_id = $1 AND bp.status = 'active'
+                    ORDER BY bp.price_monthly DESC LIMIT 1`, [tid]).catch(() => null),
         ]);
 
-        const avgPrice = 50; // Default product value estimate
+        const totalProducts = Number(productStats?.total_products || 0);
         const counterfeit = Number(scanStats?.counterfeit || 0);
+        const suspicious = Number(scanStats?.suspicious || 0);
         const authentic = Number(scanStats?.authentic || 0);
         const totalScans = Number(scanStats?.total_scans || 0);
         const fraudCount = Number(fraudStats?.total_alerts || 0);
         const settings = orgInfo?.settings || {};
         const fin = settings.financials || {};
-        const platformCost = Number(fin.annual_revenue || 0) > 0 ? 5994 : 0; // Platform cost
-        const estimatedFraudLoss = Math.round(counterfeit * avgPrice * 0.8);
+
+        // avgPrice: from financial config (revenue / products), fallback $50
+        const annualRevenue = Number(fin.annual_revenue || 0);
+        const avgPrice = (annualRevenue > 0 && totalProducts > 0)
+            ? Math.round(annualRevenue / totalProducts)
+            : 50;
+
+        // platformCost: from actual billing plan, fallback to plan tier estimate
+        const planTierCosts = { free: 0, starter: 588, pro: 2388, business: 5988, enterprise: 12000 };
+        let platformCost = 0;
+        if (billingPlan?.price_monthly > 0) {
+            platformCost = Math.round(billingPlan.price_monthly * 12);
+        } else {
+            const orgPlan = orgInfo?.plan || 'free';
+            platformCost = planTierCosts[orgPlan] || 0;
+        }
+
+        // Financial impact calculations
+        const estimatedFraudLoss = Math.round((counterfeit + suspicious * 0.3) * avgPrice);
         const revenueProtected = Math.round(authentic * avgPrice);
-        const savingsCounterfeit = Math.round(authentic * avgPrice * 0.02);
-        const savingsRecall = Math.round(savingsCounterfeit * 0.18);
-        const savingsAudit = Math.round(totalScans * 0.5);
+        const savingsCounterfeit = Math.round(revenueProtected * 0.05); // 5% brand protection value
+        const savingsRecall = Math.round(counterfeit * avgPrice * 0.15); // avoided recall cost
+        const savingsAudit = Math.round(totalScans * 0.5); // audit automation savings
         const totalSavings = savingsCounterfeit + savingsRecall + savingsAudit;
         const roi = platformCost > 0 ? Math.round(totalSavings / platformCost * 100) / 100 : 0;
         const costPerVerification = totalScans > 0 ? Math.round(platformCost / totalScans * 1000) / 1000 : 0;
