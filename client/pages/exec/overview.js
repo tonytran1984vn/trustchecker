@@ -72,7 +72,15 @@ function renderCCS() {
         <div style="font-size:0.78rem;opacity:0.8;margin-top:2px">Set your Annual Revenue, EBITDA, and EV Multiple to unlock full Capital Intelligence</div>
       </div>
       <button onclick="document.getElementById('ccs-fin-modal').style.display='flex'" class="ccs-config-btn">Configure Now</button>
-    </div>` : ''}
+    </div>` : `
+    <div class="ccs-config-banner" style="background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.2)">
+      <div class="ccs-config-icon" style="color:#22c55e">${icon('check', 20)}</div>
+      <div>
+        <strong style="color:#22c55e">Financial Inputs Configured</strong>
+        <div style="font-size:0.78rem;opacity:0.8;margin-top:2px">Revenue: ${fmtMoney(fin.annual_revenue)} · EBITDA: ${fmtMoney(fin.ebitda)} · EV Multiple: ${fin.base_multiple}x</div>
+      </div>
+      <button onclick="document.getElementById('ccs-fin-modal').style.display='flex'" class="ccs-config-btn" style="background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.3)">${icon('edit', 14)} Edit</button>
+    </div>`}
 
     <!-- LAYER 1: Capital Exposure Radar -->
     <section class="exec-section">
