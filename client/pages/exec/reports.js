@@ -142,12 +142,18 @@ window._generatePDF = async function (type = 'board') {
   try {
     console.log('[PDF] Starting generation, type:', type);
 
+    // Timeout wrapper — 8 second max per API call
+    const withTimeout = (promise, label) => Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(label + ' timeout (8s)')), 8000))
+    ]).catch(e => { console.warn('[PDF]', e.message); return null; });
+
     // Fetch all available executive data in parallel
     const [reports, overview, carbon, trust] = await Promise.all([
-      api.get('/tenant/owner/ccs/reports').catch(e => { console.warn('[PDF] reports fetch failed:', e.message); return null; }),
-      api.get('/tenant/owner/ccs/overview').catch(e => { console.warn('[PDF] overview fetch failed:', e.message); return null; }),
-      api.get('/tenant/owner/ccs/carbon-summary').catch(e => { console.warn('[PDF] carbon fetch failed:', e.message); return null; }),
-      api.get('/tenant/owner/ccs/trust-report').catch(e => { console.warn('[PDF] trust fetch failed:', e.message); return null; }),
+      withTimeout(api.get('/tenant/owner/ccs/reports'), 'reports'),
+      withTimeout(api.get('/tenant/owner/ccs/overview'), 'overview'),
+      withTimeout(api.get('/tenant/owner/ccs/carbon-summary'), 'carbon'),
+      withTimeout(api.get('/tenant/owner/ccs/trust-report'), 'trust'),
     ]);
 
     console.log('[PDF] Data fetched:', { reports: !!reports, overview: !!overview, carbon: !!carbon, trust: !!trust });
