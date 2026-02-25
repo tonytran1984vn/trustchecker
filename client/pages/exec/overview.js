@@ -284,11 +284,11 @@ function renderCCS() {
             <div class="ccs-metric-label">Platform Investment</div>
           </div>
           <div class="ccs-metric">
-            <div class="ccs-metric-value" style="color:#22c55e">${fmtMoney(eff.ev_uplift)}</div>
+              <div class="ccs-metric-value" style="color:#22c55e">${fmtMoney(eff.ev_uplift)}</div>
             <div class="ccs-metric-label">EV Uplift</div>
           </div>
           <div class="ccs-metric">
-            <div class="ccs-metric-value" style="color:#6366f1">${eff.roi}x</div>
+              <div class="ccs-metric-value" style="color:#6366f1">${eff.roi}x</div>
             <div class="ccs-metric-label">ROI</div>
           </div>
           <div class="ccs-metric">
