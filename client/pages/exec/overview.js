@@ -594,7 +594,26 @@ window.openBUConfigModal = async function () {
     const cfg = res.bu_config || {};
     window._buRows = cfg.business_units && cfg.business_units.length > 0
       ? JSON.parse(JSON.stringify(cfg.business_units))
-      : [{ id: 'bu_1', name: 'Division 1', categories: [], beta: 1.5, k: 2.5, avg_fine: 25000, revenue_weight: 0.5 }];
+      : [{ id: 'bu_1', name: 'Division 1', categories: [], industry_type: 'fmcg', beta: 1.4, k: 1.5, avg_fine: 15000, revenue_weight: 0.5 }];
+
+    // Auto-detect industry_type for BUs migrated from old config (no industry_type field)
+    const idGuess = { pharma: 'pharmaceutical', luxury: 'luxury', fmcg: 'fmcg', tech: 'electronics', finance: 'banking_finance', food: 'restaurant', auto: 'automotive' };
+    const nameGuess = { 'pharma': 'pharmaceutical', 'health': 'pharmaceutical', 'luxury': 'luxury', 'fashion': 'luxury', 'f&b': 'fmcg', 'consumer': 'fmcg', 'food': 'fmcg', 'tech': 'electronics', 'iot': 'electronics', 'software': 'saas', 'bank': 'banking_finance', 'finance': 'banking_finance' };
+    for (const bu of window._buRows) {
+      if (!bu.industry_type) {
+        // Try matching by BU id first, then by keywords in name
+        bu.industry_type = idGuess[bu.id] || null;
+        if (!bu.industry_type && bu.name) {
+          const n = bu.name.toLowerCase();
+          for (const [kw, ind] of Object.entries(nameGuess)) {
+            if (n.includes(kw)) { bu.industry_type = ind; break; }
+          }
+        }
+        if (!bu.industry_type) bu.industry_type = 'fmcg'; // fallback
+        // Auto-fill cluster values
+        window._setBUIndustry && window._setBUIndustry(window._buRows.indexOf(bu), bu.industry_type);
+      }
+    }
 
     // Create or show modal
     let modal = document.getElementById('ccs-bu-modal');
