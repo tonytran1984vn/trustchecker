@@ -11,7 +11,7 @@ import { icon } from '../../core/icons.js';
 
 let _exposure = null, _decisions = null, _valuation = null;
 let _catData = [], _catPage = 1, _catSize = 10;
-let _decData = [], _decPage = 1, _decSize = 10;
+let _decData = [], _decPage = 1, _decSize = 5;
 
 export function renderPage() {
   loadCCSData();
@@ -228,6 +228,7 @@ function renderCCS() {
         </select>
         <select id="ccs-dec-pagesize" onchange="filterDecisionTable(true)"
                 style="padding:6px 8px;border-radius:6px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);font-size:0.78rem">
+          <option value="5" selected>5 / page</option>
           <option value="10">10 / page</option>
           <option value="20">20 / page</option>
           <option value="50">50 / page</option>
