@@ -1957,7 +1957,9 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
         // Financial impact calculations (per-unit based)
         const estimatedFraudLoss = Math.round((counterfeit + suspicious * 0.3) * valuePerUnit);
         const revenueProtected = Math.min(Math.round(authentic * valuePerUnit), annualRevenue || authentic * valuePerUnit);
-        const savingsFraudAvoided = Math.round(estimatedFraudLoss * 0.6); // 60% of fraud loss detected & avoided
+        // Savings = INCREMENTAL value over manual processes
+        // TrustChecker improves fraud detection by ~15% vs manual inspection
+        const savingsFraudAvoided = Math.round(estimatedFraudLoss * 0.15); // 15% incremental detection improvement
         const savingsAudit = Math.round(totalScans * 2); // $2/scan automation savings
         const totalSavings = savingsFraudAvoided + savingsAudit;
         const roi = platformCost > 0 ? Math.round(totalSavings / platformCost * 100) / 100 : 0;
