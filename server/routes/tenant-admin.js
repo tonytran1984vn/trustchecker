@@ -1937,10 +1937,10 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
         const settings = orgInfo?.settings || {};
         const fin = settings.financials || {};
 
-        // avgPrice: from financial config (revenue / products), fallback $50
+        // valuePerUnit: revenue per verification (each scan checks one unit)
         const annualRevenue = Number(fin.annual_revenue || 0);
-        const avgPrice = (annualRevenue > 0 && totalProducts > 0)
-            ? Math.round(annualRevenue / totalProducts)
+        const valuePerUnit = (annualRevenue > 0 && totalScans > 0)
+            ? Math.round(annualRevenue / totalScans)
             : 50;
 
         // platformCost: from actual billing plan, fallback to plan tier estimate
@@ -1953,13 +1953,12 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
             platformCost = planTierCosts[orgPlan] || 0;
         }
 
-        // Financial impact calculations
-        const estimatedFraudLoss = Math.round((counterfeit + suspicious * 0.3) * avgPrice);
-        const revenueProtected = Math.round(authentic * avgPrice);
-        const savingsCounterfeit = Math.round(revenueProtected * 0.05); // 5% brand protection value
-        const savingsRecall = Math.round(counterfeit * avgPrice * 0.15); // avoided recall cost
-        const savingsAudit = Math.round(totalScans * 0.5); // audit automation savings
-        const totalSavings = savingsCounterfeit + savingsRecall + savingsAudit;
+        // Financial impact calculations (per-unit based)
+        const estimatedFraudLoss = Math.round((counterfeit + suspicious * 0.3) * valuePerUnit);
+        const revenueProtected = Math.min(Math.round(authentic * valuePerUnit), annualRevenue || authentic * valuePerUnit);
+        const savingsFraudAvoided = Math.round(estimatedFraudLoss * 0.6); // 60% of fraud loss detected & avoided
+        const savingsAudit = Math.round(totalScans * 2); // $2/scan automation savings
+        const totalSavings = savingsFraudAvoided + savingsAudit;
         const roi = platformCost > 0 ? Math.round(totalSavings / platformCost * 100) / 100 : 0;
         const costPerVerification = totalScans > 0 ? Math.round(platformCost / totalScans * 1000) / 1000 : 0;
 
@@ -1971,9 +1970,8 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
                 cost_per_verification: costPerVerification,
             },
             savings: {
-                counterfeit_prevention: savingsCounterfeit,
-                recall_reduction: savingsRecall,
-                audit_elimination: savingsAudit,
+                fraud_avoided: savingsFraudAvoided,
+                audit_automation: savingsAudit,
                 total: totalSavings,
             },
             investment: {
