@@ -132,21 +132,30 @@ function templateCard(title, desc, type, emoji) {
 // PDF Generation — collects all exec data and opens print-ready popup
 // ═══════════════════════════════════════════════════════════════════════════════
 window._generatePDF = async function (type = 'board') {
-  const btn = event?.target;
+  // Find and disable the clicked button
+  const btns = document.querySelectorAll('button');
+  let btn = null;
+  btns.forEach(b => { if (b.textContent.includes('Generating')) btn = b; });
+  if (!btn) btns.forEach(b => { if (b.textContent.includes('Generate') && b.textContent.includes('PDF')) btn = b; });
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating...'; }
 
   try {
+    console.log('[PDF] Starting generation, type:', type);
+
     // Fetch all available executive data in parallel
     const [reports, overview, carbon, trust] = await Promise.all([
-      api.get('/tenant/owner/ccs/reports').catch(() => null),
-      api.get('/tenant/owner/ccs/overview').catch(() => null),
-      api.get('/tenant/owner/ccs/carbon-summary').catch(() => null),
-      api.get('/tenant/owner/ccs/trust-report').catch(() => null),
+      api.get('/tenant/owner/ccs/reports').catch(e => { console.warn('[PDF] reports fetch failed:', e.message); return null; }),
+      api.get('/tenant/owner/ccs/overview').catch(e => { console.warn('[PDF] overview fetch failed:', e.message); return null; }),
+      api.get('/tenant/owner/ccs/carbon-summary').catch(e => { console.warn('[PDF] carbon fetch failed:', e.message); return null; }),
+      api.get('/tenant/owner/ccs/trust-report').catch(e => { console.warn('[PDF] trust fetch failed:', e.message); return null; }),
     ]);
+
+    console.log('[PDF] Data fetched:', { reports: !!reports, overview: !!overview, carbon: !!carbon, trust: !!trust });
 
     const now = new Date();
     const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const orgName = overview?.org_name || 'Organization';
+    console.log('[PDF] Building', type, 'report for', orgName);
 
     let html = '';
     if (type === 'board') html = buildBoardReport(orgName, dateStr, reports, overview, carbon, trust);
@@ -154,14 +163,27 @@ window._generatePDF = async function (type = 'board') {
     else if (type === 'carbon') html = buildCarbonReport(orgName, dateStr, carbon, overview);
     else html = buildBoardReport(orgName, dateStr, reports, overview, carbon, trust);
 
-    // Open popup and print
-    const popup = window.open('', '_blank', 'width=900,height=700');
-    popup.document.write(html);
-    popup.document.close();
-    setTimeout(() => popup.print(), 600);
+    console.log('[PDF] HTML generated, length:', html.length);
+
+    // Open popup — handle popup blocker
+    const popup = window.open('', '_blank');
+    if (!popup || popup.closed) {
+      // Popup blocked — fallback to current window
+      console.warn('[PDF] Popup blocked, using current window');
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } else {
+      popup.document.write(html);
+      popup.document.close();
+      popup.onload = () => popup.print();
+      setTimeout(() => { try { popup.print(); } catch (e) { } }, 800);
+    }
+    console.log('[PDF] Done!');
   } catch (e) {
-    console.error('[PDF Export]', e);
-    alert('Failed to generate PDF. Please try again.');
+    console.error('[PDF Export Error]', e);
+    alert('Failed to generate PDF: ' + e.message);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '📄 Generate PDF'; }
   }
