@@ -10,6 +10,7 @@
 import { icon } from '../../core/icons.js';
 
 let _exposure = null, _decisions = null, _valuation = null;
+let _catData = [], _catPage = 1, _catSize = 10;
 
 export function renderPage() {
   loadCCSData();
@@ -38,6 +39,12 @@ async function loadCCSData() {
       API.get('/tenant/owner/ccs/valuation').catch(() => null),
     ]);
     renderCCS();
+    // Populate category table after DOM is ready
+    setTimeout(() => {
+      _catData = (_exposure || {}).category_exposure || [];
+      _catPage = 1;
+      filterCategoryTable();
+    }, 0);
   } catch (e) {
     console.error('[CCS] Load error:', e);
     const el = document.getElementById('ccs-overview-content');
@@ -163,22 +170,27 @@ function renderCCS() {
           </table>` : '<div style="color:var(--text-muted);padding:1rem;text-align:center">No geographic scan data in last 30 days</div>'}
         </div>
         <div class="exec-card">
-          <h3>${icon('products', 18)} Category Exposure</h3>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
+            <h3 style="margin:0">${icon('products', 18)} Category Exposure</h3>
+            <div style="display:flex;gap:0.5rem;align-items:center">
+              <input type="text" id="ccs-cat-search" placeholder="Search category..."
+                     oninput="filterCategoryTable()"
+                     style="padding:6px 10px;border-radius:6px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);font-size:0.78rem;width:160px">
+              <select id="ccs-cat-pagesize" onchange="filterCategoryTable(true)"
+                      style="padding:6px 8px;border-radius:6px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);font-size:0.78rem">
+                <option value="10">10 / page</option>
+                <option value="20">20 / page</option>
+                <option value="50">50 / page</option>
+              </select>
+            </div>
+          </div>
           ${(exp.category_exposure || []).length > 0 ? `
           <table class="ccs-table">
             <thead><tr><th>Category</th><th>Products</th><th>Scans</th><th>Suspicious</th><th>Risk %</th></tr></thead>
-            <tbody>
-              ${(exp.category_exposure || []).map(c => `
-                <tr>
-                  <td><strong>${c.category || '—'}</strong></td>
-                  <td>${c.products}</td>
-                  <td>${c.scans}</td>
-                  <td>${c.suspicious}</td>
-                  <td>${c.risk_rate}%</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>` : '<div style="color:var(--text-muted);padding:1rem;text-align:center">No scan data by category</div>'}
+            <tbody id="ccs-cat-tbody"></tbody>
+          </table>
+          <div id="ccs-cat-pager" style="display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem;font-size:0.78rem;color:var(--text-secondary)"></div>
+          ` : '<div style="color:var(--text-muted);padding:1rem;text-align:center">No scan data by category</div>'}
         </div>
       </div>
     </section>
@@ -355,6 +367,53 @@ window.saveCCSFinancials = async function () {
   } catch (e) {
     alert('Failed to save financial configuration');
   }
+};
+
+// ── Category Exposure Pagination ─────────────────────────────────────────────
+window.filterCategoryTable = function (resetPage) {
+  const q = (document.getElementById('ccs-cat-search')?.value || '').toLowerCase();
+  const sizeEl = document.getElementById('ccs-cat-pagesize');
+  _catSize = Number(sizeEl?.value || 10);
+  if (resetPage) _catPage = 1;
+
+  const filtered = _catData.filter(c => !q || (c.category || '').toLowerCase().includes(q));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / _catSize));
+  if (_catPage > totalPages) _catPage = totalPages;
+
+  const start = (_catPage - 1) * _catSize;
+  const page = filtered.slice(start, start + _catSize);
+
+  const tbody = document.getElementById('ccs-cat-tbody');
+  if (tbody) {
+    tbody.innerHTML = page.length > 0 ? page.map(c => `
+      <tr>
+        <td><strong>${c.category || '—'}</strong></td>
+        <td>${c.products}</td>
+        <td>${c.scans}</td>
+        <td>${c.suspicious}</td>
+        <td>${c.risk_rate}%</td>
+      </tr>
+    `).join('') : `<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:1rem">No matching categories</td></tr>`;
+  }
+
+  const pager = document.getElementById('ccs-cat-pager');
+  if (pager) {
+    pager.innerHTML = `
+      <span>Showing ${filtered.length > 0 ? start + 1 : 0}–${Math.min(start + _catSize, filtered.length)} of ${filtered.length}</span>
+      <div style="display:flex;gap:4px">
+        <button onclick="changeCatPage(-1)" ${_catPage <= 1 ? 'disabled' : ''}
+                style="padding:4px 10px;border-radius:4px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);cursor:pointer;font-size:0.75rem">← Prev</button>
+        <span style="padding:4px 8px;font-size:0.75rem">${_catPage} / ${totalPages}</span>
+        <button onclick="changeCatPage(1)" ${_catPage >= totalPages ? 'disabled' : ''}
+                style="padding:4px 10px;border-radius:4px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);cursor:pointer;font-size:0.75rem">Next →</button>
+      </div>
+    `;
+  }
+};
+
+window.changeCatPage = function (delta) {
+  _catPage += delta;
+  filterCategoryTable();
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
