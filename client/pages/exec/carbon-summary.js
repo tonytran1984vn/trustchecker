@@ -86,6 +86,9 @@ export function renderPage() {
         </div>
       </section>
 
+      <!-- CEO Recommendations -->
+      ${buildRecommendations(d)}
+
       <!-- Partner ESG -->
       <section class="exec-section">
         <h2 class="exec-section-title" style="letter-spacing:0.025em">${icon('network', 20)} Partner ESG Intelligence</h2>
@@ -167,6 +170,113 @@ function regRow(fw) {
       <div style="font-size:0.78rem;opacity:0.5">${fw.region || ''}</div>
       <div style="font-size:0.82rem;font-weight:600;color:${statusColor}">${statusLabel}</div>
     </div>`;
+}
+
+function buildRecommendations(d) {
+  const recs = [];
+  const e = d.emissions;
+  const grade = e.grade;
+  const matLevel = d.maturity?.current_level || 1;
+  const compScore = d.compliance_score || 0;
+
+  if (grade === 'F') {
+    recs.push({
+      severity: 'critical', icon: '🚨', title: 'Carbon Grade F — Urgent Restructuring Required',
+      desc: `Total emissions: ${e.total_tCO2e} tCO₂e across ${d.products_assessed} products. Average per product exceeds Grade F threshold. EU CBAM exposure imminent.`,
+      action: 'Restructure high-emission supply routes. Shift air freight → sea/rail. Estimated 30-45% emissions reduction possible.',
+      cost: `$${Math.round(e.total_kgCO2e * 0.02).toLocaleString()} investment needed`
+    });
+  } else if (grade === 'D') {
+    recs.push({
+      severity: 'high', icon: '⚠️', title: 'Carbon Grade D — Energy Transition Needed',
+      desc: `Average product footprint 40-70 kgCO₂e. Industry peers moving to B/C grade.`,
+      action: 'Prioritize renewable energy and optimize manufacturing processes.',
+      cost: `$${Math.round(e.total_kgCO2e * 0.015).toLocaleString()}`
+    });
+  } else if (grade === 'C') {
+    recs.push({
+      severity: 'medium', icon: '📊', title: 'Carbon Grade C — Improvement Opportunity',
+      desc: 'On track but not competitive. Target Grade B.',
+      action: 'Focus on Scope 3 optimization and partner ESG collaboration.',
+      cost: 'Moderate'
+    });
+  }
+
+  if (matLevel === 1) {
+    recs.push({
+      severity: 'high', icon: '📈', title: 'Maturity Level 1 — Upgrade to ESG Governance',
+      desc: 'Only carbon calculation active. Missing: GRI reporting, offset recording, blockchain evidence.',
+      action: 'Deploy GRI 305 auto-reporting, start carbon offset procurement, enable blockchain seal → Level 2.',
+      cost: 'Operational upgrade'
+    });
+  } else if (matLevel === 2) {
+    recs.push({
+      severity: 'medium', icon: '🎯', title: 'Maturity Level 2 — Advance to Carbon Intelligence',
+      desc: 'GRI and offsets active. Next: risk integration, cross-tenant benchmarks.',
+      action: 'Enable ESG→Risk factor mapping and carbon benchmarking → Level 3.',
+      cost: 'Strategic investment'
+    });
+  }
+
+  if (d.offsets_recorded === 0) {
+    recs.push({
+      severity: 'high', icon: '🌱', title: 'Zero Carbon Offsets — Liability Fully Unhedged',
+      desc: `${e.total_tCO2e} tCO₂e emissions with no offsets. $${d.financial_exposure?.carbon_liability?.toLocaleString() || '0'} carbon liability fully exposed.`,
+      action: `Purchase verified offsets (Gold Standard/Verra). Budget: €${Math.round(e.total_tCO2e * 15)}-€${Math.round(e.total_tCO2e * 30)}/year.`,
+      cost: `€${Math.round(e.total_tCO2e * 20)} annual offset`
+    });
+  }
+
+  if (e.scope3 > 0 && e.total_kgCO2e > 0 && (e.scope3 / e.total_kgCO2e) > 0.6) {
+    const pct = Math.round(e.scope3 / e.total_kgCO2e * 100);
+    recs.push({
+      severity: 'medium', icon: '🚛', title: `Scope 3 = ${pct}% of Emissions — Logistics Risk`,
+      desc: 'Transport drives majority of footprint. High CBAM sensitivity.',
+      action: 'Shift air → sea, nearshore suppliers, consolidate shipments. Target: -25% Scope 3.',
+      cost: `$${Math.round(e.scope3 * 0.01).toLocaleString()}`
+    });
+  }
+
+  if (compScore < 50) {
+    recs.push({
+      severity: 'high', icon: '⚖️', title: `Compliance ${compScore}/100 — Below Regulatory Threshold`,
+      desc: 'Risk of non-compliance under EU CSRD, CBAM, SEC Climate disclosure.',
+      action: 'Improve regulatory readiness, increase offsets, strengthen partner ESG screening.',
+      cost: 'High priority'
+    });
+  }
+
+  if (recs.length === 0) return '';
+
+  const sevOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+  recs.sort((a, b) => (sevOrder[a.severity] || 3) - (sevOrder[b.severity] || 3));
+
+  const sevColors = { critical: '#dc2626', high: '#ea580c', medium: '#d97706', low: '#2563eb' };
+  const sevBgs = { critical: 'rgba(220,38,38,0.08)', high: 'rgba(234,88,12,0.08)', medium: 'rgba(217,119,6,0.06)', low: 'rgba(37,99,235,0.06)' };
+  const sevLabels = { critical: 'CRITICAL', high: 'HIGH', medium: 'MEDIUM', low: 'INFO' };
+
+  return `
+    <section class="exec-section">
+      <h2 class="exec-section-title" style="letter-spacing:0.025em">${icon('alertTriangle', 20)} CEO Action Required <span style="font-weight:400;font-size:0.82rem;opacity:0.6">(${recs.length} recommendations)</span></h2>
+      ${recs.map(r => `
+      <div class="exec-card" style="margin-bottom:0.75rem;border-left:4px solid ${sevColors[r.severity]};background:${sevBgs[r.severity]}">
+        <div style="display:flex;align-items:flex-start;gap:1rem">
+          <div style="font-size:1.5rem;line-height:1">${r.icon}</div>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.4rem;flex-wrap:wrap">
+              <span style="font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:4px;background:${sevColors[r.severity]};color:#fff;letter-spacing:0.05em">${sevLabels[r.severity]}</span>
+              <strong style="font-size:0.95rem">${r.title}</strong>
+            </div>
+            <div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:0.5rem">${r.desc}</div>
+            <div style="font-size:0.82rem"><strong>Action:</strong> ${r.action}</div>
+            <div style="display:flex;align-items:center;gap:1rem;margin-top:0.5rem">
+              <span style="font-size:0.75rem;opacity:0.55">💰 ${r.cost}</span>
+              <button class="btn btn-sm" style="font-size:0.72rem;padding:3px 12px;background:${sevColors[r.severity]}15;color:${sevColors[r.severity]};border:1px solid ${sevColors[r.severity]}30;cursor:pointer" onclick="window.navigate && window.navigate('exec-allocation-engine')">→ Capital Allocator</button>
+            </div>
+          </div>
+        </div>
+      </div>`).join('')}
+    </section>`;
 }
 
 window.refreshCarbonSummary = function () {
