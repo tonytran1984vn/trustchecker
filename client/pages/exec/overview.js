@@ -424,64 +424,64 @@ function renderCCS() {
           <label>Industry Default Preset <span style="font-size:0.68rem;opacity:0.5;font-weight:400">(sets default β, k, fine, recovery — override below)</span></label>
           <select id="ccs-fin-industry" onchange="window._fillERQFDefaults && window._fillERQFDefaults()" style="padding:8px;border-radius:6px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0);font-size:0.82rem">
             <optgroup label="⚠️ Critical Risk">
-              <option value="pharmaceutical" ${(fin.industry_type || 'pharmaceutical') === 'pharmaceutical' ? 'selected' : ''}>Dược phẩm & Y tế (β=1.8, k=3)</option>
-              <option value="aviation" ${fin.industry_type === 'aviation' ? 'selected' : ''}>Hàng không dân dụng (β=5.0, k=30)</option>
-              <option value="banking_finance" ${fin.industry_type === 'banking_finance' ? 'selected' : ''}>Ngân hàng & Tài chính (β=4.5, k=25)</option>
-              <option value="nuclear_energy" ${fin.industry_type === 'nuclear_energy' ? 'selected' : ''}>Năng lượng hạt nhân (β=5.0, k=50)</option>
-              <option value="baby_food" ${fin.industry_type === 'baby_food' ? 'selected' : ''}>Thực phẩm trẻ em (β=4.8, k=35)</option>
-              <option value="blood_vaccine" ${fin.industry_type === 'blood_vaccine' ? 'selected' : ''}>Máu & Vaccine (β=4.9, k=40)</option>
-              <option value="cybersecurity" ${fin.industry_type === 'cybersecurity' ? 'selected' : ''}>An ninh mạng (β=4.2, k=20)</option>
-              <option value="life_medical_device" ${fin.industry_type === 'life_medical_device' ? 'selected' : ''}>Thiết bị y tế sinh tồn (β=4.5, k=25)</option>
-              <option value="fund_management" ${fin.industry_type === 'fund_management' ? 'selected' : ''}>Quản lý quỹ đầu tư (β=4.0, k=18)</option>
-              <option value="oil_gas" ${fin.industry_type === 'oil_gas' ? 'selected' : ''}>Dầu khí (β=3.5, k=22)</option>
+              <option value="pharmaceutical" ${(fin.industry_type || 'pharmaceutical') === 'pharmaceutical' ? 'selected' : ''}>Pharmaceutical & Healthcare (β=1.8, k=3)</option>
+              <option value="aviation" ${fin.industry_type === 'aviation' ? 'selected' : ''}>Civil Aviation (β=5.0, k=30)</option>
+              <option value="banking_finance" ${fin.industry_type === 'banking_finance' ? 'selected' : ''}>Banking & Finance (β=4.5, k=25)</option>
+              <option value="nuclear_energy" ${fin.industry_type === 'nuclear_energy' ? 'selected' : ''}>Nuclear Energy (β=5.0, k=50)</option>
+              <option value="baby_food" ${fin.industry_type === 'baby_food' ? 'selected' : ''}>Baby & Infant Food (β=4.8, k=35)</option>
+              <option value="blood_vaccine" ${fin.industry_type === 'blood_vaccine' ? 'selected' : ''}>Blood Services & Vaccines (β=4.9, k=40)</option>
+              <option value="cybersecurity" ${fin.industry_type === 'cybersecurity' ? 'selected' : ''}>Cybersecurity (β=4.2, k=20)</option>
+              <option value="life_medical_device" ${fin.industry_type === 'life_medical_device' ? 'selected' : ''}>Life-Critical Medical Devices (β=4.5, k=25)</option>
+              <option value="fund_management" ${fin.industry_type === 'fund_management' ? 'selected' : ''}>Fund & Asset Management (β=4.0, k=18)</option>
+              <option value="oil_gas" ${fin.industry_type === 'oil_gas' ? 'selected' : ''}>Oil & Gas Extraction (β=3.5, k=22)</option>
             </optgroup>
             <optgroup label="💎 High Brand Sensitivity">
-              <option value="luxury" ${fin.industry_type === 'luxury' ? 'selected' : ''}>Thời trang Xa xỉ (β=2.5, k=4)</option>
-              <option value="jewelry_gems" ${fin.industry_type === 'jewelry_gems' ? 'selected' : ''}>Trang sức & Đá quý (β=3.5, k=10)</option>
-              <option value="premium_wine" ${fin.industry_type === 'premium_wine' ? 'selected' : ''}>Rượu vang cao cấp (β=3.0, k=12)</option>
-              <option value="cosmetics_skincare" ${fin.industry_type === 'cosmetics_skincare' ? 'selected' : ''}>Mỹ phẩm & Skincare (β=2.8, k=15)</option>
-              <option value="premium_watches" ${fin.industry_type === 'premium_watches' ? 'selected' : ''}>Đồng hồ cao cấp (β=3.2, k=8)</option>
-              <option value="luxury_auto" ${fin.industry_type === 'luxury_auto' ? 'selected' : ''}>Xe hơi hạng sang (β=2.7, k=10)</option>
-              <option value="art_antiques" ${fin.industry_type === 'art_antiques' ? 'selected' : ''}>Nghệ thuật & Đồ cổ (β=4.0, k=5)</option>
-              <option value="premium_hospitality" ${fin.industry_type === 'premium_hospitality' ? 'selected' : ''}>Khách sạn 5⭐ (β=2.4, k=12)</option>
-              <option value="premium_real_estate" ${fin.industry_type === 'premium_real_estate' ? 'selected' : ''}>BĐS cao cấp (β=2.2, k=7)</option>
-              <option value="yacht_jet" ${fin.industry_type === 'yacht_jet' ? 'selected' : ''}>Du thuyền & Chuyên cơ (β=2.6, k=10)</option>
+              <option value="luxury" ${fin.industry_type === 'luxury' ? 'selected' : ''}>Luxury Fashion (β=2.5, k=4)</option>
+              <option value="jewelry_gems" ${fin.industry_type === 'jewelry_gems' ? 'selected' : ''}>Jewelry & Gemstones (β=3.5, k=10)</option>
+              <option value="premium_wine" ${fin.industry_type === 'premium_wine' ? 'selected' : ''}>Premium Wine & Spirits (β=3.0, k=12)</option>
+              <option value="cosmetics_skincare" ${fin.industry_type === 'cosmetics_skincare' ? 'selected' : ''}>Cosmetics & Skincare (β=2.8, k=15)</option>
+              <option value="premium_watches" ${fin.industry_type === 'premium_watches' ? 'selected' : ''}>Premium Watches (β=3.2, k=8)</option>
+              <option value="luxury_auto" ${fin.industry_type === 'luxury_auto' ? 'selected' : ''}>Luxury Automotive (β=2.7, k=10)</option>
+              <option value="art_antiques" ${fin.industry_type === 'art_antiques' ? 'selected' : ''}>Art & Antiques (β=4.0, k=5)</option>
+              <option value="premium_hospitality" ${fin.industry_type === 'premium_hospitality' ? 'selected' : ''}>5-Star Hospitality (β=2.4, k=12)</option>
+              <option value="premium_real_estate" ${fin.industry_type === 'premium_real_estate' ? 'selected' : ''}>Premium Real Estate (β=2.2, k=7)</option>
+              <option value="yacht_jet" ${fin.industry_type === 'yacht_jet' ? 'selected' : ''}>Yachts & Private Jets (β=2.6, k=10)</option>
             </optgroup>
             <optgroup label="⚙️ Operational & Tech">
-              <option value="electronics" ${fin.industry_type === 'electronics' ? 'selected' : ''}>Điện tử (β=1.5, k=2.5)</option>
-              <option value="electronic_parts" ${fin.industry_type === 'electronic_parts' ? 'selected' : ''}>Linh kiện điện tử (β=1.4, k=5)</option>
-              <option value="telecom" ${fin.industry_type === 'telecom' ? 'selected' : ''}>Viễn thông (β=1.8, k=10)</option>
-              <option value="logistics" ${fin.industry_type === 'logistics' ? 'selected' : ''}>Logistics & Vận tải (β=1.3, k=6)</option>
-              <option value="ecommerce" ${fin.industry_type === 'ecommerce' ? 'selected' : ''}>Thương mại điện tử (β=1.7, k=15)</option>
-              <option value="saas" ${fin.industry_type === 'saas' ? 'selected' : ''}>SaaS / Phần mềm (β=1.6, k=8)</option>
-              <option value="automotive" ${fin.industry_type === 'automotive' ? 'selected' : ''}>Ô tô phổ thông (β=1.8, k=12)</option>
-              <option value="home_appliances" ${fin.industry_type === 'home_appliances' ? 'selected' : ''}>Thiết bị gia dụng (β=1.4, k=7)</option>
-              <option value="construction" ${fin.industry_type === 'construction' ? 'selected' : ''}>Xây dựng dân dụng (β=1.5, k=9)</option>
-              <option value="renewable_energy" ${fin.industry_type === 'renewable_energy' ? 'selected' : ''}>Năng lượng tái tạo (β=1.6, k=5)</option>
+              <option value="electronics" ${fin.industry_type === 'electronics' ? 'selected' : ''}>Electronics (β=1.5, k=2.5)</option>
+              <option value="electronic_parts" ${fin.industry_type === 'electronic_parts' ? 'selected' : ''}>Electronic Components (β=1.4, k=5)</option>
+              <option value="telecom" ${fin.industry_type === 'telecom' ? 'selected' : ''}>Telecommunications (β=1.8, k=10)</option>
+              <option value="logistics" ${fin.industry_type === 'logistics' ? 'selected' : ''}>Logistics & Transportation (β=1.3, k=6)</option>
+              <option value="ecommerce" ${fin.industry_type === 'ecommerce' ? 'selected' : ''}>E-Commerce Platforms (β=1.7, k=15)</option>
+              <option value="saas" ${fin.industry_type === 'saas' ? 'selected' : ''}>SaaS / Enterprise Software (β=1.6, k=8)</option>
+              <option value="automotive" ${fin.industry_type === 'automotive' ? 'selected' : ''}>Automotive (β=1.8, k=12)</option>
+              <option value="home_appliances" ${fin.industry_type === 'home_appliances' ? 'selected' : ''}>Home Appliances (β=1.4, k=7)</option>
+              <option value="construction" ${fin.industry_type === 'construction' ? 'selected' : ''}>Construction (β=1.5, k=9)</option>
+              <option value="renewable_energy" ${fin.industry_type === 'renewable_energy' ? 'selected' : ''}>Renewable Energy (β=1.6, k=5)</option>
             </optgroup>
             <optgroup label="🛒 Consumer & Retail">
-              <option value="fmcg" ${fin.industry_type === 'fmcg' ? 'selected' : ''}>FMCG / Tiêu dùng nhanh (β=1.2, k=2)</option>
-              <option value="retail" ${fin.industry_type === 'retail' ? 'selected' : ''}>Siêu thị & Bán lẻ (β=1.1, k=4)</option>
-              <option value="fast_fashion" ${fin.industry_type === 'fast_fashion' ? 'selected' : ''}>Thời trang nhanh (β=1.2, k=3)</option>
-              <option value="toys" ${fin.industry_type === 'toys' ? 'selected' : ''}>Đồ chơi trẻ em (β=2.0, k=18)</option>
-              <option value="animal_feed" ${fin.industry_type === 'animal_feed' ? 'selected' : ''}>Thức ăn chăn nuôi (β=1.5, k=10)</option>
-              <option value="furniture" ${fin.industry_type === 'furniture' ? 'selected' : ''}>Nội thất (β=1.2, k=3)</option>
-              <option value="household_chemicals" ${fin.industry_type === 'household_chemicals' ? 'selected' : ''}>Hóa chất gia dụng (β=1.4, k=8)</option>
-              <option value="sporting_goods" ${fin.industry_type === 'sporting_goods' ? 'selected' : ''}>Đồ thể thao (β=1.3, k=4)</option>
-              <option value="publishing" ${fin.industry_type === 'publishing' ? 'selected' : ''}>Xuất bản (β=1.1, k=2)</option>
-              <option value="restaurant" ${fin.industry_type === 'restaurant' ? 'selected' : ''}>Nhà hàng / F&B (β=1.6, k=12)</option>
+              <option value="fmcg" ${fin.industry_type === 'fmcg' ? 'selected' : ''}>FMCG / Consumer Goods (β=1.2, k=2)</option>
+              <option value="retail" ${fin.industry_type === 'retail' ? 'selected' : ''}>Supermarket & Retail (β=1.1, k=4)</option>
+              <option value="fast_fashion" ${fin.industry_type === 'fast_fashion' ? 'selected' : ''}>Fast Fashion (β=1.2, k=3)</option>
+              <option value="toys" ${fin.industry_type === 'toys' ? 'selected' : ''}>Children's Toys (β=2.0, k=18)</option>
+              <option value="animal_feed" ${fin.industry_type === 'animal_feed' ? 'selected' : ''}>Animal Feed (β=1.5, k=10)</option>
+              <option value="furniture" ${fin.industry_type === 'furniture' ? 'selected' : ''}>Furniture & Decor (β=1.2, k=3)</option>
+              <option value="household_chemicals" ${fin.industry_type === 'household_chemicals' ? 'selected' : ''}>Household Chemicals (β=1.4, k=8)</option>
+              <option value="sporting_goods" ${fin.industry_type === 'sporting_goods' ? 'selected' : ''}>Sporting Goods (β=1.3, k=4)</option>
+              <option value="publishing" ${fin.industry_type === 'publishing' ? 'selected' : ''}>Publishing (β=1.1, k=2)</option>
+              <option value="restaurant" ${fin.industry_type === 'restaurant' ? 'selected' : ''}>Restaurant & F&B (β=1.6, k=12)</option>
             </optgroup>
             <optgroup label="🏭 Industrial & Materials">
-              <option value="mining" ${fin.industry_type === 'mining' ? 'selected' : ''}>Khai thác khoáng sản (β=1.2, k=15)</option>
-              <option value="steel_metals" ${fin.industry_type === 'steel_metals' ? 'selected' : ''}>Thép & Kim loại (β=1.1, k=5)</option>
-              <option value="heavy_chemicals" ${fin.industry_type === 'heavy_chemicals' ? 'selected' : ''}>Hóa chất nặng (β=1.8, k=20)</option>
-              <option value="wood_forestry" ${fin.industry_type === 'wood_forestry' ? 'selected' : ''}>Gỗ & Lâm sản (β=1.3, k=8)</option>
-              <option value="cement" ${fin.industry_type === 'cement' ? 'selected' : ''}>Xi măng (β=1.1, k=6)</option>
-              <option value="waste_management" ${fin.industry_type === 'waste_management' ? 'selected' : ''}>Xử lý chất thải (β=2.5, k=25)</option>
-              <option value="water_utilities" ${fin.industry_type === 'water_utilities' ? 'selected' : ''}>Cấp thoát nước (β=2.0, k=15)</option>
-              <option value="shipbuilding" ${fin.industry_type === 'shipbuilding' ? 'selected' : ''}>Đóng tàu (β=1.5, k=10)</option>
-              <option value="fertilizer_pesticide" ${fin.industry_type === 'fertilizer_pesticide' ? 'selected' : ''}>Phân bón & Thuốc BVTV (β=1.9, k=18)</option>
-              <option value="machinery" ${fin.industry_type === 'machinery' ? 'selected' : ''}>Chế tạo máy (β=1.4, k=5)</option>
+              <option value="mining" ${fin.industry_type === 'mining' ? 'selected' : ''}>Mining & Minerals (β=1.2, k=15)</option>
+              <option value="steel_metals" ${fin.industry_type === 'steel_metals' ? 'selected' : ''}>Steel & Metals (β=1.1, k=5)</option>
+              <option value="heavy_chemicals" ${fin.industry_type === 'heavy_chemicals' ? 'selected' : ''}>Heavy Chemicals (β=1.8, k=20)</option>
+              <option value="wood_forestry" ${fin.industry_type === 'wood_forestry' ? 'selected' : ''}>Wood & Forestry (β=1.3, k=8)</option>
+              <option value="cement" ${fin.industry_type === 'cement' ? 'selected' : ''}>Cement (β=1.1, k=6)</option>
+              <option value="waste_management" ${fin.industry_type === 'waste_management' ? 'selected' : ''}>Waste Management (β=2.5, k=25)</option>
+              <option value="water_utilities" ${fin.industry_type === 'water_utilities' ? 'selected' : ''}>Water & Utilities (β=2.0, k=15)</option>
+              <option value="shipbuilding" ${fin.industry_type === 'shipbuilding' ? 'selected' : ''}>Shipbuilding (β=1.5, k=10)</option>
+              <option value="fertilizer_pesticide" ${fin.industry_type === 'fertilizer_pesticide' ? 'selected' : ''}>Fertilizer & Pesticide (β=1.9, k=18)</option>
+              <option value="machinery" ${fin.industry_type === 'machinery' ? 'selected' : ''}>Machinery & Tools (β=1.4, k=5)</option>
             </optgroup>
           </select>
           <label>Estimated Units Sold (YTD)</label>
