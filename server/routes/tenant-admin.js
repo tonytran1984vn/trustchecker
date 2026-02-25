@@ -1464,8 +1464,9 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
 
         // Risk dimensions ($)
         const revenueAtRisk = Math.round(annualRevenue * fraudRate);
-        const brandAtRisk = Math.round(brandValue * (1 - (parseFloat(s30.avg_trust) || 0.9)));
-        const complianceRiskPct = cr.total > 0 ? (parseInt(cr.non_compliant || 0) + parseInt(cr.partial || 0) * 0.5) / parseInt(cr.total) : 0;
+        const trustRatio = Math.min((parseFloat(s30.avg_trust) || 90) / 100, 1); // Convert 0-100 to 0-1
+        const brandAtRisk = Math.round(brandValue * (1 - trustRatio));
+        const complianceRiskPct = cr.total > 0 ? (parseInt(cr.non_compliant || 0)) / parseInt(cr.total) : 0;
         const supplyChainRiskIndex = parseFloat(s30.avg_fraud) || 0;
 
         // Total exposure
