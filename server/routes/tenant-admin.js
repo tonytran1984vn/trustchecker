@@ -2882,14 +2882,36 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
         const ebitda = Number(finConfig?.ebitda || revenue * 0.15);
         const totalEmissions = Number(scopeData?.total_emissions_kgCO2e || scopeData?.total_kgCO2e || 0);
         const carbonPrice = 90; // EU ETS avg price €/tonne
-        const carbonLiability = Math.round(totalEmissions / 1000 * carbonPrice);
-        const regulatoryFineRisk = Math.round(carbonLiability * (riskFactors?.regulatory_risk || 0.15));
-        const carbonTaxImpact = ebitda > 0 ? Math.round(10000 * carbonLiability / ebitda) / 100 : 0;
-        const esgMultiplier = riskFactors?.esg_premium || 0;
 
-        // Compliance status
-        const complianceScore = riskFactors?.compliance_score || 0;
+        // Derive risk percentages from actual engine data
+        const riskImpact = Math.min(100, riskFactors?.total_risk_score_impact || 0);
+        const emissionsPerProduct = products.length > 0 ? totalEmissions / products.length : 0;
+        const avgPartnerESG = Array.isArray(leaderboard) && leaderboard.length > 0
+            ? leaderboard.reduce((s, p) => s + (p.esg_score || 50), 0) / leaderboard.length : 50;
+        const regulatoryReadiness = Array.isArray(regulatory)
+            ? regulatory.reduce((s, f) => s + (f.readiness_pct || 0), 0) / Math.max(1, regulatory.length) : 0;
+        const offsetRatio = totalEmissions > 0 ? Math.min(1, Number(offsets?.c || 0) * 500 / totalEmissions) : 0;
+
+        // Compliance score: weighted combination of factors (higher = better)
+        const complianceScore = Math.round(
+            Math.max(0, 100 - riskImpact) * 0.3 +           // Risk impact (30%)
+            regulatoryReadiness * 0.25 +                      // Regulatory readiness (25%)
+            avgPartnerESG * 0.2 +                             // Partner ESG health (20%)
+            Math.min(100, offsetRatio * 100) * 0.15 +        // Offset coverage (15%)
+            Math.min(100, maturity.current_level * 20) * 0.1  // Maturity level (10%)
+        );
         const complianceStatus = complianceScore >= 80 ? 'Pass' : complianceScore >= 50 ? 'At Risk' : 'Fail';
+
+        // Risk factor percentages (lower = better, shown as exposure %)
+        const regulatoryRisk = Math.round(100 - regulatoryReadiness);
+        const transitionRisk = Math.round(Math.min(100, emissionsPerProduct / 50 * 100)); // >50kg/product = 100%
+        const reputationRisk = Math.round(Math.min(100, (100 - avgPartnerESG)));
+        const physicalRisk = Math.round(Math.min(100, (riskImpact * 0.6)));
+
+        const carbonLiability = Math.round(totalEmissions / 1000 * carbonPrice);
+        const regulatoryFineRisk = Math.round(carbonLiability * (regulatoryRisk / 100 * 0.3));
+        const carbonTaxImpact = ebitda > 0 ? Math.round(10000 * carbonLiability / ebitda) / 100 : 0;
+        const esgMultiplier = complianceScore >= 80 ? 0.15 : complianceScore >= 60 ? 0.08 : complianceScore >= 40 ? 0.03 : 0;
 
         // Scope breakdown — engine returns scope_1.total, scope_2.total, scope_3.total
         const scope1 = Number(scopeData?.scope_1?.total || scopeData?.scope1_kgCO2e || 0);
@@ -2917,11 +2939,11 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
                 carbon_price_per_tonne: carbonPrice,
             },
             risk_factors: {
-                regulatory_risk: riskFactors?.regulatory_risk || 0,
-                transition_risk: riskFactors?.transition_risk || 0,
-                physical_risk: riskFactors?.physical_risk || 0,
-                reputation_risk: riskFactors?.reputation_risk || 0,
-                overall: riskFactors?.overall_risk || 0,
+                regulatory_risk: regulatoryRisk,
+                transition_risk: transitionRisk,
+                physical_risk: physicalRisk,
+                reputation_risk: reputationRisk,
+                overall: Math.round((regulatoryRisk + transitionRisk + physicalRisk + reputationRisk) / 4),
             },
             regulatory: {
                 frameworks: Array.isArray(regulatory) ? regulatory : [],
