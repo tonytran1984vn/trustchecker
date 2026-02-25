@@ -58,11 +58,11 @@ export function renderPage() {
       <section class="exec-section">
         <h2 class="exec-section-title">${icon('lock', 20)} Seal & Integrity Metrics</h2>
         <div class="exec-kpi-grid" style="grid-template-columns: repeat(5, 1fr)">
-          ${m('Total Seals', sc.total, '', '#6366f1', 'lock')}
-          ${m('Scan Verified', sv.authentic + '/' + sv.total, sv.integrity_pct + '%', '#22c55e', 'check')}
-          ${m('Chain Sealed', ci.sealed + '/' + ci.total_events, ci.coverage_pct + '%', '#3b82f6', 'link')}
-          ${m('Tamper Alerts', td.total, td.critical + ' critical', '#ef4444', 'alertTriangle')}
-          ${m('Evidence Pkgs', ev.sealed + '/' + ev.total, 'sealed', '#8b5cf6', 'archive')}
+          ${m('Total Seals', sc.total.toLocaleString(), '', '#6366f1', 'lock')}
+          ${m('Scan Verified', sv.authentic.toLocaleString() + ' / ' + sv.total.toLocaleString(), sv.integrity_pct + '%', '#22c55e', 'check')}
+          ${m('Chain Sealed', ci.sealed.toLocaleString() + ' / ' + ci.total_events.toLocaleString(), ci.coverage_pct + '%', '#3b82f6', 'link')}
+          ${m('Tamper Alerts', td.total.toLocaleString(), td.critical + ' critical', '#ef4444', 'alertTriangle')}
+          ${m('Evidence Pkgs', ev.sealed.toLocaleString() + ' / ' + ev.total.toLocaleString(), 'sealed', '#8b5cf6', 'archive')}
         </div>
       </section>
 
