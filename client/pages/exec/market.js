@@ -106,7 +106,7 @@ function channelRow(name, compliance, count, status) {
   const color = status === 'healthy' ? '#22c55e' : status === 'warning' ? '#f59e0b' : '#ef4444';
   return `
     <div style="display:flex;align-items:center;gap:1rem;padding:0.75rem 0;border-bottom:1px solid var(--border-color, rgba(255,255,255,0.04))">
-      <div style="flex:1;font-size:1rem;font-weight:500">${name}</div>
+      <div style="flex:1;font-size:1rem;font-weight:500;text-transform:capitalize">${name}</div>
       <div style="width:120px">
         <div class="exec-score-bar" style="background:${color}15"><div class="exec-score-fill" style="width:${compliance}%;background:${color}"></div></div>
       </div>
