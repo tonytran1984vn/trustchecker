@@ -1527,10 +1527,10 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         const TCAR = ERL + EBI + RFE - diversification;
 
         // ── 7. SCENARIO MODELING ──
-        function calcScenario(fraudMult, betaMult, enfMult) {
+        function calcScenario(fraudMult, absBeta, enfMult) {
             const sPFraud = pFraud * fraudMult;
             const sERL = Math.round(revenueCovered * sPFraud * severity);
-            const sBRF = Math.pow(1 - trustScore / 100, preset.beta * betaMult);
+            const sBRF = Math.pow(1 - trustScore / 100, absBeta);
             const sIE = 1 - Math.exp(-preset.k * sPFraud);
             const sEBI = Math.round(brandValue * sBRF * sIE);
             const sEnf = Math.min(enforcementProbability * enfMult, 1);
@@ -1539,9 +1539,9 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             return { erl: sERL, ebi: sEBI, rfe: sRFE, tcar: sERL + sEBI + sRFE - sDiv };
         }
         const scenarios = {
-            best: calcScenario(0.5, 0.8, 0.5),
+            best: calcScenario(0.8, 1.2, 0.5),     // ERQF: -20% fraud, β=1.2, low enforcement
             base: { erl: ERL, ebi: EBI, rfe: RFE, tcar: TCAR },
-            stress: calcScenario(2.0, 1.5, 2.0),
+            stress: calcScenario(1.5, 2.5, 2.0),   // ERQF: +50% fraud, β=2.5, high enforcement
         };
 
         // ── GEO RISK MAP ──
@@ -2119,9 +2119,9 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
                 total_scans_ytd: totalScans,
             },
             scenarios: {
-                best: perfScenario(0.5),
+                best: perfScenario(0.8),      // ERQF: -20% fraud
                 base: { tfl: TFL, idv: IDV, teb: TEB, raroi: RAROI },
-                stress: perfScenario(2.0),
+                stress: perfScenario(1.5),    // ERQF: +50% fraud
             },
             performance: {
                 avg_speed_ms: Number(scanSpeed?.avg_ms || 0),
