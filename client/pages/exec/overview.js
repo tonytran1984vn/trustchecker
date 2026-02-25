@@ -99,10 +99,22 @@ function renderCCS() {
       <button onclick="document.getElementById('ccs-fin-modal').style.display='flex'" class="ccs-config-btn" style="background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.3)">${icon('edit', 14)} Edit</button>
     </div>`}
 
-    <!-- LAYER 1: Capital Exposure Radar (ERQF) -->
+    <!-- LAYER 1: Capital Exposure Radar -->
     <section class="exec-section">
-      <h2 class="exec-section-title">${icon('target', 20)} Capital Exposure Radar <span style="font-size:0.65rem;opacity:0.6;font-weight:400">ERQF Engine</span></h2>
-      <div class="ccs-kpi-row">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2 class="exec-section-title" style="margin:0">${icon('target', 20)} Capital Exposure Radar ${exp.per_bu && exp.per_bu.length > 0 ? '<span style="font-size:0.65rem;opacity:0.6;font-weight:400">Group Overview · ERQF</span>' : '<span style="font-size:0.65rem;opacity:0.6;font-weight:400">ERQF Engine</span>'}</h2>
+        <div style="display:flex;gap:0.5rem;align-items:center">
+          ${exp.per_bu && exp.per_bu.length > 0 ? `
+          <button onclick="openBUConfigModal()" class="ccs-config-btn" style="padding:4px 10px;font-size:0.7rem;background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.3)">${icon('settings', 12)} Edit BUs</button>
+          <button onclick="document.getElementById('ccs-bu-detail').style.display=document.getElementById('ccs-bu-detail').style.display==='none'?'block':'none';this.textContent=document.getElementById('ccs-bu-detail').style.display==='none'?'▸ Show per BU':'▾ Hide per BU'" class="ccs-config-btn" style="padding:4px 12px;font-size:0.72rem;background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.25)">▸ Show per BU</button>
+          ` : `
+          <button onclick="openBUConfigModal()" class="ccs-config-btn" style="padding:4px 10px;font-size:0.7rem;background:rgba(99,102,241,0.1);border-color:rgba(99,102,241,0.2)">${icon('layers', 12)} Setup Multi-BU</button>
+          `}
+        </div>
+      </div>
+
+      <!-- Group-level KPI cards (always visible) -->
+      <div class="ccs-kpi-row" style="margin-top:0.75rem">
         ${exposureCard('Total Capital at Risk', fmtMoney(exposure.total_capital_at_risk), 'ERL + EBI + RFE − Diversification', exposure.total_capital_at_risk > 0 ? 'red' : 'green')}
         ${exposureCard('Expected Revenue Loss', fmtMoney(exposure.expected_revenue_loss), `P(Fraud): ${exposure.fraud_probability || 0}% · Coverage: ${exposure.coverage_ratio || 100}%`, exposure.expected_revenue_loss > 0 ? 'orange' : 'green')}
         ${exposureCard('Expected Brand Impact', fmtMoney(exposure.expected_brand_impact), `BRF: ${exposure.brand_risk_factor || 0} · Escalation: ${((exposure.incident_escalation || 0) * 100).toFixed(1)}%`, exposure.expected_brand_impact > 0 ? 'orange' : 'green')}
@@ -125,56 +137,66 @@ function renderCCS() {
       </div>` : ''}
 
       ${exp.per_bu && exp.per_bu.length > 0 ? `
-      <!-- Per-BU Risk Breakdown -->
-      <div class="exec-card" style="margin-top:0.75rem">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
-          <h3 style="margin:0">${icon('layers', 18)} Business Unit Risk Breakdown
-            <span style="font-size:0.6rem;opacity:0.5;margin-left:6px;font-weight:400">${exp.group_aggregated?.brand_architecture === 'branded_house' ? '🏢 Branded House' : '🏘️ House of Brands'}</span>
+      <!-- ═══ Per-BU Detail View (collapsible) ═══ -->
+      <div id="ccs-bu-detail" style="display:none;margin-top:1rem">
+
+        <!-- Group Aggregation Summary -->
+        <div class="exec-card" style="margin-bottom:1rem;border-left:3px solid #6366f1">
+          <h3 style="margin-bottom:0.5rem">${icon('layers', 18)} Group Aggregation Summary
+            <span style="font-size:0.62rem;opacity:0.5;margin-left:6px;font-weight:400">${exp.group_aggregated?.brand_architecture === 'branded_house' ? '🏢 Branded House' : '🏘️ House of Brands'} · ρ=${exp.group_aggregated?.cross_bu_correlation || 0.3}${exp.group_aggregated?.brand_architecture === 'branded_house' ? ' · γ=' + (exp.group_aggregated?.contagion_factor || 0) : ''}</span>
           </h3>
-          <button onclick="document.getElementById('ccs-bu-modal').style.display='flex'" class="ccs-config-btn" style="padding:4px 10px;font-size:0.7rem;background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.3)">${icon('settings', 12)} Edit BUs</button>
+          <table class="ccs-table" style="font-size:0.75rem">
+            <thead><tr>
+              <th>Business Unit</th><th>β</th><th>k</th><th>Weight</th><th>Scans</th><th>P(Fraud)</th>
+              <th>ERL</th><th>EBI</th><th>RFE</th><th style="font-weight:700">TCAR</th>
+            </tr></thead>
+            <tbody>
+              ${exp.per_bu.map(bu => `<tr>
+                <td><strong>${bu.name}</strong></td>
+                <td>${bu.beta}</td><td>${bu.k}</td>
+                <td>${Math.round((bu.revenue_weight || 0) * 100)}%</td>
+                <td>${bu.scans.toLocaleString()}</td>
+                <td>${bu.p_fraud}%</td>
+                <td>${fmtMoney(bu.erl)}</td><td>${fmtMoney(bu.ebi)}</td><td>${fmtMoney(bu.rfe)}</td>
+                <td><strong>${fmtMoney(bu.tcar)}</strong></td>
+              </tr>`).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="border-top:2px solid var(--border-color,rgba(255,255,255,0.15));font-weight:600">
+                <td colspan="6">Group Total</td>
+                <td>${fmtMoney(exp.group_aggregated?.erl)}</td>
+                <td>${fmtMoney(exp.group_aggregated?.ebi)}</td>
+                <td>${fmtMoney(exp.group_aggregated?.rfe)}</td>
+                <td><strong>${fmtMoney(exp.group_aggregated?.tcar)}</strong></td>
+              </tr>
+              ${exp.group_aggregated?.diversification_discount > 0 ? `<tr style="color:#22c55e;font-size:0.7rem">
+                <td colspan="9">↳ Diversification Discount (ρ=${exp.group_aggregated.cross_bu_correlation})</td>
+                <td>−${fmtMoney(exp.group_aggregated.diversification_discount)}</td>
+              </tr>` : ''}
+              ${exp.group_aggregated?.contagion_adjustment > 0 ? `<tr style="color:#ef4444;font-size:0.7rem">
+                <td colspan="8">↳ Brand Contagion (γ=${exp.group_aggregated.contagion_factor})</td>
+                <td>+${fmtMoney(exp.group_aggregated.contagion_adjustment)}</td><td></td>
+              </tr>` : ''}
+            </tfoot>
+          </table>
         </div>
-        <table class="ccs-table" style="font-size:0.75rem">
-          <thead><tr>
-            <th>Business Unit</th><th>β</th><th>k</th><th>Weight</th><th>Scans</th><th>P(Fraud)</th>
-            <th>ERL</th><th>EBI</th><th>RFE</th><th style="font-weight:700">TCAR</th>
-          </tr></thead>
-          <tbody>
-            ${exp.per_bu.map(bu => `<tr>
-              <td><strong>${bu.name}</strong><br><span style="font-size:0.65rem;opacity:0.5">${(bu.categories || []).join(', ')}</span></td>
-              <td>${bu.beta}</td><td>${bu.k}</td>
-              <td>${Math.round((bu.revenue_weight || 0) * 100)}%</td>
-              <td>${bu.scans.toLocaleString()}</td>
-              <td>${bu.p_fraud}%</td>
-              <td>${fmtMoney(bu.erl)}</td><td>${fmtMoney(bu.ebi)}</td><td>${fmtMoney(bu.rfe)}</td>
-              <td><strong>${fmtMoney(bu.tcar)}</strong></td>
-            </tr>`).join('')}
-          </tbody>
-          <tfoot>
-            <tr style="border-top:2px solid var(--border-color,rgba(255,255,255,0.15));font-weight:600">
-              <td colspan="6">Group Total</td>
-              <td>${fmtMoney(exp.group_aggregated?.erl)}</td>
-              <td>${fmtMoney(exp.group_aggregated?.ebi)}</td>
-              <td>${fmtMoney(exp.group_aggregated?.rfe)}</td>
-              <td><strong>${fmtMoney(exp.group_aggregated?.tcar)}</strong></td>
-            </tr>
-            ${exp.group_aggregated?.diversification_discount > 0 ? `<tr style="color:#22c55e;font-size:0.7rem">
-              <td colspan="6">↳ Diversification Discount (ρ=${exp.group_aggregated.cross_bu_correlation})</td>
-              <td colspan="3"></td><td>−${fmtMoney(exp.group_aggregated.diversification_discount)}</td>
-            </tr>` : ''}
-            ${exp.group_aggregated?.contagion_adjustment > 0 ? `<tr style="color:#ef4444;font-size:0.7rem">
-              <td colspan="6">↳ Brand Contagion (γ=${exp.group_aggregated.contagion_factor})</td>
-              <td colspan="2"></td><td>+${fmtMoney(exp.group_aggregated.contagion_adjustment)}</td><td></td>
-            </tr>` : ''}
-          </tfoot>
-        </table>
+
+        <!-- Individual BU Exposure Cards -->
+        ${exp.per_bu.map(bu => `
+        <div class="exec-card" style="margin-bottom:0.75rem;border-left:3px solid ${bu.p_fraud > 4 ? '#ef4444' : bu.p_fraud > 2 ? '#f59e0b' : '#22c55e'}">
+          <h3 style="margin-bottom:0.5rem">${bu.name}
+            <span style="font-size:0.62rem;opacity:0.5;font-weight:400;margin-left:6px">β=${bu.beta} · k=${bu.k} · Fine=$${(bu.avg_fine || 0).toLocaleString()} · ${Math.round((bu.revenue_weight || 0) * 100)}% revenue</span>
+          </h3>
+          <div style="font-size:0.68rem;opacity:0.45;margin-bottom:0.5rem">${(bu.categories || []).join(' · ')}</div>
+          <div class="ccs-kpi-row">
+            ${exposureCard('TCAR', fmtMoney(bu.tcar), 'Total Capital at Risk', bu.tcar > 0 ? 'red' : 'green')}
+            ${exposureCard('ERL', fmtMoney(bu.erl), `P(Fraud): ${bu.p_fraud}%`, bu.erl > 0 ? 'orange' : 'green')}
+            ${exposureCard('EBI', fmtMoney(bu.ebi), `β=${bu.beta} · Trust: ${bu.trust_score}`, bu.ebi > 0 ? 'orange' : 'green')}
+            ${exposureCard('RFE', fmtMoney(bu.rfe), `Fine: $${(bu.avg_fine || 0).toLocaleString()}`, bu.rfe > 0 ? 'red' : 'green')}
+          </div>
+        </div>`).join('')}
       </div>
-      ` : `
-      <!-- No BU config — show setup prompt -->
-      <div style="margin-top:0.5rem;padding:0.6rem 1rem;background:rgba(99,102,241,0.06);border:1px dashed rgba(99,102,241,0.2);border-radius:8px;display:flex;align-items:center;gap:0.75rem">
-        <span style="opacity:0.6;font-size:0.78rem">${icon('layers', 16)} Multi-BU segmentation available for conglomerates</span>
-        <button onclick="openBUConfigModal()" class="ccs-config-btn" style="padding:4px 10px;font-size:0.7rem;background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.3);margin-left:auto">${icon('settings', 12)} Setup Business Units</button>
-      </div>
-      `}
+      ` : ''}
       
       <div class="exec-grid-2" style="margin-top:1rem">
         <!-- Scan Integrity -->
@@ -397,13 +419,13 @@ function renderCCS() {
           <input type="number" id="ccs-fin-brand" value="${fin.brand_value || ''}" placeholder="e.g. 15000000">
 
           <div style="font-size:0.7rem;opacity:0.6;margin:1rem 0 0.75rem;text-transform:uppercase;letter-spacing:1px;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.75rem">ERQF Risk Parameters</div>
-          <label>Industry Type</label>
+          <label>Industry Default Preset <span style="font-size:0.68rem;opacity:0.5;font-weight:400">(sets default β, k, fine — override below)</span></label>
           <select id="ccs-fin-industry" onchange="window._fillERQFDefaults && window._fillERQFDefaults()" style="padding:8px;border-radius:6px;border:1px solid var(--border-color,rgba(255,255,255,0.1));background:var(--input-bg,rgba(255,255,255,0.05));color:var(--text-primary,#e2e8f0);font-size:0.85rem">
-            <option value="pharmaceutical" ${(fin.industry_type || 'pharmaceutical') === 'pharmaceutical' ? 'selected' : ''}>Pharmaceutical (β=1.8, k=3.0)</option>
-            <option value="luxury" ${fin.industry_type === 'luxury' ? 'selected' : ''}>Luxury (β=2.5, k=4.0)</option>
-            <option value="fmcg" ${fin.industry_type === 'fmcg' ? 'selected' : ''}>FMCG (β=1.2, k=2.0)</option>
-            <option value="electronics" ${fin.industry_type === 'electronics' ? 'selected' : ''}>Electronics (β=1.5, k=2.5)</option>
-            <option value="automotive" ${fin.industry_type === 'automotive' ? 'selected' : ''}>Automotive (β=2.0, k=3.5)</option>
+            <option value="pharmaceutical" ${(fin.industry_type || 'pharmaceutical') === 'pharmaceutical' ? 'selected' : ''}>Pharmaceutical (β=1.8, k=3.0, $50K fine)</option>
+            <option value="luxury" ${fin.industry_type === 'luxury' ? 'selected' : ''}>Luxury (β=2.5, k=4.0, $30K fine)</option>
+            <option value="fmcg" ${fin.industry_type === 'fmcg' ? 'selected' : ''}>FMCG (β=1.2, k=2.0, $15K fine)</option>
+            <option value="electronics" ${fin.industry_type === 'electronics' ? 'selected' : ''}>Electronics (β=1.5, k=2.5, $25K fine)</option>
+            <option value="automotive" ${fin.industry_type === 'automotive' ? 'selected' : ''}>Automotive (β=2.0, k=3.5, $40K fine)</option>
           </select>
           <label>Estimated Units Sold (YTD)</label>
           <input type="number" id="ccs-fin-units" value="${fin.estimated_units_ytd || ''}" placeholder="e.g. 500000 · Leave blank for auto">
