@@ -622,6 +622,7 @@ const EXECUTIVE_ITEMS = [
   { id: 'exec-reports', icon: icon('scroll'), label: 'Board Reports' },
   { id: 'exec-trust-report', icon: icon('shield'), label: 'Trust Report' },
   { id: 'exec-scm-summary', icon: icon('truck'), label: 'Supply Chain Capital' },
+  { id: 'exec-carbon-summary', icon: icon('leaf'), label: 'Carbon Capital' },
 ];
 
 function renderExecutiveSidebar() {

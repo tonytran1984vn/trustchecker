@@ -2841,5 +2841,111 @@ router.get('/owner/ccs/scm-summary', requireExecutiveAccess(), async (req, res) 
     }
 });
 
+// CCS: Carbon Capital Summary — Carbon → Financial Exposure abstraction for CEO
+// ═══════════════════════════════════════════════════════════════════════════════
+router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+        const carbonEngine = require('../engines/carbon-engine');
+        const engineClient = require('../engines/engine-client');
+
+        // Fetch org data
+        const [products, shipments, events, partners, violations, offsets, finConfig] = await Promise.all([
+            db.all(`SELECT * FROM products WHERE org_id = $1 AND status = 'active'`, [tid]),
+            db.all(`SELECT s.* FROM shipments s JOIN batches b ON s.batch_id = b.id JOIN products p ON b.product_id = p.id WHERE p.org_id = $1`, [tid])
+                .catch(() => []),
+            db.all(`SELECT sce.* FROM supply_chain_events sce WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+            db.all(`SELECT * FROM partners WHERE org_id = $1 AND status = 'active'`, [tid]),
+            db.all(`SELECT * FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+            db.get(`SELECT COUNT(*) as c FROM evidence_items WHERE entity_type = 'carbon_offset' AND entity_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                .catch(() => ({ c: 0 })),
+            db.get(`SELECT * FROM financial_configs WHERE org_id = $1`, [tid])
+                .catch(() => null),
+        ]);
+
+        // Use carbon engine for calculations
+        const scopeData = await engineClient.carbonAggregate(products, shipments, events);
+        const leaderboard = await engineClient.carbonLeaderboard(partners, shipments, violations);
+        const riskFactors = carbonEngine.calculateRiskFactors(scopeData, leaderboard);
+        const regulatory = carbonEngine.assessRegulatory(scopeData, leaderboard, Number(offsets?.c || 0));
+
+        // Maturity assessment
+        const features = ['scope_calculation'];
+        if (shipments.length > 0) features.push('logistics_emissions');
+        if (partners.length > 0) features.push('partner_esg_scoring');
+        if (Number(offsets?.c || 0) > 0) features.push('offset_tracking');
+        if (events.length > 50) features.push('supply_chain_mapping');
+        const maturity = carbonEngine.assessMaturity(features);
+
+        // Financial calculations
+        const revenue = Number(finConfig?.annual_revenue || 10000000);
+        const ebitda = Number(finConfig?.ebitda || revenue * 0.15);
+        const totalEmissions = Number(scopeData?.total_kgCO2e || 0);
+        const carbonPrice = 90; // EU ETS avg price €/tonne
+        const carbonLiability = Math.round(totalEmissions / 1000 * carbonPrice);
+        const regulatoryFineRisk = Math.round(carbonLiability * (riskFactors?.regulatory_risk || 0.15));
+        const carbonTaxImpact = ebitda > 0 ? Math.round(10000 * carbonLiability / ebitda) / 100 : 0;
+        const esgMultiplier = riskFactors?.esg_premium || 0;
+
+        // Compliance status
+        const complianceScore = riskFactors?.compliance_score || 0;
+        const complianceStatus = complianceScore >= 80 ? 'Pass' : complianceScore >= 50 ? 'At Risk' : 'Fail';
+
+        // Scope breakdown
+        const scope1 = Number(scopeData?.scope1_kgCO2e || 0);
+        const scope2 = Number(scopeData?.scope2_kgCO2e || 0);
+        const scope3 = Number(scopeData?.scope3_kgCO2e || 0);
+
+        res.json({
+            compliance_status: complianceStatus,
+            compliance_score: complianceScore,
+            maturity,
+            emissions: {
+                total_kgCO2e: totalEmissions,
+                total_tCO2e: Math.round(totalEmissions / 1000 * 10) / 10,
+                scope1: Math.round(scope1),
+                scope2: Math.round(scope2),
+                scope3: Math.round(scope3),
+                grade: scopeData?.grade || 'N/A',
+                grade_label: scopeData?.grade_label || 'No data',
+            },
+            financial_exposure: {
+                carbon_liability: carbonLiability,
+                regulatory_fine_risk: regulatoryFineRisk,
+                carbon_tax_impact_pct: carbonTaxImpact,
+                esg_multiplier: esgMultiplier,
+                carbon_price_per_tonne: carbonPrice,
+            },
+            risk_factors: {
+                regulatory_risk: riskFactors?.regulatory_risk || 0,
+                transition_risk: riskFactors?.transition_risk || 0,
+                physical_risk: riskFactors?.physical_risk || 0,
+                reputation_risk: riskFactors?.reputation_risk || 0,
+                overall: riskFactors?.overall_risk || 0,
+            },
+            regulatory: {
+                frameworks: Array.isArray(regulatory) ? regulatory : [],
+                aligned_count: Array.isArray(regulatory) ? regulatory.filter(f => f.status === 'aligned' || f.status === 'compliant').length : 0,
+                total_frameworks: Array.isArray(regulatory) ? regulatory.length : 0,
+            },
+            partner_esg: {
+                total_partners: partners.length,
+                avg_esg_score: leaderboard?.avg_score || 0,
+                top_performers: (leaderboard?.ranking || []).slice(0, 3).map(p => ({
+                    name: p.name,
+                    score: p.score,
+                    grade: p.grade,
+                })),
+                risk_partners: (leaderboard?.ranking || []).filter(p => (p.score || 0) < 40).length,
+            },
+            products_assessed: products.length,
+            offsets_recorded: Number(offsets?.c || 0),
+        });
+    } catch (err) {
+        console.error('[CCS] Carbon Summary error:', err);
+        res.status(500).json({ error: 'Failed to load carbon summary' });
+    }
+});
+
 module.exports = router;
 
