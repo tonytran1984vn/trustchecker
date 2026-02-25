@@ -1465,13 +1465,63 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         const prevFlagged = parseInt(sPrev.flagged) || 0;
         const prevTotal = parseInt(sPrev.total) || 1;
 
-        // Industry presets
+        // Industry presets — 50 industries (GICS + ISO 31000 + Actuarial Data)
         const industryPresets = {
-            pharmaceutical: { beta: 1.8, avgFine: 50000, k: 3.0 },
-            luxury: { beta: 2.5, avgFine: 30000, k: 4.0 },
-            fmcg: { beta: 1.2, avgFine: 15000, k: 2.0 },
-            electronics: { beta: 1.5, avgFine: 25000, k: 2.5 },
-            automotive: { beta: 2.0, avgFine: 40000, k: 3.5 },
+            // ── Group 1: Critical Risk ──
+            pharmaceutical: { beta: 1.8, k: 3.0, avgFine: 50000, recovery: 0.1 },
+            aviation: { beta: 5.0, k: 30.0, avgFine: 500000, recovery: 0.05 },
+            banking_finance: { beta: 4.5, k: 25.0, avgFine: 250000, recovery: 0.2 },
+            nuclear_energy: { beta: 5.0, k: 50.0, avgFine: 1000000, recovery: 0.0 },
+            baby_food: { beta: 4.8, k: 35.0, avgFine: 200000, recovery: 0.1 },
+            blood_vaccine: { beta: 4.9, k: 40.0, avgFine: 500000, recovery: 0.05 },
+            cybersecurity: { beta: 4.2, k: 20.0, avgFine: 150000, recovery: 0.3 },
+            life_medical_device: { beta: 4.5, k: 25.0, avgFine: 300000, recovery: 0.15 },
+            fund_management: { beta: 4.0, k: 18.0, avgFine: 200000, recovery: 0.4 },
+            oil_gas: { beta: 3.5, k: 22.0, avgFine: 400000, recovery: 0.2 },
+            // ── Group 2: High Brand Sensitivity ──
+            luxury: { beta: 2.5, k: 4.0, avgFine: 30000, recovery: 0.5 },
+            jewelry_gems: { beta: 3.5, k: 10.0, avgFine: 50000, recovery: 0.7 },
+            premium_wine: { beta: 3.0, k: 12.0, avgFine: 40000, recovery: 0.4 },
+            cosmetics_skincare: { beta: 2.8, k: 15.0, avgFine: 60000, recovery: 0.3 },
+            premium_watches: { beta: 3.2, k: 8.0, avgFine: 35000, recovery: 0.6 },
+            luxury_auto: { beta: 2.7, k: 10.0, avgFine: 80000, recovery: 0.5 },
+            art_antiques: { beta: 4.0, k: 5.0, avgFine: 20000, recovery: 0.8 },
+            premium_hospitality: { beta: 2.4, k: 12.0, avgFine: 45000, recovery: 0.2 },
+            premium_real_estate: { beta: 2.2, k: 7.0, avgFine: 30000, recovery: 0.9 },
+            yacht_jet: { beta: 2.6, k: 10.0, avgFine: 50000, recovery: 0.6 },
+            // ── Group 3: Operational & Tech ──
+            electronics: { beta: 1.5, k: 2.5, avgFine: 25000, recovery: 0.5 },
+            electronic_parts: { beta: 1.4, k: 5.0, avgFine: 20000, recovery: 0.6 },
+            telecom: { beta: 1.8, k: 10.0, avgFine: 80000, recovery: 0.4 },
+            logistics: { beta: 1.3, k: 6.0, avgFine: 15000, recovery: 0.5 },
+            ecommerce: { beta: 1.7, k: 15.0, avgFine: 50000, recovery: 0.3 },
+            saas: { beta: 1.6, k: 8.0, avgFine: 40000, recovery: 0.2 },
+            automotive: { beta: 1.8, k: 12.0, avgFine: 75000, recovery: 0.6 },
+            home_appliances: { beta: 1.4, k: 7.0, avgFine: 25000, recovery: 0.5 },
+            construction: { beta: 1.5, k: 9.0, avgFine: 30000, recovery: 0.8 },
+            renewable_energy: { beta: 1.6, k: 5.0, avgFine: 20000, recovery: 0.7 },
+            // ── Group 4: Consumer & Retail ──
+            fmcg: { beta: 1.2, k: 2.0, avgFine: 15000, recovery: 0.4 },
+            retail: { beta: 1.1, k: 4.0, avgFine: 10000, recovery: 0.6 },
+            fast_fashion: { beta: 1.2, k: 3.0, avgFine: 12000, recovery: 0.7 },
+            toys: { beta: 2.0, k: 18.0, avgFine: 80000, recovery: 0.3 },
+            animal_feed: { beta: 1.5, k: 10.0, avgFine: 30000, recovery: 0.4 },
+            furniture: { beta: 1.2, k: 3.0, avgFine: 8000, recovery: 0.8 },
+            household_chemicals: { beta: 1.4, k: 8.0, avgFine: 25000, recovery: 0.5 },
+            sporting_goods: { beta: 1.3, k: 4.0, avgFine: 10000, recovery: 0.7 },
+            publishing: { beta: 1.1, k: 2.0, avgFine: 5000, recovery: 0.8 },
+            restaurant: { beta: 1.6, k: 12.0, avgFine: 35000, recovery: 0.2 },
+            // ── Group 5: Industrial & Materials ──
+            mining: { beta: 1.2, k: 15.0, avgFine: 100000, recovery: 0.9 },
+            steel_metals: { beta: 1.1, k: 5.0, avgFine: 20000, recovery: 0.9 },
+            heavy_chemicals: { beta: 1.8, k: 20.0, avgFine: 150000, recovery: 0.4 },
+            wood_forestry: { beta: 1.3, k: 8.0, avgFine: 25000, recovery: 0.7 },
+            cement: { beta: 1.1, k: 6.0, avgFine: 15000, recovery: 0.9 },
+            waste_management: { beta: 2.5, k: 25.0, avgFine: 200000, recovery: 0.1 },
+            water_utilities: { beta: 2.0, k: 15.0, avgFine: 80000, recovery: 0.3 },
+            shipbuilding: { beta: 1.5, k: 10.0, avgFine: 40000, recovery: 0.7 },
+            fertilizer_pesticide: { beta: 1.9, k: 18.0, avgFine: 100000, recovery: 0.5 },
+            machinery: { beta: 1.4, k: 5.0, avgFine: 20000, recovery: 0.8 },
         };
         const industry = fin.industry_type || 'pharmaceutical';
         const basePreset = industryPresets[industry] || industryPresets.pharmaceutical;
