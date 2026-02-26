@@ -567,17 +567,19 @@ function renderRiskHeatmap() {
       ${geo.map(g => {
     const scans = parseInt(g.scans) || 0;
     const flagged = parseInt(g.flagged) || 0;
-    const fraudRate = scans > 0 ? flagged / scans : 0;
+    const fraudRate = (parseFloat(g.fraud_rate) || 0) / 100;
     const size = Math.max(60, Math.round(60 + (scans / maxScans) * 80));
     const r = Math.round(fraudRate * 255);
     const g2 = Math.round((1 - fraudRate) * 200);
     const bg = `rgba(${Math.min(r + 40, 255)}, ${g2}, ${Math.max(60 - r, 20)}, 0.2)`;
     const borderColor = `rgb(${Math.min(r + 40, 255)}, ${g2}, ${Math.max(60 - r, 20)})`;
+    const riskColors = { low: '#22c55e', medium: '#eab308', high: '#ef4444', critical: '#dc2626' };
+    const riskCol = riskColors[g.risk_level] || borderColor;
     return `
-        <div style="width:${size}px;height:${size}px;border-radius:10px;background:${bg};border:2px solid ${borderColor};display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:0.7rem;cursor:default;transition:transform 0.15s" title="${g.geo_country}: ${scans} scans, ${flagged} flagged (${Math.round(fraudRate * 100)}%)">
-          <div style="font-weight:700;font-size:0.85rem">${g.geo_country || '??'}</div>
+        <div style="width:${size}px;height:${size}px;border-radius:10px;background:${bg};border:2px solid ${riskCol};display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:0.7rem;cursor:default;transition:transform 0.15s" title="${g.country}: ${scans} scans, ${flagged} flagged (${g.fraud_rate || 0}%)">
+          <div style="font-weight:700;font-size:0.85rem">${g.country || '??'}</div>
           <div style="opacity:0.7">${scans}</div>
-          ${flagged > 0 ? `<div style="color:${borderColor};font-weight:600">${Math.round(fraudRate * 100)}%</div>` : ''}
+          ${flagged > 0 ? `<div style="color:${riskCol};font-weight:600">${g.fraud_rate || 0}%</div>` : ''}
         </div>`;
   }).join('')}
     </div>
