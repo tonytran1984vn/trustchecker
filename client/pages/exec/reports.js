@@ -8,10 +8,15 @@ import { icon } from '../../core/icons.js';
 import { API as api } from '../../core/api.js';
 
 let _data = null;
+let _activeDays = 30;
+let _customFrom = '';
+let _customTo = '';
 
 export function renderPage() {
   if (!_data) { loadData(); return loadingState(); }
   const d = _data;
+  const cm = d.current_month;
+  const pLabel = d.period_label || `Last ${_activeDays} days`;
 
   return `
     <div class="exec-page">
@@ -22,25 +27,57 @@ export function renderPage() {
         </div>
       </div>
 
-      <!-- Current Month Summary -->
+      <!-- Period Selector -->
       <section class="exec-section">
-        <h2 class="exec-section-title">Current Period (30 days)</h2>
+        <h2 class="exec-section-title">${icon('calendar', 20)} Operational Activity — ${pLabel}</h2>
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap">
+          ${['7', '14', '30', '90', '180', '365'].map(d =>
+    `<button class="btn btn-sm ${_activeDays == d && !_customFrom ? 'btn-primary' : 'btn-outline'}" 
+              onclick="window._setPeriod(${d})" style="min-width:48px">${d <= 30 ? d + 'd' : d == 90 ? '3M' : d == 180 ? '6M' : '1Y'}</button>`
+  ).join('')}
+          <span style="margin:0 0.5rem;opacity:0.3">|</span>
+          <input type="date" id="period-from" value="${_customFrom}" 
+            style="padding:4px 8px;border:1px solid var(--border-color,#e2e8f0);border-radius:6px;font-size:0.78rem;background:var(--card-bg,#fff);color:var(--text-primary,#1a1a2e)"
+            onchange="window._setCustomRange()">
+          <span style="opacity:0.4;font-size:0.82rem">→</span>
+          <input type="date" id="period-to" value="${_customTo}"
+            style="padding:4px 8px;border:1px solid var(--border-color,#e2e8f0);border-radius:6px;font-size:0.78rem;background:var(--card-bg,#fff);color:var(--text-primary,#1a1a2e)"
+            onchange="window._setCustomRange()">
+        </div>
         <div class="exec-kpi-grid" style="grid-template-columns: repeat(4, 1fr)">
           <div class="exec-kpi-card">
-            <div class="exec-kpi-value">${d.current_month.scans}</div>
-            <div class="exec-kpi-label">Scans (30d)</div>
+            <div class="exec-kpi-value">${(cm.scans || 0).toLocaleString()}</div>
+            <div class="exec-kpi-label">Total Scans</div>
           </div>
           <div class="exec-kpi-card">
-            <div class="exec-kpi-value">${d.current_month.alerts}</div>
+            <div class="exec-kpi-value" style="color:#22c55e">${(cm.authentic || 0).toLocaleString()}</div>
+            <div class="exec-kpi-label">Authentic</div>
+          </div>
+          <div class="exec-kpi-card">
+            <div class="exec-kpi-value" style="color:#f59e0b">${(cm.suspicious || 0).toLocaleString()}</div>
+            <div class="exec-kpi-label">Suspicious</div>
+          </div>
+          <div class="exec-kpi-card">
+            <div class="exec-kpi-value" style="color:#ef4444">${(cm.counterfeit || 0).toLocaleString()}</div>
+            <div class="exec-kpi-label">Counterfeit</div>
+          </div>
+        </div>
+        <div class="exec-kpi-grid" style="grid-template-columns: repeat(4, 1fr);margin-top:0.75rem">
+          <div class="exec-kpi-card">
+            <div class="exec-kpi-value">${cm.alerts || 0}</div>
             <div class="exec-kpi-label">Fraud Alerts</div>
           </div>
           <div class="exec-kpi-card">
-            <div class="exec-kpi-value" style="color:#ef4444">${d.current_month.critical}</div>
+            <div class="exec-kpi-value" style="color:#ef4444">${cm.critical || 0}</div>
             <div class="exec-kpi-label">Critical</div>
           </div>
           <div class="exec-kpi-card">
-            <div class="exec-kpi-value" style="color:#22c55e">${d.current_month.resolved}</div>
+            <div class="exec-kpi-value" style="color:#22c55e">${cm.resolved || 0}</div>
             <div class="exec-kpi-label">Resolved</div>
+          </div>
+          <div class="exec-kpi-card">
+            <div class="exec-kpi-value">${cm.avg_trust || 0}%</div>
+            <div class="exec-kpi-label">Avg Trust Score</div>
           </div>
         </div>
       </section>
@@ -92,12 +129,37 @@ export function renderPage() {
 
 async function loadData() {
   try {
-    const r = await api.get('/tenant/owner/ccs/reports');
+    let url = '/tenant/owner/ccs/reports';
+    if (_customFrom && _customTo) {
+      url += `?from=${_customFrom}&to=${_customTo}`;
+    } else {
+      url += `?days=${_activeDays}`;
+    }
+    const r = await api.get(url);
     _data = r;
     const el = document.getElementById('main-content');
     if (el) el.innerHTML = renderPage();
   } catch (e) { console.error('[Reports]', e); }
 }
+
+window._setPeriod = function (days) {
+  _activeDays = days;
+  _customFrom = '';
+  _customTo = '';
+  _data = null;
+  loadData();
+};
+
+window._setCustomRange = function () {
+  const from = document.getElementById('period-from')?.value;
+  const to = document.getElementById('period-to')?.value;
+  if (from && to && from <= to) {
+    _customFrom = from;
+    _customTo = to;
+    _data = null;
+    loadData();
+  }
+};
 
 function loadingState() {
   return `<div class="exec-page"><div style="text-align:center;padding:4rem"><div class="loading-spinner"></div><div style="margin-top:1rem;color:var(--text-secondary)">Loading reports...</div></div></div>`;

@@ -2548,7 +2548,22 @@ router.get('/owner/ccs/reports', requireExecutiveAccess(), async (req, res) => {
     try {
         const tid = req.tenantId;
 
-        const [monthlySummaries, scansByMonth, alertsByMonth, recentAudit] = await Promise.all([
+        // Date range: ?from=2025-12-01&to=2025-12-31 or ?days=7
+        const days = parseInt(req.query.days) || 30;
+        const fromDate = req.query.from || null;
+        const toDate = req.query.to || null;
+
+        // Build date filter for current period
+        let periodFilter, periodParams;
+        if (fromDate && toDate) {
+            periodFilter = `AND scanned_at >= $2::date AND scanned_at < ($3::date + INTERVAL '1 day')`;
+            periodParams = [tid, fromDate, toDate];
+        } else {
+            periodFilter = `AND scanned_at >= NOW() - INTERVAL '${days} days'`;
+            periodParams = [tid];
+        }
+
+        const [monthlySummaries, scansByPeriod, alertsByPeriod, recentAudit] = await Promise.all([
             // Monthly snapshots (last 6 months)
             db.all(`SELECT TO_CHAR(scanned_at, 'YYYY-MM') as month,
                     COUNT(*) as total_scans,
@@ -2560,15 +2575,20 @@ router.get('/owner/ccs/reports', requireExecutiveAccess(), async (req, res) => {
                     AND scanned_at >= NOW() - INTERVAL '6 months'
                     GROUP BY TO_CHAR(scanned_at, 'YYYY-MM')
                     ORDER BY month DESC`, [tid]),
-            // Scan trend
-            db.get(`SELECT COUNT(*) as total_30d FROM scan_events
-                    WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '30 days'`, [tid]),
-            // Alert trend
+            // Scan trend — uses date range
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
+                    COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
+                    COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
+                    ROUND(AVG(trust_score)::numeric, 2) as avg_trust
+                    FROM scan_events WHERE org_id = $1
+                    ${periodFilter}`, periodParams),
+            // Alert trend — uses date range
             db.get(`SELECT COUNT(*) as total_alerts,
                     COUNT(*) FILTER (WHERE severity = 'critical') as critical,
                     COUNT(*) FILTER (WHERE status = 'resolved') as resolved
                     FROM fraud_alerts WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)
-                    AND created_at >= NOW() - INTERVAL '30 days'`, [tid]),
+                    ${periodFilter.replace(/scanned_at/g, 'created_at')}`, periodParams),
             // Recent audit events (report-related)
             db.all(`SELECT action, details, created_at, actor_id
                     FROM audit_log WHERE tenant_id = $1
@@ -2594,11 +2614,18 @@ router.get('/owner/ccs/reports', requireExecutiveAccess(), async (req, res) => {
 
         res.json({
             reports,
+            period_label: fromDate && toDate
+                ? `${fromDate} → ${toDate}`
+                : `Last ${days} days`,
             current_month: {
-                scans: Number(scansByMonth?.total_30d || 0),
-                alerts: Number(alertsByMonth?.total_alerts || 0),
-                critical: Number(alertsByMonth?.critical || 0),
-                resolved: Number(alertsByMonth?.resolved || 0),
+                scans: Number(scansByPeriod?.total || 0),
+                authentic: Number(scansByPeriod?.authentic || 0),
+                suspicious: Number(scansByPeriod?.suspicious || 0),
+                counterfeit: Number(scansByPeriod?.counterfeit || 0),
+                avg_trust: Number(scansByPeriod?.avg_trust || 0),
+                alerts: Number(alertsByPeriod?.total_alerts || 0),
+                critical: Number(alertsByPeriod?.critical || 0),
+                resolved: Number(alertsByPeriod?.resolved || 0),
             },
             scheduled: [
                 { name: 'Executive Summary', frequency: 'Monthly', recipients: 'CEO, CFO, COO', next_run: null, active: true },
