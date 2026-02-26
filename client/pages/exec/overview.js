@@ -596,30 +596,109 @@ function renderROIDashboard() {
   if (!r.total_scans) return '';
 
   const protRate = r.authentication_rate || 0;
+  const stopped = r.counterfeits_detected || 0;
+  const flagged = (r.counterfeits_detected || 0) + (r.suspicious_flagged || 0);
+  const stopRate = flagged > 0 ? Math.round((stopped / flagged) * 100) : 0;
+  const t = (_trends || {}).trend || [];
+
+  // Mini sparkline SVG helper
+  const sparkline = (data, color) => {
+    if (!data.length) return '';
+    const max = Math.max(...data, 1);
+    const w = 80, h = 28;
+    const pts = data.map((v, i) => `${(i / Math.max(data.length - 1, 1)) * w},${h - (v / max) * (h - 4) - 2}`).join(' ');
+    return `<svg width="${w}" height="${h}" style="opacity:0.6"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+  };
+
+  const tcarSpark = sparkline(t.map(w => w.tcar || 0), '#22c55e');
+  const detSpark = sparkline(t.map(w => w.counterfeit || 0), '#f59e0b');
+
   return `
   <section class="ccs-section">
     <div class="ccs-section-header">
       <h3>${icon('bar-chart-2', 18)} Platform ROI</h3>
-      <button onclick="window._exportBoardReport()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;padding:5px 14px;border-radius:8px;font-size:0.72rem;cursor:pointer;font-weight:600">📄 Export Board Report</button>
+      <button onclick="window._exportBoardReport()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;padding:6px 16px;border-radius:8px;font-size:0.72rem;cursor:pointer;font-weight:600;box-shadow:0 2px 8px rgba(99,102,241,0.3);transition:transform 0.15s" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">📄 Export Board Report</button>
     </div>
-    <div class="ccs-metrics-grid">
-      ${exposureCard('Revenue Protected', fmtMoney(r.protected_revenue), `${protRate}% authentication rate`, '#22c55e')}
-      ${exposureCard('Counterfeits Stopped', r.counterfeits_detected?.toLocaleString() || '0', `${r.suspicious_flagged || 0} suspicious flagged`, '#ef4444')}
-      ${exposureCard('Detection Value', fmtMoney(r.detection_value), `$${r.cost_per_detection || 0}/detection cost`, '#f59e0b')}
-      ${exposureCard('ROI Multiple', `${r.roi_multiple || 0}x`, `Payback: ${r.payback_months || 0} months`, '#6366f1')}
+
+    <!-- 2×2 Premium Card Grid -->
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:0.5rem">
+
+      <!-- Revenue Protected -->
+      <div style="background:linear-gradient(135deg,rgba(34,197,94,0.08),rgba(34,197,94,0.02));border:1px solid rgba(34,197,94,0.2);border-radius:14px;padding:16px;position:relative;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div style="width:32px;height:32px;border-radius:8px;background:rgba(34,197,94,0.15);display:flex;align-items:center;justify-content:center;font-size:1.1rem">🛡️</div>
+          <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;opacity:0.6;font-weight:600">Revenue Protected</span>
+        </div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between">
+          <div>
+            <div style="font-size:1.5rem;font-weight:800;color:#22c55e;letter-spacing:-0.5px">${fmtMoney(r.protected_revenue)}</div>
+            <div style="font-size:0.68rem;opacity:0.5;margin-top:2px">${protRate}% authentication rate</div>
+          </div>
+          <div style="flex-shrink:0">${tcarSpark}</div>
+        </div>
+      </div>
+
+      <!-- Counterfeits Stopped -->
+      <div style="background:linear-gradient(135deg,rgba(239,68,68,0.08),rgba(239,68,68,0.02));border:1px solid rgba(239,68,68,0.2);border-radius:14px;padding:16px;position:relative;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div style="width:32px;height:32px;border-radius:8px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;font-size:1.1rem">🚫</div>
+          <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;opacity:0.6;font-weight:600">Counterfeits Stopped</span>
+        </div>
+        <div style="font-size:1.5rem;font-weight:800;color:#ef4444;letter-spacing:-0.5px">${stopped.toLocaleString()}</div>
+        <div style="margin-top:8px">
+          <div style="display:flex;justify-content:space-between;font-size:0.65rem;margin-bottom:3px">
+            <span style="opacity:0.6">Stopped vs Total Flagged</span>
+            <span style="font-weight:600;color:${stopRate > 60 ? '#22c55e' : '#eab308'}">${stopped.toLocaleString()} / ${flagged.toLocaleString()}</span>
+          </div>
+          <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden">
+            <div style="width:${stopRate}%;height:100%;background:linear-gradient(90deg,#ef4444,#f97316);border-radius:3px;transition:width 0.5s"></div>
+          </div>
+          <div style="font-size:0.6rem;opacity:0.4;margin-top:2px;text-align:right">${stopRate}% confirmation rate</div>
+        </div>
+      </div>
+
+      <!-- Detection Value -->
+      <div style="background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(245,158,11,0.02));border:1px solid rgba(245,158,11,0.2);border-radius:14px;padding:16px;position:relative;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div style="width:32px;height:32px;border-radius:8px;background:rgba(245,158,11,0.15);display:flex;align-items:center;justify-content:center;font-size:1.1rem">💰</div>
+          <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;opacity:0.6;font-weight:600">Detection Value</span>
+        </div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between">
+          <div>
+            <div style="font-size:1.5rem;font-weight:800;color:#f59e0b;letter-spacing:-0.5px">${fmtMoney(r.detection_value)}</div>
+            <div style="font-size:0.68rem;opacity:0.5;margin-top:2px">$${r.cost_per_detection || 0} per detection</div>
+          </div>
+          <div style="flex-shrink:0">${detSpark}</div>
+        </div>
+      </div>
+
+      <!-- ROI Multiple -->
+      <div style="background:linear-gradient(135deg,rgba(99,102,241,0.1),rgba(139,92,246,0.05));border:1px solid rgba(99,102,241,0.25);border-radius:14px;padding:16px;position:relative;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div style="width:32px;height:32px;border-radius:8px;background:rgba(99,102,241,0.15);display:flex;align-items:center;justify-content:center;font-size:1.1rem">📈</div>
+          <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;opacity:0.6;font-weight:600">ROI Multiple</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-size:1.8rem;font-weight:900;background:linear-gradient(135deg,#6366f1,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-1px">${r.roi_multiple || 0}x</div>
+          <div style="background:rgba(99,102,241,0.1);padding:3px 10px;border-radius:20px;font-size:0.65rem;font-weight:600;color:#a78bfa">Payback: ${r.payback_months || 0}mo</div>
+        </div>
+        <div style="font-size:0.65rem;opacity:0.4;margin-top:6px">Platform cost: $${(r.platform_cost || 0).toLocaleString()} · ${r.months_active || 0} months active</div>
+      </div>
+
     </div>
-    <div style="margin-top:0.75rem;background:rgba(99,102,241,0.06);border-radius:10px;padding:0.75rem">
-      <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:6px">
-        <span style="opacity:0.7">Protection Coverage</span>
-        <span style="font-weight:600;color:#22c55e">${protRate}%</span>
+
+    <!-- Protection Coverage Footer -->
+    <div style="margin-top:10px;background:rgba(99,102,241,0.04);border:1px solid rgba(99,102,241,0.1);border-radius:12px;padding:12px 16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:0.72rem;font-weight:600;opacity:0.7">${icon('shield', 14)} Protection Coverage</span>
+        <span style="font-size:0.82rem;font-weight:700;color:#22c55e">${protRate}%</span>
       </div>
-      <div style="height:8px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden">
-        <div style="width:${Math.min(protRate, 100)}%;height:100%;background:linear-gradient(90deg,#22c55e,#6366f1);border-radius:4px;transition:width 0.5s"></div>
+      <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden">
+        <div style="width:${Math.min(protRate, 100)}%;height:100%;background:linear-gradient(90deg,#22c55e,#6366f1);border-radius:4px;transition:width 0.8s ease"></div>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:0.65rem;opacity:0.5;margin-top:4px">
+      <div style="display:flex;justify-content:space-between;font-size:0.62rem;opacity:0.4;margin-top:4px">
         <span>${r.total_scans?.toLocaleString() || 0} total scans</span>
-        <span>${r.months_active || 0} months active</span>
-        <span>Avg detection: ${r.avg_detection_days || 0} days</span>
+        <span>${stopped.toLocaleString()} counterfeits · ${(r.suspicious_flagged || 0).toLocaleString()} suspicious</span>
       </div>
     </div>
   </section>`;
