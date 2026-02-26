@@ -50,7 +50,7 @@ export function renderPage() {
         <h2 class="exec-section-title">Monthly Executive Summaries</h2>
         <div class="exec-card">
           ${d.reports.length > 0
-      ? d.reports.map(r => reportRow(r)).join('')
+      ? d.reports.map((r, i) => reportRow(r, i)).join('')
       : '<div style="color:var(--text-secondary);font-size:0.85rem;padding:1rem 0">No reports generated yet. Scan data will generate automatic monthly reports.</div>'}
         </div>
       </section>
@@ -103,7 +103,7 @@ function loadingState() {
   return `<div class="exec-page"><div style="text-align:center;padding:4rem"><div class="loading-spinner"></div><div style="margin-top:1rem;color:var(--text-secondary)">Loading reports...</div></div></div>`;
 }
 
-function reportRow(r) {
+function reportRow(r, idx) {
   return `
     <div style="display:flex;align-items:center;gap:1rem;padding:0.75rem 0;border-bottom:1px solid var(--border-color, rgba(255,255,255,0.04))">
       <div style="flex:1">
@@ -114,7 +114,7 @@ function reportRow(r) {
         ✓ ${r.authentic} auth · ⚠ ${r.suspicious} susp · ✕ ${r.counterfeit} cntf
       </div>
       <span class="sa-status-pill sa-pill-green">${r.status}</span>
-      <button class="btn btn-xs btn-outline" onclick="window._generatePDF('board')">📄 PDF</button>
+      <button class="btn btn-xs btn-outline" onclick="window._generatePDF('board', ${idx})">📄 PDF</button>
     </div>`;
 }
 
@@ -131,7 +131,7 @@ function templateCard(title, desc, type, emoji) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // PDF Generation — collects all exec data and opens print-ready popup
 // ═══════════════════════════════════════════════════════════════════════════════
-window._generatePDF = async function (type = 'board') {
+window._generatePDF = async function (type = 'board', monthIdx = null) {
   // Find and disable the clicked button
   const btns = document.querySelectorAll('button');
   let btn = null;
@@ -140,7 +140,7 @@ window._generatePDF = async function (type = 'board') {
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating...'; }
 
   try {
-    console.log('[PDF] Starting generation, type:', type);
+    console.log('[PDF] Starting generation, type:', type, 'monthIdx:', monthIdx);
 
     // Timeout wrapper — 8 second max per API call
     const withTimeout = (promise, label) => Promise.race([
@@ -158,16 +158,25 @@ window._generatePDF = async function (type = 'board') {
 
     console.log('[PDF] Data fetched:', { reports: !!reports, overview: !!overview, carbon: !!carbon, trust: !!trust });
 
+    // If a specific month was selected, use that month's data for the report
+    let selectedReport = null;
+    if (monthIdx !== null && reports?.reports?.[monthIdx]) {
+      selectedReport = reports.reports[monthIdx];
+      console.log('[PDF] Using month-specific data:', selectedReport.title);
+    }
+
     const now = new Date();
-    const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const dateStr = selectedReport
+      ? selectedReport.title.replace('—', '·').trim()
+      : now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const orgName = overview?.org_name || 'Organization';
     console.log('[PDF] Building', type, 'report for', orgName);
 
     let html = '';
-    if (type === 'board') html = buildBoardReport(orgName, dateStr, reports, overview, carbon, trust);
+    if (type === 'board') html = buildBoardReport(orgName, dateStr, reports, overview, carbon, trust, selectedReport);
     else if (type === 'risk') html = buildRiskReport(orgName, dateStr, reports, overview, trust);
     else if (type === 'carbon') html = buildCarbonReport(orgName, dateStr, carbon, overview);
-    else html = buildBoardReport(orgName, dateStr, reports, overview, carbon, trust);
+    else html = buildBoardReport(orgName, dateStr, reports, overview, carbon, trust, selectedReport);
 
     console.log('[PDF] HTML generated, length:', html.length);
 
@@ -236,8 +245,14 @@ function pdfStyles() {
   `;
 }
 
-function buildBoardReport(org, date, reports, overview, carbon, trust) {
-  const cm = reports?.current_month || {};
+function buildBoardReport(org, date, reports, overview, carbon, trust, selectedReport) {
+  // Use selectedReport for operational data if a specific month was chosen
+  const cm = selectedReport
+    ? { scans: selectedReport.scans, alerts: selectedReport.suspicious + selectedReport.counterfeit, critical: selectedReport.counterfeit, resolved: selectedReport.authentic }
+    : (reports?.current_month || {});
+  const periodLabel = selectedReport
+    ? selectedReport.title.split('—')[0].trim()
+    : 'Last 30 Days';
   const ov = overview || {};
   const c = carbon || {};
   const t = trust || {};
@@ -260,19 +275,31 @@ function buildBoardReport(org, date, reports, overview, carbon, trust) {
       ${pdfKPI('Compliance', c.compliance_status || '—', c.compliance_status === 'Pass')}
     </div>
 
-    <h2>2. Operational Activity (Last 30 Days)</h2>
+    <h2>2. Operational Activity — ${periodLabel}</h2>
     <div class="kpi-grid">
-      ${pdfKPI('Total Scans', cm.scans || 0, true)}
+      ${pdfKPI('Total Scans', (cm.scans || 0).toLocaleString(), true)}
       ${pdfKPI('Fraud Alerts', cm.alerts || 0, (cm.alerts || 0) === 0)}
       ${pdfKPI('Critical Issues', cm.critical || 0, (cm.critical || 0) === 0)}
-      ${pdfKPI('Resolved', cm.resolved || 0, true)}
+      ${pdfKPI('Resolved / Authentic', (cm.resolved || 0).toLocaleString(), true)}
     </div>
+    ${selectedReport ? `
+    <div class="card" style="margin:10px 0;padding:12px">
+      <h3 style="margin:0 0 8px">Scan Breakdown — ${periodLabel}</h3>
+      <table>
+        <tr><th>Metric</th><th>Count</th><th>%</th></tr>
+        <tr><td>✓ Authentic</td><td>${selectedReport.authentic.toLocaleString()}</td><td>${selectedReport.scans > 0 ? Math.round(selectedReport.authentic / selectedReport.scans * 100) : 0}%</td></tr>
+        <tr><td>⚠ Suspicious</td><td>${selectedReport.suspicious.toLocaleString()}</td><td style="color:#d97706">${selectedReport.scans > 0 ? Math.round(selectedReport.suspicious / selectedReport.scans * 100) : 0}%</td></tr>
+        <tr><td>✕ Counterfeit</td><td>${selectedReport.counterfeit.toLocaleString()}</td><td style="color:#dc2626">${selectedReport.scans > 0 ? Math.round(selectedReport.counterfeit / selectedReport.scans * 100) : 0}%</td></tr>
+        <tr style="font-weight:700;border-top:2px solid #cbd5e1"><td>Total</td><td>${selectedReport.scans.toLocaleString()}</td><td>100%</td></tr>
+      </table>
+      ${selectedReport.avg_trust ? `<div style="margin-top:8px;font-size:9pt;color:#64748b">Average Trust Score: <strong>${selectedReport.avg_trust}%</strong></div>` : ''}
+    </div>` : ''}
 
     ${reports?.reports?.length > 0 ? `
     <h3>Monthly Trend</h3>
     <table>
       <tr><th>Month</th><th>Scans</th><th>Authentic</th><th>Suspicious</th><th>Counterfeit</th><th>Avg Trust</th></tr>
-      ${reports.reports.slice(0, 6).map(r => `<tr><td>${r.title.split('—')[0].trim()}</td><td>${r.scans}</td><td>${r.authentic}</td><td>${r.suspicious}</td><td>${r.counterfeit}</td><td>${r.avg_trust}%</td></tr>`).join('')}
+      ${reports.reports.slice(0, 6).map(r => `<tr${selectedReport && r.date === selectedReport.date ? ' style="background:#f5f3ff;font-weight:600"' : ''}><td>${r.title.split('—')[0].trim()}</td><td>${r.scans}</td><td>${r.authentic}</td><td>${r.suspicious}</td><td>${r.counterfeit}</td><td>${r.avg_trust}%</td></tr>`).join('')}
     </table>` : ''}
 
     <h2>3. Carbon & ESG Exposure</h2>
