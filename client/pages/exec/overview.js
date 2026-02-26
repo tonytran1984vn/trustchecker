@@ -103,6 +103,8 @@ function renderCCS() {
       <button onclick="document.getElementById('ccs-fin-modal').style.display='flex'" class="ccs-config-btn" style="background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.3)">${icon('edit', 14)} Edit</button>
     </div>`}
 
+    ${renderAlertFeed()}
+
     <!-- LAYER 1: Capital Exposure Radar -->
     <section class="exec-section">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -258,27 +260,9 @@ function renderCCS() {
         </div>
       </div>
       
-      <!-- Geo Risk + Category -->
+      <!-- Category Exposure (Geo removed — now in dedicated Heatmap) -->
       <div class="exec-grid-2" style="margin-top:0.75rem">
-        <div class="exec-card">
-          <h3>${icon('globe', 18)} Geographic Risk Map</h3>
-          ${(exp.geo_risk || []).length > 0 ? `
-          <table class="ccs-table">
-            <thead><tr><th>Country</th><th>Scans</th><th>Flagged</th><th>Fraud %</th><th>Risk</th></tr></thead>
-            <tbody>
-              ${(exp.geo_risk || []).map(g => `
-                <tr>
-                  <td><strong>${g.country || '—'}</strong></td>
-                  <td>${g.scans}</td>
-                  <td>${g.flagged}</td>
-                  <td>${g.fraud_rate}%</td>
-                  <td><span class="ccs-risk-badge ccs-risk-${g.risk_level}">${g.risk_level}</span></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>` : '<div style="color:var(--text-muted);padding:1rem;text-align:center">No geographic scan data in last 30 days</div>'}
-        </div>
-        <div class="exec-card">
+        <div class="exec-card" style="grid-column: span 2">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
             <h3 style="margin:0">${icon('products', 18)} Category Exposure</h3>
             <div style="display:flex;gap:0.5rem;align-items:center">
@@ -304,38 +288,8 @@ function renderCCS() {
       </div>
     </section>
 
-    <!-- LAYER 4: Decision Command Center -->
-    <section class="exec-section">
-      <h2 class="exec-section-title">${icon('zap', 20)} Decision Command Center</h2>
-      <div class="ccs-decision-summary">
-        <span class="ccs-dec-chip ccs-dec-critical">${summary.critical || 0} Critical</span>
-        <span class="ccs-dec-chip ccs-dec-high">${summary.high || 0} High</span>
-        <span class="ccs-dec-chip ccs-dec-compliance">${summary.compliance_urgent || 0} Compliance Urgent</span>
-        <span class="ccs-dec-chip ccs-dec-total">${summary.total_decisions || 0} Total Actions</span>
-      </div>
-      <div style="display:flex;gap:0.5rem;align-items:center;margin:0.75rem 0;flex-wrap:wrap">
-        <input type="text" id="ccs-dec-search" placeholder="Search decisions..."
-               oninput="filterDecisionTable()"
-               style="padding:6px 10px;border-radius:6px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);font-size:0.78rem;width:180px;flex-shrink:0">
-        <select id="ccs-dec-severity" onchange="filterDecisionTable(true)"
-                style="padding:6px 8px;border-radius:6px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);font-size:0.78rem">
-          <option value="">All Severity</option>
-          <option value="critical">Critical</option>
-          <option value="high">High</option>
-          <option value="compliance">Compliance</option>
-          <option value="info">Info</option>
-        </select>
-        <select id="ccs-dec-pagesize" onchange="filterDecisionTable(true)"
-                style="padding:6px 8px;border-radius:6px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);font-size:0.78rem">
-          <option value="5" selected>5 / page</option>
-          <option value="10">10 / page</option>
-          <option value="20">20 / page</option>
-          <option value="50">50 / page</option>
-        </select>
-      </div>
-      <div id="ccs-dec-container"></div>
-      <div id="ccs-dec-pager" style="display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem;font-size:0.78rem;color:var(--text-secondary)"></div>
-    </section>
+    ${renderTrendChart()}
+    ${renderRiskHeatmap()}
 
     <!-- LAYER 5: Enterprise Value Snapshot -->
     <section class="exec-section">
@@ -411,9 +365,39 @@ function renderCCS() {
       </div>`}
     </section>
 
-    ${renderTrendChart()}
-    ${renderAlertFeed()}
-    ${renderRiskHeatmap()}
+    <!-- LAYER 4: Decision Command Center -->
+    <section class="exec-section">
+      <h2 class="exec-section-title">${icon('zap', 20)} Decision Command Center</h2>
+      <div class="ccs-decision-summary">
+        <span class="ccs-dec-chip ccs-dec-critical">${summary.critical || 0} Critical</span>
+        <span class="ccs-dec-chip ccs-dec-high">${summary.high || 0} High</span>
+        <span class="ccs-dec-chip ccs-dec-compliance">${summary.compliance_urgent || 0} Compliance Urgent</span>
+        <span class="ccs-dec-chip ccs-dec-total">${summary.total_decisions || 0} Total Actions</span>
+      </div>
+      <div style="display:flex;gap:0.5rem;align-items:center;margin:0.75rem 0;flex-wrap:wrap">
+        <input type="text" id="ccs-dec-search" placeholder="Search decisions..."
+               oninput="filterDecisionTable()"
+               style="padding:6px 10px;border-radius:6px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);font-size:0.78rem;width:180px;flex-shrink:0">
+        <select id="ccs-dec-severity" onchange="filterDecisionTable(true)"
+                style="padding:6px 8px;border-radius:6px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);font-size:0.78rem">
+          <option value="">All Severity</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="compliance">Compliance</option>
+          <option value="info">Info</option>
+        </select>
+        <select id="ccs-dec-pagesize" onchange="filterDecisionTable(true)"
+                style="padding:6px 8px;border-radius:6px;border:1px solid var(--border-color, rgba(255,255,255,0.1));background:var(--input-bg, rgba(255,255,255,0.05));color:var(--text-primary, #e2e8f0);font-size:0.78rem">
+          <option value="5" selected>5 / page</option>
+          <option value="10">10 / page</option>
+          <option value="20">20 / page</option>
+          <option value="50">50 / page</option>
+        </select>
+      </div>
+      <div id="ccs-dec-container"></div>
+      <div id="ccs-dec-pager" style="display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem;font-size:0.78rem;color:var(--text-secondary)"></div>
+    </section>
+
     ${renderROIDashboard()}
 
     <!-- Financial Config Modal -->
