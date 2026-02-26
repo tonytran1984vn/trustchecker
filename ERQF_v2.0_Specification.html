@@ -1,777 +1,1235 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ERQF v2.0 — Enterprise Risk Quantification Framework</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<!-- MathJax for LaTeX rendering -->
-<script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-<style>
-  :root {
-    --bg: #0a0a1a;
-    --surface: #12122a;
-    --card: #1a1a36;
-    --border: rgba(109, 40, 217, 0.15);
-    --accent: #6d28d9;
-    --accent2: #8b5cf6;
-    --accent3: #a78bfa;
-    --text: #e2e8f0;
-    --text2: #94a3b8;
-    --text3: #64748b;
-    --green: #22c55e;
-    --red: #ef4444;
-    --amber: #f59e0b;
-    --blue: #3b82f6;
-    --cyan: #06b6d4;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'Inter', system-ui, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    line-height: 1.7;
-    padding: 0;
-  }
-  /* Hero Header */
-  .hero {
-    background: linear-gradient(135deg, #1a0533 0%, #0f0a2e 40%, #0a1628 100%);
-    border-bottom: 1px solid var(--border);
-    padding: 80px 0 60px;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-  }
-  .hero::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(circle at 30% 50%, rgba(109, 40, 217, 0.08) 0%, transparent 50%),
-                radial-gradient(circle at 70% 50%, rgba(59, 130, 246, 0.05) 0%, transparent 50%);
-    animation: pulse 8s ease-in-out infinite alternate;
-  }
-  @keyframes pulse {
-    0% { opacity: 0.5; transform: scale(1); }
-    100% { opacity: 1; transform: scale(1.05); }
-  }
-  .hero-content { position: relative; z-index: 1; }
-  .hero .badge {
-    display: inline-block;
-    padding: 6px 20px;
-    background: rgba(109, 40, 217, 0.2);
-    border: 1px solid rgba(109, 40, 217, 0.3);
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--accent3);
-    margin-bottom: 24px;
-  }
-  .hero h1 {
-    font-size: 3rem;
-    font-weight: 900;
-    letter-spacing: -1.5px;
-    background: linear-gradient(135deg, #fff 0%, var(--accent3) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin-bottom: 12px;
-  }
-  .hero .subtitle {
-    font-size: 1.15rem;
-    color: var(--text2);
-    font-weight: 300;
-    max-width: 600px;
-    margin: 0 auto;
-  }
-  .hero .version-tag {
-    display: inline-block;
-    margin-top: 24px;
-    padding: 8px 24px;
-    background: linear-gradient(135deg, var(--accent), #4f46e5);
-    border-radius: 8px;
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: #fff;
-    letter-spacing: 0.05em;
-  }
-  /* Container */
-  .container {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 40px 24px;
-  }
-  /* Section */
-  .section {
-    margin-bottom: 48px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    overflow: hidden;
-  }
-  .section-header {
-    padding: 24px 32px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-  .section-num {
-    width: 36px;
-    height: 36px;
-    background: linear-gradient(135deg, var(--accent), #4f46e5);
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 800;
-    font-size: 0.9rem;
-    color: #fff;
-    flex-shrink: 0;
-  }
-  .section-header h2 {
-    font-size: 1.25rem;
-    font-weight: 700;
-    letter-spacing: -0.3px;
-    color: #fff;
-  }
-  .section-header .tag {
-    margin-left: auto;
-    padding: 4px 12px;
-    border-radius: 6px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-  }
-  .tag-new { background: rgba(34, 197, 94, 0.15); color: var(--green); border: 1px solid rgba(34, 197, 94, 0.2); }
-  .tag-upgraded { background: rgba(109, 40, 217, 0.15); color: var(--accent3); border: 1px solid rgba(109, 40, 217, 0.2); }
-  .section-body {
-    padding: 28px 32px 32px;
-  }
-  .section-body p {
-    color: var(--text2);
-    font-size: 0.9rem;
-    margin-bottom: 16px;
-  }
-  /* Formula Box */
-  .formula-box {
-    background: var(--card);
-    border: 1px solid rgba(109, 40, 217, 0.12);
-    border-radius: 12px;
-    padding: 24px 28px;
-    margin: 16px 0;
-    text-align: center;
-    position: relative;
-  }
-  .formula-box.primary {
-    border-left: 4px solid var(--accent);
-    background: linear-gradient(135deg, rgba(109, 40, 217, 0.05) 0%, var(--card) 100%);
-  }
-  .formula-box .label {
-    position: absolute;
-    top: 8px;
-    left: 12px;
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: var(--accent3);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  .formula-box .mjx-chtml { font-size: 115% !important; }
-  /* Sub-formula */
-  .sub-formula {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    border-radius: 8px;
-    padding: 14px 20px;
-    margin: 10px 0;
-    font-size: 0.88rem;
-  }
-  .sub-formula .where {
-    font-size: 0.78rem;
-    color: var(--text3);
-    margin-top: 8px;
-    line-height: 1.8;
-  }
-  /* Table */
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 16px 0;
-    font-size: 0.82rem;
-  }
-  th {
-    background: rgba(109, 40, 217, 0.08);
-    text-align: left;
-    padding: 10px 14px;
-    font-weight: 600;
-    color: var(--accent3);
-    border-bottom: 1px solid var(--border);
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-  td {
-    padding: 9px 14px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-    color: var(--text2);
-  }
-  tr:hover td { background: rgba(109, 40, 217, 0.03); }
-  .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: var(--accent3); }
-  /* Cluster Grid */
-  .cluster-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 10px;
-    margin: 16px 0;
-  }
-  .cluster-card {
-    background: var(--card);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    border-radius: 10px;
-    padding: 14px;
-    text-align: center;
-  }
-  .cluster-card .id {
-    font-size: 1.4rem;
-    font-weight: 900;
-    background: linear-gradient(135deg, var(--accent), var(--blue));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-  .cluster-card .name {
-    font-size: 0.7rem;
-    color: var(--text3);
-    margin: 4px 0 10px;
-    line-height: 1.3;
-  }
-  .cluster-card .params {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.68rem;
-    color: var(--text2);
-    line-height: 1.6;
-  }
-  /* Scenario Table */
-  .scenario-table td:first-child { font-weight: 600; }
-  .s-best { color: var(--green); }
-  .s-mod { color: #86efac; }
-  .s-base { color: var(--text); }
-  .s-stress { color: var(--amber); }
-  .s-extreme { color: var(--red); }
-  /* Sigmoid Chart */
-  .sigmoid-chart {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 20px;
-    margin: 16px 0;
-  }
-  .sigmoid-visual {
-    background: var(--card);
-    border-radius: 10px;
-    padding: 16px;
-    border: 1px solid rgba(255,255,255,0.04);
-  }
-  /* Note */
-  .note {
-    background: rgba(59, 130, 246, 0.06);
-    border: 1px solid rgba(59, 130, 246, 0.12);
-    border-radius: 10px;
-    padding: 14px 18px;
-    margin: 16px 0;
-    font-size: 0.82rem;
-    color: var(--text2);
-  }
-  .note strong { color: var(--blue); }
-  /* Footer */
-  .footer {
-    text-align: center;
-    padding: 40px 0;
-    color: var(--text3);
-    font-size: 0.75rem;
-    border-top: 1px solid var(--border);
-    margin-top: 20px;
-  }
-  /* Print */
-  @media print {
-    body { background: #fff; color: #1a1a2e; }
-    .hero { background: #f8f8ff; }
-    .hero h1 { -webkit-text-fill-color: #6d28d9; }
-    .section { border-color: #e2e8f0; }
-    .section-body p, td, .sub-formula .where { color: #475569; }
-    .formula-box { background: #f8fafc; border-color: #e2e8f0; }
-    .cluster-card { background: #f8fafc; }
-  }
-  @media (max-width: 768px) {
-    .hero h1 { font-size: 2rem; }
-    .container { padding: 20px 16px; }
-    .section-body { padding: 20px; }
-    .cluster-grid { grid-template-columns: repeat(2, 1fr); }
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ERQF v2.0 — Enterprise Risk Quantification Framework</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <!-- MathJax for LaTeX rendering -->
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <style>
+    :root {
+      --bg: #0a0a1a;
+      --surface: #12122a;
+      --card: #1a1a36;
+      --border: rgba(109, 40, 217, 0.15);
+      --accent: #6d28d9;
+      --accent2: #8b5cf6;
+      --accent3: #a78bfa;
+      --text: #e2e8f0;
+      --text2: #94a3b8;
+      --text3: #64748b;
+      --green: #22c55e;
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --blue: #3b82f6;
+      --cyan: #06b6d4;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      padding: 0;
+    }
+
+    /* Hero Header */
+    .hero {
+      background: linear-gradient(135deg, #1a0533 0%, #0f0a2e 40%, #0a1628 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 80px 0 60px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle at 30% 50%, rgba(109, 40, 217, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 70% 50%, rgba(59, 130, 246, 0.05) 0%, transparent 50%);
+      animation: pulse 8s ease-in-out infinite alternate;
+    }
+
+    @keyframes pulse {
+      0% {
+        opacity: 0.5;
+        transform: scale(1);
+      }
+
+      100% {
+        opacity: 1;
+        transform: scale(1.05);
+      }
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero .badge {
+      display: inline-block;
+      padding: 6px 20px;
+      background: rgba(109, 40, 217, 0.2);
+      border: 1px solid rgba(109, 40, 217, 0.3);
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent3);
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 900;
+      letter-spacing: -1.5px;
+      background: linear-gradient(135deg, #fff 0%, var(--accent3) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 12px;
+    }
+
+    .hero .subtitle {
+      font-size: 1.15rem;
+      color: var(--text2);
+      font-weight: 300;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .hero .version-tag {
+      display: inline-block;
+      margin-top: 24px;
+      padding: 8px 24px;
+      background: linear-gradient(135deg, var(--accent), #4f46e5);
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.05em;
+    }
+
+    /* Container */
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 40px 24px;
+    }
+
+    /* Section */
+    .section {
+      margin-bottom: 48px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .section-header {
+      padding: 24px 32px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .section-num {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), #4f46e5);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 0.9rem;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .section-header h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      color: #fff;
+    }
+
+    .section-header .tag {
+      margin-left: auto;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .tag-new {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--green);
+      border: 1px solid rgba(34, 197, 94, 0.2);
+    }
+
+    .tag-upgraded {
+      background: rgba(109, 40, 217, 0.15);
+      color: var(--accent3);
+      border: 1px solid rgba(109, 40, 217, 0.2);
+    }
+
+    .section-body {
+      padding: 28px 32px 32px;
+    }
+
+    .section-body p {
+      color: var(--text2);
+      font-size: 0.9rem;
+      margin-bottom: 16px;
+    }
+
+    /* Formula Box */
+    .formula-box {
+      background: var(--card);
+      border: 1px solid rgba(109, 40, 217, 0.12);
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin: 16px 0;
+      text-align: center;
+      position: relative;
+    }
+
+    .formula-box.primary {
+      border-left: 4px solid var(--accent);
+      background: linear-gradient(135deg, rgba(109, 40, 217, 0.05) 0%, var(--card) 100%);
+    }
+
+    .formula-box .label {
+      position: absolute;
+      top: 8px;
+      left: 12px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: var(--accent3);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .formula-box .mjx-chtml {
+      font-size: 115% !important;
+    }
+
+    /* Sub-formula */
+    .sub-formula {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: 8px;
+      padding: 14px 20px;
+      margin: 10px 0;
+      font-size: 0.88rem;
+    }
+
+    .sub-formula .where {
+      font-size: 0.78rem;
+      color: var(--text3);
+      margin-top: 8px;
+      line-height: 1.8;
+    }
+
+    /* Table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 0.82rem;
+    }
+
+    th {
+      background: rgba(109, 40, 217, 0.08);
+      text-align: left;
+      padding: 10px 14px;
+      font-weight: 600;
+      color: var(--accent3);
+      border-bottom: 1px solid var(--border);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      color: var(--text2);
+    }
+
+    tr:hover td {
+      background: rgba(109, 40, 217, 0.03);
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem;
+      color: var(--accent3);
+    }
+
+    /* Cluster Grid */
+    .cluster-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin: 16px 0;
+    }
+
+    .cluster-card {
+      background: var(--card);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: 10px;
+      padding: 14px;
+      text-align: center;
+    }
+
+    .cluster-card .id {
+      font-size: 1.4rem;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--accent), var(--blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .cluster-card .name {
+      font-size: 0.7rem;
+      color: var(--text3);
+      margin: 4px 0 10px;
+      line-height: 1.3;
+    }
+
+    .cluster-card .params {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      color: var(--text2);
+      line-height: 1.6;
+    }
+
+    /* Scenario Table */
+    .scenario-table td:first-child {
+      font-weight: 600;
+    }
+
+    .s-best {
+      color: var(--green);
+    }
+
+    .s-mod {
+      color: #86efac;
+    }
+
+    .s-base {
+      color: var(--text);
+    }
+
+    .s-stress {
+      color: var(--amber);
+    }
+
+    .s-extreme {
+      color: var(--red);
+    }
+
+    /* Sigmoid Chart */
+    .sigmoid-chart {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      margin: 16px 0;
+    }
+
+    .sigmoid-visual {
+      background: var(--card);
+      border-radius: 10px;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    /* Note */
+    .note {
+      background: rgba(59, 130, 246, 0.06);
+      border: 1px solid rgba(59, 130, 246, 0.12);
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin: 16px 0;
+      font-size: 0.82rem;
+      color: var(--text2);
+    }
+
+    .note strong {
+      color: var(--blue);
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 40px 0;
+      color: var(--text3);
+      font-size: 0.75rem;
+      border-top: 1px solid var(--border);
+      margin-top: 20px;
+    }
+
+    /* Print */
+    @media print {
+      body {
+        background: #fff;
+        color: #1a1a2e;
+      }
+
+      .hero {
+        background: #f8f8ff;
+      }
+
+      .hero h1 {
+        -webkit-text-fill-color: #6d28d9;
+      }
+
+      .section {
+        border-color: #e2e8f0;
+      }
+
+      .section-body p,
+      td,
+      .sub-formula .where {
+        color: #475569;
+      }
+
+      .formula-box {
+        background: #f8fafc;
+        border-color: #e2e8f0;
+      }
+
+      .cluster-card {
+        background: #f8fafc;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .hero h1 {
+        font-size: 2rem;
+      }
+
+      .container {
+        padding: 20px 16px;
+      }
+
+      .section-body {
+        padding: 20px;
+      }
+
+      .cluster-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+  </style>
 </head>
+
 <body>
 
-<!-- ═══════════════ HERO ═══════════════ -->
-<header class="hero">
-  <div class="hero-content">
-    <div class="badge">TrustChecker Intelligence Platform</div>
-    <h1>Enterprise Risk Quantification<br>Framework</h1>
-    <p class="subtitle">Mathematical specification for quantifying fraud risk, brand exposure, regulatory liability, and total capital at risk across multi-industry enterprises.</p>
-    <div class="version-tag">ERQF v2.0 · Production Grade</div>
-  </div>
-</header>
-
-<div class="container">
-
-<!-- ═══════════════ TABLE OF CONTENTS ═══════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-num">📋</div>
-    <h2>Table of Contents</h2>
-  </div>
-  <div class="section-body">
-    <table>
-      <tr><td class="mono">§1</td><td>Fraud Probability Model — P(Fraud)</td><td class="tag tag-upgraded" style="font-size:0.65rem">Time-Decay</td></tr>
-      <tr><td class="mono">§2</td><td>Expected Revenue Loss — ERL</td><td></td></tr>
-      <tr><td class="mono">§3</td><td>Expected Brand Impact — EBI</td><td></td></tr>
-      <tr><td class="mono">§4</td><td>Regulatory Fine Exposure — RFE</td><td class="tag tag-upgraded" style="font-size:0.65rem">Sigmoid</td></tr>
-      <tr><td class="mono">§5</td><td>Supply Chain Risk Index — SCRI</td><td class="tag tag-upgraded" style="font-size:0.65rem">Dynamic</td></tr>
-      <tr><td class="mono">§6</td><td>Total Capital at Risk — TCAR</td><td class="tag tag-upgraded" style="font-size:0.65rem">ρ-Based</td></tr>
-      <tr><td class="mono">§7</td><td>Scenario Modeling — 5-Point Envelope</td><td class="tag tag-new" style="font-size:0.65rem">5-Point</td></tr>
-      <tr><td class="mono">§8</td><td>95% Confidence Interval</td><td></td></tr>
-      <tr><td class="mono">§9</td><td>Risk Clusters (A–E) & Industry Map</td><td></td></tr>
-      <tr><td class="mono">§10</td><td>Per-BU Segmented Aggregation</td><td></td></tr>
-    </table>
-  </div>
-</div>
-
-<!-- ═══════════════ §1: P(FRAUD) ═══════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-num">1</div>
-    <h2>Fraud Probability Model — P(Fraud)</h2>
-    <span class="tag tag-upgraded">v2.0 · Time-Decay</span>
-  </div>
-  <div class="section-body">
-    <p>Probability of fraud is computed using <strong>exponential time-decay weighting</strong>, giving recent scans significantly more influence than older ones. This captures trend direction — a company improving its fraud rate will see lower P(Fraud) than one with the same aggregate rate but worsening trend.</p>
-
-    <div class="formula-box primary">
-      <span class="label">Primary Formula</span>
-      $$P(\text{Fraud}) = \frac{\sum_{i=1}^{D} w_i \cdot f_i}{\sum_{i=1}^{D} w_i \cdot n_i}$$
+  <!-- ═══════════════ HERO ═══════════════ -->
+  <header class="hero">
+    <div class="hero-content">
+      <div class="badge">TrustChecker Intelligence Platform</div>
+      <h1>Enterprise Risk Quantification<br>Framework</h1>
+      <p class="subtitle">Mathematical specification for quantifying fraud risk, brand exposure, regulatory liability,
+        and total capital at risk across multi-industry enterprises.</p>
+      <div class="version-tag">ERQF v2.0 · Production Grade</div>
     </div>
+  </header>
 
-    <div class="sub-formula">
-      <div class="where">
-        <strong>Where:</strong><br>
-        \( w_i = e^{-\lambda \cdot d_i} \) — exponential decay weight for day \(i\)<br>
-        \( \lambda = 0.05 \) — decay constant (half-life ≈ 14 days)<br>
-        \( d_i \) — number of days ago for day \(i\)<br>
-        \( f_i = \text{counterfeit}_i + \text{suspicious}_i \times C_r \) — weighted fraud count per day<br>
-        \( n_i \) — total scans on day \(i\)<br>
-        \( D \) — number of days with scan data (up to 30)
+  <div class="container">
+
+    <!-- ═══════════════ TABLE OF CONTENTS ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">📋</div>
+        <h2>Table of Contents</h2>
+      </div>
+      <div class="section-body">
+        <table>
+          <tr>
+            <td class="mono">§1</td>
+            <td>Fraud Probability Model — P(Fraud)</td>
+            <td class="tag tag-upgraded" style="font-size:0.65rem">Time-Decay</td>
+          </tr>
+          <tr>
+            <td class="mono">§2</td>
+            <td>Expected Revenue Loss — ERL</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="mono">§3</td>
+            <td>Expected Brand Impact — EBI</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="mono">§4</td>
+            <td>Regulatory Fine Exposure — RFE</td>
+            <td class="tag tag-upgraded" style="font-size:0.65rem">Sigmoid</td>
+          </tr>
+          <tr>
+            <td class="mono">§5</td>
+            <td>Supply Chain Risk Index — SCRI</td>
+            <td class="tag tag-upgraded" style="font-size:0.65rem">Dynamic</td>
+          </tr>
+          <tr>
+            <td class="mono">§6</td>
+            <td>Total Capital at Risk — TCAR</td>
+            <td class="tag tag-upgraded" style="font-size:0.65rem">ρ-Based</td>
+          </tr>
+          <tr>
+            <td class="mono">§7</td>
+            <td>Scenario Modeling — 5-Point Envelope</td>
+            <td class="tag tag-new" style="font-size:0.65rem">5-Point</td>
+          </tr>
+          <tr>
+            <td class="mono">§8</td>
+            <td>95% Confidence Interval</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="mono">§9</td>
+            <td>Risk Clusters (A–E) & Industry Map</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="mono">§10</td>
+            <td>Per-BU Segmented Aggregation</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="mono">§11</td>
+            <td>Platform ROI Intelligence</td>
+            <td class="tag tag-new" style="font-size:0.65rem">v2.1 · New</td>
+          </tr>
+        </table>
       </div>
     </div>
 
-    <div class="formula-box">
-      <span class="label">Confirmation Rate</span>
-      $$C_r = \frac{\text{Critical Alerts} + \text{High Alerts}}{\text{Total Alerts}}$$
-    </div>
-
-    <p><strong>Trend Detection:</strong> Compare recent 7-day fraud rate vs prior 7-day rate:</p>
-    <div class="sub-formula">
-      <div class="where">
-        \( R_{\text{recent}} = \frac{\text{fraud}_{0..7}}{\text{total}_{0..7}} \), &nbsp;
-        \( R_{\text{older}} = \frac{\text{fraud}_{8..14}}{\text{total}_{8..14}} \)<br><br>
-        If \( R_{\text{recent}} > 1.2 \times R_{\text{older}} \) → <strong style="color:#ef4444">Worsening (+1)</strong><br>
-        If \( R_{\text{recent}} < 0.8 \times R_{\text{older}} \) → <strong style="color:#22c55e">Improving (−1)</strong><br>
-        Otherwise → <strong style="color:#f59e0b">Stable (0)</strong>
+    <!-- ═══════════════ §1: P(FRAUD) ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">1</div>
+        <h2>Fraud Probability Model — P(Fraud)</h2>
+        <span class="tag tag-upgraded">v2.0 · Time-Decay</span>
       </div>
-    </div>
+      <div class="section-body">
+        <p>Probability of fraud is computed using <strong>exponential time-decay weighting</strong>, giving recent scans
+          significantly more influence than older ones. This captures trend direction — a company improving its fraud
+          rate will see lower P(Fraud) than one with the same aggregate rate but worsening trend.</p>
 
-    <div class="note">
-      <strong>Fallback:</strong> If fewer than 3 days of daily data available, falls back to simple ratio: \( P(\text{Fraud}) = \frac{C_{30} + S_{30} \times C_r}{N_{30}} \)
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════ §2: ERL ═══════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-num">2</div>
-    <h2>Expected Revenue Loss — ERL</h2>
-  </div>
-  <div class="section-body">
-    <p>Quantifies direct revenue at risk from fraud-related product diversion, counterfeiting losses, and channel leakage. Adjusted by scan coverage ratio to extrapolate from observed to total estimated volume.</p>
-
-    <div class="formula-box primary">
-      <span class="label">Primary Formula</span>
-      $$\text{ERL} = R_{\text{covered}} \times P(\text{Fraud}) \times (1 - r_{\text{recovery}})$$
-    </div>
-
-    <div class="sub-formula">
-      <div class="where">
-        <strong>Where:</strong><br>
-        \( R_{\text{covered}} = R_{\text{annual}} \times \text{Coverage} \) — revenue covered by scan network<br>
-        \( \text{Coverage} = \min\!\left(\frac{\text{totalScans}}{\text{estimatedUnits} / 12},\ 1\right) \) — monthly scan penetration rate<br>
-        \( r_{\text{recovery}} \) — expected recovery rate (default: 0.2 = 20%)<br>
-        \( 1 - r_{\text{recovery}} \) = Severity factor
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════ §3: EBI ═══════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-num">3</div>
-    <h2>Expected Brand Impact — EBI</h2>
-  </div>
-  <div class="section-body">
-    <p>Models brand value at risk using a <strong>power-law trust decay</strong> (Brand Risk Factor) combined with a <strong>saturating incident escalation</strong> (1 − exponential CDF). Industry-specific β and k parameters from Risk Clusters control sensitivity.</p>
-
-    <div class="formula-box primary">
-      <span class="label">Primary Formula</span>
-      $$\text{EBI} = V_{\text{brand}} \times \underbrace{\left(1 - \frac{T}{100}\right)^\beta}_{\text{Brand Risk Factor}} \times \underbrace{\left(1 - e^{-k \cdot P(\text{Fraud})}\right)}_{\text{Incident Escalation}}$$
-    </div>
-
-    <div class="sub-formula">
-      <div class="where">
-        <strong>Where:</strong><br>
-        \( V_{\text{brand}} \) — estimated brand value (USD)<br>
-        \( T \) — average trust score (0–100)<br>
-        \( \beta \) — brand sensitivity exponent (from Risk Cluster, range 1.2–2.8)<br>
-        \( k \) — incident escalation rate (from Risk Cluster, range 1.25–2.8)<br><br>
-        <strong>BRF behavior:</strong> Higher β → brand more sensitive to trust erosion (luxury/pharma)<br>
-        <strong>IE behavior:</strong> Saturating function — small fraud rates cause proportionally larger escalation
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════ §4: RFE ═══════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-num">4</div>
-    <h2>Regulatory Fine Exposure — RFE</h2>
-    <span class="tag tag-upgraded">v2.0 · Sigmoid</span>
-  </div>
-  <div class="section-body">
-    <p>Estimates regulatory fine exposure using a <strong>sigmoid enforcement probability</strong> that replaces the previous 3-step cliff function, providing smooth risk transition without artificial discontinuities.</p>
-
-    <div class="formula-box primary">
-      <span class="label">Primary Formula</span>
-      $$\text{RFE} = \text{WCRS} \times \bar{F}_{\text{industry}} \times \mathcal{E}(\text{WCRS}) \times N_{\text{nc}}$$
-    </div>
-
-    <div class="formula-box">
-      <span class="label">Compliance Risk Score</span>
-      $$\text{WCRS} = \frac{N_{\text{nc}} \times 1.0 + N_{\text{partial}} \times 0.5}{N_{\text{total}}}$$
-    </div>
-
-    <div class="formula-box">
-      <span class="label">Sigmoid Enforcement · v2.0</span>
-      $$\mathcal{E}(\text{WCRS}) = 0.08 + \frac{0.57}{1 + e^{-12 \cdot (\text{WCRS} - 0.2)}}$$
-    </div>
-
-    <div class="sub-formula">
-      <div class="where">
-        <strong>Where:</strong><br>
-        \( \bar{F}_{\text{industry}} \) — average regulatory fine per incident (industry-specific, see §9)<br>
-        \( N_{\text{nc}} \) — number of non-compliant records<br>
-        \( N_{\text{partial}} \) — number of partially compliant records<br><br>
-        <strong>Sigmoid parameters:</strong> L = 0.08 (floor), U = 0.65 (ceiling), midpoint = 0.2, steepness = 12<br>
-        <strong>Behavior:</strong> Smooth transition from 8% → 65% enforcement probability as WCRS increases
-      </div>
-    </div>
-
-    <div class="note">
-      <strong>v1.0 (deprecated):</strong> Step function — \(\mathcal{E} = 0.6\) if WCRS > 0.3, \(0.3\) if > 0.15, \(0.1\) otherwise. This created "cliff effects" at thresholds.
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════ §5: SCRI ═══════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-num">5</div>
-    <h2>Supply Chain Risk Index — SCRI</h2>
-    <span class="tag tag-upgraded">v2.0 · Dynamic Weights</span>
-  </div>
-  <div class="section-body">
-    <p>Composite risk index (0–1) combining four risk drivers with <strong>cluster-specific weights</strong>. Life-critical industries weight compliance higher, while luxury weights fraud/brand higher.</p>
-
-    <div class="formula-box primary">
-      <span class="label">Primary Formula</span>
-      $$\text{SCRI} = \alpha_1 \cdot P(\text{Fraud}) + \alpha_2 \cdot \text{WCRS} + \alpha_3 \cdot G_{\max} + \alpha_4 \cdot \min(V \times 10,\ 1)$$
-    </div>
-
-    <div class="sub-formula">
-      <div class="where">
-        <strong>Where:</strong><br>
-        \( G_{\max} = \max(\text{avg\_fraud\_score per country}) \) — worst geographic risk<br>
-        \( V = |r_{\text{current}} - r_{\text{previous}}| \) — fraud rate volatility (month-over-month)<br>
-        \( \alpha_1, \alpha_2, \alpha_3, \alpha_4 \) — cluster-specific weights (see below)
-      </div>
-    </div>
-
-    <table>
-      <thead>
-        <tr><th>Cluster</th><th>Label</th><th>α₁ P(Fraud)</th><th>α₂ WCRS</th><th>α₃ Geo</th><th>α₄ Volatility</th></tr>
-      </thead>
-      <tbody>
-        <tr><td class="mono">A</td><td>Life-Critical Regulated</td><td>0.25</td><td><strong>0.40</strong></td><td>0.15</td><td>0.20</td></tr>
-        <tr><td class="mono">B</td><td>Financial & Systemic</td><td>0.30</td><td><strong>0.35</strong></td><td>0.20</td><td>0.15</td></tr>
-        <tr><td class="mono">C</td><td>Luxury & Brand-Driven</td><td><strong>0.40</strong></td><td>0.20</td><td>0.20</td><td>0.20</td></tr>
-        <tr><td class="mono">D</td><td>Consumer Mass Market</td><td>0.35</td><td>0.25</td><td>0.20</td><td>0.20</td></tr>
-        <tr><td class="mono">E</td><td>Industrial & Commodity</td><td>0.30</td><td>0.25</td><td><strong>0.25</strong></td><td>0.20</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- ═══════════════ §6: TCAR ═══════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-num">6</div>
-    <h2>Total Capital at Risk — TCAR</h2>
-    <span class="tag tag-upgraded">v2.0 · ρ-Based</span>
-  </div>
-  <div class="section-body">
-    <p>Aggregates all risk components with <strong>correlation-based diversification</strong> using portfolio volatility theory. Since ERL and EBI share the same fraud driver, their correlation is high (ρ ≈ 0.7), reducing the diversification benefit compared to v1.0.</p>
-
-    <div class="formula-box primary">
-      <span class="label">Primary Formula</span>
-      $$\text{TCAR} = \text{ERL} + \text{EBI} + \text{RFE} - \mathcal{D}$$
-    </div>
-
-    <div class="formula-box">
-      <span class="label">Diversification Benefit · v2.0</span>
-      $$\mathcal{D} = (\text{ERL} + \text{EBI}) \times \left(1 - \sqrt{w_1^2 + w_2^2 + 2\rho \cdot w_1 \cdot w_2}\right)$$
-    </div>
-
-    <div class="sub-formula">
-      <div class="where">
-        <strong>Where:</strong><br>
-        \( w_1 = \frac{\text{ERL}}{\text{ERL} + \text{EBI}} \), &nbsp;
-        \( w_2 = \frac{\text{EBI}}{\text{ERL} + \text{EBI}} \)<br>
-        \( \rho = 0.7 \) — correlation between revenue loss and brand damage<br><br>
-        <strong>Numerical example:</strong> If ERL = EBI (equal split), then \( w_1 = w_2 = 0.5 \):<br>
-        \( \sqrt{0.25 + 0.25 + 2 \times 0.7 \times 0.25} = \sqrt{0.85} = 0.922 \)<br>
-        \( \mathcal{D} = (E+E) \times (1 - 0.922) = 7.8\% \) diversification benefit<br><br>
-        <strong>v1.0 (deprecated):</strong> \( \mathcal{D} = 0.3 \times \min(\text{ERL}, \text{EBI}) \) — up to 30% benefit, overly optimistic
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════ §7: SCENARIOS ═══════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-num">7</div>
-    <h2>Scenario Modeling — 5-Point Envelope</h2>
-    <span class="tag tag-new">v2.0 · Extended</span>
-  </div>
-  <div class="section-body">
-    <p>Each scenario recalculates the entire ERQF pipeline with modified inputs. The 5-point envelope provides a comprehensive risk distribution for board-level decision making.</p>
-
-    <div class="formula-box primary">
-      <span class="label">Scenario Recalculation</span>
-      $$\text{TCAR}_s = \text{ERL}_s + \text{EBI}_s + \text{RFE}_s - \mathcal{D}_s$$
-    </div>
-
-    <div class="sub-formula">
-      <div class="where">
-        \( \text{ERL}_s = R_{\text{covered}} \times P(\text{Fraud}) \times m_f \times (1 - r) \)<br>
-        \( \text{EBI}_s = V_b \times (1 - \frac{T + \Delta T}{100})^\beta \times (1 - e^{-k \cdot P \cdot m_f}) \)<br>
-        \( \text{RFE}_s = \text{WCRS} \times \bar{F} \times \mathcal{E}(\text{WCRS} \times m_e) \times N_{\text{nc}} \)
-      </div>
-    </div>
-
-    <table class="scenario-table">
-      <thead>
-        <tr><th>Scenario</th><th>Fraud Multiplier (m<sub>f</sub>)</th><th>Trust Delta (ΔT)</th><th>Enforcement (m<sub>e</sub>)</th><th>Interpretation</th></tr>
-      </thead>
-      <tbody>
-        <tr class="s-best"><td>🟢 Best</td><td>0.6× (−40%)</td><td>+5%</td><td>0.3×</td><td>Optimistic: strong anti-fraud program impact</td></tr>
-        <tr class="s-mod"><td>🟢 Moderate</td><td>0.8× (−20%)</td><td>+3%</td><td>0.5×</td><td>Gradual improvement trajectory</td></tr>
-        <tr class="s-base"><td>⚪ Base</td><td>1.0×</td><td>0</td><td>1.0×</td><td>Current state extrapolation</td></tr>
-        <tr class="s-stress"><td>🟡 Stress</td><td>1.5× (+50%)</td><td>−10%</td><td>2.0×</td><td>Regulatory tightening + fraud escalation</td></tr>
-        <tr class="s-extreme"><td>🔴 Extreme Tail</td><td>2.5× (+150%)</td><td>−20%</td><td>3.0×</td><td>Black swan: major breach + full enforcement</td></tr>
-      </tbody>
-    </table>
-
-    <div class="note">
-      <strong>Design note:</strong> β stays constant across scenarios (it's an industry property, not a state variable). Only trust level, fraud rate, and enforcement probability vary.
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════ §8: CONFIDENCE INTERVAL ═══════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-num">8</div>
-    <h2>95% Confidence Interval</h2>
-  </div>
-  <div class="section-body">
-    <p>Closed-form sensitivity analysis using the parameter distributions from Risk Clusters. TCAR is recalculated at ±1.96σ parameter shifts for β, k, and recovery rate.</p>
-
-    <div class="formula-box primary">
-      <span class="label">Confidence Bounds</span>
-      $$\text{TCAR}_{95\%} = \left[\text{TCAR}(\theta_{\text{opt}}),\ \text{TCAR}(\theta_{\text{pes}})\right]$$
-    </div>
-
-    <div class="sub-formula">
-      <div class="where">
-        <strong>Optimistic bound (lower TCAR):</strong><br>
-        \( \beta_{\text{opt}} = \max(1.0,\ \bar{\beta} - 1.96\sigma_\beta) \), &nbsp;
-        \( k_{\text{opt}} = \max(0.5,\ \bar{k} - 1.96\sigma_k) \)<br>
-        \( r_{\text{opt}} = \min(0.9,\ \bar{r} + 1.96\sigma_r) \) — higher recovery = lower loss<br><br>
-        <strong>Pessimistic bound (higher TCAR):</strong><br>
-        \( \beta_{\text{pes}} = \min(3.5,\ \bar{\beta} + 1.96\sigma_\beta) \), &nbsp;
-        \( k_{\text{pes}} = \min(8.0,\ \bar{k} + 1.96\sigma_k) \)<br>
-        \( r_{\text{pes}} = \max(0.2,\ \bar{r} - 1.96\sigma_r) \) — lower recovery = higher loss
-      </div>
-    </div>
-
-    <div class="note">
-      <strong>Note:</strong> If custom β or k overrides are set by the tenant, CI is disabled (bounds = base TCAR) since the custom values represent the user's expert judgment, not a statistical distribution.
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════ §9: RISK CLUSTERS ═══════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-num">9</div>
-    <h2>Risk Clusters (A–E) & Industry Map</h2>
-  </div>
-  <div class="section-body">
-    <p>Five risk clusters based on GICS industry classification and ISO 31000. Each cluster defines truncated statistical distributions for β, k, and recovery rate.</p>
-
-    <div class="cluster-grid">
-      <div class="cluster-card">
-        <div class="id">A</div>
-        <div class="name">Life-Critical<br>Regulated</div>
-        <div class="params">
-          β = 2.8 ± 0.30<br>
-          k = 2.2 ± 0.50<br>
-          r = 0.286 ± 0.16
+        <div class="formula-box primary">
+          <span class="label">Primary Formula</span>
+          $$P(\text{Fraud}) = \frac{\sum_{i=1}^{D} w_i \cdot f_i}{\sum_{i=1}^{D} w_i \cdot n_i}$$
         </div>
-      </div>
-      <div class="cluster-card">
-        <div class="id">B</div>
-        <div class="name">Financial &<br>Systemic Trust</div>
-        <div class="params">
-          β = 2.5 ± 0.40<br>
-          k = 2.8 ± 0.70<br>
-          r = 0.429 ± 0.17
+
+        <div class="sub-formula">
+          <div class="where">
+            <strong>Where:</strong><br>
+            \( w_i = e^{-\lambda \cdot d_i} \) — exponential decay weight for day \(i\)<br>
+            \( \lambda = 0.05 \) — decay constant (half-life ≈ 14 days)<br>
+            \( d_i \) — number of days ago for day \(i\)<br>
+            \( f_i = \text{counterfeit}_i + \text{suspicious}_i \times C_r \) — weighted fraud count per day<br>
+            \( n_i \) — total scans on day \(i\)<br>
+            \( D \) — number of days with scan data (up to 30)
+          </div>
         </div>
-      </div>
-      <div class="cluster-card">
-        <div class="id">C</div>
-        <div class="name">Luxury &<br>Brand-Driven</div>
-        <div class="params">
-          β = 2.2 ± 0.30<br>
-          k = 1.9 ± 0.50<br>
-          r = 0.571 ± 0.17
+
+        <div class="formula-box">
+          <span class="label">Confirmation Rate</span>
+          $$C_r = \frac{\text{Critical Alerts} + \text{High Alerts}}{\text{Total Alerts}}$$
         </div>
-      </div>
-      <div class="cluster-card">
-        <div class="id">D</div>
-        <div class="name">Consumer<br>Mass Market</div>
-        <div class="params">
-          β = 1.4 ± 0.20<br>
-          k = 1.5 ± 0.40<br>
-          r = 0.625 ± 0.16
+
+        <p><strong>Trend Detection:</strong> Compare recent 7-day fraud rate vs prior 7-day rate:</p>
+        <div class="sub-formula">
+          <div class="where">
+            \( R_{\text{recent}} = \frac{\text{fraud}_{0..7}}{\text{total}_{0..7}} \), &nbsp;
+            \( R_{\text{older}} = \frac{\text{fraud}_{8..14}}{\text{total}_{8..14}} \)<br><br>
+            If \( R_{\text{recent}} > 1.2 \times R_{\text{older}} \) → <strong style="color:#ef4444">Worsening
+              (+1)</strong><br>
+            If \( R_{\text{recent}} < 0.8 \times R_{\text{older}} \) → <strong style="color:#22c55e">Improving
+              (−1)</strong><br>
+              Otherwise → <strong style="color:#f59e0b">Stable (0)</strong>
+          </div>
         </div>
-      </div>
-      <div class="cluster-card">
-        <div class="id">E</div>
-        <div class="name">Industrial &<br>Commodity</div>
-        <div class="params">
-          β = 1.2 ± 0.20<br>
-          k = 1.25 ± 0.30<br>
-          r = 0.750 ± 0.14
+
+        <div class="note">
+          <strong>Fallback:</strong> If fewer than 3 days of daily data available, falls back to simple ratio: \(
+          P(\text{Fraud}) = \frac{C_{30} + S_{30} \times C_r}{N_{30}} \)
         </div>
       </div>
     </div>
 
-    <p><strong>Industry → Cluster Mapping</strong> (50+ industries):</p>
-    <table>
-      <thead>
-        <tr><th>Cluster</th><th>Industries</th><th>Avg Fine Range</th></tr>
-      </thead>
-      <tbody>
-        <tr><td class="mono">A</td><td>Pharmaceutical, Aviation, Nuclear Energy, Blood/Vaccine, Medical Devices, Baby Food, Oil & Gas, Waste Management</td><td>$200K – $1M</td></tr>
-        <tr><td class="mono">B</td><td>Banking/Finance, Fund Management, Cybersecurity, SaaS, Telecom</td><td>$40K – $250K</td></tr>
-        <tr><td class="mono">C</td><td>Luxury, Jewelry, Premium Wine, Cosmetics, Watches, Luxury Auto, Art/Antiques, Premium Hospitality, Yacht/Jet</td><td>$20K – $80K</td></tr>
-        <tr><td class="mono">D</td><td>FMCG, Retail, Fashion, Toys, Electronics, E-commerce, Automotive, Home Appliances, Restaurants</td><td>$5K – $80K</td></tr>
-        <tr><td class="mono">E</td><td>Mining, Steel/Metals, Heavy Chemicals, Wood/Forestry, Cement, Shipbuilding, Machinery, Logistics</td><td>$15K – $150K</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+    <!-- ═══════════════ §2: ERL ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">2</div>
+        <h2>Expected Revenue Loss — ERL</h2>
+      </div>
+      <div class="section-body">
+        <p>Quantifies direct revenue at risk from fraud-related product diversion, counterfeiting losses, and channel
+          leakage. Adjusted by scan coverage ratio to extrapolate from observed to total estimated volume.</p>
 
-<!-- ═══════════════ §10: PER-BU ═══════════════ -->
-<div class="section">
-  <div class="section-header">
-    <div class="section-num">10</div>
-    <h2>Per-BU Segmented Aggregation</h2>
-  </div>
-  <div class="section-body">
-    <p>For multi-business-unit organizations, ERQF computes risk at BU level then aggregates with cross-BU correlation and brand contagion effects.</p>
+        <div class="formula-box primary">
+          <span class="label">Primary Formula</span>
+          $$\text{ERL} = R_{\text{covered}} \times P(\text{Fraud}) \times (1 - r_{\text{recovery}})$$
+        </div>
 
-    <div class="formula-box">
-      <span class="label">Per-BU TCAR</span>
-      $$\text{TCAR}_{\text{bu}} = \text{ERL}_{\text{bu}} + \text{EBI}_{\text{bu}} + \text{RFE}_{\text{bu}}$$
-    </div>
-
-    <div class="sub-formula">
-      <div class="where">
-        Each BU uses its own:<br>
-        • <strong>Revenue weight</strong> \( w_{\text{bu}} \) — fraction of total revenue<br>
-        • <strong>Cluster parameters</strong> — BU can override β, k, avgFine or inherit from org<br>
-        • <strong>P(Fraud)</strong> — computed from BU's product categories' scan data<br>
-        • <strong>Coverage</strong> — \( \text{BU scans} / (\text{estimated units} \times w_{\text{bu}} / 12) \)
+        <div class="sub-formula">
+          <div class="where">
+            <strong>Where:</strong><br>
+            \( R_{\text{covered}} = R_{\text{annual}} \times \text{Coverage} \) — revenue covered by scan network<br>
+            \( \text{Coverage} = \min\!\left(\frac{\text{totalScans}}{\text{estimatedUnits} / 12},\ 1\right) \) —
+            monthly scan penetration rate<br>
+            \( r_{\text{recovery}} \) — expected recovery rate (default: 0.2 = 20%)<br>
+            \( 1 - r_{\text{recovery}} \) = Severity factor
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="formula-box primary">
-      <span class="label">Group Aggregation with Contagion</span>
-      $$\text{TCAR}_{\text{group}} = \sum_i \text{TCAR}_i + \mathcal{C}_{\text{contagion}} - \mathcal{D}_{\text{group}}$$
-    </div>
+    <!-- ═══════════════ §3: EBI ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">3</div>
+        <h2>Expected Brand Impact — EBI</h2>
+      </div>
+      <div class="section-body">
+        <p>Models brand value at risk using a <strong>power-law trust decay</strong> (Brand Risk Factor) combined with a
+          <strong>saturating incident escalation</strong> (1 − exponential CDF). Industry-specific β and k parameters
+          from Risk Clusters control sensitivity.</p>
 
-    <div class="sub-formula">
-      <div class="where">
-        <strong>Brand Contagion (Branded House only):</strong><br>
-        \( \mathcal{C} = \gamma \times \sum_i P(\text{Fraud})_i \times \left(V_{\text{brand}} - V_{\text{brand}} \times w_i\right) \times \text{IE}_i \)<br>
-        \( \gamma \) — contagion factor (0 = no contagion, 1 = full contagion)<br><br>
-        <strong>Group Diversification:</strong><br>
-        \( \mathcal{D}_{\text{group}} = \rho_{\text{cross}} \times 0.3 \times \min(\text{ERL}_{\text{group}}, \text{EBI}_{\text{group}}) \)<br>
-        \( \rho_{\text{cross}} \) — cross-BU correlation (default: 0.3)
+        <div class="formula-box primary">
+          <span class="label">Primary Formula</span>
+          $$\text{EBI} = V_{\text{brand}} \times \underbrace{\left(1 - \frac{T}{100}\right)^\beta}_{\text{Brand Risk
+          Factor}} \times \underbrace{\left(1 - e^{-k \cdot P(\text{Fraud})}\right)}_{\text{Incident Escalation}}$$
+        </div>
+
+        <div class="sub-formula">
+          <div class="where">
+            <strong>Where:</strong><br>
+            \( V_{\text{brand}} \) — estimated brand value (USD)<br>
+            \( T \) — average trust score (0–100)<br>
+            \( \beta \) — brand sensitivity exponent (from Risk Cluster, range 1.2–2.8)<br>
+            \( k \) — incident escalation rate (from Risk Cluster, range 1.25–2.8)<br><br>
+            <strong>BRF behavior:</strong> Higher β → brand more sensitive to trust erosion (luxury/pharma)<br>
+            <strong>IE behavior:</strong> Saturating function — small fraud rates cause proportionally larger escalation
+          </div>
+        </div>
       </div>
     </div>
+
+    <!-- ═══════════════ §4: RFE ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">4</div>
+        <h2>Regulatory Fine Exposure — RFE</h2>
+        <span class="tag tag-upgraded">v2.0 · Sigmoid</span>
+      </div>
+      <div class="section-body">
+        <p>Estimates regulatory fine exposure using a <strong>sigmoid enforcement probability</strong> that replaces the
+          previous 3-step cliff function, providing smooth risk transition without artificial discontinuities.</p>
+
+        <div class="formula-box primary">
+          <span class="label">Primary Formula</span>
+          $$\text{RFE} = \text{WCRS} \times \bar{F}_{\text{industry}} \times \mathcal{E}(\text{WCRS}) \times
+          N_{\text{nc}}$$
+        </div>
+
+        <div class="formula-box">
+          <span class="label">Compliance Risk Score</span>
+          $$\text{WCRS} = \frac{N_{\text{nc}} \times 1.0 + N_{\text{partial}} \times 0.5}{N_{\text{total}}}$$
+        </div>
+
+        <div class="formula-box">
+          <span class="label">Sigmoid Enforcement · v2.0</span>
+          $$\mathcal{E}(\text{WCRS}) = 0.08 + \frac{0.57}{1 + e^{-12 \cdot (\text{WCRS} - 0.2)}}$$
+        </div>
+
+        <div class="sub-formula">
+          <div class="where">
+            <strong>Where:</strong><br>
+            \( \bar{F}_{\text{industry}} \) — average regulatory fine per incident (industry-specific, see §9)<br>
+            \( N_{\text{nc}} \) — number of non-compliant records<br>
+            \( N_{\text{partial}} \) — number of partially compliant records<br><br>
+            <strong>Sigmoid parameters:</strong> L = 0.08 (floor), U = 0.65 (ceiling), midpoint = 0.2, steepness =
+            12<br>
+            <strong>Behavior:</strong> Smooth transition from 8% → 65% enforcement probability as WCRS increases
+          </div>
+        </div>
+
+        <div class="note">
+          <strong>v1.0 (deprecated):</strong> Step function — \(\mathcal{E} = 0.6\) if WCRS > 0.3, \(0.3\) if > 0.15,
+          \(0.1\) otherwise. This created "cliff effects" at thresholds.
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ §5: SCRI ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">5</div>
+        <h2>Supply Chain Risk Index — SCRI</h2>
+        <span class="tag tag-upgraded">v2.0 · Dynamic Weights</span>
+      </div>
+      <div class="section-body">
+        <p>Composite risk index (0–1) combining four risk drivers with <strong>cluster-specific weights</strong>.
+          Life-critical industries weight compliance higher, while luxury weights fraud/brand higher.</p>
+
+        <div class="formula-box primary">
+          <span class="label">Primary Formula</span>
+          $$\text{SCRI} = \alpha_1 \cdot P(\text{Fraud}) + \alpha_2 \cdot \text{WCRS} + \alpha_3 \cdot G_{\max} +
+          \alpha_4 \cdot \min(V \times 10,\ 1)$$
+        </div>
+
+        <div class="sub-formula">
+          <div class="where">
+            <strong>Where:</strong><br>
+            \( G_{\max} = \max(\text{avg\_fraud\_score per country}) \) — worst geographic risk<br>
+            \( V = |r_{\text{current}} - r_{\text{previous}}| \) — fraud rate volatility (month-over-month)<br>
+            \( \alpha_1, \alpha_2, \alpha_3, \alpha_4 \) — cluster-specific weights (see below)
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Cluster</th>
+              <th>Label</th>
+              <th>α₁ P(Fraud)</th>
+              <th>α₂ WCRS</th>
+              <th>α₃ Geo</th>
+              <th>α₄ Volatility</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="mono">A</td>
+              <td>Life-Critical Regulated</td>
+              <td>0.25</td>
+              <td><strong>0.40</strong></td>
+              <td>0.15</td>
+              <td>0.20</td>
+            </tr>
+            <tr>
+              <td class="mono">B</td>
+              <td>Financial & Systemic</td>
+              <td>0.30</td>
+              <td><strong>0.35</strong></td>
+              <td>0.20</td>
+              <td>0.15</td>
+            </tr>
+            <tr>
+              <td class="mono">C</td>
+              <td>Luxury & Brand-Driven</td>
+              <td><strong>0.40</strong></td>
+              <td>0.20</td>
+              <td>0.20</td>
+              <td>0.20</td>
+            </tr>
+            <tr>
+              <td class="mono">D</td>
+              <td>Consumer Mass Market</td>
+              <td>0.35</td>
+              <td>0.25</td>
+              <td>0.20</td>
+              <td>0.20</td>
+            </tr>
+            <tr>
+              <td class="mono">E</td>
+              <td>Industrial & Commodity</td>
+              <td>0.30</td>
+              <td>0.25</td>
+              <td><strong>0.25</strong></td>
+              <td>0.20</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══════════════ §6: TCAR ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">6</div>
+        <h2>Total Capital at Risk — TCAR</h2>
+        <span class="tag tag-upgraded">v2.0 · ρ-Based</span>
+      </div>
+      <div class="section-body">
+        <p>Aggregates all risk components with <strong>correlation-based diversification</strong> using portfolio
+          volatility theory. Since ERL and EBI share the same fraud driver, their correlation is high (ρ ≈ 0.7),
+          reducing the diversification benefit compared to v1.0.</p>
+
+        <div class="formula-box primary">
+          <span class="label">Primary Formula</span>
+          $$\text{TCAR} = \text{ERL} + \text{EBI} + \text{RFE} - \mathcal{D}$$
+        </div>
+
+        <div class="formula-box">
+          <span class="label">Diversification Benefit · v2.0</span>
+          $$\mathcal{D} = (\text{ERL} + \text{EBI}) \times \left(1 - \sqrt{w_1^2 + w_2^2 + 2\rho \cdot w_1 \cdot
+          w_2}\right)$$
+        </div>
+
+        <div class="sub-formula">
+          <div class="where">
+            <strong>Where:</strong><br>
+            \( w_1 = \frac{\text{ERL}}{\text{ERL} + \text{EBI}} \), &nbsp;
+            \( w_2 = \frac{\text{EBI}}{\text{ERL} + \text{EBI}} \)<br>
+            \( \rho = 0.7 \) — correlation between revenue loss and brand damage<br><br>
+            <strong>Numerical example:</strong> If ERL = EBI (equal split), then \( w_1 = w_2 = 0.5 \):<br>
+            \( \sqrt{0.25 + 0.25 + 2 \times 0.7 \times 0.25} = \sqrt{0.85} = 0.922 \)<br>
+            \( \mathcal{D} = (E+E) \times (1 - 0.922) = 7.8\% \) diversification benefit<br><br>
+            <strong>v1.0 (deprecated):</strong> \( \mathcal{D} = 0.3 \times \min(\text{ERL}, \text{EBI}) \) — up to 30%
+            benefit, overly optimistic
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ §7: SCENARIOS ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">7</div>
+        <h2>Scenario Modeling — 5-Point Envelope</h2>
+        <span class="tag tag-new">v2.0 · Extended</span>
+      </div>
+      <div class="section-body">
+        <p>Each scenario recalculates the entire ERQF pipeline with modified inputs. The 5-point envelope provides a
+          comprehensive risk distribution for board-level decision making.</p>
+
+        <div class="formula-box primary">
+          <span class="label">Scenario Recalculation</span>
+          $$\text{TCAR}_s = \text{ERL}_s + \text{EBI}_s + \text{RFE}_s - \mathcal{D}_s$$
+        </div>
+
+        <div class="sub-formula">
+          <div class="where">
+            \( \text{ERL}_s = R_{\text{covered}} \times P(\text{Fraud}) \times m_f \times (1 - r) \)<br>
+            \( \text{EBI}_s = V_b \times (1 - \frac{T + \Delta T}{100})^\beta \times (1 - e^{-k \cdot P \cdot m_f})
+            \)<br>
+            \( \text{RFE}_s = \text{WCRS} \times \bar{F} \times \mathcal{E}(\text{WCRS} \times m_e) \times N_{\text{nc}}
+            \)
+          </div>
+        </div>
+
+        <table class="scenario-table">
+          <thead>
+            <tr>
+              <th>Scenario</th>
+              <th>Fraud Multiplier (m<sub>f</sub>)</th>
+              <th>Trust Delta (ΔT)</th>
+              <th>Enforcement (m<sub>e</sub>)</th>
+              <th>Interpretation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="s-best">
+              <td>🟢 Best</td>
+              <td>0.6× (−40%)</td>
+              <td>+5%</td>
+              <td>0.3×</td>
+              <td>Optimistic: strong anti-fraud program impact</td>
+            </tr>
+            <tr class="s-mod">
+              <td>🟢 Moderate</td>
+              <td>0.8× (−20%)</td>
+              <td>+3%</td>
+              <td>0.5×</td>
+              <td>Gradual improvement trajectory</td>
+            </tr>
+            <tr class="s-base">
+              <td>⚪ Base</td>
+              <td>1.0×</td>
+              <td>0</td>
+              <td>1.0×</td>
+              <td>Current state extrapolation</td>
+            </tr>
+            <tr class="s-stress">
+              <td>🟡 Stress</td>
+              <td>1.5× (+50%)</td>
+              <td>−10%</td>
+              <td>2.0×</td>
+              <td>Regulatory tightening + fraud escalation</td>
+            </tr>
+            <tr class="s-extreme">
+              <td>🔴 Extreme Tail</td>
+              <td>2.5× (+150%)</td>
+              <td>−20%</td>
+              <td>3.0×</td>
+              <td>Black swan: major breach + full enforcement</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="note">
+          <strong>Design note:</strong> β stays constant across scenarios (it's an industry property, not a state
+          variable). Only trust level, fraud rate, and enforcement probability vary.
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ §8: CONFIDENCE INTERVAL ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">8</div>
+        <h2>95% Confidence Interval</h2>
+      </div>
+      <div class="section-body">
+        <p>Closed-form sensitivity analysis using the parameter distributions from Risk Clusters. TCAR is recalculated
+          at ±1.96σ parameter shifts for β, k, and recovery rate.</p>
+
+        <div class="formula-box primary">
+          <span class="label">Confidence Bounds</span>
+          $$\text{TCAR}_{95\%} = \left[\text{TCAR}(\theta_{\text{opt}}),\ \text{TCAR}(\theta_{\text{pes}})\right]$$
+        </div>
+
+        <div class="sub-formula">
+          <div class="where">
+            <strong>Optimistic bound (lower TCAR):</strong><br>
+            \( \beta_{\text{opt}} = \max(1.0,\ \bar{\beta} - 1.96\sigma_\beta) \), &nbsp;
+            \( k_{\text{opt}} = \max(0.5,\ \bar{k} - 1.96\sigma_k) \)<br>
+            \( r_{\text{opt}} = \min(0.9,\ \bar{r} + 1.96\sigma_r) \) — higher recovery = lower loss<br><br>
+            <strong>Pessimistic bound (higher TCAR):</strong><br>
+            \( \beta_{\text{pes}} = \min(3.5,\ \bar{\beta} + 1.96\sigma_\beta) \), &nbsp;
+            \( k_{\text{pes}} = \min(8.0,\ \bar{k} + 1.96\sigma_k) \)<br>
+            \( r_{\text{pes}} = \max(0.2,\ \bar{r} - 1.96\sigma_r) \) — lower recovery = higher loss
+          </div>
+        </div>
+
+        <div class="note">
+          <strong>Note:</strong> If custom β or k overrides are set by the tenant, CI is disabled (bounds = base TCAR)
+          since the custom values represent the user's expert judgment, not a statistical distribution.
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ §9: RISK CLUSTERS ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">9</div>
+        <h2>Risk Clusters (A–E) & Industry Map</h2>
+      </div>
+      <div class="section-body">
+        <p>Five risk clusters based on GICS industry classification and ISO 31000. Each cluster defines truncated
+          statistical distributions for β, k, and recovery rate.</p>
+
+        <div class="cluster-grid">
+          <div class="cluster-card">
+            <div class="id">A</div>
+            <div class="name">Life-Critical<br>Regulated</div>
+            <div class="params">
+              β = 2.8 ± 0.30<br>
+              k = 2.2 ± 0.50<br>
+              r = 0.286 ± 0.16
+            </div>
+          </div>
+          <div class="cluster-card">
+            <div class="id">B</div>
+            <div class="name">Financial &<br>Systemic Trust</div>
+            <div class="params">
+              β = 2.5 ± 0.40<br>
+              k = 2.8 ± 0.70<br>
+              r = 0.429 ± 0.17
+            </div>
+          </div>
+          <div class="cluster-card">
+            <div class="id">C</div>
+            <div class="name">Luxury &<br>Brand-Driven</div>
+            <div class="params">
+              β = 2.2 ± 0.30<br>
+              k = 1.9 ± 0.50<br>
+              r = 0.571 ± 0.17
+            </div>
+          </div>
+          <div class="cluster-card">
+            <div class="id">D</div>
+            <div class="name">Consumer<br>Mass Market</div>
+            <div class="params">
+              β = 1.4 ± 0.20<br>
+              k = 1.5 ± 0.40<br>
+              r = 0.625 ± 0.16
+            </div>
+          </div>
+          <div class="cluster-card">
+            <div class="id">E</div>
+            <div class="name">Industrial &<br>Commodity</div>
+            <div class="params">
+              β = 1.2 ± 0.20<br>
+              k = 1.25 ± 0.30<br>
+              r = 0.750 ± 0.14
+            </div>
+          </div>
+        </div>
+
+        <p><strong>Industry → Cluster Mapping</strong> (50+ industries):</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Cluster</th>
+              <th>Industries</th>
+              <th>Avg Fine Range</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="mono">A</td>
+              <td>Pharmaceutical, Aviation, Nuclear Energy, Blood/Vaccine, Medical Devices, Baby Food, Oil & Gas, Waste
+                Management</td>
+              <td>$200K – $1M</td>
+            </tr>
+            <tr>
+              <td class="mono">B</td>
+              <td>Banking/Finance, Fund Management, Cybersecurity, SaaS, Telecom</td>
+              <td>$40K – $250K</td>
+            </tr>
+            <tr>
+              <td class="mono">C</td>
+              <td>Luxury, Jewelry, Premium Wine, Cosmetics, Watches, Luxury Auto, Art/Antiques, Premium Hospitality,
+                Yacht/Jet</td>
+              <td>$20K – $80K</td>
+            </tr>
+            <tr>
+              <td class="mono">D</td>
+              <td>FMCG, Retail, Fashion, Toys, Electronics, E-commerce, Automotive, Home Appliances, Restaurants</td>
+              <td>$5K – $80K</td>
+            </tr>
+            <tr>
+              <td class="mono">E</td>
+              <td>Mining, Steel/Metals, Heavy Chemicals, Wood/Forestry, Cement, Shipbuilding, Machinery, Logistics</td>
+              <td>$15K – $150K</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══════════════ §10: PER-BU ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">10</div>
+        <h2>Per-BU Segmented Aggregation</h2>
+      </div>
+      <div class="section-body">
+        <p>For multi-business-unit organizations, ERQF computes risk at BU level then aggregates with cross-BU
+          correlation and brand contagion effects.</p>
+
+        <div class="formula-box">
+          <span class="label">Per-BU TCAR</span>
+          $$\text{TCAR}_{\text{bu}} = \text{ERL}_{\text{bu}} + \text{EBI}_{\text{bu}} + \text{RFE}_{\text{bu}}$$
+        </div>
+
+        <div class="sub-formula">
+          <div class="where">
+            Each BU uses its own:<br>
+            • <strong>Revenue weight</strong> \( w_{\text{bu}} \) — fraction of total revenue<br>
+            • <strong>Cluster parameters</strong> — BU can override β, k, avgFine or inherit from org<br>
+            • <strong>P(Fraud)</strong> — computed from BU's product categories' scan data<br>
+            • <strong>Coverage</strong> — \( \text{BU scans} / (\text{estimated units} \times w_{\text{bu}} / 12) \)
+          </div>
+        </div>
+
+        <div class="formula-box primary">
+          <span class="label">Group Aggregation with Contagion</span>
+          $$\text{TCAR}_{\text{group}} = \sum_i \text{TCAR}_i + \mathcal{C}_{\text{contagion}} -
+          \mathcal{D}_{\text{group}}$$
+        </div>
+
+        <div class="sub-formula">
+          <div class="where">
+            <strong>Brand Contagion (Branded House only):</strong><br>
+            \( \mathcal{C} = \gamma \times \sum_i P(\text{Fraud})_i \times \left(V_{\text{brand}} - V_{\text{brand}}
+            \times w_i\right) \times \text{IE}_i \)<br>
+            \( \gamma \) — contagion factor (0 = no contagion, 1 = full contagion)<br><br>
+            <strong>Group Diversification:</strong><br>
+            \( \mathcal{D}_{\text{group}} = \rho_{\text{cross}} \times 0.3 \times \min(\text{ERL}_{\text{group}},
+            \text{EBI}_{\text{group}}) \)<br>
+            \( \rho_{\text{cross}} \) — cross-BU correlation (default: 0.3)
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ §11: PLATFORM ROI ═══════════════ -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-num">11</div>
+        <h2>Platform ROI Intelligence</h2>
+        <span class="tag tag-new">v2.1 · New</span>
+      </div>
+      <div class="section-body">
+        <p>Business-layer metrics quantifying the economic return of the TrustChecker platform. These formulas sit
+          <strong>on top of</strong> the ERQF core engine (§1–§10) and translate risk quantification into actionable
+          financial metrics for executive decision-making.</p>
+
+        <div class="formula-box primary">
+          <span class="label">Detection Value</span>
+          $$\text{DV} = N_{\text{counterfeit}} \times \bar{V}_{\text{unit}}$$
+        </div>
+
+        <div class="sub-formula">
+          <div class="where">
+            <strong>Where:</strong><br>
+            \( N_{\text{counterfeit}} \) — total counterfeits detected (all-time)<br>
+            \( \bar{V}_{\text{unit}} = \frac{R_{\text{annual}}}{U_{\text{estimated}}} \) — average unit value<br>
+            \( U_{\text{estimated}} \) — estimated units sold YTD (configured), or \( N_{\text{totalScans}} \) as
+            fallback<br><br>
+            <strong>Interpretation:</strong> Each counterfeit detected prevents ~1 unit of revenue loss at its average
+            value.
+          </div>
+        </div>
+
+        <div class="formula-box">
+          <span class="label">Revenue Protected</span>
+          $$R_{\text{protected}} = R_{\text{annual}} \times \underbrace{\frac{N_{\text{counterfeit}} +
+          N_{\text{suspicious}}}{N_{\text{totalScans}}}}_{\text{Fraud Rate}} \times
+          \underbrace{\frac{N_{\text{authentic}}}{N_{\text{totalScans}}}}_{\text{Auth Rate}}$$
+        </div>
+
+        <div class="sub-formula">
+          <div class="where">
+            <strong>Where:</strong><br>
+            \( R_{\text{protected}} \) — estimated fraud loss avoided through detection<br>
+            Fraud Rate × Revenue = total revenue exposed to fraud risk<br>
+            Auth Rate = platform's detection effectiveness (typically 95%+)
+          </div>
+        </div>
+
+        <div class="formula-box">
+          <span class="label">Manual Cost Savings</span>
+          $$S_{\text{manual}} = N_{\text{totalScans}} \times C_{\text{manual}}$$
+        </div>
+
+        <div class="sub-formula">
+          <div class="where">
+            <strong>Where:</strong><br>
+            \( C_{\text{manual}} \) — cost of manual verification per check (default: $5 USD)<br>
+            <strong>Interpretation:</strong> Automated scanning replaces manual inspection, saving \( C_{\text{manual}}
+            \) per scan.
+          </div>
+        </div>
+
+        <div class="formula-box primary">
+          <span class="label">ROI Multiple</span>
+          $$\text{ROI} = \frac{\text{DV} + S_{\text{manual}}}{C_{\text{platform}}}$$
+        </div>
+
+        <div class="sub-formula">
+          <div class="where">
+            <strong>Where:</strong><br>
+            \( C_{\text{platform}} \) — annual platform cost (default: $6,000 USD)<br>
+            \( \text{DV} \) — Detection Value (counterfeits × unit value)<br>
+            \( S_{\text{manual}} \) — manual verification cost savings<br><br>
+            <strong>Example:</strong> DV = $970K, manual savings = $350K, platform cost = $6K → ROI = 220×
+          </div>
+        </div>
+
+        <div class="formula-box">
+          <span class="label">Payback Period</span>
+          $$T_{\text{payback}} = \left\lceil \frac{C_{\text{platform}}}{(\text{DV} + S_{\text{manual}}) \;/\;
+          M_{\text{active}}} \right\rceil \text{ months}$$
+        </div>
+
+        <div class="sub-formula">
+          <div class="where">
+            <strong>Where:</strong><br>
+            \( M_{\text{active}} \) — number of months the platform has been active<br>
+            Monthly value = total value generated ÷ months active<br>
+            Payback = platform cost ÷ monthly value (ceiling to nearest month)
+          </div>
+        </div>
+
+        <div class="formula-box">
+          <span class="label">Cost per Detection</span>
+          $$\text{CPD} = \frac{C_{\text{platform}}}{N_{\text{counterfeit}} + N_{\text{suspicious}}}$$
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>Formula</th>
+              <th>Typical Range</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Detection Value</td>
+              <td class="mono">counterfeits × (revenue / units)</td>
+              <td>$100K – $5M</td>
+            </tr>
+            <tr>
+              <td>Revenue Protected</td>
+              <td class="mono">revenue × fraud_rate × auth_rate</td>
+              <td>$500K – $50M</td>
+            </tr>
+            <tr>
+              <td>Cost Savings</td>
+              <td class="mono">total_scans × manual_cost</td>
+              <td>$50K – $500K</td>
+            </tr>
+            <tr>
+              <td>ROI Multiple</td>
+              <td class="mono">(DV + savings) / platform_cost</td>
+              <td>10× – 500×</td>
+            </tr>
+            <tr>
+              <td>Cost per Detection</td>
+              <td class="mono">platform_cost / detections</td>
+              <td>$0.50 – $10</td>
+            </tr>
+            <tr>
+              <td>Payback Period</td>
+              <td class="mono">cost / monthly_value</td>
+              <td>1 – 6 months</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="note">
+          <strong>Dependency on Financial Inputs:</strong> ROI metrics require tenant-configured financial inputs
+          (Annual Revenue, Estimated Units, Platform Cost, Manual Cost per Check). If unconfigured, the system uses scan
+          count as a proxy for unit volume and $6,000 as default platform cost.
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ FOOTER ═══════════════ -->
+    <div class="footer">
+      <p><strong>ERQF v2.0</strong> — Enterprise Risk Quantification Framework</p>
+      <p>TrustChecker Intelligence Platform · Confidential · February 2026</p>
+      <p style="margin-top:12px;font-size:0.68rem;color:var(--text3)">
+        Standards: GICS Industry Classification · ISO 31000 Risk Management · Basel III Capital Requirements<br>
+        Distributions: β ~ TruncatedNormal · k ~ TruncatedLogNormal · Recovery ~ Beta
+      </p>
+    </div>
+
   </div>
-</div>
-
-<!-- ═══════════════ FOOTER ═══════════════ -->
-<div class="footer">
-  <p><strong>ERQF v2.0</strong> — Enterprise Risk Quantification Framework</p>
-  <p>TrustChecker Intelligence Platform · Confidential · February 2026</p>
-  <p style="margin-top:12px;font-size:0.68rem;color:var(--text3)">
-    Standards: GICS Industry Classification · ISO 31000 Risk Management · Basel III Capital Requirements<br>
-    Distributions: β ~ TruncatedNormal · k ~ TruncatedLogNormal · Recovery ~ Beta
-  </p>
-</div>
-
-</div>
 </body>
+
 </html>
