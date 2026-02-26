@@ -1466,392 +1466,44 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         const cr = compRecords || {};
         const fin = orgInfo?.settings?.financials || {};
 
-        // ═══ ERQF: Enterprise Risk Quantification Framework ═══
-        const annualRevenue = Number(fin.annual_revenue) || 0;
-        const brandValue = Number(fin.brand_value_estimate) || 0;
+        // ═══ ERQF v2.0 — Protected Engine (V8 Bytecode) ═══
+        require('bytenode');
+        const fs = require('fs');
+        const path = require('path');
+        const jscPath = path.join(__dirname, '..', 'engines', 'erqf-engine.jsc');
+        const { computeRisk } = fs.existsSync(jscPath)
+            ? require('../engines/erqf-engine.jsc')
+            : require('../engines/erqf-engine');
+        const erqf = computeRisk({
+            scanStats30d, scanStatsPrev, fraudAlerts, compRecords,
+            geoBreakdown, categoryBreakdown, dailyScanBreakdown,
+            financials: orgInfo?.settings?.financials || {},
+            buConfig: orgInfo?.settings?.bu_config || null,
+        });
+
+        // Destructure results for response
+        const { exposure, scenarios, geo_risk: geoRisk, per_bu: perBU, group_aggregated: groupAggregated, _internal } = erqf;
+        const { tcar_ci_low, tcar_ci_high } = exposure;
+        const { pFraud, confirmationRate, severity, coverageRatio, trustScore, WCRS,
+            enforcementProbability, currentFraudRate, prevFraudRate, volatility,
+            preset, clusterId, crNonCompliant, crPartial, crTotal } = _internal;
+        const { total_capital_at_risk: TCAR, expected_revenue_loss: ERL, expected_brand_impact: EBI,
+            regulatory_exposure: RFE, diversification_adj: diversification,
+            brand_risk_factor: brandRiskFactor, incident_escalation: incidentEscalation,
+            supply_chain_scri: SCRI, scri_cluster_weights: sw, trend_direction: trendDirection } = exposure;
+        const cluster = { label: exposure.risk_cluster.label };
+
         const totalScans = parseInt(s30.total) || 0;
         const suspicious30 = parseInt(s30.suspicious) || 0;
         const counterfeit30 = parseInt(s30.counterfeit) || 0;
         const authentic30 = parseInt(s30.authentic) || 0;
         const prevFlagged = parseInt(sPrev.flagged) || 0;
         const prevTotal = parseInt(sPrev.total) || 1;
-
-        // ═══ RISK CLUSTERS — Bounded Statistical Distributions (GICS + ISO 31000) ═══
-        // β ~ TruncatedNormal, k ~ TruncatedLogNormal, Recovery ~ Beta
-        // Point estimates = distribution means. σ used for 95% CI bands.
-        const riskClusters = {
-            A: { label: 'Life-Critical Regulated', beta: { mean: 2.8, sigma: 0.30 }, k: { mean: 2.2, sigma: 0.50 }, recovery: { mean: 0.286, sigma: 0.16 } },
-            B: { label: 'Financial & Systemic Trust', beta: { mean: 2.5, sigma: 0.40 }, k: { mean: 2.8, sigma: 0.70 }, recovery: { mean: 0.429, sigma: 0.17 } },
-            C: { label: 'Luxury & Brand-Driven', beta: { mean: 2.2, sigma: 0.30 }, k: { mean: 1.9, sigma: 0.50 }, recovery: { mean: 0.571, sigma: 0.17 } },
-            D: { label: 'Consumer Mass Market', beta: { mean: 1.4, sigma: 0.20 }, k: { mean: 1.5, sigma: 0.40 }, recovery: { mean: 0.625, sigma: 0.16 } },
-            E: { label: 'Industrial & Commodity', beta: { mean: 1.2, sigma: 0.20 }, k: { mean: 1.25, sigma: 0.30 }, recovery: { mean: 0.750, sigma: 0.14 } },
-        };
-        // Industry → Cluster mapping + per-industry avgFine (regulatory fines vary by jurisdiction)
-        const industryMap = {
-            // Cluster A — Life-Critical
-            pharmaceutical: 'A', aviation: 'A', nuclear_energy: 'A', blood_vaccine: 'A',
-            life_medical_device: 'A', baby_food: 'A', waste_management: 'A', oil_gas: 'A',
-            // Cluster B — Financial & Systemic
-            banking_finance: 'B', fund_management: 'B', cybersecurity: 'B', saas: 'B', telecom: 'B',
-            // Cluster C — Luxury & Brand
-            luxury: 'C', jewelry_gems: 'C', premium_wine: 'C', cosmetics_skincare: 'C',
-            premium_watches: 'C', luxury_auto: 'C', art_antiques: 'C', premium_hospitality: 'C',
-            premium_real_estate: 'C', yacht_jet: 'C',
-            // Cluster D — Consumer Mass Market
-            fmcg: 'D', retail: 'D', fast_fashion: 'D', toys: 'D', animal_feed: 'D', furniture: 'D',
-            household_chemicals: 'D', sporting_goods: 'D', publishing: 'D', restaurant: 'D',
-            electronics: 'D', electronic_parts: 'D', ecommerce: 'D', home_appliances: 'D',
-            automotive: 'D',
-            // Cluster E — Industrial & Commodity
-            mining: 'E', steel_metals: 'E', heavy_chemicals: 'E', wood_forestry: 'E', cement: 'E',
-            water_utilities: 'E', shipbuilding: 'E', fertilizer_pesticide: 'E', machinery: 'E',
-            construction: 'E', renewable_energy: 'E', logistics: 'E',
-        };
-        const industryFines = {
-            pharmaceutical: 50000, aviation: 500000, banking_finance: 250000, nuclear_energy: 1000000,
-            baby_food: 200000, blood_vaccine: 500000, cybersecurity: 150000, life_medical_device: 300000,
-            fund_management: 200000, oil_gas: 400000, luxury: 30000, jewelry_gems: 50000,
-            premium_wine: 40000, cosmetics_skincare: 60000, premium_watches: 35000, luxury_auto: 80000,
-            art_antiques: 20000, premium_hospitality: 45000, premium_real_estate: 30000, yacht_jet: 50000,
-            electronics: 25000, electronic_parts: 20000, telecom: 80000, logistics: 15000,
-            ecommerce: 50000, saas: 40000, automotive: 75000, home_appliances: 25000,
-            construction: 30000, renewable_energy: 20000, fmcg: 15000, retail: 10000,
-            fast_fashion: 12000, toys: 80000, animal_feed: 30000, furniture: 8000,
-            household_chemicals: 25000, sporting_goods: 10000, publishing: 5000, restaurant: 35000,
-            mining: 100000, steel_metals: 20000, heavy_chemicals: 150000, wood_forestry: 25000,
-            cement: 15000, waste_management: 200000, water_utilities: 80000, shipbuilding: 40000,
-            fertilizer_pesticide: 100000, machinery: 20000,
-        };
-        const industry = fin.industry_type || 'pharmaceutical';
-        const clusterId = industryMap[industry] || 'A';
-        const cluster = riskClusters[clusterId];
-        const avgFine = industryFines[industry] || 50000;
-        // Custom overrides — user can fine-tune β, k, avgFine per tenant
-        const preset = {
-            beta: fin.custom_beta > 0 ? fin.custom_beta : cluster.beta.mean,
-            k: fin.custom_k > 0 ? fin.custom_k : cluster.k.mean,
-            avgFine: fin.custom_avg_fine > 0 ? fin.custom_avg_fine : avgFine,
-        };
-
-        // ── 1. FRAUD PROBABILITY MODEL (UPGRADED: Time-Decay Weighting) ──
-        // P(Fraud) = Σ(w_i × fraud_i) / Σ(w_i × total_i)
-        // w_i = e^(-λ × days_ago),  λ = 0.05 → half-life ≈ 14 days
+        const annualRevenue = Number((orgInfo?.settings?.financials || {}).annual_revenue) || 0;
+        const brandValue = Number((orgInfo?.settings?.financials || {}).brand_value_estimate) || 0;
         const faTotal = parseInt(fa.total) || 0;
         const faCritical = parseInt(fa.critical) || 0;
         const faHigh = parseInt(fa.high) || 0;
-        const confirmedProxy = faCritical + faHigh;
-        const confirmationRate = faTotal > 0 ? Math.min(confirmedProxy / faTotal, 1) : 0.3;
-
-        let pFraud;
-        let trendDirection = 0; // -1 = improving, 0 = stable, +1 = worsening
-        const dailyData = dailyScanBreakdown || [];
-
-        if (dailyData.length >= 3) {
-            // Time-decay weighted P(Fraud)
-            const LAMBDA = 0.05; // decay constant (half-life ≈ 14 days)
-            let weightedFraud = 0, weightedTotal = 0;
-            for (const day of dailyData) {
-                const daysAgo = parseInt(day.days_ago) || 0;
-                const w = Math.exp(-LAMBDA * daysAgo);
-                const dayFraud = (parseInt(day.counterfeit) || 0) + (parseInt(day.suspicious) || 0) * confirmationRate;
-                weightedFraud += w * dayFraud;
-                weightedTotal += w * (parseInt(day.total) || 0);
-            }
-            pFraud = weightedTotal > 0 ? weightedFraud / weightedTotal : 0;
-
-            // Trend detection: compare recent 7d vs older 7d
-            let recent7 = { fraud: 0, total: 0 }, older7 = { fraud: 0, total: 0 };
-            for (const day of dailyData) {
-                const dAgo = parseInt(day.days_ago) || 0;
-                const f = (parseInt(day.counterfeit) || 0) + (parseInt(day.suspicious) || 0);
-                const t = parseInt(day.total) || 0;
-                if (dAgo <= 7) { recent7.fraud += f; recent7.total += t; }
-                else if (dAgo <= 14) { older7.fraud += f; older7.total += t; }
-            }
-            const recentRate = recent7.total > 0 ? recent7.fraud / recent7.total : 0;
-            const olderRate = older7.total > 0 ? older7.fraud / older7.total : 0;
-            if (recentRate > olderRate * 1.2) trendDirection = 1;    // worsening
-            else if (recentRate < olderRate * 0.8) trendDirection = -1;  // improving
-        } else {
-            // Fallback: simple ratio (insufficient daily data)
-            pFraud = totalScans > 0
-                ? (counterfeit30 + suspicious30 * confirmationRate) / totalScans
-                : 0;
-        }
-
-        // ── 2. EXPECTED REVENUE LOSS (ERL) ──
-        const estimatedUnits = Number(fin.estimated_units_ytd) || 0;
-        const coverageRatio = estimatedUnits > 0 ? Math.min(totalScans / (estimatedUnits / 12), 1) : 1;
-        const recoveryRate = Number(fin.recovery_rate) || 0.2;
-        const severity = 1 - recoveryRate;
-        const revenueCovered = annualRevenue * coverageRatio;
-        const ERL = Math.round(revenueCovered * pFraud * severity);
-
-        // ── 3. EXPECTED BRAND IMPACT (EBI) ──
-        const trustScore = Math.min(parseFloat(s30.avg_trust) || 90, 100);
-        const brandRiskFactor = Math.pow(1 - trustScore / 100, preset.beta);
-        const incidentEscalation = 1 - Math.exp(-preset.k * pFraud);
-        const EBI = Math.round(brandValue * brandRiskFactor * incidentEscalation);
-
-        // ── 4. WCRS + RFE (UPGRADED: Sigmoid Enforcement) ──
-        const crTotal = parseInt(cr.total) || 0;
-        const crNonCompliant = parseInt(cr.non_compliant) || 0;
-        const crPartial = parseInt(cr.partial) || 0;
-        const WCRS = crTotal > 0 ? (crNonCompliant * 1.0 + crPartial * 0.5) / crTotal : 0;
-
-        // Sigmoid function: smooth transition 0.1 → 0.6 centered at WCRS=0.2
-        // S(x) = L + (U-L) / (1 + e^(-steepness × (x - midpoint)))
-        const sigmoid = (x, mid, steep, lo, hi) => lo + (hi - lo) / (1 + Math.exp(-steep * (x - mid)));
-        const enforcementProbability = sigmoid(WCRS, 0.2, 12, 0.08, 0.65);
-
-        const RFE = Math.round(WCRS * preset.avgFine * enforcementProbability * crNonCompliant);
-
-        // ── 5. SUPPLY CHAIN RISK INDEX (UPGRADED: Cluster-Dynamic Weights) ──
-        const avgFraudScore = parseFloat(s30.avg_fraud) || 0;
-        const geoRiskList = (geoBreakdown || []);
-        const maxGeoFraud = geoRiskList.length > 0
-            ? Math.max(...geoRiskList.map(g => parseFloat(g.avg_fraud) || 0))
-            : 0;
-        const prevFraudRate = prevTotal > 0 ? prevFlagged / prevTotal : 0;
-        const currentFraudRate = totalScans > 0 ? (suspicious30 + counterfeit30) / totalScans : 0;
-        const volatility = Math.abs(currentFraudRate - prevFraudRate);
-
-        // Per-cluster weight matrix (A→E)
-        const scri_weights = {
-            A: [0.25, 0.40, 0.15, 0.20], // Life-Critical: compliance dominates
-            B: [0.30, 0.35, 0.20, 0.15], // Financial: compliance + fraud
-            C: [0.40, 0.20, 0.20, 0.20], // Luxury: fraud/brand dominates
-            D: [0.35, 0.25, 0.20, 0.20], // Consumer: balanced (original)
-            E: [0.30, 0.25, 0.25, 0.20], // Industrial: geo supply chain weight
-        };
-        const sw = scri_weights[clusterId] || scri_weights.D;
-        const SCRI = Math.round((
-            sw[0] * pFraud +
-            sw[1] * WCRS +
-            sw[2] * Math.min(maxGeoFraud, 1) +
-            sw[3] * Math.min(volatility * 10, 1)
-        ) * 1000) / 1000;
-
-        // ── 6. TOTAL CAPITAL AT RISK (UPGRADED: Correlation-Based Diversification) ──
-        // ρ(ERL, EBI) ≈ 0.7 — high correlation because same fraud driver
-        // Diversification = (ERL+EBI) × (1 - √(w1² + w2² + 2ρ·w1·w2))
-        // where w1 = ERL/(ERL+EBI), w2 = EBI/(ERL+EBI)
-        const rho_erl_ebi = 0.7; // correlation between revenue loss and brand damage
-        const erlEbiSum = ERL + EBI;
-        let diversification = 0;
-        if (erlEbiSum > 0) {
-            const w1 = ERL / erlEbiSum;
-            const w2 = EBI / erlEbiSum;
-            const portfolioVol = Math.sqrt(w1 * w1 + w2 * w2 + 2 * rho_erl_ebi * w1 * w2);
-            diversification = Math.round(erlEbiSum * (1 - portfolioVol));
-        }
-        const TCAR = ERL + EBI + RFE - diversification;
-
-        // ── 7. SCENARIO MODELING (UPGRADED: 5-Point Envelope) ──
-        // Best → Moderate → Base → Stress → Extreme Tail
-        function calcScenario(fraudMult, trustDelta, enfMult) {
-            const sPFraud = pFraud * fraudMult;
-            const sERL = Math.round(revenueCovered * sPFraud * severity);
-            const sTrust = Math.max(0, Math.min(100, trustScore + trustDelta));
-            const sBRF = Math.pow(1 - sTrust / 100, preset.beta);
-            const sIE = 1 - Math.exp(-preset.k * sPFraud);
-            const sEBI = Math.round(brandValue * sBRF * sIE);
-            const sEnf = Math.min(sigmoid(WCRS * enfMult, 0.2, 12, 0.08, 0.65), 1);
-            const sRFE = Math.round(WCRS * preset.avgFine * sEnf * crNonCompliant);
-            const sSum = sERL + sEBI;
-            let sDiv = 0;
-            if (sSum > 0) {
-                const sw1 = sERL / sSum, sw2 = sEBI / sSum;
-                sDiv = Math.round(sSum * (1 - Math.sqrt(sw1 * sw1 + sw2 * sw2 + 2 * rho_erl_ebi * sw1 * sw2)));
-            }
-            return { erl: sERL, ebi: sEBI, rfe: sRFE, tcar: sERL + sEBI + sRFE - sDiv };
-        }
-        const scenarios = {
-            best: calcScenario(0.6, +5, 0.3),    // Optimistic: -40% fraud, trust+5%, minimal enforcement
-            moderate: calcScenario(0.8, +3, 0.5),    // Moderate: -20% fraud, trust+3%, low enforcement
-            base: { erl: ERL, ebi: EBI, rfe: RFE, tcar: TCAR },
-            stress: calcScenario(1.5, -10, 2.0),   // Stress: +50% fraud, trust-10%, high enforcement
-            extreme: calcScenario(2.5, -20, 3.0),   // Extreme Tail: +150% fraud, trust-20%, max enforcement
-        };
-
-        // ── PHASE 2: 95% CONFIDENCE INTERVAL (Closed-form sensitivity) ──
-        // CI computed by recalculating TCAR at ±1.96σ parameter shifts
-        const z = 1.96; // 95% confidence
-        const hasCustom = fin.custom_beta > 0 || fin.custom_k > 0;
-        let tcar_ci_low = TCAR, tcar_ci_high = TCAR;
-        if (!hasCustom) {
-            // Optimistic: lower β, lower k, higher recovery → lower TCAR
-            const optBeta = Math.max(1.0, cluster.beta.mean - z * cluster.beta.sigma);
-            const optK = Math.max(0.5, cluster.k.mean - z * cluster.k.sigma);
-            const optRecovery = Math.min(0.9, cluster.recovery.mean + z * cluster.recovery.sigma);
-            const optSeverity = 1 - optRecovery;
-            const optERL = Math.round(revenueCovered * pFraud * optSeverity);
-            const optBRF = Math.pow(1 - trustScore / 100, optBeta);
-            const optIE = 1 - Math.exp(-optK * pFraud);
-            const optEBI = Math.round(brandValue * optBRF * optIE);
-            const optRFE = Math.round(WCRS * preset.avgFine * enforcementProbability * crNonCompliant);
-            tcar_ci_low = Math.round(optERL + optEBI + optRFE - 0.3 * Math.min(optERL, optEBI));
-
-            // Pessimistic: higher β, higher k, lower recovery → higher TCAR
-            const pesBeta = Math.min(3.5, cluster.beta.mean + z * cluster.beta.sigma);
-            const pesK = Math.min(8.0, cluster.k.mean + z * cluster.k.sigma);
-            const pesRecovery = Math.max(0.2, cluster.recovery.mean - z * cluster.recovery.sigma);
-            const pesSeverity = 1 - pesRecovery;
-            const pesERL = Math.round(revenueCovered * pFraud * pesSeverity);
-            const pesBRF = Math.pow(1 - trustScore / 100, pesBeta);
-            const pesIE = 1 - Math.exp(-pesK * pFraud);
-            const pesEBI = Math.round(brandValue * pesBRF * pesIE);
-            const pesRFE = Math.round(WCRS * preset.avgFine * enforcementProbability * crNonCompliant);
-            tcar_ci_high = Math.round(pesERL + pesEBI + pesRFE - 0.3 * Math.min(pesERL, pesEBI));
-        }
-
-        // ── GEO RISK MAP ──
-        const geoRisk = geoRiskList.map(g => ({
-            country: g.geo_country,
-            scans: parseInt(g.scans),
-            flagged: parseInt(g.flagged),
-            fraud_rate: parseInt(g.scans) > 0 ? Math.round((parseInt(g.flagged) / parseInt(g.scans)) * 100) : 0,
-            avg_fraud_score: parseFloat(g.avg_fraud) || 0,
-            risk_level: parseFloat(g.avg_fraud) > 0.5 ? 'critical' : parseFloat(g.avg_fraud) > 0.3 ? 'high' : parseFloat(g.avg_fraud) > 0.1 ? 'medium' : 'low',
-        }));
-
-        // ═══ ERQF Phase 2: PER-BU SEGMENTED AGGREGATION ═══
-        const buConfig = orgInfo?.settings?.bu_config || null;
-        let perBU = null;
-        let groupAggregated = null;
-
-        if (buConfig && buConfig.business_units && buConfig.business_units.length > 0) {
-            const catData = {};
-            for (const c of (categoryBreakdown || [])) {
-                catData[c.category] = {
-                    scans: parseInt(c.scans) || 0,
-                    suspicious: parseInt(c.suspicious) || 0,
-                    counterfeit: parseInt(c.counterfeit) || 0,
-                    authentic: parseInt(c.authentic) || 0,
-                    products: parseInt(c.products) || 0,
-                    avg_trust: parseFloat(c.avg_trust) || 85,
-                };
-            }
-
-            const estimatedUnits = Number(fin.estimated_units_ytd) || totalScans * 12;
-
-            perBU = buConfig.business_units.map(bu => {
-                // Aggregate scan data for this BU's categories
-                let buScans = 0, buSuspicious = 0, buCounterfeit = 0, buAuthentic = 0, buProducts = 0;
-                let trustSum = 0, trustCount = 0;
-                for (const cat of (bu.categories || [])) {
-                    const cd = catData[cat];
-                    if (cd) {
-                        buScans += cd.scans;
-                        buSuspicious += cd.suspicious;
-                        buCounterfeit += cd.counterfeit;
-                        buAuthentic += cd.authentic;
-                        buProducts += cd.products;
-                        if (cd.avg_trust > 0) { trustSum += cd.avg_trust * cd.scans; trustCount += cd.scans; }
-                    }
-                }
-                const buTrust = trustCount > 0 ? trustSum / trustCount : 85;
-                const buWeight = Number(bu.revenue_weight) || 0;
-                const buRevenue = annualRevenue * buWeight;
-                const buBrandValue = brandValue * buWeight;
-
-                // Per-BU P(Fraud)
-                const buPFraud = buScans > 0
-                    ? (buCounterfeit + buSuspicious * confirmationRate) / buScans : 0;
-
-                // Per-BU Coverage
-                const buUnits = estimatedUnits * buWeight;
-                const buCoverage = buUnits > 0 ? Math.min(buScans / (buUnits / 12), 1) : 1;
-                const buRevCovered = buRevenue * buCoverage;
-
-                // Per-BU ERL
-                const buClusterId = bu.industry_type ? (industryMap[bu.industry_type] || 'D') : 'D';
-                const buCluster = riskClusters[buClusterId];
-                const buBeta = bu.beta || buCluster.beta.mean;
-                const buK = bu.k || buCluster.k.mean;
-                const buAvgFine = bu.avg_fine || (bu.industry_type ? (industryFines[bu.industry_type] || 25000) : 25000);
-                const buERL = Math.round(buRevCovered * buPFraud * severity);
-
-                // Per-BU EBI (with cluster-resolved β and k)
-                const buBRF = Math.pow(Math.max(1 - buTrust / 100, 0.001), buBeta);
-                const buIE = 1 - Math.exp(-buK * buPFraud);
-                const buEBI = Math.round(buBrandValue * buBRF * buIE);
-
-                // Per-BU RFE
-                const buCrTotal = crTotal > 0 ? Math.round(crTotal * buWeight) : 1;
-                const buWCRS = WCRS; // Use org-level WCRS (same compliance framework)
-                const buRFE = Math.round(buWCRS * buAvgFine * enforcementProbability * Math.max(crNonCompliant * buWeight, 0.1));
-
-                // Per-BU TCAR (no diversification at BU level)
-                const buTCAR = buERL + buEBI + buRFE;
-
-                return {
-                    id: bu.id,
-                    name: bu.name,
-                    categories: bu.categories,
-                    beta: bu.beta,
-                    k: bu.k,
-                    avg_fine: bu.avg_fine,
-                    revenue_weight: buWeight,
-                    scans: buScans,
-                    products: buProducts,
-                    trust_score: Math.round(buTrust * 10) / 10,
-                    p_fraud: Math.round(buPFraud * 10000) / 100,
-                    erl: buERL,
-                    ebi: buEBI,
-                    rfe: buRFE,
-                    tcar: buTCAR,
-                };
-            });
-
-            // ── GROUP AGGREGATION ──
-            const rho = buConfig.cross_bu_correlation || 0.3;
-            const gamma = buConfig.contagion_factor || 0;
-            const isBrandedHouse = buConfig.brand_architecture === 'branded_house';
-
-            // Weighted sum
-            let groupERL = 0, groupEBI = 0, groupRFE = 0;
-            let totalWeight = 0;
-            for (const bu of perBU) {
-                const w = bu.revenue_weight || (1 / perBU.length);
-                groupERL += bu.erl;
-                groupEBI += bu.ebi;
-                groupRFE += bu.rfe;
-                totalWeight += w;
-            }
-
-            // Brand Contagion Effect (Branded House only)
-            let contagionAdj = 0;
-            if (isBrandedHouse && gamma > 0) {
-                // For each BU, its incident adds γ × Σ(other BU brand values)
-                const totalBrandValue = brandValue;
-                for (const bu of perBU) {
-                    const buBV = totalBrandValue * (bu.revenue_weight || 1 / perBU.length);
-                    const otherBV = totalBrandValue - buBV;
-                    contagionAdj += bu.p_fraud / 100 * gamma * otherBV * 0.01; // weighted by fraud probability
-                }
-                contagionAdj = Math.round(contagionAdj);
-                groupEBI += contagionAdj;
-            }
-
-            // Cross-BU Diversification Discount
-            const rawTCAR = groupERL + groupEBI + groupRFE;
-            const diversificationDiscount = Math.round(rawTCAR * (1 - rho) * 0.15); // 15% max at ρ=0
-            const groupTCAR = rawTCAR - diversificationDiscount;
-
-            groupAggregated = {
-                erl: groupERL,
-                ebi: groupEBI,
-                rfe: groupRFE,
-                tcar: groupTCAR,
-                raw_tcar: rawTCAR,
-                diversification_discount: diversificationDiscount,
-                contagion_adjustment: contagionAdj,
-                brand_architecture: buConfig.brand_architecture,
-                cross_bu_correlation: rho,
-                contagion_factor: gamma,
-            };
-        }
 
         res.json({
             exposure: {
