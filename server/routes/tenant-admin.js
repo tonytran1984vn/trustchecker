@@ -1449,7 +1449,7 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             db.get(`SELECT name, plan, settings FROM organizations WHERE id = $1`, [tid]),
             // Daily scan breakdown (for time-decay weighting)
             db.all(`SELECT DATE(scanned_at) as scan_date,
-                    EXTRACT(DAY FROM NOW() - scanned_at)::int as days_ago,
+                    EXTRACT(DAY FROM NOW() - DATE(scanned_at))::int as days_ago,
                     COUNT(*) as total,
                     COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
                     COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
@@ -1506,28 +1506,7 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         const faHigh = parseInt(fa.high) || 0;
 
         res.json({
-            exposure: {
-                total_capital_at_risk: TCAR,
-                tcar_ci_low,
-                tcar_ci_high,
-                expected_revenue_loss: ERL,
-                expected_brand_impact: EBI,
-                regulatory_exposure: RFE,
-                diversification_adj: diversification,
-                diversification_rho: rho_erl_ebi,
-                fraud_probability: Math.round(pFraud * 10000) / 100,
-                coverage_ratio: Math.round(coverageRatio * 100),
-                compliance_wcrs: Math.round(WCRS * 1000) / 1000,
-                enforcement_probability: Math.round(enforcementProbability * 1000) / 1000,
-                enforcement_model: 'sigmoid',
-                supply_chain_scri: SCRI,
-                scri_cluster_weights: sw,
-                brand_risk_factor: Math.round(brandRiskFactor * 10000) / 10000,
-                incident_escalation: Math.round(incidentEscalation * 10000) / 10000,
-                risk_cluster: { id: clusterId, label: cluster.label },
-                trend_direction: trendDirection,  // -1=improving, 0=stable, 1=worsening
-                erqf_version: '2.0',
-            },
+            exposure,
             scenarios,
             products: {
                 total: parseInt(productStats?.total) || 0,
@@ -1572,8 +1551,8 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             financial_config: {
                 annual_revenue: annualRevenue,
                 brand_value: brandValue,
-                industry_type: industry,
-                recovery_rate: recoveryRate,
+                industry_type: (orgInfo?.settings?.financials || {}).industry_type || 'pharmaceutical',
+                recovery_rate: 1 - severity,
                 configured: annualRevenue > 0,
             },
             // Multi-BU (Phase 2) — only present when bu_config exists
