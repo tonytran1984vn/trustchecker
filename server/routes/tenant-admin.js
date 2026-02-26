@@ -1671,22 +1671,20 @@ router.get('/owner/ccs/alerts', requireExecutiveAccess(), async (req, res) => {
 
         // 3. Trust score drops (products with significant trust decline)
         const trustDrops = await db.all(`
-            SELECT p.name, p.trust_score,
-                   (SELECT ROUND(AVG(se.trust_score)::numeric, 1)
-                    FROM scan_events se WHERE se.product_id = p.id
-                    AND se.scanned_at >= NOW() - INTERVAL '7 days') as recent_trust,
-                   (SELECT ROUND(AVG(se.trust_score)::numeric, 1)
-                    FROM scan_events se WHERE se.product_id = p.id
-                    AND se.scanned_at >= NOW() - INTERVAL '30 days'
-                    AND se.scanned_at < NOW() - INTERVAL '7 days') as prev_trust
-            FROM products p WHERE p.org_id = $1 AND p.status = 'active'
-            HAVING (SELECT ROUND(AVG(se.trust_score)::numeric, 1)
-                    FROM scan_events se WHERE se.product_id = p.id
-                    AND se.scanned_at >= NOW() - INTERVAL '30 days'
-                    AND se.scanned_at < NOW() - INTERVAL '7 days') -
-                   (SELECT ROUND(AVG(se.trust_score)::numeric, 1)
-                    FROM scan_events se WHERE se.product_id = p.id
-                    AND se.scanned_at >= NOW() - INTERVAL '7 days') > 10
+            SELECT sub.name, sub.trust_score, sub.recent_trust, sub.prev_trust
+            FROM (
+                SELECT p.name, p.trust_score,
+                       (SELECT ROUND(AVG(se.trust_score)::numeric, 1)
+                        FROM scan_events se WHERE se.product_id = p.id
+                        AND se.scanned_at >= NOW() - INTERVAL '7 days') as recent_trust,
+                       (SELECT ROUND(AVG(se.trust_score)::numeric, 1)
+                        FROM scan_events se WHERE se.product_id = p.id
+                        AND se.scanned_at >= NOW() - INTERVAL '30 days'
+                        AND se.scanned_at < NOW() - INTERVAL '7 days') as prev_trust
+                FROM products p WHERE p.org_id = $1 AND p.status = 'active'
+            ) sub
+            WHERE sub.prev_trust IS NOT NULL AND sub.recent_trust IS NOT NULL
+              AND (sub.prev_trust - sub.recent_trust) > 10
             LIMIT 5`, [tid]);
 
         for (const td of trustDrops) {
