@@ -10,6 +10,7 @@
 import { icon } from '../../core/icons.js';
 
 let _exposure = null, _decisions = null, _valuation = null;
+let _trends = null, _alerts = null, _roi = null;
 let _catData = [], _catPage = 1, _catSize = 10;
 let _decData = [], _decPage = 1, _decSize = 5;
 
@@ -34,10 +35,13 @@ export function renderPage() {
 async function loadCCSData() {
   try {
     const API = window.API;
-    [_exposure, _decisions, _valuation] = await Promise.all([
+    [_exposure, _decisions, _valuation, _trends, _alerts, _roi] = await Promise.all([
       API.get('/tenant/owner/ccs/exposure').catch(() => null),
       API.get('/tenant/owner/ccs/decisions').catch(() => null),
       API.get('/tenant/owner/ccs/valuation').catch(() => null),
+      API.get('/tenant/owner/ccs/trends').catch(() => null),
+      API.get('/tenant/owner/ccs/alerts').catch(() => null),
+      API.get('/tenant/owner/ccs/roi').catch(() => null),
     ]);
     renderCCS();
     // Populate category table after DOM is ready
@@ -407,6 +411,11 @@ function renderCCS() {
       </div>`}
     </section>
 
+    ${renderTrendChart()}
+    ${renderAlertFeed()}
+    ${renderRiskHeatmap()}
+    ${renderROIDashboard()}
+
     <!-- Financial Config Modal -->
     <div id="ccs-fin-modal" class="ccs-modal" style="display:none">
       <div class="ccs-modal-content">
@@ -442,6 +451,289 @@ function renderCCS() {
     </div>
   `;
 }
+
+// ── Render: 12-Week Trend Chart (SVG) ──────────────────────────────────────────
+function renderTrendChart() {
+  const t = (_trends || {}).trend || [];
+  if (!t.length) return '';
+  const maxTCAR = Math.max(...t.map(d => d.tcar), 1);
+  const maxPF = Math.max(...t.map(d => d.pFraud), 1);
+  const W = 680, H = 200, PAD = 40;
+  const cw = (W - PAD * 2) / Math.max(t.length - 1, 1);
+  const tcarPts = t.map((d, i) => `${PAD + i * cw},${H - PAD - ((d.tcar / maxTCAR) * (H - PAD * 2))}`).join(' ');
+  const pfPts = t.map((d, i) => `${PAD + i * cw},${H - PAD - ((d.pFraud / maxPF) * (H - PAD * 2))}`).join(' ');
+  const labels = t.map((d, i) => {
+    const dt = new Date(d.week);
+    return `<text x="${PAD + i * cw}" y="${H - 8}" text-anchor="middle" fill="#888" font-size="9">${(dt.getMonth() + 1)}/${dt.getDate()}</text>`;
+  }).join('');
+  // Trend direction
+  const firstTCAR = t[0]?.tcar || 0, lastTCAR = t[t.length - 1]?.tcar || 0;
+  const trendDir = lastTCAR > firstTCAR * 1.1 ? 'worsening' : lastTCAR < firstTCAR * 0.9 ? 'improving' : 'stable';
+  const trendColor = trendDir === 'improving' ? '#22c55e' : trendDir === 'worsening' ? '#ef4444' : '#eab308';
+  const trendIcon = trendDir === 'improving' ? '↘' : trendDir === 'worsening' ? '↗' : '→';
+
+  return `
+  <section class="ccs-section">
+    <div class="ccs-section-header">
+      <h3>${icon('trending-up', 18)} Risk Trend (12 Weeks)</h3>
+      <span style="font-size:0.75rem;padding:3px 10px;border-radius:20px;background:${trendColor}22;color:${trendColor};font-weight:600">${trendIcon} ${trendDir}</span>
+    </div>
+    <div style="overflow-x:auto">
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;margin:0 auto;display:block">
+        <defs>
+          <linearGradient id="tcar-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#6366f1" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <!-- Grid lines -->
+        ${[0, 1, 2, 3, 4].map(i => {
+    const y = PAD + i * ((H - PAD * 2) / 4);
+    return `<line x1="${PAD}" y1="${y}" x2="${W - PAD}" y2="${y}" stroke="#333" stroke-width="0.5" stroke-dasharray="4"/>`;
+  }).join('')}
+        <!-- TCAR area -->
+        <polygon points="${PAD},${H - PAD} ${tcarPts} ${PAD + (t.length - 1) * cw},${H - PAD}" fill="url(#tcar-grad)"/>
+        <!-- TCAR line -->
+        <polyline points="${tcarPts}" fill="none" stroke="#6366f1" stroke-width="2.5" stroke-linejoin="round"/>
+        <!-- P(Fraud) line -->
+        <polyline points="${pfPts}" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="6,3" stroke-linejoin="round"/>
+        <!-- Data points -->
+        ${t.map((d, i) => `<circle cx="${PAD + i * cw}" cy="${H - PAD - ((d.tcar / maxTCAR) * (H - PAD * 2))}" r="3.5" fill="#6366f1"/>`).join('')}
+        ${labels}
+        <!-- Y-axis labels -->
+        <text x="${PAD - 4}" y="${PAD + 4}" text-anchor="end" fill="#6366f1" font-size="9">${fmtMoney(maxTCAR)}</text>
+        <text x="${PAD - 4}" y="${H - PAD}" text-anchor="end" fill="#888" font-size="9">$0</text>
+        <text x="${W - PAD + 4}" y="${PAD + 4}" text-anchor="start" fill="#f59e0b" font-size="9">${maxPF}%</text>
+      </svg>
+    </div>
+    <div style="display:flex;gap:1.5rem;justify-content:center;margin-top:0.5rem;font-size:0.72rem;opacity:0.7">
+      <span><span style="display:inline-block;width:16px;height:3px;background:#6366f1;vertical-align:middle;margin-right:4px;border-radius:2px"></span>TCAR ($)</span>
+      <span><span style="display:inline-block;width:16px;height:3px;background:#f59e0b;vertical-align:middle;margin-right:4px;border-radius:2px;border-top:2px dashed #f59e0b;height:0"></span>P(Fraud) %</span>
+    </div>
+  </section>`;
+}
+
+// ── Render: Smart Alert Feed ───────────────────────────────────────────────────
+function renderAlertFeed() {
+  const al = (_alerts || {}).alerts || [];
+  if (!al.length) return `
+  <section class="ccs-section">
+    <div class="ccs-section-header"><h3>${icon('bell', 18)} Intelligence Alerts</h3></div>
+    <div style="text-align:center;padding:1.5rem;opacity:0.5;font-size:0.85rem">${icon('check-circle', 24)}<br>No active alerts — all systems nominal</div>
+  </section>`;
+
+  const sevStyles = {
+    critical: { bg: 'rgba(239,68,68,0.12)', border: '#ef4444', icon: '🚨', color: '#ef4444' },
+    high: { bg: 'rgba(249,115,22,0.12)', border: '#f97316', icon: '⚠️', color: '#f97316' },
+    medium: { bg: 'rgba(234,179,8,0.12)', border: '#eab308', icon: '⚡', color: '#eab308' },
+    low: { bg: 'rgba(34,197,94,0.08)', border: '#22c55e', icon: 'ℹ️', color: '#22c55e' },
+  };
+
+  const shown = al.slice(0, 5);
+  return `
+  <section class="ccs-section">
+    <div class="ccs-section-header">
+      <h3>${icon('bell', 18)} Intelligence Alerts</h3>
+      <span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:2px 10px;border-radius:20px;font-size:0.72rem;font-weight:600">${al.length} active</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:0.5rem">
+      ${shown.map(a => {
+    const s = sevStyles[a.severity] || sevStyles.medium;
+    return `
+        <div style="display:flex;align-items:flex-start;gap:0.75rem;padding:0.75rem;border-radius:10px;background:${s.bg};border-left:3px solid ${s.border}">
+          <div style="font-size:1.2rem;flex-shrink:0;margin-top:2px">${s.icon}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:0.82rem;color:${s.color}">${a.title}</div>
+            <div style="font-size:0.74rem;opacity:0.75;margin-top:2px">${a.description}</div>
+          </div>
+          <div style="font-size:0.68rem;opacity:0.5;flex-shrink:0;white-space:nowrap">${a.timestamp ? timeAgo(a.timestamp) : ''}</div>
+        </div>`;
+  }).join('')}
+      ${al.length > 5 ? `<div style="text-align:center;font-size:0.75rem;opacity:0.5;padding:0.5rem">+${al.length - 5} more alerts</div>` : ''}
+    </div>
+  </section>`;
+}
+
+// ── Render: Risk Heatmap (Geographic) ──────────────────────────────────────────
+function renderRiskHeatmap() {
+  const geo = (_exposure || {}).geo_risk || [];
+  if (!geo.length) return '';
+
+  const maxScans = Math.max(...geo.map(g => parseInt(g.scans) || 1));
+  return `
+  <section class="ccs-section">
+    <div class="ccs-section-header"><h3>${icon('globe', 18)} Geographic Risk Heatmap</h3></div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;padding:0.5rem 0">
+      ${geo.map(g => {
+    const scans = parseInt(g.scans) || 0;
+    const flagged = parseInt(g.flagged) || 0;
+    const fraudRate = scans > 0 ? flagged / scans : 0;
+    const size = Math.max(60, Math.round(60 + (scans / maxScans) * 80));
+    const r = Math.round(fraudRate * 255);
+    const g2 = Math.round((1 - fraudRate) * 200);
+    const bg = `rgba(${Math.min(r + 40, 255)}, ${g2}, ${Math.max(60 - r, 20)}, 0.2)`;
+    const borderColor = `rgb(${Math.min(r + 40, 255)}, ${g2}, ${Math.max(60 - r, 20)})`;
+    return `
+        <div style="width:${size}px;height:${size}px;border-radius:10px;background:${bg};border:2px solid ${borderColor};display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:0.7rem;cursor:default;transition:transform 0.15s" title="${g.geo_country}: ${scans} scans, ${flagged} flagged (${Math.round(fraudRate * 100)}%)">
+          <div style="font-weight:700;font-size:0.85rem">${g.geo_country || '??'}</div>
+          <div style="opacity:0.7">${scans}</div>
+          ${flagged > 0 ? `<div style="color:${borderColor};font-weight:600">${Math.round(fraudRate * 100)}%</div>` : ''}
+        </div>`;
+  }).join('')}
+    </div>
+    <div style="display:flex;gap:1rem;justify-content:center;margin-top:0.5rem;font-size:0.68rem;opacity:0.6">
+      <span>🟢 Low risk</span><span>🟡 Medium</span><span>🔴 High risk</span>
+      <span style="margin-left:0.5rem">Size = scan volume</span>
+    </div>
+  </section>`;
+}
+
+// ── Render: ROI Dashboard ──────────────────────────────────────────────────────
+function renderROIDashboard() {
+  const r = _roi || {};
+  if (!r.total_scans) return '';
+
+  const protRate = r.authentication_rate || 0;
+  return `
+  <section class="ccs-section">
+    <div class="ccs-section-header">
+      <h3>${icon('bar-chart-2', 18)} Platform ROI</h3>
+      <button onclick="window._exportBoardReport()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;padding:5px 14px;border-radius:8px;font-size:0.72rem;cursor:pointer;font-weight:600">📄 Export Board Report</button>
+    </div>
+    <div class="ccs-metrics-grid">
+      ${exposureCard('Revenue Protected', fmtMoney(r.protected_revenue), `${protRate}% authentication rate`, '#22c55e')}
+      ${exposureCard('Counterfeits Stopped', r.counterfeits_detected?.toLocaleString() || '0', `${r.suspicious_flagged || 0} suspicious flagged`, '#ef4444')}
+      ${exposureCard('Detection Value', fmtMoney(r.detection_value), `$${r.cost_per_detection || 0}/detection cost`, '#f59e0b')}
+      ${exposureCard('ROI Multiple', `${r.roi_multiple || 0}x`, `Payback: ${r.payback_months || 0} months`, '#6366f1')}
+    </div>
+    <div style="margin-top:0.75rem;background:rgba(99,102,241,0.06);border-radius:10px;padding:0.75rem">
+      <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:6px">
+        <span style="opacity:0.7">Protection Coverage</span>
+        <span style="font-weight:600;color:#22c55e">${protRate}%</span>
+      </div>
+      <div style="height:8px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden">
+        <div style="width:${Math.min(protRate, 100)}%;height:100%;background:linear-gradient(90deg,#22c55e,#6366f1);border-radius:4px;transition:width 0.5s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:0.65rem;opacity:0.5;margin-top:4px">
+        <span>${r.total_scans?.toLocaleString() || 0} total scans</span>
+        <span>${r.months_active || 0} months active</span>
+        <span>Avg detection: ${r.avg_detection_days || 0} days</span>
+      </div>
+    </div>
+  </section>`;
+}
+
+// ── Board Report Export ────────────────────────────────────────────────────────
+window._exportBoardReport = async function () {
+  try {
+    const btn = event?.target;
+    if (btn) { btn.textContent = '⏳ Generating...'; btn.disabled = true; }
+
+    const exp = (_exposure || {}).exposure || {};
+    const val = _valuation || {};
+    const roi = _roi || {};
+    const trends = (_trends || {}).trend || [];
+    const alerts = (_alerts || {}).alerts || [];
+    const fin = (val.financial_inputs || {});
+    const ev = val.valuation || {};
+    const gov = val.governance_maturity || {};
+    const scenarios = (_exposure || {}).scenarios || {};
+    const scans = (_exposure || {}).scans_30d || {};
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Board Report — ${dateStr}</title>
+    <style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family: 'Segoe UI',system-ui,-apple-system,sans-serif; color:#1a1a2e; background:#fff; padding:40px; max-width:900px; margin:0 auto; font-size:13px; line-height:1.6; }
+      h1 { font-size:22px; margin-bottom:4px; color:#1a1a2e; }
+      h2 { font-size:15px; margin:24px 0 10px; padding-bottom:6px; border-bottom:2px solid #6366f1; color:#6366f1; text-transform:uppercase; letter-spacing:1px; }
+      .subtitle { font-size:12px; color:#666; margin-bottom:20px; }
+      .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:12px 0; }
+      .card { padding:14px; border-radius:10px; background:#f8fafc; border:1px solid #e2e8f0; }
+      .card-value { font-size:20px; font-weight:700; color:#1a1a2e; }
+      .card-label { font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:#666; margin-top:2px; }
+      .card-sub { font-size:10px; color:#888; margin-top:4px; }
+      .alert-row { padding:8px 12px; border-radius:8px; margin:4px 0; font-size:11px; }
+      .alert-critical { background:#fef2f2; border-left:3px solid #ef4444; }
+      .alert-high { background:#fff7ed; border-left:3px solid #f97316; }
+      table { width:100%; border-collapse:collapse; font-size:11px; margin:8px 0; }
+      th,td { padding:6px 10px; text-align:left; border-bottom:1px solid #e2e8f0; }
+      th { background:#f1f5f9; font-weight:600; text-transform:uppercase; font-size:10px; letter-spacing:0.5px; }
+      .footer { margin-top:30px; padding-top:12px; border-top:1px solid #e2e8f0; font-size:10px; color:#999; text-align:center; }
+      @media print { body { padding:20px; } }
+    </style></head><body>
+    <h1>📊 Capital Command System — Board Report</h1>
+    <div class="subtitle">Generated ${dateStr} · ERQF v${exp.erqf_version || '2.0'} · Confidential</div>
+
+    <h2>Capital Exposure Radar</h2>
+    <div class="grid">
+      <div class="card"><div class="card-value">${fmtMoney(exp.total_capital_at_risk || 0)}</div><div class="card-label">Total Capital at Risk</div></div>
+      <div class="card"><div class="card-value">${fmtMoney(exp.expected_revenue_loss || 0)}</div><div class="card-label">Expected Revenue Loss</div></div>
+      <div class="card"><div class="card-value">${fmtMoney(exp.expected_brand_impact || 0)}</div><div class="card-label">Expected Brand Impact</div></div>
+      <div class="card"><div class="card-value">${fmtMoney(exp.regulatory_exposure || 0)}</div><div class="card-label">Regulatory Exposure</div></div>
+    </div>
+    <div class="grid">
+      <div class="card"><div class="card-value">${exp.fraud_probability || 0}%</div><div class="card-label">P(Fraud)</div></div>
+      <div class="card"><div class="card-value">${exp.coverage_ratio || 0}%</div><div class="card-label">Coverage Ratio</div></div>
+      <div class="card"><div class="card-value">${exp.supply_chain_scri || 0}</div><div class="card-label">Supply Chain SCRI</div></div>
+      <div class="card"><div class="card-value">${exp.risk_cluster?.label || 'N/A'}</div><div class="card-label">Risk Cluster</div></div>
+    </div>
+
+    ${Object.keys(scenarios).length ? `
+    <h2>Scenario Analysis</h2>
+    <table>
+      <tr><th>Scenario</th><th>ERL</th><th>EBI</th><th>RFE</th><th>TCAR</th></tr>
+      ${['best', 'moderate', 'base', 'stress', 'extreme'].filter(k => scenarios[k]).map(k => {
+      const s = scenarios[k];
+      return `<tr><td style="text-transform:capitalize;font-weight:600">${k}</td><td>${fmtMoney(s.erl)}</td><td>${fmtMoney(s.ebi)}</td><td>${fmtMoney(s.rfe)}</td><td style="font-weight:700">${fmtMoney(s.tcar)}</td></tr>`;
+    }).join('')}
+    </table>` : ''}
+
+    ${ev.ev_baseline ? `
+    <h2>Enterprise Valuation</h2>
+    <div class="grid">
+      <div class="card"><div class="card-value">${fmtMoney(ev.ev_baseline)}</div><div class="card-label">EV Baseline</div></div>
+      <div class="card"><div class="card-value" style="color:#22c55e">${fmtMoney(ev.ev_with_governance)}</div><div class="card-label">EV with Governance</div></div>
+      <div class="card"><div class="card-value" style="color:#6366f1">+${fmtMoney(ev.ev_uplift)}</div><div class="card-label">EV Uplift</div></div>
+      <div class="card"><div class="card-value">${gov.total_score || 0}/100</div><div class="card-label">Governance Score</div></div>
+    </div>` : ''}
+
+    ${roi.total_scans ? `
+    <h2>Platform ROI</h2>
+    <div class="grid">
+      <div class="card"><div class="card-value" style="color:#22c55e">${fmtMoney(roi.protected_revenue)}</div><div class="card-label">Revenue Protected</div></div>
+      <div class="card"><div class="card-value" style="color:#ef4444">${roi.counterfeits_detected?.toLocaleString()}</div><div class="card-label">Counterfeits Detected</div></div>
+      <div class="card"><div class="card-value">${fmtMoney(roi.detection_value)}</div><div class="card-label">Detection Value</div></div>
+      <div class="card"><div class="card-value" style="color:#6366f1">${roi.roi_multiple}x</div><div class="card-label">ROI Multiple</div></div>
+    </div>` : ''}
+
+    ${alerts.length ? `
+    <h2>Active Alerts (${alerts.length})</h2>
+    ${alerts.slice(0, 5).map(a => `<div class="alert-row alert-${a.severity}"><strong>${a.title}</strong><br>${a.description}</div>`).join('')}
+    ` : ''}
+
+    <div class="footer">
+      TrustChecker Capital Command System · ERQF v${exp.erqf_version || '2.0'} · ${scans.total || 0} scans analyzed (30d)<br>
+      This report is auto-generated and confidential. © ${now.getFullYear()} TrustChecker
+    </div>
+    </body></html>`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `TrustChecker_Board_Report_${now.toISOString().slice(0, 10)}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    if (btn) { btn.textContent = '📄 Export Board Report'; btn.disabled = false; }
+  } catch (e) {
+    console.error('[CCS] Board report export error:', e);
+    alert('Failed to generate report');
+  }
+};
 
 window.saveCCSFinancials = async function () {
   const API = window.API;

@@ -1564,6 +1564,234 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
     }
 });
 
+// ─── CCS Layer 1b: Risk Trend (12-Week Time Series) ────────────────────────────
+router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+        const weeks = await db.all(`
+            SELECT DATE_TRUNC('week', scanned_at)::date as week_start,
+                   COUNT(*) as total,
+                   COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
+                   COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
+                   COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
+                   ROUND(AVG(trust_score)::numeric, 2) as avg_trust,
+                   ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud
+            FROM scan_events WHERE org_id = $1
+            AND scanned_at >= NOW() - INTERVAL '12 weeks'
+            GROUP BY DATE_TRUNC('week', scanned_at)
+            ORDER BY week_start ASC`, [tid]);
+
+        const org = await db.get(`SELECT settings FROM organizations WHERE id = $1`, [tid]);
+        const fin = org?.settings?.financials || {};
+        const annualRevenue = Number(fin.annual_revenue) || 0;
+        const brandValue = Number(fin.brand_value_estimate) || 0;
+
+        const trend = weeks.map(w => {
+            const total = parseInt(w.total) || 1;
+            const flagged = (parseInt(w.suspicious) || 0) + (parseInt(w.counterfeit) || 0);
+            const pFraud = Math.round((flagged / total) * 10000) / 100;
+            const severity = Math.min(0.03 + pFraud / 100, 0.25);
+            const erl = Math.round(annualRevenue * (pFraud / 100) * severity);
+            const trustScore = parseFloat(w.avg_trust) || 80;
+            const brf = Math.pow(1 - trustScore / 100, 1.8);
+            const ie = 1 - Math.exp(-2.5 * (pFraud / 100));
+            const ebi = Math.round(brandValue * brf * ie);
+            const tcar = erl + ebi;
+            return {
+                week: w.week_start,
+                scans: parseInt(w.total),
+                suspicious: parseInt(w.suspicious) || 0,
+                counterfeit: parseInt(w.counterfeit) || 0,
+                pFraud,
+                erl, ebi, tcar,
+                avg_trust: parseFloat(w.avg_trust) || 0,
+            };
+        });
+        res.json({ trend, weeks: trend.length });
+    } catch (err) {
+        console.error('[CCS] Trends error:', err);
+        res.status(500).json({ error: 'Failed to load trend data' });
+    }
+});
+
+// ─── CCS: Smart Alert Feed ──────────────────────────────────────────────────────
+router.get('/owner/ccs/alerts', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+        const alerts = [];
+
+        // 1. Critical fraud alerts (unresolved)
+        const fraudAlerts = await db.all(`
+            SELECT fa.id, fa.severity, fa.status, fa.description, fa.created_at,
+                   p.name as product_name
+            FROM fraud_alerts fa
+            JOIN products p ON p.id = fa.product_id
+            WHERE p.org_id = $1 AND fa.status != 'resolved'
+            ORDER BY CASE fa.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 ELSE 3 END,
+                     fa.created_at DESC
+            LIMIT 10`, [tid]);
+
+        for (const fa of fraudAlerts) {
+            alerts.push({
+                id: fa.id,
+                severity: fa.severity,
+                type: 'fraud',
+                title: `${fa.severity === 'critical' ? '🚨' : '⚠️'} Fraud Alert: ${fa.product_name}`,
+                description: fa.description || `${fa.severity} fraud detected`,
+                timestamp: fa.created_at,
+            });
+        }
+
+        // 2. Fraud spike detection (current week vs avg)
+        const spikeCheck = await db.get(`
+            SELECT
+              (SELECT COUNT(*) FROM scan_events WHERE org_id = $1
+               AND result IN ('suspicious','counterfeit')
+               AND scanned_at >= NOW() - INTERVAL '7 days') as current_week,
+              (SELECT ROUND(AVG(cnt)::numeric, 1) FROM (
+                SELECT COUNT(*) as cnt FROM scan_events WHERE org_id = $1
+                AND result IN ('suspicious','counterfeit')
+                AND scanned_at >= NOW() - INTERVAL '56 days'
+                AND scanned_at < NOW() - INTERVAL '7 days'
+                GROUP BY DATE_TRUNC('week', scanned_at)
+              ) sub) as weekly_avg`, [tid]);
+
+        const currentWeekFlagged = parseInt(spikeCheck?.current_week) || 0;
+        const weeklyAvg = parseFloat(spikeCheck?.weekly_avg) || 0;
+        if (weeklyAvg > 0 && currentWeekFlagged > weeklyAvg * 2) {
+            alerts.unshift({
+                id: 'spike-' + Date.now(),
+                severity: 'critical',
+                type: 'anomaly',
+                title: '📈 Fraud Spike Detected',
+                description: `${currentWeekFlagged} flagged scans this week vs ${weeklyAvg} weekly average (+${Math.round((currentWeekFlagged / weeklyAvg - 1) * 100)}%)`,
+                timestamp: new Date().toISOString(),
+            });
+        }
+
+        // 3. Trust score drops (products with significant trust decline)
+        const trustDrops = await db.all(`
+            SELECT p.name, p.trust_score,
+                   (SELECT ROUND(AVG(se.trust_score)::numeric, 1)
+                    FROM scan_events se WHERE se.product_id = p.id
+                    AND se.scanned_at >= NOW() - INTERVAL '7 days') as recent_trust,
+                   (SELECT ROUND(AVG(se.trust_score)::numeric, 1)
+                    FROM scan_events se WHERE se.product_id = p.id
+                    AND se.scanned_at >= NOW() - INTERVAL '30 days'
+                    AND se.scanned_at < NOW() - INTERVAL '7 days') as prev_trust
+            FROM products p WHERE p.org_id = $1 AND p.status = 'active'
+            HAVING (SELECT ROUND(AVG(se.trust_score)::numeric, 1)
+                    FROM scan_events se WHERE se.product_id = p.id
+                    AND se.scanned_at >= NOW() - INTERVAL '30 days'
+                    AND se.scanned_at < NOW() - INTERVAL '7 days') -
+                   (SELECT ROUND(AVG(se.trust_score)::numeric, 1)
+                    FROM scan_events se WHERE se.product_id = p.id
+                    AND se.scanned_at >= NOW() - INTERVAL '7 days') > 10
+            LIMIT 5`, [tid]);
+
+        for (const td of trustDrops) {
+            const drop = Math.round((parseFloat(td.prev_trust) || 0) - (parseFloat(td.recent_trust) || 0));
+            if (drop > 0) {
+                alerts.push({
+                    id: 'trust-drop-' + td.name,
+                    severity: drop > 20 ? 'critical' : 'high',
+                    type: 'trust_drop',
+                    title: `📉 Trust Score Drop: ${td.name}`,
+                    description: `Trust dropped ${drop} points (${td.prev_trust} → ${td.recent_trust})`,
+                    timestamp: new Date().toISOString(),
+                });
+            }
+        }
+
+        // Sort by severity
+        const sev = { critical: 0, high: 1, medium: 2, low: 3 };
+        alerts.sort((a, b) => (sev[a.severity] ?? 9) - (sev[b.severity] ?? 9));
+
+        res.json({ alerts, total: alerts.length });
+    } catch (err) {
+        console.error('[CCS] Alerts error:', err);
+        res.status(500).json({ error: 'Failed to load alerts' });
+    }
+});
+
+// ─── CCS: ROI Dashboard ─────────────────────────────────────────────────────────
+router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [scanTotals, counterfeitsAll, firstDetection, productCount] = await Promise.all([
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
+                    COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
+                    COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious
+                    FROM scan_events WHERE org_id = $1`, [tid]),
+            db.get(`SELECT COUNT(*) as total,
+                    MIN(scanned_at) as first_at, MAX(scanned_at) as last_at
+                    FROM scan_events WHERE org_id = $1
+                    AND result = 'counterfeit'`, [tid]),
+            db.get(`SELECT ROUND(AVG(EXTRACT(EPOCH FROM (
+                        (SELECT MIN(se.scanned_at) FROM scan_events se
+                         WHERE se.product_id = p.id AND se.result IN ('suspicious','counterfeit'))
+                        - p.created_at
+                    )) / 86400)::numeric, 1) as avg_days
+                    FROM products p WHERE p.org_id = $1
+                    AND EXISTS (SELECT 1 FROM scan_events se
+                                WHERE se.product_id = p.id
+                                AND se.result IN ('suspicious','counterfeit'))`, [tid]),
+            db.get(`SELECT COUNT(*) as total FROM products WHERE org_id = $1`, [tid]),
+        ]);
+
+        const org = await db.get(`SELECT settings, created_at FROM organizations WHERE id = $1`, [tid]);
+        const fin = org?.settings?.financials || {};
+        const annualRevenue = Number(fin.annual_revenue) || 0;
+        const platformCost = Number(fin.platform_cost) || 6000;
+
+        const totalScans = parseInt(scanTotals?.total) || 0;
+        const authenticScans = parseInt(scanTotals?.authentic) || 0;
+        const counterfeitTotal = parseInt(scanTotals?.counterfeit) || 0;
+        const suspiciousTotal = parseInt(scanTotals?.suspicious) || 0;
+
+        // Revenue protected = revenue × authentication rate
+        const authRate = totalScans > 0 ? authenticScans / totalScans : 1;
+        const protectedRevenue = Math.round(annualRevenue * authRate);
+
+        // Average value per counterfeit detection
+        const avgProductValue = annualRevenue / Math.max(parseInt(productCount?.total) || 1, 1);
+        const detectionValue = Math.round(counterfeitTotal * avgProductValue * 0.1);
+
+        // Cost per detection
+        const totalDetections = counterfeitTotal + suspiciousTotal;
+        const costPerDetection = totalDetections > 0 ? Math.round(platformCost / totalDetections) : 0;
+
+        // ROI = value generated / cost
+        const totalValue = detectionValue + Math.round(protectedRevenue * 0.02);
+        const roiMultiple = platformCost > 0 ? Math.round((totalValue / platformCost) * 10) / 10 : 0;
+
+        // Months since launch
+        const launchDate = org?.created_at ? new Date(org.created_at) : new Date();
+        const monthsSinceLaunch = Math.max(1, Math.round((Date.now() - launchDate.getTime()) / (30.44 * 86400000)));
+        const paybackMonths = totalValue > 0 ? Math.max(1, Math.round(platformCost / (totalValue / monthsSinceLaunch))) : 0;
+
+        res.json({
+            protected_revenue: protectedRevenue,
+            authentication_rate: Math.round(authRate * 10000) / 100,
+            counterfeits_detected: counterfeitTotal,
+            suspicious_flagged: suspiciousTotal,
+            detection_value: detectionValue,
+            cost_per_detection: costPerDetection,
+            platform_cost: platformCost,
+            roi_multiple: roiMultiple,
+            payback_months: paybackMonths,
+            total_scans: totalScans,
+            avg_detection_days: parseFloat(firstDetection?.avg_days) || 0,
+            months_active: monthsSinceLaunch,
+        });
+    } catch (err) {
+        console.error('[CCS] ROI error:', err);
+        res.status(500).json({ error: 'Failed to calculate ROI' });
+    }
+});
+
 // ─── CCS: Business Unit Config (Multi-BU Segmented Aggregation) ──────────────
 router.get('/owner/ccs/bu-config', requireExecutiveAccess(), async (req, res) => {
     try {
