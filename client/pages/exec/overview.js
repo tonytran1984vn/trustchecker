@@ -559,33 +559,92 @@ function renderRiskHeatmap() {
   const geo = (_exposure || {}).geo_risk || [];
   if (!geo.length) return '';
 
+  // Country code → flag emoji
+  const flag = (cc) => {
+    if (!cc || cc.length !== 2) return '🌍';
+    return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+  };
+  // Country code → full name
+  const names = { VN: 'Vietnam', PH: 'Philippines', AE: 'UAE', JP: 'Japan', US: 'United States', TH: 'Thailand', MY: 'Malaysia', SG: 'Singapore', ID: 'Indonesia', KR: 'South Korea', CN: 'China', TW: 'Taiwan', HK: 'Hong Kong', IN: 'India', AU: 'Australia', GB: 'United Kingdom', DE: 'Germany', FR: 'France', IT: 'Italy', ES: 'Spain', BR: 'Brazil', MX: 'Mexico', CA: 'Canada', NZ: 'New Zealand', SA: 'Saudi Arabia', QA: 'Qatar', KW: 'Kuwait', NG: 'Nigeria', ZA: 'South Africa', EG: 'Egypt', KE: 'Kenya', GH: 'Ghana', RU: 'Russia', UA: 'Ukraine', TR: 'Turkey', PK: 'Pakistan', BD: 'Bangladesh', MM: 'Myanmar', KH: 'Cambodia', LA: 'Laos', NP: 'Nepal' };
+  const cname = (cc) => names[cc] || cc || '??';
+
   const maxScans = Math.max(...geo.map(g => parseInt(g.scans) || 1));
+  const totalScans = geo.reduce((s, g) => s + (parseInt(g.scans) || 0), 0);
+  const totalFlagged = geo.reduce((s, g) => s + (parseInt(g.flagged) || 0), 0);
+  const sorted = [...geo].sort((a, b) => (parseFloat(b.fraud_rate) || 0) - (parseFloat(a.fraud_rate) || 0));
+  const riskColors = { low: '#22c55e', medium: '#eab308', high: '#ef4444', critical: '#dc2626' };
+
+  // Top 3 risk countries for highlight cards
+  const top3 = sorted.slice(0, 3);
+
   return `
   <section class="ccs-section">
-    <div class="ccs-section-header"><h3>${icon('globe', 18)} Geographic Risk Heatmap</h3></div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;padding:0.5rem 0">
-      ${geo.map(g => {
+    <div class="ccs-section-header">
+      <h3>${icon('globe', 18)} Geographic Risk Heatmap</h3>
+      <span style="font-size:0.7rem;opacity:0.5">${geo.length} regions · ${totalScans.toLocaleString()} scans</span>
+    </div>
+
+    <!-- Top Risk Countries Highlight -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+      ${top3.map((g, i) => {
+    const rc = riskColors[g.risk_level] || '#eab308';
     const scans = parseInt(g.scans) || 0;
-    const flagged = parseInt(g.flagged) || 0;
-    const fraudRate = (parseFloat(g.fraud_rate) || 0) / 100;
-    const size = Math.max(60, Math.round(60 + (scans / maxScans) * 80));
-    const r = Math.round(fraudRate * 255);
-    const g2 = Math.round((1 - fraudRate) * 200);
-    const bg = `rgba(${Math.min(r + 40, 255)}, ${g2}, ${Math.max(60 - r, 20)}, 0.2)`;
-    const borderColor = `rgb(${Math.min(r + 40, 255)}, ${g2}, ${Math.max(60 - r, 20)})`;
-    const riskColors = { low: '#22c55e', medium: '#eab308', high: '#ef4444', critical: '#dc2626' };
-    const riskCol = riskColors[g.risk_level] || borderColor;
+    const pct = Math.round((scans / totalScans) * 100);
     return `
-        <div style="width:${size}px;height:${size}px;border-radius:10px;background:${bg};border:2px solid ${riskCol};display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:0.7rem;cursor:default;transition:transform 0.15s" title="${g.country}: ${scans} scans, ${flagged} flagged (${g.fraud_rate || 0}%)">
-          <div style="font-weight:700;font-size:0.85rem">${g.country || '??'}</div>
-          <div style="opacity:0.7">${scans}</div>
-          ${flagged > 0 ? `<div style="color:${riskCol};font-weight:600">${g.fraud_rate || 0}%</div>` : ''}
+        <div style="background:linear-gradient(135deg,${rc}12,${rc}05);border:1px solid ${rc}30;border-radius:12px;padding:12px;text-align:center;position:relative">
+          ${i === 0 ? '<div style="position:absolute;top:6px;right:8px;font-size:0.55rem;background:rgba(239,68,68,0.15);color:#ef4444;padding:1px 6px;border-radius:10px;font-weight:600">HIGHEST RISK</div>' : ''}
+          <div style="font-size:1.6rem;margin-bottom:2px">${flag(g.country)}</div>
+          <div style="font-weight:700;font-size:0.82rem">${cname(g.country)}</div>
+          <div style="font-size:1.1rem;font-weight:800;color:${rc};margin:4px 0">${g.fraud_rate || 0}%</div>
+          <div style="font-size:0.62rem;opacity:0.5">${scans.toLocaleString()} scans · ${pct}% volume</div>
         </div>`;
   }).join('')}
     </div>
-    <div style="display:flex;gap:1rem;justify-content:center;margin-top:0.5rem;font-size:0.68rem;opacity:0.6">
-      <span>🟢 Low risk</span><span>🟡 Medium</span><span>🔴 High risk</span>
-      <span style="margin-left:0.5rem">Size = scan volume</span>
+
+    <!-- Full Country List -->
+    <div style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;overflow:hidden">
+      <!-- Header -->
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 80px;gap:8px;padding:8px 12px;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.8px;opacity:0.4;font-weight:600;border-bottom:1px solid rgba(255,255,255,0.06)">
+        <span>Country</span><span>Scans</span><span>Fraud Rate</span><span>Risk</span>
+      </div>
+      <!-- Rows -->
+      ${sorted.map(g => {
+    const scans = parseInt(g.scans) || 0;
+    const flagged = parseInt(g.flagged) || 0;
+    const fraudRate = parseFloat(g.fraud_rate) || 0;
+    const barW = Math.round((scans / maxScans) * 100);
+    const rc = riskColors[g.risk_level] || '#888';
+    const riskBg = { low: 'rgba(34,197,94,0.1)', medium: 'rgba(234,179,8,0.1)', high: 'rgba(239,68,68,0.1)', critical: 'rgba(220,38,38,0.12)' };
+    return `
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr 80px;gap:8px;padding:8px 12px;align-items:center;border-bottom:1px solid rgba(255,255,255,0.03);transition:background 0.15s" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:1.1rem">${flag(g.country)}</span>
+            <div>
+              <div style="font-weight:600;font-size:0.78rem">${cname(g.country)}</div>
+              <div style="font-size:0.6rem;opacity:0.4">${g.country}</div>
+            </div>
+          </div>
+          <div>
+            <div style="font-weight:600;font-size:0.78rem">${scans.toLocaleString()}</div>
+            <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:3px;overflow:hidden">
+              <div style="width:${barW}%;height:100%;background:${rc};border-radius:2px;opacity:0.6"></div>
+            </div>
+          </div>
+          <div>
+            <span style="font-weight:700;font-size:0.78rem;color:${rc}">${fraudRate}%</span>
+            <span style="font-size:0.62rem;opacity:0.4;margin-left:3px">(${flagged})</span>
+          </div>
+          <div>
+            <span style="font-size:0.62rem;font-weight:600;padding:2px 8px;border-radius:10px;background:${riskBg[g.risk_level] || 'rgba(255,255,255,0.05)'};color:${rc};text-transform:uppercase;letter-spacing:0.5px">${g.risk_level || 'n/a'}</span>
+          </div>
+        </div>`;
+  }).join('')}
+    </div>
+
+    <!-- Summary Footer -->
+    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:0.62rem;opacity:0.4;padding:0 4px">
+      <span>${geo.filter(g => g.risk_level === 'low').length} low · ${geo.filter(g => g.risk_level === 'medium').length} medium · ${geo.filter(g => g.risk_level === 'high').length} high risk</span>
+      <span>Total flagged: ${totalFlagged.toLocaleString()} (${totalScans > 0 ? Math.round(totalFlagged / totalScans * 100) : 0}%)</span>
     </div>
   </section>`;
 }
