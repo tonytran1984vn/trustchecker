@@ -1749,26 +1749,39 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
         const counterfeitTotal = parseInt(scanTotals?.counterfeit) || 0;
         const suspiciousTotal = parseInt(scanTotals?.suspicious) || 0;
 
-        // Revenue protected = revenue × authentication rate
+        // Authentication rate
         const authRate = totalScans > 0 ? authenticScans / totalScans : 1;
-        const protectedRevenue = Math.round(annualRevenue * authRate);
 
-        // Average value per counterfeit detection
-        const avgProductValue = annualRevenue / Math.max(parseInt(productCount?.total) || 1, 1);
-        const detectionValue = Math.round(counterfeitTotal * avgProductValue * 0.1);
+        // Per-unit value: use estimated_units_ytd if configured, else estimate from scans
+        const estimatedUnits = Number(fin.estimated_units_ytd) || totalScans || 1;
+        const avgUnitValue = annualRevenue / estimatedUnits;
+
+        // Detection Value = counterfeits caught × avg unit value × recovery multiplier
+        // Each counterfeit caught prevents ~1 unit of revenue loss
+        const detectionValue = Math.round(counterfeitTotal * avgUnitValue);
+
+        // Revenue protected = estimated fraud loss avoided
+        // fraud_rate × revenue × detection_effectiveness
+        const fraudRate = totalScans > 0 ? (counterfeitTotal + suspiciousTotal) / totalScans : 0;
+        const protectedRevenue = Math.round(annualRevenue * fraudRate * authRate);
 
         // Cost per detection
         const totalDetections = counterfeitTotal + suspiciousTotal;
-        const costPerDetection = totalDetections > 0 ? Math.round(platformCost / totalDetections) : 0;
+        const costPerDetection = totalDetections > 0 ? Math.round((platformCost / totalDetections) * 100) / 100 : 0;
 
-        // ROI = value generated / cost
-        const totalValue = detectionValue + Math.round(protectedRevenue * 0.02);
+        // Manual verification cost savings
+        const manualCostPerCheck = Number(fin.manual_cost_per_check) || 5;
+        const costSavings = Math.round(totalScans * manualCostPerCheck);
+
+        // ROI = total value generated / platform cost
+        const totalValue = detectionValue + costSavings;
         const roiMultiple = platformCost > 0 ? Math.round((totalValue / platformCost) * 10) / 10 : 0;
 
         // Months since launch
         const launchDate = org?.created_at ? new Date(org.created_at) : new Date();
         const monthsSinceLaunch = Math.max(1, Math.round((Date.now() - launchDate.getTime()) / (30.44 * 86400000)));
-        const paybackMonths = totalValue > 0 ? Math.max(1, Math.round(platformCost / (totalValue / monthsSinceLaunch))) : 0;
+        const monthlyValue = monthsSinceLaunch > 0 ? totalValue / monthsSinceLaunch : 0;
+        const paybackMonths = monthlyValue > 0 ? Math.max(1, Math.round(platformCost / monthlyValue)) : 0;
 
         res.json({
             protected_revenue: protectedRevenue,
