@@ -1389,7 +1389,7 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         const [
             productStats, scanStats30d, scanStatsPrev, fraudAlerts,
             compRecords, supplyEvents, geoBreakdown, categoryBreakdown,
-            orgInfo
+            orgInfo, dailyScanBreakdown
         ] = await Promise.all([
             // Products overview
             db.get(`SELECT COUNT(*) as total,
@@ -1447,6 +1447,17 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
                     WHERE p.org_id = $1 GROUP BY p.category ORDER BY scans DESC`, [tid]),
             // Org info + financial config
             db.get(`SELECT name, plan, settings FROM organizations WHERE id = $1`, [tid]),
+            // Daily scan breakdown (for time-decay weighting)
+            db.all(`SELECT DATE(scanned_at) as scan_date,
+                    EXTRACT(DAY FROM NOW() - scanned_at)::int as days_ago,
+                    COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
+                    COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
+                    COUNT(*) FILTER (WHERE result = 'authentic') as authentic
+                    FROM scan_events WHERE org_id = $1
+                    AND scanned_at >= NOW() - INTERVAL '30 days'
+                    GROUP BY DATE(scanned_at)
+                    ORDER BY scan_date DESC`, [tid]),
         ]);
 
         const s30 = scanStats30d || {};
@@ -1522,16 +1533,51 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             avgFine: fin.custom_avg_fine > 0 ? fin.custom_avg_fine : avgFine,
         };
 
-        // ── 1. FRAUD PROBABILITY MODEL ──
-        // P(Fraud) = (confirmed + suspicious × confirmationRate) / total
+        // ── 1. FRAUD PROBABILITY MODEL (UPGRADED: Time-Decay Weighting) ──
+        // P(Fraud) = Σ(w_i × fraud_i) / Σ(w_i × total_i)
+        // w_i = e^(-λ × days_ago),  λ = 0.05 → half-life ≈ 14 days
         const faTotal = parseInt(fa.total) || 0;
         const faCritical = parseInt(fa.critical) || 0;
         const faHigh = parseInt(fa.high) || 0;
-        const confirmedProxy = faCritical + faHigh; // Critical+High as confirmed fraud proxy
+        const confirmedProxy = faCritical + faHigh;
         const confirmationRate = faTotal > 0 ? Math.min(confirmedProxy / faTotal, 1) : 0.3;
-        const pFraud = totalScans > 0
-            ? (counterfeit30 + suspicious30 * confirmationRate) / totalScans
-            : 0;
+
+        let pFraud;
+        let trendDirection = 0; // -1 = improving, 0 = stable, +1 = worsening
+        const dailyData = dailyScanBreakdown || [];
+
+        if (dailyData.length >= 3) {
+            // Time-decay weighted P(Fraud)
+            const LAMBDA = 0.05; // decay constant (half-life ≈ 14 days)
+            let weightedFraud = 0, weightedTotal = 0;
+            for (const day of dailyData) {
+                const daysAgo = parseInt(day.days_ago) || 0;
+                const w = Math.exp(-LAMBDA * daysAgo);
+                const dayFraud = (parseInt(day.counterfeit) || 0) + (parseInt(day.suspicious) || 0) * confirmationRate;
+                weightedFraud += w * dayFraud;
+                weightedTotal += w * (parseInt(day.total) || 0);
+            }
+            pFraud = weightedTotal > 0 ? weightedFraud / weightedTotal : 0;
+
+            // Trend detection: compare recent 7d vs older 7d
+            let recent7 = { fraud: 0, total: 0 }, older7 = { fraud: 0, total: 0 };
+            for (const day of dailyData) {
+                const dAgo = parseInt(day.days_ago) || 0;
+                const f = (parseInt(day.counterfeit) || 0) + (parseInt(day.suspicious) || 0);
+                const t = parseInt(day.total) || 0;
+                if (dAgo <= 7) { recent7.fraud += f; recent7.total += t; }
+                else if (dAgo <= 14) { older7.fraud += f; older7.total += t; }
+            }
+            const recentRate = recent7.total > 0 ? recent7.fraud / recent7.total : 0;
+            const olderRate = older7.total > 0 ? older7.fraud / older7.total : 0;
+            if (recentRate > olderRate * 1.2) trendDirection = 1;    // worsening
+            else if (recentRate < olderRate * 0.8) trendDirection = -1;  // improving
+        } else {
+            // Fallback: simple ratio (insufficient daily data)
+            pFraud = totalScans > 0
+                ? (counterfeit30 + suspicious30 * confirmationRate) / totalScans
+                : 0;
+        }
 
         // ── 2. EXPECTED REVENUE LOSS (ERL) ──
         const estimatedUnits = Number(fin.estimated_units_ytd) || 0;
@@ -1547,15 +1593,20 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         const incidentEscalation = 1 - Math.exp(-preset.k * pFraud);
         const EBI = Math.round(brandValue * brandRiskFactor * incidentEscalation);
 
-        // ── 4. WEIGHTED COMPLIANCE RISK SCORE (WCRS) + RFE ──
+        // ── 4. WCRS + RFE (UPGRADED: Sigmoid Enforcement) ──
         const crTotal = parseInt(cr.total) || 0;
         const crNonCompliant = parseInt(cr.non_compliant) || 0;
         const crPartial = parseInt(cr.partial) || 0;
         const WCRS = crTotal > 0 ? (crNonCompliant * 1.0 + crPartial * 0.5) / crTotal : 0;
-        const enforcementProbability = WCRS > 0.3 ? 0.6 : WCRS > 0.15 ? 0.3 : 0.1;
+
+        // Sigmoid function: smooth transition 0.1 → 0.6 centered at WCRS=0.2
+        // S(x) = L + (U-L) / (1 + e^(-steepness × (x - midpoint)))
+        const sigmoid = (x, mid, steep, lo, hi) => lo + (hi - lo) / (1 + Math.exp(-steep * (x - mid)));
+        const enforcementProbability = sigmoid(WCRS, 0.2, 12, 0.08, 0.65);
+
         const RFE = Math.round(WCRS * preset.avgFine * enforcementProbability * crNonCompliant);
 
-        // ── 5. SUPPLY CHAIN RISK INDEX (SCRI) ──
+        // ── 5. SUPPLY CHAIN RISK INDEX (UPGRADED: Cluster-Dynamic Weights) ──
         const avgFraudScore = parseFloat(s30.avg_fraud) || 0;
         const geoRiskList = (geoBreakdown || []);
         const maxGeoFraud = geoRiskList.length > 0
@@ -1564,21 +1615,40 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         const prevFraudRate = prevTotal > 0 ? prevFlagged / prevTotal : 0;
         const currentFraudRate = totalScans > 0 ? (suspicious30 + counterfeit30) / totalScans : 0;
         const volatility = Math.abs(currentFraudRate - prevFraudRate);
+
+        // Per-cluster weight matrix (A→E)
+        const scri_weights = {
+            A: [0.25, 0.40, 0.15, 0.20], // Life-Critical: compliance dominates
+            B: [0.30, 0.35, 0.20, 0.15], // Financial: compliance + fraud
+            C: [0.40, 0.20, 0.20, 0.20], // Luxury: fraud/brand dominates
+            D: [0.35, 0.25, 0.20, 0.20], // Consumer: balanced (original)
+            E: [0.30, 0.25, 0.25, 0.20], // Industrial: geo supply chain weight
+        };
+        const sw = scri_weights[clusterId] || scri_weights.D;
         const SCRI = Math.round((
-            0.35 * pFraud +
-            0.25 * WCRS +
-            0.20 * Math.min(maxGeoFraud, 1) +
-            0.20 * Math.min(volatility * 10, 1)
+            sw[0] * pFraud +
+            sw[1] * WCRS +
+            sw[2] * Math.min(maxGeoFraud, 1) +
+            sw[3] * Math.min(volatility * 10, 1)
         ) * 1000) / 1000;
 
-        // ── 6. TOTAL CAPITAL AT RISK (TCAR) ──
-        const diversification = Math.round(0.3 * Math.min(ERL, EBI));
+        // ── 6. TOTAL CAPITAL AT RISK (UPGRADED: Correlation-Based Diversification) ──
+        // ρ(ERL, EBI) ≈ 0.7 — high correlation because same fraud driver
+        // Diversification = (ERL+EBI) × (1 - √(w1² + w2² + 2ρ·w1·w2))
+        // where w1 = ERL/(ERL+EBI), w2 = EBI/(ERL+EBI)
+        const rho_erl_ebi = 0.7; // correlation between revenue loss and brand damage
+        const erlEbiSum = ERL + EBI;
+        let diversification = 0;
+        if (erlEbiSum > 0) {
+            const w1 = ERL / erlEbiSum;
+            const w2 = EBI / erlEbiSum;
+            const portfolioVol = Math.sqrt(w1 * w1 + w2 * w2 + 2 * rho_erl_ebi * w1 * w2);
+            diversification = Math.round(erlEbiSum * (1 - portfolioVol));
+        }
         const TCAR = ERL + EBI + RFE - diversification;
 
-        // ── 7. SCENARIO MODELING ──
-        // ERQF Reference: Best=-20% fraud, Stress=+50% fraud
-        // β stays constant (industry property), trust level varies per scenario
-        // (varying β with high trust causes counterintuitive EBI reversal)
+        // ── 7. SCENARIO MODELING (UPGRADED: 5-Point Envelope) ──
+        // Best → Moderate → Base → Stress → Extreme Tail
         function calcScenario(fraudMult, trustDelta, enfMult) {
             const sPFraud = pFraud * fraudMult;
             const sERL = Math.round(revenueCovered * sPFraud * severity);
@@ -1586,15 +1656,22 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             const sBRF = Math.pow(1 - sTrust / 100, preset.beta);
             const sIE = 1 - Math.exp(-preset.k * sPFraud);
             const sEBI = Math.round(brandValue * sBRF * sIE);
-            const sEnf = Math.min(enforcementProbability * enfMult, 1);
+            const sEnf = Math.min(sigmoid(WCRS * enfMult, 0.2, 12, 0.08, 0.65), 1);
             const sRFE = Math.round(WCRS * preset.avgFine * sEnf * crNonCompliant);
-            const sDiv = Math.round(0.3 * Math.min(sERL, sEBI));
+            const sSum = sERL + sEBI;
+            let sDiv = 0;
+            if (sSum > 0) {
+                const sw1 = sERL / sSum, sw2 = sEBI / sSum;
+                sDiv = Math.round(sSum * (1 - Math.sqrt(sw1 * sw1 + sw2 * sw2 + 2 * rho_erl_ebi * sw1 * sw2)));
+            }
             return { erl: sERL, ebi: sEBI, rfe: sRFE, tcar: sERL + sEBI + sRFE - sDiv };
         }
         const scenarios = {
-            best: calcScenario(0.8, +3, 0.5),      // ERQF: -20% fraud, trust+3%, low enforcement
+            best: calcScenario(0.6, +5, 0.3),    // Optimistic: -40% fraud, trust+5%, minimal enforcement
+            moderate: calcScenario(0.8, +3, 0.5),    // Moderate: -20% fraud, trust+3%, low enforcement
             base: { erl: ERL, ebi: EBI, rfe: RFE, tcar: TCAR },
-            stress: calcScenario(1.5, -10, 2.0),    // ERQF: +50% fraud, trust-10%, high enforcement
+            stress: calcScenario(1.5, -10, 2.0),   // Stress: +50% fraud, trust-10%, high enforcement
+            extreme: calcScenario(2.5, -20, 3.0),   // Extreme Tail: +150% fraud, trust-20%, max enforcement
         };
 
         // ── PHASE 2: 95% CONFIDENCE INTERVAL (Closed-form sensitivity) ──
@@ -1785,13 +1862,19 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
                 expected_brand_impact: EBI,
                 regulatory_exposure: RFE,
                 diversification_adj: diversification,
+                diversification_rho: rho_erl_ebi,
                 fraud_probability: Math.round(pFraud * 10000) / 100,
                 coverage_ratio: Math.round(coverageRatio * 100),
                 compliance_wcrs: Math.round(WCRS * 1000) / 1000,
+                enforcement_probability: Math.round(enforcementProbability * 1000) / 1000,
+                enforcement_model: 'sigmoid',
                 supply_chain_scri: SCRI,
+                scri_cluster_weights: sw,
                 brand_risk_factor: Math.round(brandRiskFactor * 10000) / 10000,
                 incident_escalation: Math.round(incidentEscalation * 10000) / 10000,
                 risk_cluster: { id: clusterId, label: cluster.label },
+                trend_direction: trendDirection,  // -1=improving, 0=stable, 1=worsening
+                erqf_version: '2.0',
             },
             scenarios,
             products: {
@@ -1808,6 +1891,7 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
                 avg_fraud: parseFloat(s30.avg_fraud) || 0,
                 trend: prevTotal > 0 ? Math.round(((totalScans - prevTotal) / prevTotal) * 100) : 0,
                 fraud_trend: Math.round((currentFraudRate - prevFraudRate) * 10000) / 100,
+                trend_direction: trendDirection,
             },
             fraud: {
                 total: faTotal,
@@ -2408,9 +2492,11 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
                 total_scans_ytd: totalScans,
             },
             scenarios: {
-                best: perfScenario(0.8),      // ERQF: -20% fraud
+                best: perfScenario(0.6),      // Optimistic: -40% fraud
+                moderate: perfScenario(0.8),   // Moderate: -20% fraud
                 base: { tfl: TFL, idv: IDV, teb: TEB, raroi: RAROI },
-                stress: perfScenario(1.5),    // ERQF: +50% fraud
+                stress: perfScenario(1.5),    // Stress: +50% fraud
+                extreme: perfScenario(2.5),   // Extreme Tail: +150% fraud
             },
             performance: {
                 avg_speed_ms: Number(scanSpeed?.avg_ms || 0),
