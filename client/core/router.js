@@ -174,7 +174,7 @@ const PAGE_LOADERS = {
     'owner-governance': () => import('../pages/owner/owner-workspace.js?v=10.4'),
 
     // ─── Carbon Officer (Carbon Governance) ──────────────
-    'carbon-workspace': () => import('../pages/carbon/carbon-workspace.js'),
+    'carbon-workspace': () => import('../pages/carbon/carbon-workspace.js?v=10.1'),
 
     // ─── Executive (CEO Decision Intelligence) pages ─────
     'exec-overview': () => import('../pages/exec/overview.js'),
