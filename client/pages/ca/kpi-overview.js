@@ -1,257 +1,256 @@
 /**
- * Company Admin – Risk Command Dashboard
+ * Company Admin – CRCE Dashboard
  * ═══════════════════════════════════════════
- * Risk-First Architecture: 7 Layers
- * ① Risk Command Bar → ② Action Queue → ③ Health Signals
- * → ④ Risk Distribution → ⑤ Trend Intelligence → ⑥ Exposure → ⑦ Investigation
+ * Company Risk Control Effectiveness KPI Tree
+ * CRCE = 0.30×T1 + 0.30×T2 + 0.25×T3 + 0.15×T4
  */
 import { API as api } from '../../core/api.js';
 
 let _d = null;
 const $ = v => v >= 1e6 ? '$' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '$' + (v / 1e3).toFixed(1) + 'K' : '$' + v;
-const N = v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : String(v);
 
 export function renderPage() {
-  if (!_d) { load(); return '<div class="loading"><div class="spinner"></div><span style="color:var(--text-muted)">Loading Risk Command...</span></div>'; }
+  if (!_d) { load(); return '<div class="loading"><div class="spinner"></div><span style="color:var(--text-muted)">Computing CRCE...</span></div>'; }
   const d = _d;
-  const rc = d.risk_command;
-  const ca = d.critical_actions;
-  const h = d.health;
-  const ex = d.exposure;
-
-  const lvlColor = { CRITICAL: '#dc2626', HIGH: '#ef4444', ELEVATED: '#f59e0b', NORMAL: '#22c55e' };
-  const lvlBg = { CRITICAL: 'rgba(220,38,38,0.12)', HIGH: 'rgba(239,68,68,0.08)', ELEVATED: 'rgba(245,158,11,0.06)', NORMAL: 'rgba(34,197,94,0.06)' };
-  const c = lvlColor[rc.level] || '#64748b';
+  const t = d.tiers;
 
   return `<div class="page-content" style="max-width:100%;overflow:hidden;box-sizing:border-box;padding:16px">
 
-    <!-- EXECUTIVE RISK BRIEFING -->
+    <!-- CRCE HEADER -->
+    ${renderCRCE(d.crce, d.crce_history)}
+
+    <!-- EXECUTIVE BRIEFING -->
     ${renderBriefing(d)}
 
-    <!-- ① RISK COMMAND BAR -->
-    <div style="background:${lvlBg[rc.level]};border:1px solid ${c}30;border-radius:12px;padding:14px;margin-bottom:16px;box-sizing:border-box">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:center">
-        <div>
-          <div style="font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Risk Level</div>
-          <div style="font-size:1.2rem;font-weight:900;color:${c}">${rc.level === 'CRITICAL' ? '🔴' : rc.level === 'HIGH' ? '🟠' : rc.level === 'ELEVATED' ? '🟡' : '🟢'} ${rc.level}</div>
-        </div>
-        <div>
-          <div style="font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Exposure</div>
-          <div style="font-size:1.2rem;font-weight:900;color:${c}">${$(rc.exposure)}</div>
-          <div style="font-size:0.58rem;color:var(--text-muted)">${$(rc.exposure_7d)} this week</div>
-        </div>
-        <div>
-          <div style="font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Trend (WoW)</div>
-          <div style="font-size:1.2rem;font-weight:900;color:${rc.wow_trend > 0 ? '#ef4444' : rc.wow_trend < 0 ? '#22c55e' : 'var(--text-muted)'}">
-            ${rc.wow_trend > 0 ? '↑' : rc.wow_trend < 0 ? '↓' : '→'} ${rc.wow_trend > 0 ? '+' : ''}${rc.wow_trend}%
-          </div>
-        </div>
-        <div>
-          <div style="font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">SLA Breach</div>
-          <div style="font-size:1.2rem;font-weight:900;color:${rc.sla_overdue > 0 ? '#ef4444' : '#22c55e'}">${rc.sla_overdue} overdue</div>
-        </div>
+    <!-- 4 TIER BLOCKS -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      ${tierBlock('Risk Exposure Health', t.risk_exposure, '🔥', [
+    ['Critical Exposure', $(t.risk_exposure.metrics.open_critical_exposure.value), t.risk_exposure.metrics.open_critical_exposure.cases + ' cases'],
+    ['Concentration', t.risk_exposure.metrics.concentration_ratio.value + '%', t.risk_exposure.metrics.concentration_ratio.value > 50 ? '⚠ Systemic' : 'Distributed'],
+    ['7d Trend', (t.risk_exposure.metrics.trend_delta_7d.value > 0 ? '+' : '') + t.risk_exposure.metrics.trend_delta_7d.value + '%', t.risk_exposure.metrics.trend_delta_7d.value > 0 ? '↑ Increasing' : '↓ Improving'],
+    ['Fraud Density', t.risk_exposure.metrics.fraud_density.value + '/1K', 'per 1,000 txn'],
+  ])}
+      ${tierBlock('SLA & Escalation', t.sla_control, '⏱', [
+    ['Overdue Rate', t.sla_control.metrics.overdue_rate.value + '%', t.sla_control.metrics.overdue_rate.overdue + '/' + t.sla_control.metrics.overdue_rate.open + ' cases', t.sla_control.metrics.overdue_rate.value > 15],
+    ['Overdue Exposure', $(t.sla_control.metrics.overdue_exposure.value), 'at risk'],
+    ['Avg Breach', t.sla_control.metrics.avg_breach_time.value + 'h', 'past SLA'],
+    ['Critical/High', t.sla_control.metrics.critical_open.value + '/' + t.sla_control.metrics.critical_open.high_open, 'open'],
+  ])}
+      ${tierBlock('Operational Throughput', t.throughput, '⚙️', [
+    ['Resolution Rate', t.throughput.metrics.resolution_rate.value + '%', t.throughput.metrics.resolution_rate.resolved + '/' + t.throughput.metrics.resolution_rate.created + ' (7d)'],
+    ['Net Backlog', String(t.throughput.metrics.net_backlog.value), 'pending'],
+    ['Avg Resolution', t.throughput.metrics.avg_resolution_time.value + 'h', ''],
+    ['Load Variance', String(t.throughput.metrics.investigator_variance.value), t.throughput.metrics.investigator_variance.count + ' investigators'],
+  ])}
+      ${tierBlock('Investigation Quality', t.quality, '🎯', [
+    ['Speed Quality', t.quality.metrics.speed_quality.value + '/100', ''],
+    ['Consistency', t.quality.metrics.consistency.value + '/100', ''],
+    ['Total Resolved', String(t.quality.metrics.total_resolved.value), 'all-time'],
+  ], t.quality.partial)}
+    </div>
+
+    <!-- TREND CHARTS -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div class="card" style="padding:12px">
+        <div style="font-size:0.72rem;font-weight:700;margin-bottom:6px">Fraud Rate Trend (12w)</div>
+        ${renderFraudTrend(d.trends.fraud_weekly)}
+      </div>
+      <div class="card" style="padding:12px">
+        <div style="font-size:0.72rem;font-weight:700;margin-bottom:6px">Alerts: Created vs Resolved</div>
+        ${renderAlertTrend(d.trends.alert_weekly)}
       </div>
     </div>
 
-    <!-- ② CRITICAL ACTION QUEUE -->
-    <div style="margin-bottom:16px">
-      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px">⚡ Critical Actions</div>
-      <div style="display:grid;gap:5px">
-        ${actionRow('🔴', ca.critical_alerts + ' Critical Alerts', ca.sla_overdue + ' over SLA', ca.critical_alerts > 0, 'Investigate →', 'ca-incidents')}
-        ${ca.high_alerts > 0 ? actionRow('🟠', ca.high_alerts + ' High-Severity Alerts', 'Pending review', true, 'Review →', 'fraud') : ''}
-        ${ca.flagged_products > 0 ? actionRow('🟠', ca.flagged_products + ' Products flagged >5%', 'Needs investigation', true, 'Products →', 'products') : ''}
-        ${ca.region_spikes > 0 ? actionRow('🟡', ca.region_spikes + ' Region' + (ca.region_spikes > 1 ? 's' : '') + ' abnormal spike', 'Geographic anomaly', true, 'Regions →', 'ca-traceability') : ''}
-        ${ca.critical_alerts === 0 && ca.flagged_products === 0 && ca.region_spikes === 0 ? actionRow('🟢', 'No critical actions', 'Systems normal', false, 'Reports →', 'ca-reports') : ''}
-      </div>
-    </div>
-
-    <!-- ③ RISK HEALTH SNAPSHOT -->
-    <div style="margin-bottom:16px">
-      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px">🩺 Risk Signals</div>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
-        ${signal('Severity Index', h.severity_index.toFixed(1) + '/4.0', h.severity_index > 3 ? 'critical' : h.severity_index > 2 ? 'high' : h.severity_index > 1 ? 'elevated' : 'normal', 'Weighted open alert severity')}
-        ${signal('Fraud Rate', h.fraud_rate + '%', h.fraud_rate > 5 ? 'critical' : h.fraud_rate > 2 ? 'elevated' : 'normal', 'Overall detection rate')}
-        ${signal('Fraud Velocity', (h.fraud_velocity > 0 ? '+' : '') + h.fraud_velocity + '% WoW', h.fraud_velocity > 20 ? 'critical' : h.fraud_velocity > 0 ? 'elevated' : 'normal', '7d vs previous 7d')}
-        ${signal('Trust Stability', h.trust_stability + '/100', h.trust_stability < 70 ? 'critical' : h.trust_stability < 85 ? 'elevated' : 'normal', 'Lower stddev = more stable')}
-      </div>
-    </div>
-
-    <!-- ④ RISK DISTRIBUTION -->
-    <div style="margin-bottom:16px">
-      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px">📍 Risk Distribution</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="card" style="padding:14px">
-          <div style="font-size:0.78rem;font-weight:700;margin-bottom:8px">By Region</div>
-          ${d.distribution.by_region.length > 0 ? d.distribution.by_region.slice(0, 6).map(r =>
-    `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">
-              <span style="font-size:0.75rem;font-weight:600">${r.region || '—'}</span>
-              <div style="display:flex;gap:8px;align-items:center">
-                <span style="font-size:0.68rem;color:var(--text-muted)">${r.flagged}/${r.scans}</span>
-                <span style="font-size:0.72rem;font-weight:700;color:${r.fraud_rate > 5 ? '#ef4444' : r.fraud_rate > 2 ? '#f59e0b' : '#22c55e'};min-width:40px;text-align:right">${r.fraud_rate}%</span>
-              </div>
-            </div>`
-  ).join('') : '<div style="font-size:0.72rem;color:var(--text-muted)">No data</div>'}
-        </div>
-        <div class="card" style="padding:14px">
-          <div style="font-size:0.78rem;font-weight:700;margin-bottom:8px">High-Risk Products</div>
-          ${d.distribution.by_product.length > 0 ? d.distribution.by_product.slice(0, 6).map(p =>
-    `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">
-              <span style="font-size:0.72rem;font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</span>
-              <span style="font-size:0.72rem;font-weight:700;color:#ef4444">${p.flag_rate}%</span>
-            </div>`
-  ).join('') : '<div style="font-size:0.72rem;color:var(--text-muted)">No high-risk products</div>'}
-        </div>
-      </div>
-    </div>
-
-    <!-- ⑤ TREND INTELLIGENCE -->
-    <div style="margin-bottom:16px">
-      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px">📈 Trend Intelligence</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="card" style="padding:14px">
-          <div style="font-size:0.78rem;font-weight:700;margin-bottom:8px">Fraud Rate Trend</div>
-          ${renderFraudTrend(d.trends.fraud_weekly)}
-        </div>
-        <div class="card" style="padding:14px">
-          <div style="font-size:0.78rem;font-weight:700;margin-bottom:8px">Alerts: Created vs Resolved</div>
-          ${renderAlertTrend(d.trends.alert_weekly)}
-        </div>
-      </div>
-    </div>
-
-    <!-- ⑥ EXPOSURE & IMPACT -->
-    <div style="margin-bottom:16px">
-      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px">💰 Exposure & Impact</div>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
-        <div class="card" style="padding:14px;border-left:3px solid #ef4444">
-          <div style="font-size:0.68rem;color:var(--text-muted)">Counterfeit Exposure</div>
-          <div style="font-size:1.6rem;font-weight:900;color:#ef4444">${$(ex.counterfeit_value)}</div>
-          <div style="font-size:0.68rem;color:var(--text-muted)">${N(ex.counterfeit_count)} counterfeit detections</div>
-        </div>
-        <div class="card" style="padding:14px;border-left:3px solid #f59e0b">
-          <div style="font-size:0.68rem;color:var(--text-muted)">Brand Impact Index</div>
-          <div style="font-size:1.6rem;font-weight:900;color:${ex.brand_impact_index > 60 ? '#ef4444' : ex.brand_impact_index > 30 ? '#f59e0b' : '#22c55e'}">${ex.brand_impact_index}/100</div>
-          <div style="font-size:0.68rem;color:var(--text-muted)">${ex.brand_impact_index > 60 ? 'Critical' : ex.brand_impact_index > 30 ? 'Moderate' : 'Low'} brand risk</div>
-        </div>
-        <div class="card" style="padding:14px;border-left:3px solid #6366f1">
-          <div style="font-size:0.68rem;color:var(--text-muted)">High-Risk Inventory</div>
-          <div style="font-size:1.6rem;font-weight:900;color:#6366f1">${ex.high_risk_pct}%</div>
-          <div style="font-size:0.68rem;color:var(--text-muted)">${ex.high_risk_products} of ${ex.total_products} products</div>
-        </div>
-        <div class="card" style="padding:14px;border-left:3px solid #3b82f6">
-          <div style="font-size:0.68rem;color:var(--text-muted)">Capital at Risk (7d)</div>
-          <div style="font-size:1.6rem;font-weight:900;color:#3b82f6">${$(d.risk_command.exposure_7d)}</div>
-          <div style="font-size:0.68rem;color:var(--text-muted)">${d.risk_command.wow_trend > 0 ? '↑' : '↓'} ${Math.abs(d.risk_command.wow_trend)}% vs last week</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ⑦ INVESTIGATION TABLE -->
+    <!-- INVESTIGATION TABLE -->
     ${d.investigation.length > 0 ? `
     <div>
-      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px">🔍 Investigation Queue (sorted by Risk Score)</div>
-      <div class="card">
-        <div class="table-container" style="overflow-x:auto">
-          <table style="width:100%">
-            <thead><tr>
-              <th>Rank</th><th>Product</th><th>Category</th>
-              <th>Flag Rate</th><th>Risk Score</th><th>Exposure</th><th>Severity</th>
-            </tr></thead>
-            <tbody>
-              ${d.investigation.map((p, i) => {
+      <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:6px">🔍 Investigation Queue</div>
+      <div class="card"><div class="table-container" style="overflow-x:auto">
+        <table style="width:100%">
+          <thead><tr><th>#</th><th>Product</th><th>Flagged</th><th>Risk</th><th>Exposure</th><th>Severity</th></tr></thead>
+          <tbody>
+            ${d.investigation.map(p => {
     const sc = { critical: '#ef4444', high: '#f59e0b', medium: '#3b82f6', low: '#22c55e' };
-    return `
-              <tr>
-                <td style="font-weight:700;color:${i < 3 ? '#ef4444' : 'var(--text-muted)'}">${i + 1}</td>
-                <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><strong>${p.name}</strong></td>
-                <td style="font-size:0.72rem;color:var(--text-muted)">${p.category || '—'}</td>
-                <td style="font-weight:700;color:${p.flag_rate > 5 ? '#ef4444' : p.flag_rate > 2 ? '#f59e0b' : '#22c55e'}">${p.flag_rate}%</td>
-                <td><span style="font-weight:800;color:${sc[p.severity]}">${p.risk_score}</span></td>
-                <td style="font-weight:600">${$(p.exposure_est)}</td>
-                <td><span style="padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:700;color:#fff;background:${sc[p.severity]};text-transform:uppercase">${p.severity}</span></td>
-              </tr>`}).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
+    return `<tr>
+                <td style="font-weight:700;color:${p.rank <= 3 ? '#ef4444' : 'var(--text-muted)'}">${p.rank}</td>
+                <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><strong>${p.name}</strong></td>
+                <td style="color:#ef4444;font-weight:600">${p.flagged}</td>
+                <td style="font-weight:800;color:${sc[p.severity]}">${p.risk_score}</td>
+                <td style="font-weight:600">${$(p.exposure)}</td>
+                <td><span style="padding:2px 6px;border-radius:4px;font-size:0.62rem;font-weight:700;color:#fff;background:${sc[p.severity]};text-transform:uppercase">${p.severity}</span></td>
+              </tr>`;
+  }).join('')}
+          </tbody>
+        </table>
+      </div></div>
     </div>` : ''}
-
   </div>`;
 }
 
-function actionRow(emoji, title, sub, active, btn, page) {
-  const bg = active ? 'rgba(239,68,68,0.06)' : 'rgba(34,197,94,0.05)';
-  const bc = active ? '#ef4444' : '#22c55e';
+// ── CRCE Score + History ──
+function renderCRCE(score, history) {
+  const color = score >= 80 ? '#22c55e' : score >= 60 ? '#f59e0b' : score >= 40 ? '#ef4444' : '#dc2626';
+  const label = score >= 80 ? 'STRONG' : score >= 60 ? 'MODERATE' : score >= 40 ? 'WEAK' : 'CRITICAL';
+  const prev = history.length >= 2 ? history[history.length - 2].crce : score;
+  const delta = score - prev;
+
   return `
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;background:${bg};border-left:3px solid ${bc};box-sizing:border-box">
-      <span style="font-size:1rem;flex-shrink:0">${emoji}</span>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:0.8rem;color:${bc}">${title}</div>
-        <div style="font-size:0.68rem;color:var(--text-muted)">${sub}</div>
+    <div style="background:${color}08;border:1px solid ${color}25;border-radius:12px;padding:16px;margin-bottom:16px;box-sizing:border-box">
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center">
+        <div style="text-align:center">
+          <div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:4px">Company Risk Control</div>
+          <div style="font-size:2.5rem;font-weight:900;color:${color};line-height:1">${score}</div>
+          <div style="font-size:0.82rem;font-weight:800;color:${color}">${label}</div>
+          <div style="font-size:0.65rem;color:var(--text-muted);margin-top:2px">
+            ${delta > 0 ? `<span style="color:#22c55e">↑ +${delta}</span>` : delta < 0 ? `<span style="color:#ef4444">↓ ${delta}</span>` : '→ stable'} vs last week
+          </div>
+        </div>
+        <div>
+          <div style="font-size:0.6rem;color:var(--text-muted);margin-bottom:4px">CRCE History (12 weeks)</div>
+          <div style="display:flex;align-items:end;gap:2px;height:50px">
+            ${history.map(h => {
+    const hh = Math.max(3, h.crce / 100 * 45);
+    const hc = h.crce >= 80 ? '#22c55e' : h.crce >= 60 ? '#f59e0b' : '#ef4444';
+    return `<div style="flex:1;height:${hh}px;background:${hc};opacity:0.6;border-radius:2px 2px 0 0" title="CRCE: ${h.crce}"></div>`;
+  }).join('')}
+          </div>
+        </div>
       </div>
-      <a href="#" onclick="event.preventDefault();window.navigate&&window.navigate('${page}')" style="padding:5px 10px;border-radius:6px;background:${bc};color:#fff;font-weight:600;font-size:0.68rem;text-decoration:none;white-space:nowrap;flex-shrink:0">${btn}</a>
     </div>`;
 }
 
-function signal(label, value, level, desc) {
-  const c = { critical: '#ef4444', high: '#f59e0b', elevated: '#f59e0b', normal: '#22c55e' };
-  const bg = { critical: 'rgba(239,68,68,0.06)', high: 'rgba(245,158,11,0.06)', elevated: 'rgba(245,158,11,0.04)', normal: 'rgba(34,197,94,0.04)' };
-  const band = { critical: '🔴 Critical', high: '🟠 High', elevated: '🟡 Elevated', normal: '🟢 Normal' };
+// ── Tier Block ──
+function tierBlock(title, tier, emoji, metrics, partial) {
+  const score = tier.score;
+  const color = score >= 80 ? '#22c55e' : score >= 60 ? '#f59e0b' : score >= 40 ? '#ef4444' : '#dc2626';
+  const pct = Math.round(tier.weight * 100);
+
   return `
-    <div class="card" style="padding:12px;background:${bg[level]};border:1px solid ${c[level]}15;box-sizing:border-box">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <span style="font-size:0.68rem;font-weight:600;color:var(--text-muted)">${label}</span>
-        <span style="font-size:0.62rem;color:${c[level]};font-weight:600">${band[level]}</span>
+    <div class="card" style="padding:12px;border-top:3px solid ${color};box-sizing:border-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:0.75rem;font-weight:700">${emoji} ${title}</div>
+        <div style="text-align:right">
+          <span style="font-size:1.3rem;font-weight:900;color:${color}">${score}</span>
+          <span style="font-size:0.6rem;color:var(--text-muted)">/ 100</span>
+        </div>
       </div>
-      <div style="font-size:1.3rem;font-weight:800;color:${c[level]}">${value}</div>
-      <div style="font-size:0.62rem;color:var(--text-muted);margin-top:2px">${desc}</div>
+      <div style="height:4px;background:var(--border);border-radius:2px;margin-bottom:8px;overflow:hidden">
+        <div style="height:100%;width:${score}%;background:${color};border-radius:2px;transition:width 0.5s"></div>
+      </div>
+      <div style="font-size:0.58rem;color:var(--text-muted);margin-bottom:6px">Weight: ${pct}%${partial ? ' · ⚠ Partial data' : ''}</div>
+      ${metrics.map(m => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:0.7rem;color:var(--text-muted)">${m[0]}</span>
+          <div style="text-align:right">
+            <span style="font-size:0.78rem;font-weight:700;color:${m[3] ? '#ef4444' : 'var(--text-primary)'}">${m[1]}</span>
+            ${m[2] ? `<span style="font-size:0.6rem;color:var(--text-muted);margin-left:4px">${m[2]}</span>` : ''}
+          </div>
+        </div>`).join('')}
     </div>`;
 }
 
+// ── Executive Briefing ──
+function renderBriefing(d) {
+  const b = d.briefing;
+  const risks = [];
+  if (b.critical_alerts > 0) risks.push(`<strong>${b.critical_alerts}</strong> critical alerts unresolved${b.sla_overdue > 0 ? `, <span style="color:#ef4444">${b.sla_overdue} past SLA</span>` : ''}.`);
+  if (b.flagged_products > 0) risks.push(`<strong>${b.flagged_products}</strong> products flagged >5% rate.`);
+  if (b.region_spikes > 0) risks.push(`<strong>${b.region_spikes}</strong> regions with abnormal spikes.`);
+  if (risks.length === 0) risks.push('No significant risks. All systems normal.');
+
+  const severity = [];
+  if (b.trend_delta !== 0) severity.push(`Fraud trend: <strong>${b.trend_delta > 0 ? '↑ +' : '↓ '}${Math.abs(b.trend_delta)}%</strong> WoW${b.trend_delta > 20 ? ' — <span style="color:#ef4444">accelerating</span>' : b.trend_delta > 0 ? '' : ' — <span style="color:#22c55e">improving</span>'}.`);
+  if (b.exposure > 0) severity.push(`Exposure: <strong>${$(b.exposure)}</strong> at risk.`);
+  if (severity.length === 0) severity.push('Within acceptable range.');
+
+  const actions = [];
+  if (b.sla_overdue > 0) actions.push({ p: 1, t: `Resolve ${b.sla_overdue} overdue alerts`, pg: 'ca-incidents', btn: 'Incidents' });
+  else if (b.critical_alerts > 0) actions.push({ p: 1, t: `Investigate ${b.critical_alerts} critical alerts`, pg: 'ca-incidents', btn: 'Incidents' });
+  if (b.flagged_products > 0) actions.push({ p: 2, t: `Review ${b.flagged_products} flagged products`, pg: 'products', btn: 'Products' });
+  if (b.region_spikes > 0) actions.push({ p: 3, t: `Investigate ${b.region_spikes} region anomalies`, pg: 'ca-traceability', btn: 'Traceability' });
+  if (actions.length === 0) actions.push({ p: 0, t: 'No immediate actions', pg: 'ca-reports', btn: 'Reports' });
+
+  const bc = d.crce >= 80 ? '#22c55e' : d.crce >= 60 ? '#f59e0b' : '#ef4444';
+  const priC = { 1: '#ef4444', 2: '#f59e0b', 3: '#3b82f6', 0: '#22c55e' };
+
+  return `
+    <div style="margin-bottom:16px;border:1px solid ${bc}25;border-radius:10px;overflow:hidden;box-sizing:border-box">
+      <div style="background:${bc}10;padding:8px 14px;display:flex;align-items:center;gap:6px;border-bottom:1px solid ${bc}15">
+        <span style="font-size:0.9rem">📋</span>
+        <span style="font-weight:800;font-size:0.78rem;color:${bc}">EXECUTIVE RISK BRIEFING</span>
+        <span style="margin-left:auto;font-size:0.55rem;color:var(--text-muted)">${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+      </div>
+      <div style="padding:12px 14px;font-size:0.75rem;line-height:1.6">
+        <div style="margin-bottom:10px">
+          <div style="font-size:0.68rem;font-weight:800;margin-bottom:4px">1. WHAT RISKS DO WE HAVE?</div>
+          <div style="padding-left:10px;border-left:2px solid ${bc}25;color:var(--text-secondary)">
+            ${risks.map(r => `<div>→ ${r}</div>`).join('')}
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <div style="font-size:0.68rem;font-weight:800;margin-bottom:4px">2. HOW SEVERE IS IT?</div>
+          <div style="padding-left:10px;border-left:2px solid ${bc}25;color:var(--text-secondary)">
+            ${severity.map(s => `<div>→ ${s}</div>`).join('')}
+          </div>
+        </div>
+        <div>
+          <div style="font-size:0.68rem;font-weight:800;margin-bottom:6px">3. WHAT TO DO NOW?</div>
+          <div style="display:grid;gap:4px">
+            ${actions.map(a => `
+            <div style="display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:6px;background:${priC[a.p]}08;border-left:3px solid ${priC[a.p]}">
+              <span style="font-weight:800;font-size:0.75rem;color:${priC[a.p]};flex-shrink:0">[${a.p}]</span>
+              <span style="flex:1;font-size:0.72rem">${a.t}</span>
+              <a href="#" onclick="event.preventDefault();window.navigate&&window.navigate('${a.pg}')" style="padding:3px 8px;border-radius:4px;background:${priC[a.p]};color:#fff;font-weight:600;font-size:0.62rem;text-decoration:none;flex-shrink:0">→ ${a.btn}</a>
+            </div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Fraud Trend ──
 function renderFraudTrend(weeks) {
-  if (!weeks || weeks.length === 0) return '<div style="font-size:0.72rem;color:var(--text-muted)">No data</div>';
-  const mx = Math.max(...weeks.map(w => w.fraud_rate), 1);
-  const avg = weeks.reduce((s, w) => s + w.fraud_rate, 0) / weeks.length;
+  if (!weeks || !weeks.length) return '<div style="font-size:0.7rem;color:var(--text-muted)">No data</div>';
+  const mx = Math.max(...weeks.map(w => w.rate), 1);
+  const avg = weeks.reduce((s, w) => s + w.rate, 0) / weeks.length;
   return `
-    <div style="display:flex;align-items:end;gap:3px;height:80px;position:relative">
-      <div style="position:absolute;top:${Math.max(0, 80 - (avg / mx) * 75)}px;left:0;right:0;border-top:1px dashed #f59e0b;opacity:0.4"></div>
+    <div style="display:flex;align-items:end;gap:2px;height:70px;position:relative">
       ${weeks.map(w => {
-    const h = Math.max(3, (w.fraud_rate / mx) * 70);
+    const h = Math.max(3, (w.rate / mx) * 60);
+    const spike = w.rate > avg * 1.5;
     const dt = new Date(w.week);
-    const isSpike = w.fraud_rate > avg * 1.5;
-    return `
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0" title="${w.fraud_rate}% (${w.flagged}/${w.scans})">
-          <div style="font-size:0.45rem;color:${isSpike ? '#ef4444' : 'var(--text-muted)'};font-weight:${isSpike ? '700' : '400'}">${w.fraud_rate}</div>
-          <div style="width:100%;height:${h}px;background:${isSpike ? '#ef4444' : w.fraud_rate > avg ? '#f59e0b' : '#3b82f6'};border-radius:2px 2px 0 0;opacity:${isSpike ? 0.85 : 0.5}"></div>
-          <div style="font-size:0.4rem;color:var(--text-muted)">${dt.getDate()}/${dt.getMonth() + 1}</div>
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0" title="${w.rate}%">
+          <div style="font-size:0.42rem;color:${spike ? '#ef4444' : 'var(--text-muted)'}">${w.rate}</div>
+          <div style="width:100%;height:${h}px;background:${spike ? '#ef4444' : '#3b82f6'};opacity:${spike ? 0.8 : 0.4};border-radius:2px 2px 0 0"></div>
+          <div style="font-size:0.38rem;color:var(--text-muted)">${dt.getDate()}/${dt.getMonth() + 1}</div>
         </div>`;
   }).join('')}
     </div>
-    <div style="font-size:0.58rem;color:var(--text-muted);text-align:center;margin-top:4px">— avg ${avg.toFixed(1)}% · <span style="color:#ef4444">■</span> anomaly</div>`;
+    <div style="font-size:0.55rem;color:var(--text-muted);text-align:center;margin-top:3px">avg ${avg.toFixed(1)}% · <span style="color:#ef4444">■</span> anomaly</div>`;
 }
 
+// ── Alert Trend ──
 function renderAlertTrend(weeks) {
-  if (!weeks || weeks.length === 0) return '<div style="font-size:0.72rem;color:var(--text-muted)">No data</div>';
+  if (!weeks || !weeks.length) return '<div style="font-size:0.7rem;color:var(--text-muted)">No data</div>';
   const mx = Math.max(...weeks.map(w => Math.max(w.created, w.resolved)), 1);
   return `
-    <div style="display:flex;align-items:end;gap:3px;height:80px">
+    <div style="display:flex;align-items:end;gap:2px;height:70px">
       ${weeks.map(w => {
-    const ch = Math.max(2, (w.created / mx) * 70);
-    const rh = Math.max(2, (w.resolved / mx) * 70);
+    const ch = Math.max(2, (w.created / mx) * 60);
+    const rh = Math.max(2, (w.resolved / mx) * 60);
     const dt = new Date(w.week);
     const gap = w.created - w.resolved;
-    return `
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0" title="Created: ${w.created}, Resolved: ${w.resolved}">
-          <div style="font-size:0.45rem;color:${gap > 0 ? '#ef4444' : '#22c55e'}">${gap > 0 ? '+' : ''}${gap}</div>
-          <div style="width:100%;display:flex;gap:1px;align-items:end;height:70px">
-            <div style="flex:1;height:${ch}px;background:#ef4444;opacity:0.5;border-radius:2px 2px 0 0"></div>
-            <div style="flex:1;height:${rh}px;background:#22c55e;opacity:0.5;border-radius:2px 2px 0 0"></div>
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0" title="C:${w.created} R:${w.resolved}">
+          <div style="font-size:0.42rem;color:${gap > 0 ? '#ef4444' : '#22c55e'}">${gap > 0 ? '+' : ''}${gap}</div>
+          <div style="width:100%;display:flex;gap:1px;align-items:end;height:60px">
+            <div style="flex:1;height:${ch}px;background:#ef4444;opacity:0.45;border-radius:2px 2px 0 0"></div>
+            <div style="flex:1;height:${rh}px;background:#22c55e;opacity:0.45;border-radius:2px 2px 0 0"></div>
           </div>
-          <div style="font-size:0.4rem;color:var(--text-muted)">${dt.getDate()}/${dt.getMonth() + 1}</div>
+          <div style="font-size:0.38rem;color:var(--text-muted)">${dt.getDate()}/${dt.getMonth() + 1}</div>
         </div>`;
   }).join('')}
     </div>
-    <div style="font-size:0.58rem;color:var(--text-muted);text-align:center;margin-top:4px"><span style="color:#ef4444">■</span> Created · <span style="color:#22c55e">■</span> Resolved</div>`;
+    <div style="font-size:0.55rem;color:var(--text-muted);text-align:center;margin-top:3px"><span style="color:#ef4444">■</span> Created · <span style="color:#22c55e">■</span> Resolved</div>`;
 }
 
 async function load() {
@@ -259,101 +258,5 @@ async function load() {
     _d = await api.get('/tenant/governance/kpi-overview');
     const el = document.getElementById('main-content');
     if (el) el.innerHTML = renderPage();
-  } catch (e) { console.error('[Risk Dashboard]', e); }
-}
-
-function renderBriefing(d) {
-  const rc = d.risk_command;
-  const ca = d.critical_actions;
-  const h = d.health;
-  const ex = d.exposure;
-  const dist = d.distribution;
-
-  // ── Q1: What risks? ──
-  const risks = [];
-  if (ca.critical_alerts > 0)
-    risks.push(`<strong>${ca.critical_alerts} critical alert${ca.critical_alerts > 1 ? 's' : ''}</strong> unresolved${ca.sla_overdue > 0 ? `, <span style="color:#ef4444">${ca.sla_overdue} already past SLA (48h)</span>` : ''}.`);
-  if (ca.flagged_products > 0) {
-    const cats = dist.by_product.map(p => p.category).filter(Boolean);
-    const uniq = [...new Set(cats)].slice(0, 3).join(', ');
-    risks.push(`<strong>${ca.flagged_products} product${ca.flagged_products > 1 ? 's' : ''}</strong> flagged >5% fraud rate${uniq ? `, concentrated in <strong>${uniq}</strong>` : ''}.`);
-  }
-  if (ca.region_spikes > 0) {
-    const regions = dist.by_region.filter(r => r.fraud_rate > 5).map(r => r.region).slice(0, 3).join(', ');
-    risks.push(`<strong>${ca.region_spikes} region${ca.region_spikes > 1 ? 's' : ''}</strong> with abnormal fraud spike${regions ? `: <strong>${regions}</strong>` : ''}.`);
-  }
-  if (risks.length === 0)
-    risks.push('No significant risks detected. All metrics within normal thresholds.');
-
-  // ── Q2: How severe? ──
-  const severity = [];
-  if (h.fraud_velocity !== 0) {
-    const dir = h.fraud_velocity > 0 ? 'up' : 'down';
-    const urgency = h.fraud_velocity > 20 ? ' — <span style="color:#ef4444">accelerating rapidly</span>' : h.fraud_velocity > 0 ? ' — still increasing' : ' — trending positive';
-    severity.push(`Fraud rate trending <strong>${dir} ${Math.abs(h.fraud_velocity)}%</strong> week-over-week${urgency}.`);
-  }
-  if (rc.exposure > 0) {
-    const proj = Math.round(rc.exposure * (1 + Math.max(0, h.fraud_velocity) / 100));
-    severity.push(`Estimated exposure: <strong>${$(rc.exposure)}</strong>.${h.fraud_velocity > 0 ? ` If unaddressed, could reach <strong>${$(proj)}</strong> next week.` : ''}`);
-  }
-  if (ex.brand_impact_index > 30) {
-    const level = ex.brand_impact_index > 60 ? 'Critical' : 'Moderate';
-    severity.push(`Brand Impact Index: <strong>${ex.brand_impact_index}/100</strong> — <span style="color:${ex.brand_impact_index > 60 ? '#ef4444' : '#f59e0b'}">${level}</span>. ${ex.brand_impact_index > 60 ? 'Immediate containment recommended.' : 'Monitor closely.'}`);
-  }
-  if (severity.length === 0)
-    severity.push('Severity levels are within acceptable range. No escalation needed.');
-
-  // ── Q3: What to do? ──
-  const actions = [];
-  if (ca.sla_overdue > 0)
-    actions.push({ pri: 1, text: `Resolve ${ca.sla_overdue} overdue alerts past SLA`, page: 'ca-incidents', btn: 'Open Incidents' });
-  if (ca.critical_alerts > 0 && ca.sla_overdue === 0)
-    actions.push({ pri: 1, text: `Investigate ${ca.critical_alerts} critical alerts`, page: 'ca-incidents', btn: 'Open Incidents' });
-  if (ca.flagged_products > 0)
-    actions.push({ pri: 2, text: `Review ${ca.flagged_products} products with >5% flag rate`, page: 'products', btn: 'Products' });
-  if (ca.region_spikes > 0)
-    actions.push({ pri: 3, text: `Investigate ${ca.region_spikes} region${ca.region_spikes > 1 ? 's' : ''} with anomalies`, page: 'ca-traceability', btn: 'Traceability' });
-  if (h.fraud_velocity > 20)
-    actions.push({ pri: 2, text: 'Tighten risk rules — fraud accelerating', page: 'ca-risk-rules', btn: 'Risk Rules' });
-  if (actions.length === 0)
-    actions.push({ pri: 0, text: 'No immediate actions required — review reports for trends', page: 'ca-reports', btn: 'Reports' });
-
-  const borderColor = rc.level === 'CRITICAL' ? '#dc2626' : rc.level === 'HIGH' ? '#ef4444' : rc.level === 'ELEVATED' ? '#f59e0b' : '#22c55e';
-
-  return `
-    <div style="margin-bottom:16px;border:1px solid ${borderColor}25;border-radius:12px;overflow:hidden">
-      <div style="background:${borderColor}12;padding:10px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid ${borderColor}20">
-        <span style="font-size:1.1rem">📋</span>
-        <span style="font-weight:800;font-size:0.88rem;color:${borderColor}">EXECUTIVE RISK BRIEFING</span>
-        <span style="margin-left:auto;font-size:0.62rem;color:var(--text-muted)">Auto-generated · ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-      </div>
-      <div style="padding:14px 16px">
-
-        <div style="margin-bottom:14px">
-          <div style="font-size:0.72rem;font-weight:800;color:var(--text-primary);margin-bottom:6px">1. WHAT RISKS DO WE HAVE?</div>
-          <div style="font-size:0.78rem;color:var(--text-secondary);line-height:1.6;padding-left:12px;border-left:2px solid ${borderColor}30">
-            ${risks.map(r => `<div style="margin-bottom:3px">→ ${r}</div>`).join('')}
-          </div>
-        </div>
-
-        <div style="margin-bottom:14px">
-          <div style="font-size:0.72rem;font-weight:800;color:var(--text-primary);margin-bottom:6px">2. HOW SEVERE IS IT?</div>
-          <div style="font-size:0.78rem;color:var(--text-secondary);line-height:1.6;padding-left:12px;border-left:2px solid ${borderColor}30">
-            ${severity.map(s => `<div style="margin-bottom:3px">→ ${s}</div>`).join('')}
-          </div>
-        </div>
-
-        <div>
-          <div style="font-size:0.72rem;font-weight:800;color:var(--text-primary);margin-bottom:8px">3. WHAT TO DO NOW?</div>
-          <div style="display:grid;gap:5px">
-            ${actions.map(a => `
-            <div style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:8px;background:${a.pri === 1 ? 'rgba(239,68,68,0.06)' : a.pri === 2 ? 'rgba(245,158,11,0.05)' : a.pri === 3 ? 'rgba(59,130,246,0.05)' : 'rgba(34,197,94,0.05)'};border-left:3px solid ${a.pri === 1 ? '#ef4444' : a.pri === 2 ? '#f59e0b' : a.pri === 3 ? '#3b82f6' : '#22c55e'}">
-              <span style="font-weight:800;font-size:0.82rem;color:${a.pri === 1 ? '#ef4444' : a.pri === 2 ? '#f59e0b' : '#3b82f6'};flex-shrink:0">[${a.pri}]</span>
-              <span style="flex:1;font-size:0.78rem;color:var(--text-secondary)">${a.text}</span>
-              <a href="#" onclick="event.preventDefault();window.navigate&&window.navigate('${a.page}')" style="padding:4px 10px;border-radius:5px;background:${a.pri === 1 ? '#ef4444' : a.pri === 2 ? '#f59e0b' : '#3b82f6'};color:#fff;font-weight:600;font-size:0.68rem;text-decoration:none;white-space:nowrap;flex-shrink:0">→ ${a.btn}</a>
-            </div>`).join('')}
-          </div>
-        </div>
-      </div>
-    </div>`;
+  } catch (e) { console.error('[CRCE]', e); }
 }
