@@ -173,6 +173,9 @@ const PAGE_LOADERS = {
     // ─── Org Owner (Strategic Governance Authority) ───────
     'owner-governance': () => import('../pages/owner/owner-workspace.js?v=10.4'),
 
+    // ─── Carbon Officer (Carbon Governance) ──────────────
+    'carbon-workspace': () => import('../pages/carbon/carbon-workspace.js'),
+
     // ─── Executive (CEO Decision Intelligence) pages ─────
     'exec-overview': () => import('../pages/exec/overview.js'),
     'exec-alerts': () => import('../pages/exec/alerts.js'),
@@ -704,7 +707,7 @@ function _defaultPageForRole() {
         compliance_officer: 'compliance-dashboard', developer: 'it-authentication',
         ggc_member: 'trustgraph', risk_committee: 'risk-dashboard',
         ivu_validator: 'risk-dashboard', scm_analyst: 'ops-dashboard',
-        blockchain_operator: 'dashboard', carbon_officer: 'scm-carbon',
+        blockchain_operator: 'dashboard', carbon_officer: 'carbon-workspace',
         auditor: 'compliance-dashboard',
     };
     return map[role] || 'dashboard';

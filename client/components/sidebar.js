@@ -449,7 +449,7 @@ function switchRole(role) {
     ivu_validator: 'mrmf',
     scm_analyst: 'dashboard',
     blockchain_operator: 'identity',
-    carbon_officer: 'scm-carbon',
+    carbon_officer: 'carbon-workspace',
     auditor: 'audit-view',
   };
   const dest = defaultPages[role] || 'dashboard';
@@ -509,9 +509,13 @@ function isIT() {
   return getUserRole() === 'developer';
 }
 
+function isCarbon() {
+  return getUserRole() === 'carbon_officer';
+}
+
 function getRoleConfig() {
   const role = getUserRole();
-  if (role === 'super_admin' || role === 'executive' || role === 'ops_manager' || role === 'risk_officer' || role === 'compliance_officer' || role === 'developer' || role === 'org_owner' || role === 'security_officer') return null;
+  if (role === 'super_admin' || role === 'executive' || role === 'ops_manager' || role === 'risk_officer' || role === 'compliance_officer' || role === 'developer' || role === 'org_owner' || role === 'security_officer' || role === 'carbon_officer') return null;
   const config = ROLE_VISIBILITY[role];
   if (config === undefined) return ROLE_VISIBILITY.operator;
   return config;
@@ -1196,6 +1200,67 @@ function renderSuperAdminSidebar() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// CARBON SIDEBAR (Carbon Officer Workspace)
+// ═══════════════════════════════════════════════════════════════
+
+function renderCarbonSidebar() {
+  const brandName = State.branding?.app_name || 'TrustChecker';
+  const orgName = State.org?.name || '';
+  const versionLabel = `v10.0 • Carbon`;
+
+  const carbonNav = [
+    { id: 'carbon-workspace', icon: icon('grid', 16), label: 'Carbon Overview', hash: 'dashboard' },
+    { id: 'carbon-workspace', icon: icon('factory', 16), label: 'Emission Tracker', hash: 'emissions' },
+    { id: 'carbon-workspace', icon: icon('tag', 16), label: 'Credit Lifecycle', hash: 'credits' },
+    { id: 'carbon-workspace', icon: icon('scroll', 16), label: 'Carbon Passports', hash: 'passport' },
+    { id: 'carbon-workspace', icon: icon('shield', 16), label: 'ESG & Compliance', hash: 'compliance' },
+    { id: 'carbon-workspace', icon: icon('barChart', 16), label: 'Industry Benchmark', hash: 'benchmark' },
+  ];
+
+  const navHtml = carbonNav.map(n => {
+    const currentTab = window._activeCarbonTab || 'dashboard';
+    const active = State.page === n.id && n.hash === currentTab;
+    return `
+      <div class="nav-item ${active ? 'active' : ''}" data-carbon-tab="${n.hash}"
+        onclick="document.querySelectorAll('[data-carbon-tab]').forEach(e=>e.classList.remove('active'));this.classList.add('active');window._activeCarbonTab='${n.hash}';window._carbonOfficerTab&&window._carbonOfficerTab('${n.hash}')"
+        style="cursor:pointer">
+        <span class="nav-icon">${n.icon}</span>
+        <span>${n.label}</span>
+      </div>`;
+  }).join('');
+
+  return `
+    <nav class="sidebar sidebar-ca" role="navigation" aria-label="Carbon navigation"
+      style="--sidebar-accent:#059669">
+      <div class="sidebar-header">
+        <div class="sidebar-logo" onclick="window._carbonOfficerTab&&window._carbonOfficerTab('dashboard');document.querySelectorAll('[data-carbon-tab]').forEach(e=>e.classList.remove('active'));document.querySelector('[data-carbon-tab=dashboard]')?.classList.add('active')" style="cursor:pointer">
+          <div class="logo-icon" style="background:#059669;color:#fff;border-radius:8px;padding:4px">${icon('globe', 22)}</div>
+          <div>
+            <div class="logo-text">${brandName}</div>
+            <div class="logo-version">${versionLabel}</div>
+          </div>
+        </div>
+        ${orgName ? `<div class="sidebar-org"><span style="font-size:11px;color:var(--text-secondary)">${icon('building', 12)} ${orgName}</span></div>` : ''}
+      </div>
+      <div class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-label" style="color:#059669">🌱 CARBON GOVERNANCE</div>
+          ${navHtml}
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="user-avatar" style="background:#059669;color:#fff">${(State.user?.email || 'C')[0].toUpperCase()}</div>
+        <div class="user-info">
+          <div class="user-name">${State.user?.email || 'User'}</div>
+          <div class="user-role"><span class="role-badge" style="background:#05966915;color:#059669;border:1px solid #05966940">carbon_officer</span></div>
+        </div>
+        <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
+      </div>
+    </nav>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // TENANT SIDEBAR (Company Admin, ops, risk, etc.)
 // ═══════════════════════════════════════════════════════════════
 
@@ -1385,6 +1450,7 @@ export function renderSidebar() {
   else if (isRisk()) html = renderRiskSidebar();
   else if (isCompliance()) html = renderComplianceSidebar();
   else if (isIT()) html = renderITSidebar();
+  else if (isCarbon()) html = renderCarbonSidebar();
   else html = renderTenantSidebar();
 
   // Inject role switcher after sidebar-header (if multi-role)
@@ -1414,7 +1480,7 @@ function goHome() {
     ivu_validator: 'mrmf',
     scm_analyst: 'dashboard',
     blockchain_operator: 'identity',
-    carbon_officer: 'scm-carbon',
+    carbon_officer: 'carbon-workspace',
     auditor: 'audit-view',
   };
   const role = State.user?.active_role || State.user?.role || 'admin';
