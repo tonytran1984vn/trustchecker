@@ -25,6 +25,9 @@ export function renderPage() {
 
   return `<div style="max-width:100%;overflow:hidden;box-sizing:border-box">
 
+    <!-- EXECUTIVE RISK BRIEFING -->
+    ${renderBriefing(d)}
+
     <!-- ① RISK COMMAND BAR -->
     <div style="background:${lvlBg[rc.level]};border:1px solid ${c}30;border-radius:12px;padding:16px;margin-bottom:16px">
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center">
@@ -257,4 +260,100 @@ async function load() {
     const el = document.getElementById('main-content');
     if (el) el.innerHTML = renderPage();
   } catch (e) { console.error('[Risk Dashboard]', e); }
+}
+
+function renderBriefing(d) {
+  const rc = d.risk_command;
+  const ca = d.critical_actions;
+  const h = d.health;
+  const ex = d.exposure;
+  const dist = d.distribution;
+
+  // ── Q1: What risks? ──
+  const risks = [];
+  if (ca.critical_alerts > 0)
+    risks.push(`<strong>${ca.critical_alerts} critical alert${ca.critical_alerts > 1 ? 's' : ''}</strong> unresolved${ca.sla_overdue > 0 ? `, <span style="color:#ef4444">${ca.sla_overdue} already past SLA (48h)</span>` : ''}.`);
+  if (ca.flagged_products > 0) {
+    const cats = dist.by_product.map(p => p.category).filter(Boolean);
+    const uniq = [...new Set(cats)].slice(0, 3).join(', ');
+    risks.push(`<strong>${ca.flagged_products} product${ca.flagged_products > 1 ? 's' : ''}</strong> flagged >5% fraud rate${uniq ? `, concentrated in <strong>${uniq}</strong>` : ''}.`);
+  }
+  if (ca.region_spikes > 0) {
+    const regions = dist.by_region.filter(r => r.fraud_rate > 5).map(r => r.region).slice(0, 3).join(', ');
+    risks.push(`<strong>${ca.region_spikes} region${ca.region_spikes > 1 ? 's' : ''}</strong> with abnormal fraud spike${regions ? `: <strong>${regions}</strong>` : ''}.`);
+  }
+  if (risks.length === 0)
+    risks.push('No significant risks detected. All metrics within normal thresholds.');
+
+  // ── Q2: How severe? ──
+  const severity = [];
+  if (h.fraud_velocity !== 0) {
+    const dir = h.fraud_velocity > 0 ? 'up' : 'down';
+    const urgency = h.fraud_velocity > 20 ? ' — <span style="color:#ef4444">accelerating rapidly</span>' : h.fraud_velocity > 0 ? ' — still increasing' : ' — trending positive';
+    severity.push(`Fraud rate trending <strong>${dir} ${Math.abs(h.fraud_velocity)}%</strong> week-over-week${urgency}.`);
+  }
+  if (rc.exposure > 0) {
+    const proj = Math.round(rc.exposure * (1 + Math.max(0, h.fraud_velocity) / 100));
+    severity.push(`Estimated exposure: <strong>${$(rc.exposure)}</strong>.${h.fraud_velocity > 0 ? ` If unaddressed, could reach <strong>${$(proj)}</strong> next week.` : ''}`);
+  }
+  if (ex.brand_impact_index > 30) {
+    const level = ex.brand_impact_index > 60 ? 'Critical' : 'Moderate';
+    severity.push(`Brand Impact Index: <strong>${ex.brand_impact_index}/100</strong> — <span style="color:${ex.brand_impact_index > 60 ? '#ef4444' : '#f59e0b'}">${level}</span>. ${ex.brand_impact_index > 60 ? 'Immediate containment recommended.' : 'Monitor closely.'}`);
+  }
+  if (severity.length === 0)
+    severity.push('Severity levels are within acceptable range. No escalation needed.');
+
+  // ── Q3: What to do? ──
+  const actions = [];
+  if (ca.sla_overdue > 0)
+    actions.push({ pri: 1, text: `Resolve ${ca.sla_overdue} overdue alerts past SLA`, page: 'ca-incidents', btn: 'Open Incidents' });
+  if (ca.critical_alerts > 0 && ca.sla_overdue === 0)
+    actions.push({ pri: 1, text: `Investigate ${ca.critical_alerts} critical alerts`, page: 'ca-incidents', btn: 'Open Incidents' });
+  if (ca.flagged_products > 0)
+    actions.push({ pri: 2, text: `Review ${ca.flagged_products} products with >5% flag rate`, page: 'products', btn: 'Products' });
+  if (ca.region_spikes > 0)
+    actions.push({ pri: 3, text: `Investigate ${ca.region_spikes} region${ca.region_spikes > 1 ? 's' : ''} with anomalies`, page: 'ca-traceability', btn: 'Traceability' });
+  if (h.fraud_velocity > 20)
+    actions.push({ pri: 2, text: 'Tighten risk rules — fraud accelerating', page: 'ca-risk-rules', btn: 'Risk Rules' });
+  if (actions.length === 0)
+    actions.push({ pri: 0, text: 'No immediate actions required — review reports for trends', page: 'ca-reports', btn: 'Reports' });
+
+  const borderColor = rc.level === 'CRITICAL' ? '#dc2626' : rc.level === 'HIGH' ? '#ef4444' : rc.level === 'ELEVATED' ? '#f59e0b' : '#22c55e';
+
+  return `
+    <div style="margin-bottom:16px;border:1px solid ${borderColor}25;border-radius:12px;overflow:hidden">
+      <div style="background:${borderColor}12;padding:10px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid ${borderColor}20">
+        <span style="font-size:1.1rem">📋</span>
+        <span style="font-weight:800;font-size:0.88rem;color:${borderColor}">EXECUTIVE RISK BRIEFING</span>
+        <span style="margin-left:auto;font-size:0.62rem;color:var(--text-muted)">Auto-generated · ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+      </div>
+      <div style="padding:14px 16px">
+
+        <div style="margin-bottom:14px">
+          <div style="font-size:0.72rem;font-weight:800;color:var(--text-primary);margin-bottom:6px">1. ĐANG CÓ RỦI RO GÌ?</div>
+          <div style="font-size:0.78rem;color:var(--text-secondary);line-height:1.6;padding-left:12px;border-left:2px solid ${borderColor}30">
+            ${risks.map(r => `<div style="margin-bottom:3px">→ ${r}</div>`).join('')}
+          </div>
+        </div>
+
+        <div style="margin-bottom:14px">
+          <div style="font-size:0.72rem;font-weight:800;color:var(--text-primary);margin-bottom:6px">2. NGHIÊM TRỌNG ĐẾN ĐÂU?</div>
+          <div style="font-size:0.78rem;color:var(--text-secondary);line-height:1.6;padding-left:12px;border-left:2px solid ${borderColor}30">
+            ${severity.map(s => `<div style="margin-bottom:3px">→ ${s}</div>`).join('')}
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size:0.72rem;font-weight:800;color:var(--text-primary);margin-bottom:8px">3. PHẢI LÀM GÌ NGAY?</div>
+          <div style="display:grid;gap:5px">
+            ${actions.map(a => `
+            <div style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:8px;background:${a.pri === 1 ? 'rgba(239,68,68,0.06)' : a.pri === 2 ? 'rgba(245,158,11,0.05)' : a.pri === 3 ? 'rgba(59,130,246,0.05)' : 'rgba(34,197,94,0.05)'};border-left:3px solid ${a.pri === 1 ? '#ef4444' : a.pri === 2 ? '#f59e0b' : a.pri === 3 ? '#3b82f6' : '#22c55e'}">
+              <span style="font-weight:800;font-size:0.82rem;color:${a.pri === 1 ? '#ef4444' : a.pri === 2 ? '#f59e0b' : '#3b82f6'};flex-shrink:0">[${a.pri}]</span>
+              <span style="flex:1;font-size:0.78rem;color:var(--text-secondary)">${a.text}</span>
+              <a href="#" onclick="event.preventDefault();window.navigate&&window.navigate('${a.page}')" style="padding:4px 10px;border-radius:5px;background:${a.pri === 1 ? '#ef4444' : a.pri === 2 ? '#f59e0b' : '#3b82f6'};color:#fff;font-weight:600;font-size:0.68rem;text-decoration:none;white-space:nowrap;flex-shrink:0">→ ${a.btn}</a>
+            </div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`;
 }
