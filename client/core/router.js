@@ -169,6 +169,10 @@ const PAGE_LOADERS = {
 
     // ─── Executive (CEO Decision Intelligence) pages ─────
     'exec-overview': () => import('../pages/exec/overview.js'),
+    'exec-alerts': () => import('../pages/exec/overview.js'),
+    'exec-trends': () => import('../pages/exec/overview.js'),
+    'exec-heatmap': () => import('../pages/exec/overview.js'),
+    'exec-roi': () => import('../pages/exec/overview.js'),
     'exec-risk-intel': () => import('../pages/exec/risk-intel.js'),
     'exec-market': () => import('../pages/exec/market.js'),
     'exec-performance': () => import('../pages/exec/performance.js'),
