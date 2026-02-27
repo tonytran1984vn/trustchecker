@@ -1662,6 +1662,111 @@ router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
     }
 });
 
+// ─── CCS: Geographic Detail (Deep Heatmap Page) ─────────────────────────────────
+router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        // Per-country summary (30 days)
+        const countries = await db.all(`
+            SELECT country, COUNT(*) as scans,
+                   COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged,
+                   COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
+                   COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
+                   ROUND(AVG(trust_score)::numeric, 1) as avg_trust,
+                   ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud
+            FROM scan_events WHERE org_id = $1
+            AND scanned_at >= NOW() - INTERVAL '30 days'
+            AND country IS NOT NULL AND country != ''
+            GROUP BY country
+            ORDER BY flagged DESC`, [tid]);
+
+        const result = {
+            countries: countries.map(c => {
+                const scans = parseInt(c.scans) || 0;
+                const flagged = parseInt(c.flagged) || 0;
+                const fraudRate = scans > 0 ? Math.round(flagged / scans * 10000) / 100 : 0;
+                return {
+                    country: c.country, scans, flagged,
+                    counterfeit: parseInt(c.counterfeit) || 0,
+                    suspicious: parseInt(c.suspicious) || 0,
+                    fraud_rate: fraudRate,
+                    avg_trust: parseFloat(c.avg_trust) || 0,
+                    risk_level: fraudRate > 10 ? 'critical' : fraudRate > 5 ? 'high' : fraudRate > 2 ? 'medium' : 'low',
+                };
+            }),
+        };
+
+        // Per-country weekly trend (12 weeks, top 5 countries)
+        const topCountries = result.countries.slice(0, 5).map(c => c.country);
+        if (topCountries.length > 0) {
+            const weeklyGeo = await db.all(`
+                SELECT country, DATE_TRUNC('week', scanned_at)::date as week,
+                       COUNT(*) as scans,
+                       COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged
+                FROM scan_events WHERE org_id = $1
+                AND scanned_at >= NOW() - INTERVAL '12 weeks'
+                AND country = ANY($2)
+                GROUP BY country, DATE_TRUNC('week', scanned_at)
+                ORDER BY week ASC`, [tid, topCountries]);
+
+            const countryTrends = {};
+            weeklyGeo.forEach(r => {
+                if (!countryTrends[r.country]) countryTrends[r.country] = [];
+                const scans = parseInt(r.scans) || 0;
+                const flagged = parseInt(r.flagged) || 0;
+                countryTrends[r.country].push({
+                    week: r.week, scans, flagged,
+                    fraud_rate: scans > 0 ? Math.round(flagged / scans * 10000) / 100 : 0,
+                });
+            });
+            result.country_trends = countryTrends;
+        }
+
+        // Top flagged products by country
+        const topProductsByCountry = await db.all(`
+            SELECT se.country, p.name as product, COUNT(*) as flags,
+                   COUNT(*) FILTER (WHERE se.result = 'counterfeit') as counterfeit
+            FROM scan_events se
+            JOIN products p ON p.id = se.product_id
+            WHERE p.org_id = $1 AND se.result IN ('suspicious','counterfeit')
+            AND se.scanned_at >= NOW() - INTERVAL '30 days'
+            AND se.country IS NOT NULL AND se.country != ''
+            GROUP BY se.country, p.name
+            ORDER BY flags DESC
+            LIMIT 20`, [tid]);
+
+        result.top_products_by_country = topProductsByCountry.map(r => ({
+            country: r.country, product: r.product,
+            flags: parseInt(r.flags) || 0,
+            counterfeit: parseInt(r.counterfeit) || 0,
+        }));
+
+        // Monthly geo progression
+        const monthlyGeo = await db.all(`
+            SELECT DATE_TRUNC('month', scanned_at)::date as month,
+                   COUNT(DISTINCT country) as countries,
+                   COUNT(*) as scans,
+                   COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged
+            FROM scan_events WHERE org_id = $1
+            AND country IS NOT NULL AND country != ''
+            GROUP BY DATE_TRUNC('month', scanned_at)
+            ORDER BY month ASC`, [tid]);
+
+        result.monthly_geo = monthlyGeo.map(m => ({
+            month: m.month,
+            countries: parseInt(m.countries) || 0,
+            scans: parseInt(m.scans) || 0,
+            flagged: parseInt(m.flagged) || 0,
+        }));
+
+        res.json(result);
+    } catch (err) {
+        console.error('[CCS] Geo detail error:', err);
+        res.status(500).json({ error: 'Failed to load geo detail' });
+    }
+});
+
 // ─── CCS: Smart Alert Feed ──────────────────────────────────────────────────────
 router.get('/owner/ccs/alerts', requireExecutiveAccess(), async (req, res) => {
     try {
@@ -1831,7 +1936,7 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
         const monthlyValue = monthsSinceLaunch > 0 ? totalValue / monthsSinceLaunch : 0;
         const paybackMonths = monthlyValue > 0 ? Math.max(1, Math.round(platformCost / monthlyValue)) : 0;
 
-        res.json({
+        const result = {
             protected_revenue: protectedRevenue,
             authentication_rate: Math.round(authRate * 10000) / 100,
             counterfeits_detected: counterfeitTotal,
@@ -1844,7 +1949,90 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
             total_scans: totalScans,
             avg_detection_days: parseFloat(firstDetection?.avg_days) || 0,
             months_active: monthsSinceLaunch,
-        });
+            cost_savings: costSavings,
+            manual_cost_per_check: manualCostPerCheck,
+            avg_unit_value: Math.round(avgUnitValue * 100) / 100,
+        };
+
+        // Full detail: monthly progression + category breakdown
+        if (req.query.detail === 'full') {
+            // Monthly ROI progression
+            const monthly = await db.all(`
+                SELECT DATE_TRUNC('month', scanned_at)::date as month,
+                       COUNT(*) as total,
+                       COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
+                       COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
+                       COUNT(*) FILTER (WHERE result = 'authentic') as authentic
+                FROM scan_events WHERE org_id = $1
+                GROUP BY DATE_TRUNC('month', scanned_at)
+                ORDER BY month ASC`, [tid]);
+
+            result.monthly = monthly.map(m => {
+                const mScans = parseInt(m.total) || 0;
+                const mCounterfeit = parseInt(m.counterfeit) || 0;
+                const mSuspicious = parseInt(m.suspicious) || 0;
+                const mDetections = mCounterfeit + mSuspicious;
+                const mDetectionVal = Math.round(mCounterfeit * avgUnitValue);
+                const mCostSave = Math.round(mScans * manualCostPerCheck);
+                const mTotal = mDetectionVal + mCostSave;
+                return {
+                    month: m.month,
+                    scans: mScans,
+                    counterfeit: mCounterfeit,
+                    suspicious: mSuspicious,
+                    authentic: parseInt(m.authentic) || 0,
+                    detection_value: mDetectionVal,
+                    cost_savings: mCostSave,
+                    total_value: mTotal,
+                    roi: platformCost > 0 ? Math.round(mTotal / platformCost * 120 * 10) / 10 : 0,
+                    cumulative_value: 0, // filled below
+                };
+            });
+
+            // Cumulative value
+            let cum = 0;
+            result.monthly.forEach(m => { cum += m.total_value; m.cumulative_value = cum; });
+
+            // Per-category detection breakdown
+            const catBreakdown = await db.all(`
+                SELECT p.category, COUNT(*) as total,
+                       COUNT(*) FILTER (WHERE se.result = 'counterfeit') as counterfeit,
+                       COUNT(*) FILTER (WHERE se.result = 'suspicious') as suspicious
+                FROM scan_events se
+                JOIN products p ON p.id = se.product_id
+                WHERE p.org_id = $1 AND se.result IN ('counterfeit','suspicious')
+                GROUP BY p.category
+                ORDER BY counterfeit DESC`, [tid]);
+
+            result.categories = catBreakdown.map(c => ({
+                category: c.category || 'Uncategorized',
+                total_flags: parseInt(c.total) || 0,
+                counterfeit: parseInt(c.counterfeit) || 0,
+                suspicious: parseInt(c.suspicious) || 0,
+                detection_value: Math.round((parseInt(c.counterfeit) || 0) * avgUnitValue),
+            }));
+
+            // Top products by detection value
+            const topProducts = await db.all(`
+                SELECT p.name, p.category, COUNT(*) as detections,
+                       COUNT(*) FILTER (WHERE se.result = 'counterfeit') as counterfeit
+                FROM scan_events se
+                JOIN products p ON p.id = se.product_id
+                WHERE p.org_id = $1 AND se.result IN ('counterfeit','suspicious')
+                GROUP BY p.id, p.name, p.category
+                ORDER BY counterfeit DESC
+                LIMIT 10`, [tid]);
+
+            result.top_products = topProducts.map(p => ({
+                name: p.name,
+                category: p.category,
+                detections: parseInt(p.detections) || 0,
+                counterfeit: parseInt(p.counterfeit) || 0,
+                value: Math.round((parseInt(p.counterfeit) || 0) * avgUnitValue),
+            }));
+        }
+
+        res.json(result);
     } catch (err) {
         console.error('[CCS] ROI error:', err);
         res.status(500).json({ error: 'Failed to calculate ROI' });
