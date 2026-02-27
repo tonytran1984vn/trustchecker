@@ -1216,11 +1216,11 @@ function renderOrgOwnerSidebar() {
   const ownerNav = [
     { id: 'owner-governance', icon: icon('grid', 16), label: 'Governance Overview', hash: 'dashboard' },
     { id: 'owner-governance', icon: icon('shield', 16), label: 'Ownership & Authority', hash: 'authority' },
+    { id: 'owner-governance', icon: icon('users', 16), label: 'Team & People', hash: 'team' },
     { id: 'owner-governance', icon: icon('eye', 16), label: 'Privilege & Access', hash: 'privilege' },
-    { id: 'owner-governance', icon: icon('alertTriangle', 16), label: 'Risk & Integrity', hash: 'risk' },
+    { id: 'owner-governance', icon: icon('alertTriangle', 16), label: 'Risk & Activity', hash: 'risk' },
     { id: 'owner-governance', icon: icon('scroll', 16), label: 'Compliance & Legal', hash: 'compliance' },
     { id: 'owner-governance', icon: icon('creditCard', 16), label: 'Financial & Plan', hash: 'financial' },
-    { id: 'owner-governance', icon: icon('clock', 16), label: 'Activity Log', hash: 'govlog' },
     { id: 'owner-governance', icon: icon('zap', 16), label: 'Emergency Controls', hash: 'emergency' },
   ];
 
