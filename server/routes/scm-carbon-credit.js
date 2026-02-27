@@ -228,9 +228,11 @@ router.post('/simulate', async (req, res) => {
 // ─── GET /registry — Credit ledger ──────────────────────────────────────────
 router.get('/registry', cacheMiddleware(30), async (req, res) => {
     try {
+        const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
         const { status, vintage, limit = 50 } = req.query;
         let q = 'SELECT * FROM carbon_credits';
         const conds = []; const params = [];
+        if (tenantId) { conds.push('tenant_id = ?'); params.push(tenantId); }
         if (status) { conds.push('status = ?'); params.push(status); }
         if (vintage) { conds.push('vintage_year = ?'); params.push(parseInt(vintage)); }
         if (conds.length) q += ' WHERE ' + conds.join(' AND ');
@@ -249,7 +251,10 @@ router.get('/registry', cacheMiddleware(30), async (req, res) => {
 // ─── GET /registry/:creditId — Single credit ───────────────────────────────
 router.get('/registry/:creditId', async (req, res) => {
     try {
-        const credit = await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ?').get(req.params.creditId);
+        const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
+        const credit = tenantId
+            ? await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ? AND tenant_id = ?').get(req.params.creditId, tenantId)
+            : await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ?').get(req.params.creditId);
         if (!credit) return res.status(404).json({ error: 'Credit not found' });
         const sim = credit.simulation_id ? await db.prepare('SELECT * FROM carbon_simulations WHERE event_id = ? OR simulation_id = ?').get(credit.simulation_id, credit.simulation_id) : null;
         res.json({ ...credit, provenance: JSON.parse(credit.provenance || '[]'), retirement_data: credit.retirement_data ? JSON.parse(credit.retirement_data) : null, simulation: sim });
@@ -315,7 +320,10 @@ router.post('/retire', requirePermission('esg:manage'), async (req, res) => {
 // ─── GET /balance — Portfolio balance ───────────────────────────────────────
 router.get('/balance', async (req, res) => {
     try {
-        const credits = await db.prepare('SELECT * FROM carbon_credits').all();
+        const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
+        const credits = tenantId
+            ? await db.prepare('SELECT * FROM carbon_credits WHERE tenant_id = ?').all(tenantId)
+            : await db.prepare('SELECT * FROM carbon_credits').all();
         const active = credits.filter(c => c.status === 'minted' || c.status === 'active');
         const retired = credits.filter(c => c.status === 'retired');
         const transferred = credits.filter(c => c.status === 'transferred');
@@ -422,7 +430,13 @@ router.get('/governance', (req, res) => {
 // ─── GET /simulations — Simulation history ──────────────────────────────────
 router.get('/simulations', cacheMiddleware(30), async (req, res) => {
     try {
-        const sims = await db.prepare('SELECT * FROM carbon_simulations ORDER BY created_at DESC LIMIT 50').all();
+        const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
+        const q = tenantId
+            ? 'SELECT * FROM carbon_simulations WHERE simulated_by IN (SELECT id FROM users WHERE org_id = ?) ORDER BY created_at DESC LIMIT 50'
+            : 'SELECT * FROM carbon_simulations ORDER BY created_at DESC LIMIT 50';
+        const sims = tenantId
+            ? await db.prepare(q).all(tenantId)
+            : await db.prepare(q).all();
         res.json({ title: 'MRV Simulation History', total: sims.length, simulations: sims });
     } catch (err) { res.status(500).json({ error: 'Simulations query failed' }); }
 });
