@@ -33,18 +33,18 @@ let _activeTab = 'dashboard';
 
 // ─── Tab Registry ───────────────────────────────────────────
 const CARBON_TABS = [
-    { id: 'dashboard', label: 'Carbon Overview', icon: '📊' },
-    { id: 'emissions', label: 'Emission Tracker', icon: '🏭' },
-    { id: 'credits', label: 'Credit Lifecycle', icon: '💎' },
-    { id: 'passport', label: 'Carbon Passports', icon: '📜' },
-    { id: 'compliance', label: 'ESG & Compliance', icon: '⚖️' },
-    { id: 'benchmark', label: 'Industry Benchmark', icon: '📈' },
+  { id: 'dashboard', label: 'Carbon Overview', icon: '📊' },
+  { id: 'emissions', label: 'Emission Tracker', icon: '🏭' },
+  { id: 'credits', label: 'Credit Lifecycle', icon: '💎' },
+  { id: 'passport', label: 'Carbon Passports', icon: '📜' },
+  { id: 'compliance', label: 'ESG & Compliance', icon: '⚖️' },
+  { id: 'benchmark', label: 'Industry Benchmark', icon: '📈' },
 ];
 
 // ─── Entry Point ────────────────────────────────────────────
 export function renderPage() {
-    setTimeout(() => loadDashboard(), 50);
-    return `
+  setTimeout(() => loadDashboard(), 50);
+  return `
     <div id="carbon-content">
       <div class="loading"><div class="spinner"></div></div>
     </div>
@@ -52,128 +52,128 @@ export function renderPage() {
 }
 
 window._carbonOfficerTab = function (tab) {
-    _activeTab = tab;
-    window._activeCarbonTab = tab;
-    const el = document.getElementById('carbon-content');
-    if (el && ['emissions', 'credits', 'passport', 'compliance', 'benchmark'].includes(tab)) {
-        el.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
+  _activeTab = tab;
+  window._activeCarbonTab = tab;
+  const el = document.getElementById('carbon-content');
+  if (el && ['emissions', 'credits', 'passport', 'compliance', 'benchmark'].includes(tab)) {
+    el.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
       <div class="spinner"></div>
       <div style="font-size:0.78rem;color:var(--text-muted)">Loading ${CARBON_TABS.find(t => t.id === tab)?.label || tab}…</div>
     </div>`;
-    }
-    if (tab === 'dashboard') { renderContent(); loadDashboard(); }
-    else if (tab === 'emissions') loadEmissions();
-    else if (tab === 'credits') loadCredits();
-    else if (tab === 'passport') loadPassports();
-    else if (tab === 'compliance') loadCompliance();
-    else if (tab === 'benchmark') loadBenchmark();
-    else renderContent();
+  }
+  if (tab === 'dashboard') { renderContent(); loadDashboard(); }
+  else if (tab === 'emissions') loadEmissions();
+  else if (tab === 'credits') loadCredits();
+  else if (tab === 'passport') loadPassports();
+  else if (tab === 'compliance') loadCompliance();
+  else if (tab === 'benchmark') loadBenchmark();
+  else renderContent();
 };
 
 // ─── Data Loaders ───────────────────────────────────────────
 async function loadDashboard() {
-    try {
-        _dashData = await API.get('/carbon-officer/dashboard');
-        _dashLoaded = true;
-        renderContent();
-    } catch (e) {
-        console.error('[Carbon] Dashboard load error:', e);
-        _dashData = {};
-        _dashLoaded = true;
-        renderContent();
-    }
+  try {
+    _dashData = await API.get('/carbon-officer/dashboard');
+    _dashLoaded = true;
+    renderContent();
+  } catch (e) {
+    console.error('[Carbon] Dashboard load error:', e);
+    _dashData = {};
+    _dashLoaded = true;
+    renderContent();
+  }
 }
 
 async function loadEmissions() {
-    try {
-        const [scope, risk] = await Promise.all([
-            API.get('/scm/carbon/scope').catch(() => ({})),
-            API.get('/scm/carbon/risk-factors').catch(() => ({})),
-        ]);
-        _emissionData = { scope, risk };
-        _emissionLoaded = true;
-        renderContent();
-    } catch (e) { _emissionData = {}; _emissionLoaded = true; renderContent(); }
+  try {
+    const [scope, risk] = await Promise.all([
+      API.get('/scm/carbon/scope').catch(() => ({})),
+      API.get('/scm/carbon/risk-factors').catch(() => ({})),
+    ]);
+    _emissionData = { scope, risk };
+    _emissionLoaded = true;
+    renderContent();
+  } catch (e) { _emissionData = {}; _emissionLoaded = true; renderContent(); }
 }
 
 async function loadCredits() {
-    try {
-        const [registry, simulations] = await Promise.all([
-            API.get('/scm/carbon-credit/registry').catch(() => ({ credits: [] })),
-            API.get('/scm/carbon-credit/simulations?limit=20').catch(() => ({ simulations: [] })),
-        ]);
-        _creditData = { registry: registry.credits || registry, simulations: simulations.simulations || simulations };
-        _creditLoaded = true;
-        renderContent();
-    } catch (e) { _creditData = {}; _creditLoaded = true; renderContent(); }
+  try {
+    const [registry, simulations] = await Promise.all([
+      API.get('/scm/carbon-credit/registry').catch(() => ({ credits: [] })),
+      API.get('/scm/carbon-credit/simulations?limit=20').catch(() => ({ simulations: [] })),
+    ]);
+    _creditData = { registry: registry.credits || registry, simulations: simulations.simulations || simulations };
+    _creditLoaded = true;
+    renderContent();
+  } catch (e) { _creditData = {}; _creditLoaded = true; renderContent(); }
 }
 
 async function loadPassports() {
-    try {
-        const [scope, report] = await Promise.all([
-            API.get('/scm/carbon/scope').catch(() => ({})),
-            API.get('/scm/carbon/report').catch(() => ({})),
-        ]);
-        _passportData = { scope, report };
-        _passportLoaded = true;
-        renderContent();
-    } catch (e) { _passportData = {}; _passportLoaded = true; renderContent(); }
+  try {
+    const [scope, report] = await Promise.all([
+      API.get('/scm/carbon/scope').catch(() => ({})),
+      API.get('/scm/carbon/report').catch(() => ({})),
+    ]);
+    _passportData = { scope, report };
+    _passportLoaded = true;
+    renderContent();
+  } catch (e) { _passportData = {}; _passportLoaded = true; renderContent(); }
 }
 
 async function loadCompliance() {
-    try {
-        const [regulatory, risk] = await Promise.all([
-            API.get('/scm/carbon/regulatory').catch(() => ({})),
-            API.get('/scm/carbon/risk-factors').catch(() => ({})),
-        ]);
-        _complianceData = { regulatory, risk };
-        _complianceLoaded = true;
-        renderContent();
-    } catch (e) { _complianceData = {}; _complianceLoaded = true; renderContent(); }
+  try {
+    const [regulatory, risk] = await Promise.all([
+      API.get('/scm/carbon/regulatory').catch(() => ({})),
+      API.get('/scm/carbon/risk-factors').catch(() => ({})),
+    ]);
+    _complianceData = { regulatory, risk };
+    _complianceLoaded = true;
+    renderContent();
+  } catch (e) { _complianceData = {}; _complianceLoaded = true; renderContent(); }
 }
 
 async function loadBenchmark() {
-    try {
-        const [maturity, leaderboard] = await Promise.all([
-            API.get('/scm/carbon/maturity').catch(() => ({})),
-            API.get('/scm/carbon/leaderboard').catch(() => ({})),
-        ]);
-        _benchmarkData = { maturity, leaderboard };
-        _benchmarkLoaded = true;
-        renderContent();
-    } catch (e) { _benchmarkData = {}; _benchmarkLoaded = true; renderContent(); }
+  try {
+    const [maturity, leaderboard] = await Promise.all([
+      API.get('/scm/carbon/maturity').catch(() => ({})),
+      API.get('/scm/carbon/leaderboard').catch(() => ({})),
+    ]);
+    _benchmarkData = { maturity, leaderboard };
+    _benchmarkLoaded = true;
+    renderContent();
+  } catch (e) { _benchmarkData = {}; _benchmarkLoaded = true; renderContent(); }
 }
 
 function renderContent() {
-    const el = document.getElementById('carbon-content');
-    if (!el) return;
-    const renderers = {
-        dashboard: renderOverview,
-        emissions: renderEmissions,
-        credits: renderCredits,
-        passport: renderPassports,
-        compliance: renderCompliance,
-        benchmark: renderBenchmark,
-    };
-    el.innerHTML = (renderers[_activeTab] || renderOverview)();
+  const el = document.getElementById('carbon-content');
+  if (!el) return;
+  const renderers = {
+    dashboard: renderOverview,
+    emissions: renderEmissions,
+    credits: renderCredits,
+    passport: renderPassports,
+    compliance: renderCompliance,
+    benchmark: renderBenchmark,
+  };
+  el.innerHTML = (renderers[_activeTab] || renderOverview)();
 }
 
 // ═══════════════════════════════════════════════════════════════
 // 1. CARBON OVERVIEW DASHBOARD
 // ═══════════════════════════════════════════════════════════════
 function renderOverview() {
-    if (!_dashLoaded) return spinner('Loading Carbon Overview…');
+  if (!_dashLoaded) return spinner('Loading Carbon Overview…');
 
-    const d = _dashData;
-    const totalKg = d.total_emissions_kgCO2e || 0;
-    const totalT = d.total_emissions_tCO2e || 0;
-    const s1 = d.scope_breakdown?.scope1 || {};
-    const s2 = d.scope_breakdown?.scope2 || {};
-    const s3 = d.scope_breakdown?.scope3 || {};
-    const grade = d.esg_grade || 'N/A';
-    const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
+  const d = _dashData;
+  const totalKg = d.total_emissions_kgCO2e || 0;
+  const totalT = d.total_emissions_tCO2e || 0;
+  const s1 = d.scope_breakdown?.scope1 || {};
+  const s2 = d.scope_breakdown?.scope2 || {};
+  const s3 = d.scope_breakdown?.scope3 || {};
+  const grade = d.esg_grade || 'N/A';
+  const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
 
-    const scopeBar = (label, kg, pct, color) => `
+  const scopeBar = (label, kg, pct, color) => `
     <div style="margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:4px">
         <span style="font-weight:600">${label}</span>
@@ -184,16 +184,16 @@ function renderOverview() {
       </div>
     </div>`;
 
-    const activity = (d.recent_activity || []).slice(0, 8).map(a => {
-        let det = {}; try { det = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {}; } catch (_) { }
-        return `
+  const activity = (d.recent_activity || []).slice(0, 8).map(a => {
+    let det = {}; try { det = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {}; } catch (_) { }
+    return `
     <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
       <span><span style="padding:2px 8px;border-radius:4px;background:#05966920;color:#059669;font-size:0.68rem;font-weight:600">${a.action || '—'}</span> ${esc(a.actor_email || '—')}</span>
       <span style="color:var(--text-muted)">${timeAgo(a.timestamp)}</span>
     </div>`;
-    }).join('') || '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.72rem">No recent carbon activity</div>';
+  }).join('') || '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.72rem">No recent carbon activity</div>';
 
-    return `
+  return `
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px">
       ${kpi('Total Emissions', `${totalT} t`, totalKg > 0 ? '#f59e0b' : '#10b981', `${(totalKg || 0).toLocaleString()} kgCO₂e`)}
       ${kpi('ESG Grade', grade, gradeColor, 'Overall carbon rating')}
@@ -229,17 +229,19 @@ function renderOverview() {
 // 2. EMISSION TRACKER
 // ═══════════════════════════════════════════════════════════════
 function renderEmissions() {
-    if (!_emissionLoaded) return spinner('Loading Emission Tracker…');
+  if (!_emissionLoaded) return spinner('Loading Emission Tracker…');
 
-    const scope = _emissionData.scope || {};
-    const s1 = scope.scope1 || {};
-    const s2 = scope.scope2 || {};
-    const s3 = scope.scope3 || {};
-    const totalKg = scope.total?.kgCO2e || 0;
-    const grade = scope.grade || 'N/A';
-    const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
+  const scope = _emissionData.scope || {};
+  // API returns scope_1/scope_2/scope_3 with .total and .pct
+  const s1 = { kgCO2e: scope.scope_1?.total || 0, percentage: scope.scope_1?.pct || 0, breakdown: scope.scope_1?.breakdown || scope.scope_1?.items || [] };
+  const s2 = { kgCO2e: scope.scope_2?.total || 0, percentage: scope.scope_2?.pct || 0, breakdown: scope.scope_2?.breakdown || scope.scope_2?.items || [] };
+  const s3 = { kgCO2e: scope.scope_3?.total || 0, percentage: scope.scope_3?.pct || 0, breakdown: scope.scope_3?.breakdown || scope.scope_3?.items || [] };
+  const totalKg = scope.total_emissions_kgCO2e || 0;
+  const totalT = scope.total_emissions_tonnes || (totalKg / 1000).toFixed(2);
+  const grade = totalKg === 0 ? 'N/A' : totalKg < 1000 ? 'A' : totalKg < 5000 ? 'B' : totalKg < 20000 ? 'C' : totalKg < 50000 ? 'D' : 'F';
+  const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
 
-    const riskFactors = (_emissionData.risk?.factors || []).map(f => `
+  const riskFactors = (_emissionData.risk?.factors || []).map(f => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
       <div>
         <div style="font-weight:700;font-size:0.75rem">${esc(f.name || f.factor)}</div>
@@ -249,17 +251,17 @@ function renderEmissions() {
     </div>
   `).join('') || '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.72rem">No risk factors detected</div>';
 
-    // Scope detail table
-    const scopeDetail = (label, data, color) => {
-        const items = data.breakdown || data.items || [];
-        const rows = items.length > 0
-            ? items.map(i => `<tr>
+  // Scope detail table
+  const scopeDetail = (label, data, color) => {
+    const items = data.breakdown || data.items || [];
+    const rows = items.length > 0
+      ? items.map(i => `<tr>
           <td style="font-size:0.72rem">${esc(i.category || i.name || '—')}</td>
           <td style="font-size:0.72rem;text-align:right;font-weight:700">${(i.kgCO2e || i.value || 0).toLocaleString()}</td>
           <td style="font-size:0.72rem;text-align:right;color:var(--text-muted)">${i.percentage || 0}%</td>
         </tr>`).join('')
-            : `<tr><td colspan="3" style="text-align:center;color:var(--text-muted);font-size:0.72rem;padding:12px">No breakdown data</td></tr>`;
-        return `
+      : `<tr><td colspan="3" style="text-align:center;color:var(--text-muted);font-size:0.72rem;padding:12px">No breakdown data</td></tr>`;
+    return `
     <div class="card" style="border-left:4px solid ${color};margin-bottom:12px">
       <div class="card-header">
         <div class="card-title">${label}</div>
@@ -270,9 +272,9 @@ function renderEmissions() {
         <tbody>${rows}</tbody></table>
       </div>
     </div>`;
-    };
+  };
 
-    return `
+  return `
     <div style="display:flex;gap:12px;margin-bottom:16px">
       ${kpi('Total Emissions', `${(totalKg / 1000).toFixed(2)} t`, '#f59e0b', `${totalKg.toLocaleString()} kgCO₂e`)}
       ${kpi('ESG Grade', grade, gradeColor, scope.grade_label || 'Carbon rating')}
@@ -299,20 +301,20 @@ function renderEmissions() {
 // 3. CREDIT LIFECYCLE
 // ═══════════════════════════════════════════════════════════════
 function renderCredits() {
-    if (!_creditLoaded) return spinner('Loading Credit Lifecycle…');
+  if (!_creditLoaded) return spinner('Loading Credit Lifecycle…');
 
-    const credits = Array.isArray(_creditData.registry) ? _creditData.registry : [];
-    const sims = Array.isArray(_creditData.simulations) ? _creditData.simulations : [];
+  const credits = Array.isArray(_creditData.registry) ? _creditData.registry : [];
+  const sims = Array.isArray(_creditData.simulations) ? _creditData.simulations : [];
 
-    const statusColor = s => {
-        if (s === 'minted' || s === 'active') return '#10b981';
-        if (s === 'pending') return '#f59e0b';
-        if (s === 'retired') return '#6b7280';
-        if (s === 'rejected') return '#ef4444';
-        return '#64748b';
-    };
+  const statusColor = s => {
+    if (s === 'minted' || s === 'active') return '#10b981';
+    if (s === 'pending') return '#f59e0b';
+    if (s === 'retired') return '#6b7280';
+    if (s === 'rejected') return '#ef4444';
+    return '#64748b';
+  };
 
-    const creditRows = credits.slice(0, 30).map(c => `
+  const creditRows = credits.slice(0, 30).map(c => `
     <tr>
       <td style="font-size:0.68rem;font-family:monospace;color:var(--text-muted)">${esc((c.credit_id || c.id || '').substring(0, 12))}…</td>
       <td style="font-size:0.72rem;font-weight:700">${c.quantity_tCO2e || 0} tCO₂e</td>
@@ -323,9 +325,9 @@ function renderCredits() {
     </tr>
   `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;font-size:0.72rem">No credits in registry</td></tr>';
 
-    const simRows = sims.slice(0, 15).map(s => {
-        const eligible = s.credit_eligible || s.pipeline_result === 'minted';
-        return `
+  const simRows = sims.slice(0, 15).map(s => {
+    const eligible = s.credit_eligible || s.pipeline_result === 'minted';
+    return `
     <tr>
       <td style="font-size:0.68rem;font-family:monospace;color:var(--text-muted)">${esc((s.simulation_id || s.id || '').substring(0, 10))}…</td>
       <td style="font-size:0.72rem">${s.route_type || '—'}</td>
@@ -334,13 +336,13 @@ function renderCredits() {
       <td style="font-size:0.72rem;color:${(s.reduction_pct || 0) >= 20 ? '#10b981' : '#f59e0b'};font-weight:700">${(s.reduction_pct || 0).toFixed(1)}%</td>
       <td><span style="font-size:0.65rem;padding:2px 8px;border-radius:10px;font-weight:600;background:${eligible ? '#10b98120' : '#f59e0b20'};color:${eligible ? '#10b981' : '#f59e0b'}">${eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}</span></td>
     </tr>`;
-    }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;font-size:0.72rem">No simulations yet</td></tr>';
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;font-size:0.72rem">No simulations yet</td></tr>';
 
-    const minted = credits.filter(c => c.status === 'minted' || c.status === 'active').length;
-    const pending = credits.filter(c => c.status === 'pending').length;
-    const retired = credits.filter(c => c.status === 'retired').length;
+  const minted = credits.filter(c => c.status === 'minted' || c.status === 'active').length;
+  const pending = credits.filter(c => c.status === 'pending').length;
+  const retired = credits.filter(c => c.status === 'retired').length;
 
-    return `
+  return `
     <div style="display:flex;gap:12px;margin-bottom:16px">
       ${kpi('Total Credits', credits.length, 'var(--text-primary,#1e293b)', 'In registry')}
       ${kpi('Active / Minted', minted, '#10b981', 'Available credits')}
@@ -380,15 +382,15 @@ function renderCredits() {
 // 4. CARBON PASSPORTS (CIP)
 // ═══════════════════════════════════════════════════════════════
 function renderPassports() {
-    if (!_passportLoaded) return spinner('Loading Carbon Passports…');
+  if (!_passportLoaded) return spinner('Loading Carbon Passports…');
 
-    const report = _passportData.report || {};
-    const scope = _passportData.scope || {};
-    const grade = scope.grade || report.grade || 'N/A';
-    const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
+  const report = _passportData.report || {};
+  const scope = _passportData.scope || {};
+  const grade = (() => { const t = scope.total_emissions_kgCO2e || 0; return report.grade || (t === 0 ? 'N/A' : t < 1000 ? 'A' : t < 5000 ? 'B' : t < 20000 ? 'C' : t < 50000 ? 'D' : 'F'); })();
+  const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
 
-    // GRI disclosures
-    const disclosures = (report.disclosures || []).map(d => `
+  // GRI disclosures
+  const disclosures = (report.disclosures || []).map(d => `
     <tr>
       <td style="font-size:0.72rem;font-weight:700;color:#3b82f6">${esc(d.code || d.id)}</td>
       <td style="font-size:0.72rem">${esc(d.title || d.name)}</td>
@@ -397,18 +399,18 @@ function renderPassports() {
     </tr>
   `).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No GRI disclosures available</td></tr>';
 
-    // Scope summary
-    const scopeSummary = ['scope1', 'scope2', 'scope3'].map(s => {
-        const data = scope[s] || {};
-        const label = s === 'scope1' ? 'Scope 1' : s === 'scope2' ? 'Scope 2' : 'Scope 3';
-        const color = s === 'scope1' ? '#ef4444' : s === 'scope2' ? '#f59e0b' : '#3b82f6';
-        return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
+  // Scope summary
+  const scopeSummary = ['scope_1', 'scope_2', 'scope_3'].map(s => {
+    const data = scope[s] || {};
+    const label = s === 'scope_1' ? 'Scope 1' : s === 'scope_2' ? 'Scope 2' : 'Scope 3';
+    const color = s === 'scope_1' ? '#ef4444' : s === 'scope_2' ? '#f59e0b' : '#3b82f6';
+    return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
       <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:6px"></span>${label}</span>
-      <span style="font-weight:700">${(data.kgCO2e || 0).toLocaleString()} kgCO₂e</span>
+      <span style="font-weight:700">${(data.total || 0).toLocaleString()} kgCO₂e</span>
     </div>`;
-    }).join('');
+  }).join('');
 
-    return `
+  return `
     <div style="display:flex;gap:12px;margin-bottom:16px">
       ${kpi('ESG Grade', grade, gradeColor, 'Carbon Integrity Rating')}
       ${kpi('GRI Standard', report.standard || 'GHG Protocol', '#3b82f6', 'Reporting framework')}
@@ -439,7 +441,7 @@ function renderPassports() {
             <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span>Organization</span><span style="font-weight:700">${esc(report.organization || State.org?.name || '—')}</span></div>
             <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span>Products Assessed</span><span style="font-weight:700">${report.products_assessed || scope.products_count || 0}</span></div>
             <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span>Supply Chain Nodes</span><span style="font-weight:700">${report.supply_chain_nodes || scope.shipments_count || 0}</span></div>
-            <div style="display:flex;justify-content:space-between;padding:6px 0"><span>Total kgCO₂e</span><span style="font-weight:700;color:#059669">${(scope.total?.kgCO2e || report.total_kgCO2e || 0).toLocaleString()}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0"><span>Total kgCO₂e</span><span style="font-weight:700;color:#059669">${(scope.total_emissions_kgCO2e || report.total_kgCO2e || 0).toLocaleString()}</span></div>
           </div>
         </div>
       </div>
@@ -451,14 +453,14 @@ function renderPassports() {
 // 5. ESG & COMPLIANCE
 // ═══════════════════════════════════════════════════════════════
 function renderCompliance() {
-    if (!_complianceLoaded) return spinner('Loading ESG & Compliance…');
+  if (!_complianceLoaded) return spinner('Loading ESG & Compliance…');
 
-    const frameworks = _complianceData.regulatory?.frameworks || [];
-    const riskFactors = _complianceData.risk?.factors || [];
+  const frameworks = _complianceData.regulatory?.frameworks || [];
+  const riskFactors = _complianceData.risk?.factors || [];
 
-    const fwRows = frameworks.map(fw => {
-        const statusColor = fw.status === 'compliant' ? '#10b981' : fw.status === 'partial' ? '#f59e0b' : fw.status === 'active' ? '#3b82f6' : '#ef4444';
-        return `
+  const fwRows = frameworks.map(fw => {
+    const statusColor = fw.status === 'compliant' ? '#10b981' : fw.status === 'partial' ? '#f59e0b' : fw.status === 'active' ? '#3b82f6' : '#ef4444';
+    return `
     <tr>
       <td style="font-size:0.72rem;font-weight:700">${esc(fw.name || fw.id)}</td>
       <td style="font-size:0.68rem;color:var(--text-muted)">${esc(fw.full || fw.description || '—')}</td>
@@ -467,9 +469,9 @@ function renderCompliance() {
       <td><span style="font-size:0.65rem;padding:2px 10px;border-radius:10px;font-weight:700;background:${statusColor}20;color:${statusColor}">${(fw.status || 'unknown').toUpperCase()}</span></td>
       <td style="font-size:0.68rem;color:var(--text-muted)">${fw.effective || '—'}</td>
     </tr>`;
-    }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No regulatory frameworks configured</td></tr>';
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No regulatory frameworks configured</td></tr>';
 
-    const riskRows = riskFactors.map(f => `
+  const riskRows = riskFactors.map(f => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
       <div style="flex:1">
         <div style="font-weight:700;font-size:0.75rem">${esc(f.name || f.factor)}</div>
@@ -482,9 +484,9 @@ function renderCompliance() {
     </div>
   `).join('') || '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.72rem">No ESG risk factors</div>';
 
-    const compliant = frameworks.filter(f => f.status === 'compliant').length;
+  const compliant = frameworks.filter(f => f.status === 'compliant').length;
 
-    return `
+  return `
     <div style="display:flex;gap:12px;margin-bottom:16px">
       ${kpi('Frameworks', frameworks.length, 'var(--text-primary,#1e293b)', 'Regulatory frameworks tracked')}
       ${kpi('Compliant', compliant, '#10b981', `${frameworks.length > 0 ? Math.round(compliant / frameworks.length * 100) : 0}% alignment`)}
@@ -515,19 +517,19 @@ function renderCompliance() {
 // 6. INDUSTRY BENCHMARK
 // ═══════════════════════════════════════════════════════════════
 function renderBenchmark() {
-    if (!_benchmarkLoaded) return spinner('Loading Industry Benchmark…');
+  if (!_benchmarkLoaded) return spinner('Loading Industry Benchmark…');
 
-    const maturity = _benchmarkData.maturity || {};
-    const leaderboard = _benchmarkData.leaderboard || {};
-    const partners = leaderboard.partners || leaderboard.leaderboard || [];
+  const maturity = _benchmarkData.maturity || {};
+  const leaderboard = _benchmarkData.leaderboard || {};
+  const partners = leaderboard.partners || leaderboard.leaderboard || [];
 
-    // Maturity levels
-    const levels = maturity.levels || [];
-    const currentLevel = maturity.current_level || maturity.level || 0;
-    const maturityBar = levels.map(l => {
-        const isCurrent = l.level === currentLevel;
-        const isPast = l.level < currentLevel;
-        return `
+  // Maturity levels
+  const levels = maturity.levels || [];
+  const currentLevel = maturity.current_level || maturity.level || 0;
+  const maturityBar = levels.map(l => {
+    const isCurrent = l.level === currentLevel;
+    const isPast = l.level < currentLevel;
+    return `
     <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
       <div style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:0.82rem;color:#fff;background:${isCurrent ? '#8b5cf6' : isPast ? '#10b981' : 'var(--border)'}">${l.level}</div>
       <div style="flex:1">
@@ -536,13 +538,13 @@ function renderBenchmark() {
       </div>
       <span style="font-size:0.65rem;padding:3px 10px;border-radius:10px;font-weight:600;background:${isCurrent ? '#8b5cf620' : isPast ? '#10b98120' : 'var(--border)'};color:${isCurrent ? '#8b5cf6' : isPast ? '#10b981' : 'var(--text-muted)'}">${isCurrent ? 'CURRENT' : isPast ? 'ACHIEVED' : l.target || 'LOCKED'}</span>
     </div>`;
-    }).join('') || '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.72rem">Maturity data unavailable</div>';
+  }).join('') || '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.72rem">Maturity data unavailable</div>';
 
-    // Partner leaderboard
-    const partnerRows = partners.slice(0, 15).map((p, i) => {
-        const esgGrade = p.esg_grade || p.grade || 'N/A';
-        const gColor = esgGrade.startsWith('A') ? '#10b981' : esgGrade.startsWith('B') ? '#22c55e' : esgGrade.startsWith('C') ? '#f59e0b' : '#ef4444';
-        return `
+  // Partner leaderboard
+  const partnerRows = partners.slice(0, 15).map((p, i) => {
+    const esgGrade = p.esg_grade || p.grade || 'N/A';
+    const gColor = esgGrade.startsWith('A') ? '#10b981' : esgGrade.startsWith('B') ? '#22c55e' : esgGrade.startsWith('C') ? '#f59e0b' : '#ef4444';
+    return `
     <tr>
       <td style="font-size:0.72rem;font-weight:700;color:${i < 3 ? '#f59e0b' : 'var(--text-primary)'}">#${i + 1}</td>
       <td style="font-size:0.72rem;font-weight:600">${esc(p.name || p.partner_name || '—')}</td>
@@ -550,9 +552,9 @@ function renderBenchmark() {
       <td style="font-size:0.72rem;text-align:center"><span style="font-weight:800;color:${gColor}">${esgGrade}</span></td>
       <td style="font-size:0.72rem">${(p.score || p.esg_score || 0).toFixed(1)}</td>
     </tr>`;
-    }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No partner data available</td></tr>';
+  }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No partner data available</td></tr>';
 
-    return `
+  return `
     <div style="display:flex;gap:12px;margin-bottom:16px">
       ${kpi('Maturity Level', `L${currentLevel}`, '#8b5cf6', maturity.current_name || maturity.name || 'Not Assessed')}
       ${kpi('Partners Tracked', partners.length, 'var(--text-primary,#1e293b)', 'ESG leaderboard')}
@@ -585,7 +587,7 @@ function renderBenchmark() {
 
 // ─── Common Helpers ─────────────────────────────────────────
 function kpi(label, value, color, desc) {
-    return `
+  return `
     <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px;flex:1;min-width:130px">
       <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">${label}</div>
       <div style="font-size:1.6rem;font-weight:800;color:${color}">${value}</div>
@@ -594,7 +596,7 @@ function kpi(label, value, color, desc) {
 }
 
 function spinner(msg) {
-    return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
+  return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
     <div class="spinner"></div>
     <div style="font-size:0.78rem;color:var(--text-muted)">${msg}</div>
   </div>`;
@@ -603,13 +605,13 @@ function spinner(msg) {
 function esc(s) { return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
 function timeAgo(d) {
-    if (!d) return '—';
-    let dt = new Date(d);
-    if (isNaN(dt.getTime())) dt = new Date(d + 'Z');
-    if (isNaN(dt.getTime())) return '—';
-    const s = Math.floor((Date.now() - dt.getTime()) / 1000);
-    if (s < 60) return s + 's ago';
-    if (s < 3600) return Math.floor(s / 60) + 'm ago';
-    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-    return Math.floor(s / 86400) + 'd ago';
+  if (!d) return '—';
+  let dt = new Date(d);
+  if (isNaN(dt.getTime())) dt = new Date(d + 'Z');
+  if (isNaN(dt.getTime())) return '—';
+  const s = Math.floor((Date.now() - dt.getTime()) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
 }

@@ -103,10 +103,22 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
         } catch (_) { }
 
         // ── Carbon intensity (per product average) ──────────────────
-        const total_emissions = scopeData?.total?.kgCO2e || 0;
+        const total_emissions = scopeData?.total_emissions_kgCO2e || 0;
         const carbon_intensity = products.length > 0
             ? (total_emissions / products.length).toFixed(2)
             : 0;
+
+        // Map scope_1/scope_2/scope_3 from engine to consistent client format
+        const s1 = scopeData?.scope_1 || {};
+        const s2 = scopeData?.scope_2 || {};
+        const s3 = scopeData?.scope_3 || {};
+
+        // Determine ESG grade from product rankings
+        const rankings = scopeData?.product_rankings || [];
+        const avgGrade = rankings.length > 0 ? rankings[0].grade : null;
+        const esgGrade = total_emissions === 0 ? 'N/A'
+            : total_emissions < 1000 ? 'A' : total_emissions < 5000 ? 'B'
+                : total_emissions < 20000 ? 'C' : total_emissions < 50000 ? 'D' : 'F';
 
         res.json({
             // KPIs
@@ -114,11 +126,11 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
             total_emissions_tCO2e: (total_emissions / 1000).toFixed(3),
             carbon_intensity_per_product: parseFloat(carbon_intensity),
             scope_breakdown: {
-                scope1: scopeData?.scope1 || { kgCO2e: 0, percentage: 0 },
-                scope2: scopeData?.scope2 || { kgCO2e: 0, percentage: 0 },
-                scope3: scopeData?.scope3 || { kgCO2e: 0, percentage: 0 },
+                scope1: { kgCO2e: s1.total || 0, percentage: s1.pct || 0, label: s1.label || 'Direct Manufacturing' },
+                scope2: { kgCO2e: s2.total || 0, percentage: s2.pct || 0, label: s2.label || 'Energy & Warehousing' },
+                scope3: { kgCO2e: s3.total || 0, percentage: s3.pct || 0, label: s3.label || 'Transport & Distribution' },
             },
-            esg_grade: scopeData?.grade || 'N/A',
+            esg_grade: esgGrade,
 
             // Credits
             credits_minted,
