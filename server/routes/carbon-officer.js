@@ -15,7 +15,7 @@ router.use(authMiddleware);
 // ─── GET /dashboard — Carbon Officer Overview KPIs ──────────────────────────
 router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
     try {
-        const orgId = req.tenantId || null;
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
 
         // ── Scope breakdown ─────────────────────────────────────────
         let products = [], shipments = [], events = [];

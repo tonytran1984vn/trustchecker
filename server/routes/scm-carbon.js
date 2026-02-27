@@ -71,7 +71,7 @@ async function getOrgViolations(orgId) {
 // ─── GET /api/scm/carbon/footprint/:productId — Product carbon passport ─────
 router.get('/footprint/:productId', async (req, res) => {
     try {
-        const orgId = req.tenantId || null;
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const product = orgId
             ? await db.prepare('SELECT * FROM products WHERE id = ? AND org_id = ?').get(req.params.productId, orgId)
             : await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.productId);
@@ -96,7 +96,7 @@ router.get('/footprint/:productId', async (req, res) => {
 // ─── GET /api/scm/carbon/scope — Scope 1/2/3 breakdown ─────────────────────
 router.get('/scope', cacheMiddleware(120), async (req, res) => {
     try {
-        const orgId = req.tenantId || null;
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
         const shipments = await getOrgShipments(orgId);
         const events = await getOrgEvents(orgId);
@@ -113,7 +113,7 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
 // ─── GET /api/scm/carbon/leaderboard — Partner ESG leaderboard ──────────────
 router.get('/leaderboard', cacheMiddleware(120), async (req, res) => {
     try {
-        const orgId = req.tenantId || null;
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const partners = await getOrgPartners(orgId);
         const shipments = await getOrgShipments(orgId);
         const violations = await getOrgViolations(orgId);
@@ -137,7 +137,7 @@ router.get('/leaderboard', cacheMiddleware(120), async (req, res) => {
 // ─── GET /api/scm/carbon/report — GRI-format ESG report ─────────────────────
 router.get('/report', cacheMiddleware(180), async (req, res) => {
     try {
-        const orgId = req.tenantId || null;
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
         const shipments = await getOrgShipments(orgId);
         const events = await getOrgEvents(orgId);
@@ -201,7 +201,7 @@ router.post('/offset', requirePermission('esg:manage'), async (req, res) => {
 // ─── GET /api/scm/carbon/risk-factors — Carbon → Risk factor mapping ────────
 router.get('/risk-factors', cacheMiddleware(120), async (req, res) => {
     try {
-        const orgId = req.tenantId || null;
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
         const shipments = await getOrgShipments(orgId);
         const events = await getOrgEvents(orgId);
@@ -222,7 +222,7 @@ router.get('/risk-factors', cacheMiddleware(120), async (req, res) => {
 // ─── GET /api/scm/carbon/regulatory — Regulatory alignment status ───────────
 router.get('/regulatory', cacheMiddleware(120), async (req, res) => {
     try {
-        const orgId = req.tenantId || null;
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
         const shipments = await getOrgShipments(orgId);
         const events = await getOrgEvents(orgId);
@@ -252,7 +252,7 @@ router.get('/regulatory', cacheMiddleware(120), async (req, res) => {
 // ─── GET /api/scm/carbon/maturity — Carbon maturity level ───────────────────
 router.get('/maturity', async (req, res) => {
     try {
-        const orgId = req.tenantId || null;
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const productQ = orgId
             ? await db.prepare('SELECT COUNT(*) as c FROM products WHERE org_id = ?').get(orgId)
             : await db.prepare('SELECT COUNT(*) as c FROM products').get();
@@ -320,7 +320,7 @@ router.get('/role-matrix', (req, res) => {
 // ─── GET /api/scm/carbon/benchmark — Cross-tenant industry benchmark ────────
 router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
     try {
-        const orgId = req.tenantId || null;
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
         const shipments = await getOrgShipments(orgId);
         const events = await getOrgEvents(orgId);
