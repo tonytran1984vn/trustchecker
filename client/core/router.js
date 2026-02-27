@@ -164,6 +164,12 @@ const PAGE_LOADERS = {
     'ca-governance': () => import('../pages/ca/ca-governance-workspace.js'),
     'ca-settings': () => import('../pages/ca/ca-settings-workspace.js'),
 
+    // ─── CA New Feature Pages ──
+    'ca-kpi-overview': () => import('../pages/ca/kpi-overview.js'),
+    'ca-reports': () => import('../pages/ca/reports.js'),
+    'ca-notifications': () => import('../pages/ca/notifications.js'),
+    'ca-audit-dashboard': () => import('../pages/ca/audit-dashboard.js'),
+
     // ─── Org Owner (Strategic Governance Authority) ───────
     'owner-governance': () => import('../pages/owner/owner-workspace.js?v=10.4'),
 

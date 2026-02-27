@@ -722,6 +722,232 @@ router.get('/governance/dashboard', async (req, res) => {
     }
 });
 
+// ─── Governance: KPI Overview (Company Admin Deep Dashboard) ─────────────────
+router.get('/governance/kpi-overview', async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [products, scanTotals, scan7d, scan30d, alerts, topProducts, weeklySeries] = await Promise.all([
+            db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'active') as active FROM products WHERE org_id = $1`, [tid]),
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
+                    COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
+                    COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
+                    ROUND(AVG(trust_score)::numeric, 1) as avg_trust,
+                    ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud
+                    FROM scan_events WHERE org_id = $1`, [tid]),
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged
+                    FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '7 days'`, [tid]),
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged
+                    FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '30 days'`, [tid]),
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE status != 'resolved') as open,
+                    COUNT(*) FILTER (WHERE severity = 'critical' AND status != 'resolved') as critical_open
+                    FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1`, [tid]),
+            db.all(`SELECT p.name, COUNT(se.id) as scans,
+                    COUNT(se.id) FILTER (WHERE se.result IN ('suspicious','counterfeit')) as flagged,
+                    ROUND(AVG(se.trust_score)::numeric, 1) as avg_trust
+                    FROM products p
+                    LEFT JOIN scan_events se ON se.product_id = p.id
+                    WHERE p.org_id = $1
+                    GROUP BY p.id, p.name
+                    ORDER BY scans DESC LIMIT 10`, [tid]),
+            db.all(`SELECT DATE_TRUNC('week', scanned_at)::date as week,
+                    COUNT(*) as scans,
+                    COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged,
+                    ROUND(AVG(trust_score)::numeric, 1) as avg_trust
+                    FROM scan_events WHERE org_id = $1
+                    AND scanned_at >= NOW() - INTERVAL '12 weeks'
+                    GROUP BY DATE_TRUNC('week', scanned_at)
+                    ORDER BY week ASC`, [tid]),
+        ]);
+
+        const totalScans = parseInt(scanTotals?.total) || 0;
+        const fraudRate = totalScans > 0 ? Math.round(((parseInt(scanTotals?.counterfeit) || 0) + (parseInt(scanTotals?.suspicious) || 0)) / totalScans * 10000) / 100 : 0;
+        const detectionRate = totalScans > 0 ? Math.round((parseInt(scanTotals?.authentic) || 0) / totalScans * 10000) / 100 : 0;
+
+        res.json({
+            products: { total: parseInt(products?.total) || 0, active: parseInt(products?.active) || 0 },
+            scans: {
+                total: totalScans,
+                last_7d: parseInt(scan7d?.total) || 0,
+                last_30d: parseInt(scan30d?.total) || 0,
+                flagged_7d: parseInt(scan7d?.flagged) || 0,
+                flagged_30d: parseInt(scan30d?.flagged) || 0,
+            },
+            fraud_rate: fraudRate,
+            detection_rate: detectionRate,
+            avg_trust: parseFloat(scanTotals?.avg_trust) || 0,
+            alerts: { total: parseInt(alerts?.total) || 0, open: parseInt(alerts?.open) || 0, critical_open: parseInt(alerts?.critical_open) || 0 },
+            top_products: topProducts.map(p => ({
+                name: p.name, scans: parseInt(p.scans) || 0,
+                flagged: parseInt(p.flagged) || 0, avg_trust: parseFloat(p.avg_trust) || 0,
+            })),
+            weekly: weeklySeries.map(w => ({
+                week: w.week, scans: parseInt(w.scans) || 0,
+                flagged: parseInt(w.flagged) || 0, avg_trust: parseFloat(w.avg_trust) || 0,
+            })),
+        });
+    } catch (err) {
+        console.error('[Governance] KPI overview error:', err);
+        res.status(500).json({ error: 'Failed to load KPI data' });
+    }
+});
+
+// ─── Governance: Reports Data (Company Admin Export) ─────────────────────────
+router.get('/governance/reports-data', async (req, res) => {
+    try {
+        const tid = req.tenantId;
+        const range = req.query.range || '30d';
+        const interval = range === '7d' ? '7 days' : range === '90d' ? '90 days' : '30 days';
+
+        const [scanSummary, alertSummary, productSummary, dailySeries] = await Promise.all([
+            db.get(`SELECT COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
+                    COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
+                    COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
+                    ROUND(AVG(trust_score)::numeric, 1) as avg_trust
+                    FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '${interval}'`, [tid]),
+            db.all(`SELECT fa.severity, fa.status, COUNT(*) as count
+                    FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id
+                    WHERE p.org_id = $1 AND fa.created_at >= NOW() - INTERVAL '${interval}'
+                    GROUP BY fa.severity, fa.status`, [tid]),
+            db.all(`SELECT p.name, p.category, p.status,
+                    COUNT(se.id) as scans,
+                    COUNT(se.id) FILTER (WHERE se.result IN ('suspicious','counterfeit')) as flagged
+                    FROM products p
+                    LEFT JOIN scan_events se ON se.product_id = p.id AND se.scanned_at >= NOW() - INTERVAL '${interval}'
+                    WHERE p.org_id = $1
+                    GROUP BY p.id, p.name, p.category, p.status
+                    ORDER BY scans DESC`, [tid]),
+            db.all(`SELECT scanned_at::date as day, COUNT(*) as scans,
+                    COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged
+                    FROM scan_events WHERE org_id = $1
+                    AND scanned_at >= NOW() - INTERVAL '${interval}'
+                    GROUP BY scanned_at::date ORDER BY day ASC`, [tid]),
+        ]);
+
+        res.json({
+            range,
+            scan_summary: {
+                total: parseInt(scanSummary?.total) || 0,
+                authentic: parseInt(scanSummary?.authentic) || 0,
+                counterfeit: parseInt(scanSummary?.counterfeit) || 0,
+                suspicious: parseInt(scanSummary?.suspicious) || 0,
+                avg_trust: parseFloat(scanSummary?.avg_trust) || 0,
+            },
+            alert_summary: alertSummary.map(a => ({ severity: a.severity, status: a.status, count: parseInt(a.count) || 0 })),
+            product_summary: productSummary.map(p => ({
+                name: p.name, category: p.category || '—', status: p.status,
+                scans: parseInt(p.scans) || 0, flagged: parseInt(p.flagged) || 0,
+            })),
+            daily_series: dailySeries.map(d => ({ day: d.day, scans: parseInt(d.scans) || 0, flagged: parseInt(d.flagged) || 0 })),
+        });
+    } catch (err) {
+        console.error('[Governance] Reports data error:', err);
+        res.status(500).json({ error: 'Failed to load report data' });
+    }
+});
+
+// ─── Governance: Notification Settings (GET/POST) ────────────────────────────
+router.get('/governance/notifications', async (req, res) => {
+    try {
+        const tid = req.tenantId;
+        const org = await db.get(`SELECT settings FROM organizations WHERE id = $1`, [tid]);
+        const notif = org?.settings?.notifications || {
+            fraud_rate_threshold: 5,
+            trust_drop_threshold: 15,
+            anomaly_multiplier: 2,
+            channels: { email: false, in_app: true },
+            severity_filter: ['critical', 'high'],
+        };
+        res.json(notif);
+    } catch (err) {
+        console.error('[Governance] Notifications GET error:', err);
+        res.status(500).json({ error: 'Failed to load notification settings' });
+    }
+});
+
+router.post('/governance/notifications', async (req, res) => {
+    try {
+        const tid = req.tenantId;
+        const { fraud_rate_threshold, trust_drop_threshold, anomaly_multiplier, channels, severity_filter } = req.body;
+
+        const org = await db.get(`SELECT settings FROM organizations WHERE id = $1`, [tid]);
+        const settings = org?.settings || {};
+        settings.notifications = {
+            fraud_rate_threshold: Math.max(0, Math.min(100, Number(fraud_rate_threshold) || 5)),
+            trust_drop_threshold: Math.max(0, Math.min(100, Number(trust_drop_threshold) || 15)),
+            anomaly_multiplier: Math.max(1, Math.min(10, Number(anomaly_multiplier) || 2)),
+            channels: { email: !!channels?.email, in_app: channels?.in_app !== false },
+            severity_filter: Array.isArray(severity_filter) ? severity_filter : ['critical', 'high'],
+        };
+
+        await db.run(`UPDATE organizations SET settings = $1 WHERE id = $2`, [JSON.stringify(settings), tid]);
+        res.json({ success: true, notifications: settings.notifications });
+    } catch (err) {
+        console.error('[Governance] Notifications POST error:', err);
+        res.status(500).json({ error: 'Failed to save notification settings' });
+    }
+});
+
+// ─── Governance: Audit Dashboard (Company Admin Audit Overview) ──────────────
+router.get('/governance/audit-summary', async (req, res) => {
+    try {
+        const tid = req.tenantId;
+
+        const [totalEvents, actionDist, topUsers, dailySeries, recentCritical, loginFails] = await Promise.all([
+            db.get(`SELECT COUNT(*) as total FROM audit_log
+                    WHERE actor_id IN (SELECT id FROM users WHERE org_id = $1)`, [tid]),
+            db.all(`SELECT action, COUNT(*) as count FROM audit_log
+                    WHERE actor_id IN (SELECT id FROM users WHERE org_id = $1)
+                    GROUP BY action ORDER BY count DESC LIMIT 15`, [tid]),
+            db.all(`SELECT u.username, u.email, COUNT(al.id) as events
+                    FROM audit_log al JOIN users u ON u.id = al.actor_id
+                    WHERE u.org_id = $1
+                    GROUP BY u.id, u.username, u.email
+                    ORDER BY events DESC LIMIT 10`, [tid]),
+            db.all(`SELECT al.created_at::date as day, COUNT(*) as events
+                    FROM audit_log al
+                    WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
+                    AND al.created_at >= NOW() - INTERVAL '30 days'
+                    GROUP BY al.created_at::date ORDER BY day ASC`, [tid]),
+            db.all(`SELECT al.*, u.username as actor_name FROM audit_log al
+                    LEFT JOIN users u ON u.id = al.actor_id
+                    WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
+                    AND al.action IN ('SELF_ELEVATION_BLOCKED','PERMISSION_CEILING_BLOCKED','HIGH_RISK_ROLE_PENDING','ROLE_ASSIGNED','ROLE_REMOVED')
+                    ORDER BY al.created_at DESC LIMIT 15`, [tid]),
+            db.get(`SELECT COUNT(*) as total FROM audit_log
+                    WHERE actor_id IN (SELECT id FROM users WHERE org_id = $1)
+                    AND action = 'LOGIN_FAILED'
+                    AND created_at >= NOW() - INTERVAL '30 days'`, [tid]),
+        ]);
+
+        const activeUsers = await db.get(`SELECT COUNT(DISTINCT actor_id) as count FROM audit_log
+            WHERE actor_id IN (SELECT id FROM users WHERE org_id = $1)
+            AND created_at >= NOW() - INTERVAL '7 days'`, [tid]);
+
+        res.json({
+            total_events: parseInt(totalEvents?.total) || 0,
+            active_users_7d: parseInt(activeUsers?.count) || 0,
+            login_failures_30d: parseInt(loginFails?.total) || 0,
+            action_distribution: actionDist.map(a => ({ action: a.action, count: parseInt(a.count) || 0 })),
+            top_users: topUsers.map(u => ({ username: u.username, email: u.email, events: parseInt(u.events) || 0 })),
+            daily_activity: dailySeries.map(d => ({ day: d.day, events: parseInt(d.events) || 0 })),
+            recent_critical: recentCritical.map(e => ({
+                action: e.action, actor: e.actor_name || '—',
+                details: typeof e.details === 'string' ? e.details : JSON.stringify(e.details || {}),
+                timestamp: e.created_at,
+            })),
+        });
+    } catch (err) {
+        console.error('[Governance] Audit summary error:', err);
+        res.status(500).json({ error: 'Failed to load audit summary' });
+    }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ORG OWNER: APPOINT COMPANY ADMIN
 // ═══════════════════════════════════════════════════════════════════════════════

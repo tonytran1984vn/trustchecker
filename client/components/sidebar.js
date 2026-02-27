@@ -287,6 +287,7 @@ const COMPANY_ADMIN_NAV = [
 const DOMAIN_ITEMS = {
   'command-center': [
     { id: 'dashboard', icon: icon('dashboard'), label: 'Executive Dashboard' },
+    { id: 'ca-kpi-overview', icon: icon('barChart'), label: 'KPI Overview' },
   ],
   'operations': [
     { id: 'products', icon: icon('products'), label: 'Products' },
@@ -314,12 +315,15 @@ const DOMAIN_ITEMS = {
     { id: 'admin-users', icon: icon('users'), label: 'Users' },
     { id: 'role-manager', icon: icon('shield'), label: 'Roles & Access Matrix' },
     { id: 'ca-access-logs', icon: icon('scroll'), label: 'Access Logs' },
+    { id: 'ca-audit-dashboard', icon: icon('search'), label: 'Audit Dashboard' },
+    { id: 'ca-reports', icon: icon('clipboard'), label: 'Reports & Export' },
     { id: 'scm-carbon-credit', icon: icon('tag'), label: 'Carbon Passport' },
     { id: 'green-finance', icon: icon('globe'), label: 'Green Finance' },
   ],
   'corporate-settings': [
     { id: 'ca-company-profile', icon: icon('building'), label: 'Company Profile' },
     { id: 'settings', icon: icon('lock'), label: 'Security' },
+    { id: 'ca-notifications', icon: icon('bell'), label: 'Notifications' },
     { id: 'ca-integrations', icon: icon('plug'), label: 'API & Integrations' },
     { id: 'billing', icon: icon('creditCard'), label: 'Billing & Quota' },
   ],
