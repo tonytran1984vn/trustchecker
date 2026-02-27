@@ -271,11 +271,15 @@ const SUPERADMIN_NAV = [
 // ── Company Admin: Flat nav (matching SA style) ────────────────
 const COMPANY_ADMIN_NAV = [
   { id: 'dashboard', icon: icon('dashboard'), label: 'Dashboard' },
+  { id: 'ca-kpi-overview', icon: icon('barChart'), label: 'KPI Overview' },
   { id: 'ca-operations', icon: icon('products'), label: 'Operations' },
   { id: 'ca-risk', icon: icon('alert'), label: 'Risk' },
   { id: 'ca-identity', icon: icon('key'), label: 'Identity' },
   { id: 'ca-governance', icon: icon('shield'), label: 'Governance' },
+  { id: 'ca-reports', icon: icon('clipboard'), label: 'Reports & Export' },
+  { id: 'ca-audit-dashboard', icon: icon('search'), label: 'Audit Dashboard' },
   { id: 'ca-settings', icon: icon('settings'), label: 'Settings' },
+  { id: 'ca-notifications', icon: icon('bell'), label: 'Notifications' },
 ];
 
 // ═══════════════════════════════════════════════════════════════
