@@ -728,26 +728,26 @@ router.get('/governance/kpi-overview', async (req, res) => {
         const tid = req.tenantId;
 
         const [products, scanTotals, scan7d, scan30d, alerts, topProducts, weeklySeries] = await Promise.all([
-            db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE status = 'active') as active FROM products WHERE org_id = $1`, [tid]),
+            db.get(`SELECT COUNT(*) as total, SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active FROM products WHERE org_id = $1`, [tid]),
             db.get(`SELECT COUNT(*) as total,
-                    COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
-                    COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
-                    COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
+                    SUM(CASE WHEN result = 'authentic' THEN 1 ELSE 0 END) as authentic,
+                    SUM(CASE WHEN result = 'counterfeit' THEN 1 ELSE 0 END) as counterfeit,
+                    SUM(CASE WHEN result = 'suspicious' THEN 1 ELSE 0 END) as suspicious,
                     ROUND(AVG(trust_score)::numeric, 1) as avg_trust,
                     ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud
                     FROM scan_events WHERE org_id = $1`, [tid]),
             db.get(`SELECT COUNT(*) as total,
-                    COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged
+                    SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged
                     FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '7 days'`, [tid]),
             db.get(`SELECT COUNT(*) as total,
-                    COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged
+                    SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged
                     FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '30 days'`, [tid]),
             db.get(`SELECT COUNT(*) as total,
-                    COUNT(*) FILTER (WHERE status != 'resolved') as open,
-                    COUNT(*) FILTER (WHERE severity = 'critical' AND status != 'resolved') as critical_open
+                    SUM(CASE WHEN fa.status != 'resolved' THEN 1 ELSE 0 END) as open,
+                    SUM(CASE WHEN fa.severity = 'critical' AND fa.status != 'resolved' THEN 1 ELSE 0 END) as critical_open
                     FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1`, [tid]),
             db.all(`SELECT p.name, COUNT(se.id) as scans,
-                    COUNT(se.id) FILTER (WHERE se.result IN ('suspicious','counterfeit')) as flagged,
+                    SUM(CASE WHEN se.result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged,
                     ROUND(AVG(se.trust_score)::numeric, 1) as avg_trust
                     FROM products p
                     LEFT JOIN scan_events se ON se.product_id = p.id
@@ -756,7 +756,7 @@ router.get('/governance/kpi-overview', async (req, res) => {
                     ORDER BY scans DESC LIMIT 10`, [tid]),
             db.all(`SELECT DATE_TRUNC('week', scanned_at)::date as week,
                     COUNT(*) as scans,
-                    COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged,
+                    SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged,
                     ROUND(AVG(trust_score)::numeric, 1) as avg_trust
                     FROM scan_events WHERE org_id = $1
                     AND scanned_at >= NOW() - INTERVAL '12 weeks'
