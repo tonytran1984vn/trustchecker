@@ -16,37 +16,59 @@ const { cacheMiddleware } = require('../cache');
 
 router.use(authMiddleware);
 
-// ─── Helper: tenant-scoped data fetchers ────────────────────────────────────
-async function getOrgProducts(orgId) {
-    if (orgId) {
-        return db.prepare('SELECT * FROM products WHERE org_id = ? LIMIT 100').all(orgId);
-    }
-    return db.prepare('SELECT * FROM products LIMIT 100').all();
+// ─── Helper: tenant-scoped data fetchers with optional date range ────────────
+function dateClause(col, from, to, params) {
+    let clause = '';
+    if (from) { clause += ` AND ${col} >= ?`; params.push(from); }
+    if (to) { clause += ` AND ${col} <= ?`; params.push(to + 'T23:59:59.999Z'); }
+    return clause;
 }
 
-async function getOrgShipments(orgId) {
+async function getOrgProducts(orgId, from, to) {
+    const params = [];
+    let q = 'SELECT * FROM products WHERE 1=1';
+    if (orgId) { q += ' AND org_id = ?'; params.push(orgId); }
+    q += dateClause('created_at', from, to, params);
+    q += ' LIMIT 200';
+    return db.prepare(q).all(...params);
+}
+
+async function getOrgShipments(orgId, from, to) {
     if (orgId) {
-        return db.prepare(`
-            SELECT s.* FROM shipments s
+        const params = [orgId];
+        let q = `SELECT s.* FROM shipments s
             INNER JOIN batches b ON s.batch_id = b.id
             INNER JOIN products p ON b.product_id = p.id
-            WHERE p.org_id = ?
-        `).all(orgId);
+            WHERE p.org_id = ?`;
+        q += dateClause('s.created_at', from, to, params);
+        return db.prepare(q).all(...params);
     }
-    return db.prepare('SELECT * FROM shipments').all();
+    const params = [];
+    let q = 'SELECT * FROM shipments WHERE 1=1';
+    q += dateClause('created_at', from, to, params);
+    return db.prepare(q).all(...params);
 }
 
-async function getOrgEvents(orgId) {
+async function getOrgEvents(orgId, from, to) {
     if (orgId) {
-        return db.prepare('SELECT * FROM supply_chain_events WHERE org_id = ?').all(orgId)
-            .catch(() => db.prepare(`
-                SELECT e.* FROM supply_chain_events e
-                INNER JOIN products p ON e.product_id = p.id
-                WHERE p.org_id = ?
-            `).all(orgId))
+        const params = [orgId];
+        let q = 'SELECT * FROM supply_chain_events WHERE org_id = ?';
+        q += dateClause('created_at', from, to, params);
+        return db.prepare(q).all(...params)
+            .catch(() => {
+                const p2 = [orgId];
+                let q2 = `SELECT e.* FROM supply_chain_events e
+                    INNER JOIN products p ON e.product_id = p.id
+                    WHERE p.org_id = ?`;
+                q2 += dateClause('e.created_at', from, to, p2);
+                return db.prepare(q2).all(...p2);
+            })
             .catch(() => db.prepare('SELECT * FROM supply_chain_events').all());
     }
-    return db.prepare('SELECT * FROM supply_chain_events').all();
+    const params = [];
+    let q = 'SELECT * FROM supply_chain_events WHERE 1=1';
+    q += dateClause('created_at', from, to, params);
+    return db.prepare(q).all(...params);
 }
 
 async function getOrgPartners(orgId) {
@@ -97,9 +119,10 @@ router.get('/footprint/:productId', async (req, res) => {
 router.get('/scope', cacheMiddleware(120), async (req, res) => {
     try {
         const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
-        const products = await getOrgProducts(orgId);
-        const shipments = await getOrgShipments(orgId);
-        const events = await getOrgEvents(orgId);
+        const { from, to } = req.query;
+        const products = await getOrgProducts(orgId, from, to);
+        const shipments = await getOrgShipments(orgId, from, to);
+        const events = await getOrgEvents(orgId, from, to);
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
 
@@ -143,9 +166,10 @@ router.get('/leaderboard', cacheMiddleware(120), async (req, res) => {
 router.get('/report', cacheMiddleware(180), async (req, res) => {
     try {
         const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
-        const products = await getOrgProducts(orgId);
-        const shipments = await getOrgShipments(orgId);
-        const events = await getOrgEvents(orgId);
+        const { from, to } = req.query;
+        const products = await getOrgProducts(orgId, from, to);
+        const shipments = await getOrgShipments(orgId, from, to);
+        const events = await getOrgEvents(orgId, from, to);
         const partners = await getOrgPartners(orgId);
         const violations = await getOrgViolations(orgId);
         const certifications = await db.prepare('SELECT * FROM certifications').all();

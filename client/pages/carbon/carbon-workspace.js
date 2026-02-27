@@ -31,6 +31,11 @@ let _benchmarkData = {};
 let _benchmarkLoaded = false;
 let _activeTab = 'dashboard';
 
+// Date range for report period
+let _dateFrom = '';
+let _dateTo = '';
+let _datePreset = 'all';
+
 // ─── Tab Registry ───────────────────────────────────────────
 const CARBON_TABS = [
   { id: 'dashboard', label: 'Carbon Overview', icon: '📊' },
@@ -64,10 +69,37 @@ window._carbonOfficerTab = function (tab) {
   if (tab === 'dashboard') { renderContent(); loadDashboard(); }
   else if (tab === 'emissions') loadEmissions();
   else if (tab === 'credits') loadCredits();
-  else if (tab === 'passport') loadPassports();
+  else if (tab === 'passport') loadPassports(_dateFrom, _dateTo);
   else if (tab === 'compliance') loadCompliance();
   else if (tab === 'benchmark') loadBenchmark();
   else renderContent();
+};
+
+// ─── Date Range Controls ────────────────────────────────────
+window._carbonDatePreset = function (preset) {
+  _datePreset = preset;
+  const now = new Date();
+  const fmt = d => d.toISOString().slice(0, 10);
+  switch (preset) {
+    case '30d': _dateFrom = fmt(new Date(now - 30 * 86400000)); _dateTo = fmt(now); break;
+    case '90d': _dateFrom = fmt(new Date(now - 90 * 86400000)); _dateTo = fmt(now); break;
+    case 'year': _dateFrom = `${now.getFullYear()}-01-01`; _dateTo = fmt(now); break;
+    case 'last_year': _dateFrom = `${now.getFullYear() - 1}-01-01`; _dateTo = `${now.getFullYear() - 1}-12-31`; break;
+    case 'all': _dateFrom = ''; _dateTo = ''; break;
+    default: return; // 'custom' — don't auto-set, user picks
+  }
+  _passportLoaded = false;
+  loadPassports(_dateFrom, _dateTo);
+};
+
+window._carbonDateCustom = function () {
+  const from = document.getElementById('carbon-date-from')?.value || '';
+  const to = document.getElementById('carbon-date-to')?.value || '';
+  _datePreset = 'custom';
+  _dateFrom = from;
+  _dateTo = to;
+  _passportLoaded = false;
+  loadPassports(from, to);
 };
 
 // ─── Data Loaders ───────────────────────────────────────────
@@ -108,11 +140,12 @@ async function loadCredits() {
   } catch (e) { _creditData = {}; _creditLoaded = true; renderContent(); }
 }
 
-async function loadPassports() {
+async function loadPassports(from, to) {
   try {
+    const qs = (from || to) ? `?${from ? `from=${from}` : ''}${from && to ? '&' : ''}${to ? `to=${to}` : ''}` : '';
     const [scope, report] = await Promise.all([
-      API.get('/scm/carbon/scope').catch(() => ({})),
-      API.get('/scm/carbon/report').catch(() => ({})),
+      API.get(`/scm/carbon/scope${qs}`).catch(() => ({})),
+      API.get(`/scm/carbon/report${qs}`).catch(() => ({})),
     ]);
     _passportData = { scope, report };
     _passportLoaded = true;
@@ -389,6 +422,41 @@ function renderPassports() {
   const grade = (() => { const t = scope.total_emissions_kgCO2e || 0; return report.grade || (t === 0 ? 'N/A' : t < 1000 ? 'A' : t < 5000 ? 'B' : t < 20000 ? 'C' : t < 50000 ? 'D' : 'F'); })();
   const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
 
+  // Presets
+  const presets = [
+    { id: 'all', label: 'All Time' },
+    { id: '30d', label: '30 Days' },
+    { id: '90d', label: '90 Days' },
+    { id: 'year', label: 'This Year' },
+    { id: 'last_year', label: 'Last Year' },
+    { id: 'custom', label: 'Custom' },
+  ];
+  const presetBtns = presets.map(p => {
+    const isActive = _datePreset === p.id;
+    return `<button onclick="_carbonDatePreset('${p.id}')" style="
+      padding:5px 14px;border-radius:8px;border:1px solid ${isActive ? '#3b82f6' : 'var(--border)'};
+      background:${isActive ? '#3b82f620' : 'transparent'};color:${isActive ? '#3b82f6' : 'var(--text-muted)'};
+      font-size:0.7rem;font-weight:${isActive ? '700' : '500'};cursor:pointer;transition:all .2s;
+    ">${p.label}</button>`;
+  }).join('');
+
+  const showCustom = _datePreset === 'custom';
+  const periodLabel = _dateFrom && _dateTo ? `${_dateFrom} — ${_dateTo}` : _dateFrom ? `From ${_dateFrom}` : _dateTo ? `Until ${_dateTo}` : report.period || 'All Time';
+
+  const datePicker = `
+    <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:0.72rem;font-weight:700;margin-right:4px">📅 Report Period</span>
+      ${presetBtns}
+      ${showCustom ? `
+        <span style="font-size:0.68rem;color:var(--text-muted);margin-left:8px">From</span>
+        <input type="date" id="carbon-date-from" value="${esc(_dateFrom)}" style="font-size:0.7rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">
+        <span style="font-size:0.68rem;color:var(--text-muted)">To</span>
+        <input type="date" id="carbon-date-to" value="${esc(_dateTo)}" style="font-size:0.7rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">
+        <button onclick="_carbonDateCustom()" style="padding:5px 14px;border-radius:8px;border:1px solid #3b82f6;background:#3b82f6;color:#fff;font-size:0.7rem;font-weight:700;cursor:pointer">Apply</button>
+      ` : ''}
+    </div>`;
+
+
   // GRI disclosures
   const disclosures = (report.disclosures || []).map(d => `
     <tr>
@@ -411,10 +479,11 @@ function renderPassports() {
   }).join('');
 
   return `
+    ${datePicker}
     <div style="display:flex;gap:12px;margin-bottom:16px">
       ${kpi('ESG Grade', grade, gradeColor, 'Carbon Integrity Rating')}
       ${kpi('GRI Standard', report.standard || 'GHG Protocol', '#3b82f6', 'Reporting framework')}
-      ${kpi('Report Period', report.period || new Date().getFullYear(), 'var(--text-primary,#1e293b)', 'Current assessment')}
+      ${kpi('Report Period', periodLabel, 'var(--text-primary,#1e293b)', 'Current assessment')}
     </div>
 
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px">
