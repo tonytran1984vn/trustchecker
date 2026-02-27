@@ -1669,7 +1669,7 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
 
         // Per-country summary (30 days)
         const countries = await db.all(`
-            SELECT country, COUNT(*) as scans,
+            SELECT geo_country as country, COUNT(*) as scans,
                    COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged,
                    COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
                    COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
@@ -1677,8 +1677,8 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
                    ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud
             FROM scan_events WHERE org_id = $1
             AND scanned_at >= NOW() - INTERVAL '30 days'
-            AND country IS NOT NULL AND country != ''
-            GROUP BY country
+            AND geo_country IS NOT NULL AND geo_country != ''
+            GROUP BY geo_country
             ORDER BY flagged DESC`, [tid]);
 
         const result = {
@@ -1701,13 +1701,13 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
         const topCountries = result.countries.slice(0, 5).map(c => c.country);
         if (topCountries.length > 0) {
             const weeklyGeo = await db.all(`
-                SELECT country, DATE_TRUNC('week', scanned_at)::date as week,
+                SELECT geo_country as country, DATE_TRUNC('week', scanned_at)::date as week,
                        COUNT(*) as scans,
                        COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged
                 FROM scan_events WHERE org_id = $1
                 AND scanned_at >= NOW() - INTERVAL '12 weeks'
-                AND country = ANY($2)
-                GROUP BY country, DATE_TRUNC('week', scanned_at)
+                AND geo_country = ANY($2)
+                GROUP BY geo_country, DATE_TRUNC('week', scanned_at)
                 ORDER BY week ASC`, [tid, topCountries]);
 
             const countryTrends = {};
@@ -1725,14 +1725,14 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
 
         // Top flagged products by country
         const topProductsByCountry = await db.all(`
-            SELECT se.country, p.name as product, COUNT(*) as flags,
+            SELECT se.geo_country as country, p.name as product, COUNT(*) as flags,
                    COUNT(*) FILTER (WHERE se.result = 'counterfeit') as counterfeit
             FROM scan_events se
             JOIN products p ON p.id = se.product_id
             WHERE p.org_id = $1 AND se.result IN ('suspicious','counterfeit')
             AND se.scanned_at >= NOW() - INTERVAL '30 days'
-            AND se.country IS NOT NULL AND se.country != ''
-            GROUP BY se.country, p.name
+            AND se.geo_country IS NOT NULL AND se.geo_country != ''
+            GROUP BY se.geo_country, p.name
             ORDER BY flags DESC
             LIMIT 20`, [tid]);
 
@@ -1745,11 +1745,11 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
         // Monthly geo progression
         const monthlyGeo = await db.all(`
             SELECT DATE_TRUNC('month', scanned_at)::date as month,
-                   COUNT(DISTINCT country) as countries,
+                   COUNT(DISTINCT geo_country) as countries,
                    COUNT(*) as scans,
                    COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged
             FROM scan_events WHERE org_id = $1
-            AND country IS NOT NULL AND country != ''
+            AND geo_country IS NOT NULL AND geo_country != ''
             GROUP BY DATE_TRUNC('month', scanned_at)
             ORDER BY month ASC`, [tid]);
 
