@@ -23,32 +23,32 @@ export function renderPage() {
   const lvlBg = { CRITICAL: 'rgba(220,38,38,0.12)', HIGH: 'rgba(239,68,68,0.08)', ELEVATED: 'rgba(245,158,11,0.06)', NORMAL: 'rgba(34,197,94,0.06)' };
   const c = lvlColor[rc.level] || '#64748b';
 
-  return `<div style="max-width:100%;overflow:hidden;box-sizing:border-box">
+  return `<div class="page-content" style="max-width:100%;overflow:hidden;box-sizing:border-box;padding:16px">
 
     <!-- EXECUTIVE RISK BRIEFING -->
     ${renderBriefing(d)}
 
     <!-- ① RISK COMMAND BAR -->
-    <div style="background:${lvlBg[rc.level]};border:1px solid ${c}30;border-radius:12px;padding:16px;margin-bottom:16px">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;text-align:center">
+    <div style="background:${lvlBg[rc.level]};border:1px solid ${c}30;border-radius:12px;padding:14px;margin-bottom:16px;box-sizing:border-box">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:center">
         <div>
-          <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Risk Level</div>
-          <div style="font-size:1.3rem;font-weight:900;color:${c};letter-spacing:1px">${rc.level === 'CRITICAL' ? '🔴' : rc.level === 'HIGH' ? '🟠' : rc.level === 'ELEVATED' ? '🟡' : '🟢'} ${rc.level}</div>
+          <div style="font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Risk Level</div>
+          <div style="font-size:1.2rem;font-weight:900;color:${c}">${rc.level === 'CRITICAL' ? '🔴' : rc.level === 'HIGH' ? '🟠' : rc.level === 'ELEVATED' ? '🟡' : '🟢'} ${rc.level}</div>
         </div>
         <div>
-          <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Exposure</div>
-          <div style="font-size:1.3rem;font-weight:900;color:${c}">${$(rc.exposure)}</div>
-          <div style="font-size:0.6rem;color:var(--text-muted)">${$(rc.exposure_7d)} this week</div>
+          <div style="font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Exposure</div>
+          <div style="font-size:1.2rem;font-weight:900;color:${c}">${$(rc.exposure)}</div>
+          <div style="font-size:0.58rem;color:var(--text-muted)">${$(rc.exposure_7d)} this week</div>
         </div>
         <div>
-          <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Trend (WoW)</div>
-          <div style="font-size:1.3rem;font-weight:900;color:${rc.wow_trend > 0 ? '#ef4444' : rc.wow_trend < 0 ? '#22c55e' : 'var(--text-muted)'}">
+          <div style="font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">Trend (WoW)</div>
+          <div style="font-size:1.2rem;font-weight:900;color:${rc.wow_trend > 0 ? '#ef4444' : rc.wow_trend < 0 ? '#22c55e' : 'var(--text-muted)'}">
             ${rc.wow_trend > 0 ? '↑' : rc.wow_trend < 0 ? '↓' : '→'} ${rc.wow_trend > 0 ? '+' : ''}${rc.wow_trend}%
           </div>
         </div>
         <div>
-          <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">SLA Breach</div>
-          <div style="font-size:1.3rem;font-weight:900;color:${rc.sla_overdue > 0 ? '#ef4444' : '#22c55e'}">${rc.sla_overdue} overdue</div>
+          <div style="font-size:0.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">SLA Breach</div>
+          <div style="font-size:1.2rem;font-weight:900;color:${rc.sla_overdue > 0 ? '#ef4444' : '#22c55e'}">${rc.sla_overdue} overdue</div>
         </div>
       </div>
     </div>
