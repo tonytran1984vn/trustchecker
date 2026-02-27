@@ -126,6 +126,40 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
 
+        // Monthly trend — group events by month
+        const monthMap = {};
+        (events || []).forEach(e => {
+            const dt = e.created_at || e.timestamp;
+            if (!dt) return;
+            const month = String(dt).slice(0, 7); // YYYY-MM
+            if (!monthMap[month]) monthMap[month] = 0;
+            // Estimate per-event emission contribution
+            monthMap[month] += (e.distance_km || 0) * 0.045 * (e.weight_kg ? e.weight_kg / 1000 : 0.5);
+        });
+        (shipments || []).forEach(s => {
+            const dt = s.created_at || s.ship_date;
+            if (!dt) return;
+            const month = String(dt).slice(0, 7);
+            if (!monthMap[month]) monthMap[month] = 0;
+            monthMap[month] += (s.distance_km || 0) * 0.045 * (s.weight_kg ? s.weight_kg / 1000 : 0.5);
+        });
+        scopeData.monthly_trend = Object.entries(monthMap)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .slice(-12)
+            .map(([month, kgCO2e]) => ({ month, kgCO2e: Math.round(kgCO2e * 100) / 100 }));
+
+        // Per-product detail
+        scopeData.products_detail = (products || []).slice(0, 30).map(p => ({
+            name: p.name || p.sku || 'Unknown',
+            category: p.category || p.type || '',
+            weight_kg: p.weight_kg || p.weight || 0,
+            kgCO2e: Math.round((p.weight_kg || p.weight || 1) * 0.062 * 100) / 100,
+            percentage: 0
+        }));
+        // Compute percentages
+        const totalProd = scopeData.products_detail.reduce((s, p) => s + p.kgCO2e, 0) || 1;
+        scopeData.products_detail.forEach(p => { p.percentage = Math.round(p.kgCO2e / totalProd * 1000) / 10; });
+
         res.json(scopeData);
     } catch (err) {
         console.error('Carbon scope error:', err);

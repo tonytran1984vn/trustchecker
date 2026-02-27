@@ -67,7 +67,7 @@ window._carbonOfficerTab = function (tab) {
     </div>`;
   }
   if (tab === 'dashboard') { renderContent(); loadDashboard(); }
-  else if (tab === 'emissions') loadEmissions();
+  else if (tab === 'emissions') loadEmissions(_dateFrom, _dateTo);
   else if (tab === 'credits') loadCredits();
   else if (tab === 'passport') loadPassports(_dateFrom, _dateTo);
   else if (tab === 'compliance') loadCompliance();
@@ -86,10 +86,10 @@ window._carbonDatePreset = function (preset) {
     case 'year': _dateFrom = `${now.getFullYear()}-01-01`; _dateTo = fmt(now); break;
     case 'last_year': _dateFrom = `${now.getFullYear() - 1}-01-01`; _dateTo = `${now.getFullYear() - 1}-12-31`; break;
     case 'all': _dateFrom = ''; _dateTo = ''; break;
-    case 'custom': renderContent(); return; // Show date inputs, don't reload yet
+    case 'custom': renderContent(); return;
   }
-  _passportLoaded = false;
-  loadPassports(_dateFrom, _dateTo);
+  if (_activeTab === 'emissions') { _emissionLoaded = false; loadEmissions(_dateFrom, _dateTo); }
+  else { _passportLoaded = false; loadPassports(_dateFrom, _dateTo); }
 };
 
 window._carbonDateCustom = function () {
@@ -98,9 +98,56 @@ window._carbonDateCustom = function () {
   _datePreset = 'custom';
   _dateFrom = from;
   _dateTo = to;
-  _passportLoaded = false;
-  loadPassports(from, to);
+  if (_activeTab === 'emissions') { _emissionLoaded = false; loadEmissions(from, to); }
+  else { _passportLoaded = false; loadPassports(from, to); }
 };
+
+window._carbonExportCSV = function () {
+  const report = _passportData.report || {};
+  const scope = _passportData.scope || {};
+  let csv = 'Carbon Integrity Passport — ' + (report.organization || 'Organization') + '\n';
+  csv += 'Period,' + (_dateFrom && _dateTo ? `${_dateFrom} to ${_dateTo}` : 'All Time') + '\n';
+  csv += 'Standard,' + (report.standard || 'GHG Protocol') + '\n\n';
+  csv += 'Scope,kgCO2e\n';
+  csv += 'Scope 1,' + (scope.scope_1?.total || 0) + '\n';
+  csv += 'Scope 2,' + (scope.scope_2?.total || 0) + '\n';
+  csv += 'Scope 3,' + (scope.scope_3?.total || 0) + '\n';
+  csv += 'Total,' + (scope.total_emissions_kgCO2e || 0) + '\n\n';
+  csv += 'Code,Disclosure,Value,Unit\n';
+  (report.disclosures || []).forEach(d => {
+    csv += `${d.code || d.id},"${d.title || d.name}",${d.value || ''},${d.unit || ''}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `carbon-passport-${_dateFrom || 'all'}-${_dateTo || 'time'}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+window._carbonComparePeriods = function () {
+  _compareMode = !_compareMode;
+  renderContent();
+};
+
+window._carbonRunCompare = async function () {
+  const f1 = document.getElementById('cmp-from-1')?.value || '';
+  const t1 = document.getElementById('cmp-to-1')?.value || '';
+  const f2 = document.getElementById('cmp-from-2')?.value || '';
+  const t2 = document.getElementById('cmp-to-2')?.value || '';
+  if (!f1 || !t1 || !f2 || !t2) return;
+  try {
+    const [s1, s2] = await Promise.all([
+      API.get(`/scm/carbon/scope?from=${f1}&to=${t1}`).catch(() => ({})),
+      API.get(`/scm/carbon/scope?from=${f2}&to=${t2}`).catch(() => ({})),
+    ]);
+    _compareData = { period1: { from: f1, to: t1, scope: s1 }, period2: { from: f2, to: t2, scope: s2 } };
+    renderContent();
+  } catch (e) { console.error('Compare error:', e); }
+};
+
+let _compareMode = false;
+let _compareData = null;
 
 // ─── Data Loaders ───────────────────────────────────────────
 async function loadDashboard() {
@@ -116,11 +163,12 @@ async function loadDashboard() {
   }
 }
 
-async function loadEmissions() {
+async function loadEmissions(from, to) {
   try {
+    const qs = (from || to) ? `?${from ? `from=${from}` : ''}${from && to ? '&' : ''}${to ? `to=${to}` : ''}` : '';
     const [scope, risk] = await Promise.all([
-      API.get('/scm/carbon/scope').catch(() => ({})),
-      API.get('/scm/carbon/risk-factors').catch(() => ({})),
+      API.get(`/scm/carbon/scope${qs}`).catch(() => ({})),
+      API.get(`/scm/carbon/risk-factors${qs}`).catch(() => ({})),
     ]);
     _emissionData = { scope, risk };
     _emissionLoaded = true;
@@ -265,7 +313,6 @@ function renderEmissions() {
   if (!_emissionLoaded) return spinner('Loading Emission Tracker…');
 
   const scope = _emissionData.scope || {};
-  // API returns scope_1/scope_2/scope_3 with .total and .pct
   const s1 = { kgCO2e: scope.scope_1?.total || 0, percentage: scope.scope_1?.pct || 0, breakdown: scope.scope_1?.breakdown || scope.scope_1?.items || [] };
   const s2 = { kgCO2e: scope.scope_2?.total || 0, percentage: scope.scope_2?.pct || 0, breakdown: scope.scope_2?.breakdown || scope.scope_2?.items || [] };
   const s3 = { kgCO2e: scope.scope_3?.total || 0, percentage: scope.scope_3?.pct || 0, breakdown: scope.scope_3?.breakdown || scope.scope_3?.items || [] };
@@ -273,6 +320,17 @@ function renderEmissions() {
   const totalT = scope.total_emissions_tonnes || (totalKg / 1000).toFixed(2);
   const grade = totalKg === 0 ? 'N/A' : totalKg < 1000 ? 'A' : totalKg < 5000 ? 'B' : totalKg < 20000 ? 'C' : totalKg < 50000 ? 'D' : 'F';
   const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
+
+  // Threshold alert
+  const THRESHOLD = 10000;
+  const alertBanner = totalKg > THRESHOLD ? `
+    <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:1.2rem">🚨</span>
+      <div>
+        <div style="font-weight:700;font-size:0.78rem;color:#dc2626">Emissions Threshold Exceeded</div>
+        <div style="font-size:0.68rem;color:#991b1b">Current: ${totalKg.toLocaleString()} kgCO₂e exceeds target of ${THRESHOLD.toLocaleString()} kgCO₂e by ${(totalKg - THRESHOLD).toLocaleString()} kgCO₂e (${((totalKg - THRESHOLD) / THRESHOLD * 100).toFixed(1)}% over)</div>
+      </div>
+    </div>` : '';
 
   const riskFactors = (_emissionData.risk?.risk_factors || []).map(f => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
@@ -284,7 +342,28 @@ function renderEmissions() {
     </div>
   `).join('') || '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.72rem">No risk factors detected</div>';
 
-  // Scope detail table
+  // Monthly trend chart from scope detail
+  const months = scope.monthly_trend || [];
+  let trendChart = '';
+  if (months.length > 0) {
+    const maxKg = Math.max(...months.map(m => m.kgCO2e || 0), 1);
+    const bars = months.map(m => {
+      const pct = Math.max((m.kgCO2e || 0) / maxKg * 100, 2);
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="font-size:0.65rem;width:60px;text-align:right;color:var(--text-muted)">${m.month || m.label}</span>
+        <div style="flex:1;height:18px;background:var(--border);border-radius:4px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,#3b82f6,#8b5cf6);border-radius:4px;transition:width 0.5s"></div>
+        </div>
+        <span style="font-size:0.65rem;width:80px;font-weight:700">${(m.kgCO2e || 0).toLocaleString()} kg</span>
+      </div>`;
+    }).join('');
+    trendChart = `
+    <div class="card" style="border-left:4px solid #06b6d4;margin-bottom:12px">
+      <div class="card-header"><div class="card-title">📈 Monthly Emission Trend</div></div>
+      <div class="card-body">${bars}</div>
+    </div>`;
+  }
+
   const scopeDetail = (label, data, color) => {
     const items = data.breakdown || data.items || [];
     const rows = items.length > 0
@@ -307,7 +386,11 @@ function renderEmissions() {
     </div>`;
   };
 
+  const periodLabel = _dateFrom && _dateTo ? `${_dateFrom} — ${_dateTo}` : 'All Time';
+
   return `
+    ${buildDatePicker()}
+    ${alertBanner}
     <div style="display:flex;gap:12px;margin-bottom:16px">
       ${kpi('Total Emissions', `${(totalKg / 1000).toFixed(2)} t`, '#f59e0b', `${totalKg.toLocaleString()} kgCO₂e`)}
       ${kpi('ESG Grade', grade, gradeColor, scope.grade_label || 'Carbon rating')}
@@ -315,6 +398,8 @@ function renderEmissions() {
       ${kpi('Scope 2', `${(s2.kgCO2e || 0).toLocaleString()} kg`, '#f59e0b', `${s2.percentage || 0}% energy`)}
       ${kpi('Scope 3', `${(s3.kgCO2e || 0).toLocaleString()} kg`, '#3b82f6', `${s3.percentage || 0}% supply chain`)}
     </div>
+
+    ${trendChart}
 
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px">
       <div>
@@ -350,10 +435,10 @@ function renderCredits() {
   const creditRows = credits.slice(0, 30).map(c => `
     <tr>
       <td style="font-size:0.68rem;font-family:monospace;color:var(--text-muted)">${esc((c.credit_id || c.id || '').substring(0, 12))}…</td>
-      <td style="font-size:0.72rem;font-weight:700">${c.quantity_tCO2e || 0} tCO₂e</td>
+      <td style="font-size:0.72rem;font-weight:700">${c.quantity_tCO2e || c.quantity_tco2e || c.quantity || 0} tCO₂e</td>
       <td><span style="font-size:0.65rem;padding:2px 8px;border-radius:10px;font-weight:600;background:${statusColor(c.status)}20;color:${statusColor(c.status)}">${(c.status || 'unknown').toUpperCase()}</span></td>
-      <td style="font-size:0.68rem;color:var(--text-muted)">${c.vintage || '—'}</td>
-      <td style="font-size:0.68rem;color:var(--text-muted)">${c.methodology || '—'}</td>
+      <td style="font-size:0.68rem;color:var(--text-muted)">${c.vintage || c.vintage_year || '—'}</td>
+      <td style="font-size:0.68rem;color:var(--text-muted)">${c.methodology || c.project_type || '—'}</td>
       <td style="font-size:0.68rem;color:var(--text-muted)">${timeAgo(c.created_at || c.minted_at)}</td>
     </tr>
   `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;font-size:0.72rem">No credits in registry</td></tr>';
@@ -422,39 +507,53 @@ function renderPassports() {
   const grade = (() => { const t = scope.total_emissions_kgCO2e || 0; return report.grade || (t === 0 ? 'N/A' : t < 1000 ? 'A' : t < 5000 ? 'B' : t < 20000 ? 'C' : t < 50000 ? 'D' : 'F'); })();
   const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
 
-  // Presets
-  const presets = [
-    { id: 'all', label: 'All Time' },
-    { id: '30d', label: '30 Days' },
-    { id: '90d', label: '90 Days' },
-    { id: 'year', label: 'This Year' },
-    { id: 'last_year', label: 'Last Year' },
-    { id: 'custom', label: 'Custom' },
-  ];
-  const presetBtns = presets.map(p => {
-    const isActive = _datePreset === p.id;
-    return `<button onclick="_carbonDatePreset('${p.id}')" style="
-      padding:5px 14px;border-radius:8px;border:1px solid ${isActive ? '#3b82f6' : 'var(--border)'};
-      background:${isActive ? '#3b82f620' : 'transparent'};color:${isActive ? '#3b82f6' : 'var(--text-muted)'};
-      font-size:0.7rem;font-weight:${isActive ? '700' : '500'};cursor:pointer;transition:all .2s;
-    ">${p.label}</button>`;
-  }).join('');
-
-  const showCustom = _datePreset === 'custom';
   const periodLabel = _dateFrom && _dateTo ? `${_dateFrom} — ${_dateTo}` : _dateFrom ? `From ${_dateFrom}` : _dateTo ? `Until ${_dateTo}` : report.period || 'All Time';
 
-  const datePicker = `
-    <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <span style="font-size:0.72rem;font-weight:700;margin-right:4px">📅 Report Period</span>
-      ${presetBtns}
-      ${showCustom ? `
-        <span style="font-size:0.68rem;color:var(--text-muted);margin-left:8px">From</span>
-        <input type="date" id="carbon-date-from" value="${esc(_dateFrom)}" style="font-size:0.7rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">
-        <span style="font-size:0.68rem;color:var(--text-muted)">To</span>
-        <input type="date" id="carbon-date-to" value="${esc(_dateTo)}" style="font-size:0.7rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">
-        <button onclick="_carbonDateCustom()" style="padding:5px 14px;border-radius:8px;border:1px solid #3b82f6;background:#3b82f6;color:#fff;font-size:0.7rem;font-weight:700;cursor:pointer">Apply</button>
-      ` : ''}
-    </div>`;
+  // Per-product passport detail
+  const products = scope.products_detail || scope.scope_3?.breakdown || [];
+  const productRows = products.slice(0, 20).map(p => `
+    <tr>
+      <td style="font-size:0.72rem;font-weight:600">${esc(p.name || p.category || '—')}</td>
+      <td style="font-size:0.72rem;text-align:right">${(p.weight_kg || p.kgCO2e || 0).toLocaleString()}</td>
+      <td style="font-size:0.72rem;text-align:right;font-weight:700;color:#3b82f6">${(p.kgCO2e || p.value || 0).toLocaleString()}</td>
+      <td style="font-size:0.68rem;color:var(--text-muted)">${p.percentage || 0}%</td>
+    </tr>
+  `).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No per-product data</td></tr>';
+
+  // Period comparison
+  const compareSection = _compareMode ? `
+    <div class="card" style="border-left:4px solid #8b5cf6;margin-bottom:16px">
+      <div class="card-header">
+        <div class="card-title">⚡ Period Comparison</div>
+        <button onclick="_carbonComparePeriods()" style="font-size:0.65rem;padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer">✕ Close</button>
+      </div>
+      <div class="card-body">
+        <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:12px">
+          <div><div style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px">Period A From</div><input type="date" id="cmp-from-1" style="font-size:0.7rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px"></div>
+          <div><div style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px">To</div><input type="date" id="cmp-to-1" style="font-size:0.7rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px"></div>
+          <div style="font-size:0.82rem;font-weight:700;padding-bottom:4px">vs</div>
+          <div><div style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px">Period B From</div><input type="date" id="cmp-from-2" style="font-size:0.7rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px"></div>
+          <div><div style="font-size:0.65rem;color:var(--text-muted);margin-bottom:4px">To</div><input type="date" id="cmp-to-2" style="font-size:0.7rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px"></div>
+          <button onclick="_carbonRunCompare()" style="padding:6px 16px;border-radius:8px;border:none;background:#8b5cf6;color:#fff;font-size:0.7rem;font-weight:700;cursor:pointer">Compare</button>
+        </div>
+        ${_compareData ? (() => {
+      const a = _compareData.period1.scope;
+      const b = _compareData.period2.scope;
+      const aTotal = a.total_emissions_kgCO2e || 0;
+      const bTotal = b.total_emissions_kgCO2e || 0;
+      const delta = bTotal - aTotal;
+      const deltaPct = aTotal > 0 ? (delta / aTotal * 100).toFixed(1) : 'N/A';
+      const deltaColor = delta > 0 ? '#ef4444' : '#10b981';
+      const arrow = delta > 0 ? '📈' : '📉';
+      return `
+            <div style="display:flex;gap:12px">
+              ${kpi(`Period A (${_compareData.period1.from})`, `${(aTotal / 1000).toFixed(2)} t`, '#3b82f6', `${aTotal.toLocaleString()} kgCO₂e`)}
+              ${kpi(`Period B (${_compareData.period2.from})`, `${(bTotal / 1000).toFixed(2)} t`, '#8b5cf6', `${bTotal.toLocaleString()} kgCO₂e`)}
+              ${kpi(`${arrow} Change`, `${delta > 0 ? '+' : ''}${deltaPct}%`, deltaColor, `${delta > 0 ? '+' : ''}${delta.toLocaleString()} kgCO₂e`)}
+            </div>`;
+    })() : '<div style="font-size:0.72rem;color:var(--text-muted)">Select two date ranges and click Compare</div>'}
+      </div>
+    </div>` : '';
 
 
   // GRI disclosures
@@ -479,24 +578,46 @@ function renderPassports() {
   }).join('');
 
   return `
-    ${datePicker}
-    <div style="display:flex;gap:12px;margin-bottom:16px">
-      ${kpi('ESG Grade', grade, gradeColor, 'Carbon Integrity Rating')}
-      ${kpi('GRI Standard', report.standard || 'GHG Protocol', '#3b82f6', 'Reporting framework')}
-      ${kpi('Report Period', periodLabel, 'var(--text-primary,#1e293b)', 'Current assessment')}
+    ${buildDatePicker()}
+    <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
+      <div style="flex:1;display:flex;gap:12px">
+        ${kpi('ESG Grade', grade, gradeColor, 'Carbon Integrity Rating')}
+        ${kpi('GRI Standard', report.standard || 'GHG Protocol', '#3b82f6', 'Reporting framework')}
+        ${kpi('Report Period', periodLabel, 'var(--text-primary,#1e293b)', 'Current assessment')}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button onclick="_carbonExportCSV()" style="padding:8px 16px;border-radius:8px;border:1px solid #059669;background:#05966910;color:#059669;font-size:0.7rem;font-weight:700;cursor:pointer;white-space:nowrap">📥 Export CSV</button>
+        <button onclick="_carbonComparePeriods()" style="padding:8px 16px;border-radius:8px;border:1px solid #8b5cf6;background:${_compareMode ? '#8b5cf620' : 'transparent'};color:#8b5cf6;font-size:0.7rem;font-weight:700;cursor:pointer;white-space:nowrap">⚡ Compare</button>
+      </div>
     </div>
 
+    ${compareSection}
+
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px">
-      <div class="card" style="border-left:4px solid #3b82f6">
-        <div class="card-header">
-          <div class="card-title">📋 GRI-Format Disclosures</div>
-          <div style="font-size:0.68rem;color:var(--text-muted)">Carbon Integrity Passport components</div>
+      <div>
+        <div class="card" style="border-left:4px solid #3b82f6;margin-bottom:12px">
+          <div class="card-header">
+            <div class="card-title">📋 GRI-Format Disclosures</div>
+            <div style="font-size:0.68rem;color:var(--text-muted)">Carbon Integrity Passport components</div>
+          </div>
+          <div class="card-body" style="max-height:350px;overflow-y:auto">
+            <table class="data-table">
+              <thead><tr><th>Code</th><th>Disclosure</th><th>Value</th><th>Unit</th></tr></thead>
+              <tbody>${disclosures}</tbody>
+            </table>
+          </div>
         </div>
-        <div class="card-body" style="max-height:450px;overflow-y:auto">
-          <table class="data-table">
-            <thead><tr><th>Code</th><th>Disclosure</th><th>Value</th><th>Unit</th></tr></thead>
-            <tbody>${disclosures}</tbody>
-          </table>
+        <div class="card" style="border-left:4px solid #06b6d4">
+          <div class="card-header">
+            <div class="card-title">📦 Per-Product Carbon Footprint</div>
+            <div style="font-size:0.68rem;color:var(--text-muted)">${products.length} products assessed</div>
+          </div>
+          <div class="card-body" style="max-height:300px;overflow-y:auto">
+            <table class="data-table">
+              <thead><tr><th>Product / Category</th><th style="text-align:right">Weight</th><th style="text-align:right">kgCO₂e</th><th style="text-align:right">%</th></tr></thead>
+              <tbody>${productRows}</tbody>
+            </table>
+          </div>
         </div>
       </div>
       <div>
@@ -655,6 +776,38 @@ function renderBenchmark() {
 }
 
 // ─── Common Helpers ─────────────────────────────────────────
+function buildDatePicker() {
+  const presets = [
+    { id: 'all', label: 'All Time' },
+    { id: '30d', label: '30 Days' },
+    { id: '90d', label: '90 Days' },
+    { id: 'year', label: 'This Year' },
+    { id: 'last_year', label: 'Last Year' },
+    { id: 'custom', label: 'Custom' },
+  ];
+  const btns = presets.map(p => {
+    const isActive = _datePreset === p.id;
+    return `<button onclick="_carbonDatePreset('${p.id}')" style="
+      padding:5px 14px;border-radius:8px;border:1px solid ${isActive ? '#3b82f6' : 'var(--border)'};
+      background:${isActive ? '#3b82f620' : 'transparent'};color:${isActive ? '#3b82f6' : 'var(--text-muted)'};
+      font-size:0.7rem;font-weight:${isActive ? '700' : '500'};cursor:pointer;transition:all .2s;
+    ">${p.label}</button>`;
+  }).join('');
+  const showCustom = _datePreset === 'custom';
+  return `
+    <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:0.72rem;font-weight:700;margin-right:4px">📅 Report Period</span>
+      ${btns}
+      ${showCustom ? `
+        <span style="font-size:0.68rem;color:var(--text-muted);margin-left:8px">From</span>
+        <input type="date" id="carbon-date-from" value="${esc(_dateFrom)}" style="font-size:0.7rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">
+        <span style="font-size:0.68rem;color:var(--text-muted)">To</span>
+        <input type="date" id="carbon-date-to" value="${esc(_dateTo)}" style="font-size:0.7rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">
+        <button onclick="_carbonDateCustom()" style="padding:5px 14px;border-radius:8px;border:1px solid #3b82f6;background:#3b82f6;color:#fff;font-size:0.7rem;font-weight:700;cursor:pointer">Apply</button>
+      ` : ''}
+    </div>`;
+}
+
 function kpi(label, value, color, desc) {
   return `
     <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px;flex:1;min-width:130px">
