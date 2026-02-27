@@ -86,7 +86,7 @@ window._carbonDatePreset = function (preset) {
     case 'year': _dateFrom = `${now.getFullYear()}-01-01`; _dateTo = fmt(now); break;
     case 'last_year': _dateFrom = `${now.getFullYear() - 1}-01-01`; _dateTo = `${now.getFullYear() - 1}-12-31`; break;
     case 'all': _dateFrom = ''; _dateTo = ''; break;
-    default: return; // 'custom' — don't auto-set, user picks
+    case 'custom': renderContent(); return; // Show date inputs, don't reload yet
   }
   _passportLoaded = false;
   loadPassports(_dateFrom, _dateTo);
