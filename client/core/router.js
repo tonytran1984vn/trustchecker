@@ -344,7 +344,7 @@ export function renderPage() {
     let page = State.page;
 
     // v10.1: Auto-correct default 'dashboard' page for roles with dedicated landing pages
-    const _roleLanding = { org_owner: 'owner-governance', super_admin: 'control-tower', executive: 'exec-overview' };
+    const _roleLanding = { org_owner: 'owner-governance', super_admin: 'control-tower', executive: 'exec-overview', carbon_officer: 'carbon-workspace' };
     const correctPage = _roleLanding[State.user?.role];
     if (correctPage && page === 'dashboard') {
         State.page = correctPage;
