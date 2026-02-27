@@ -241,7 +241,7 @@ function renderEmissions() {
   const grade = totalKg === 0 ? 'N/A' : totalKg < 1000 ? 'A' : totalKg < 5000 ? 'B' : totalKg < 20000 ? 'C' : totalKg < 50000 ? 'D' : 'F';
   const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
 
-  const riskFactors = (_emissionData.risk?.factors || []).map(f => `
+  const riskFactors = (_emissionData.risk?.risk_factors || []).map(f => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
       <div>
         <div style="font-weight:700;font-size:0.75rem">${esc(f.name || f.factor)}</div>
@@ -456,7 +456,7 @@ function renderCompliance() {
   if (!_complianceLoaded) return spinner('Loading ESG & Compliance…');
 
   const frameworks = _complianceData.regulatory?.frameworks || [];
-  const riskFactors = _complianceData.risk?.factors || [];
+  const riskFactors = _complianceData.risk?.risk_factors || [];
 
   const fwRows = frameworks.map(fw => {
     const statusColor = fw.status === 'compliant' ? '#10b981' : fw.status === 'partial' ? '#f59e0b' : fw.status === 'active' ? '#3b82f6' : '#ef4444';
@@ -558,7 +558,7 @@ function renderBenchmark() {
     <div style="display:flex;gap:12px;margin-bottom:16px">
       ${kpi('Maturity Level', `L${currentLevel}`, '#8b5cf6', maturity.current_name || maturity.name || 'Not Assessed')}
       ${kpi('Partners Tracked', partners.length, 'var(--text-primary,#1e293b)', 'ESG leaderboard')}
-      ${kpi('Features Active', (maturity.features || []).length, '#059669', 'Carbon capabilities')}
+      ${kpi('Features Active', (maturity.features_detected || maturity.features || []).length, '#059669', 'Carbon capabilities')}
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">

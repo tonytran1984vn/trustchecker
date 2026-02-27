@@ -181,12 +181,13 @@ class CarbonEngine {
     aggregateByScope(products, shipments, events) {
         let scope1Total = 0, scope2Total = 0, scope3Total = 0;
         const productFootprints = [];
+        // Per-category breakdown accumulators
+        const s1ByCat = {}, s2ByCat = {}, s3ByCat = {};
 
         for (const product of products) {
             // Match shipments: try batch chain first, then proportional fallback
             let productShipments = shipments.filter(s => {
                 if (!s.batch_id) return false;
-                // Check via events
                 const batch = events.find(e => e.product_id === product.id && e.batch_id === s.batch_id);
                 return !!batch;
             });
@@ -199,15 +200,26 @@ class CarbonEngine {
             const productEvents = events.filter(e => e.product_id === product.id);
 
             const fp = this.calculateFootprint(product, productShipments, productEvents);
-            scope1Total += fp.scopes[0].value;
-            scope2Total += fp.scopes[1].value;
-            scope3Total += fp.scopes[2].value;
+            const cat = product.category || 'General';
+            const s1v = fp.scopes[0].value;
+            const s2v = fp.scopes[1].value;
+            const s3v = fp.scopes[2].value;
+
+            scope1Total += s1v;
+            scope2Total += s2v;
+            scope3Total += s3v;
+
+            // Accumulate per category
+            s1ByCat[cat] = (s1ByCat[cat] || 0) + s1v;
+            s2ByCat[cat] = (s2ByCat[cat] || 0) + s2v;
+            s3ByCat[cat] = (s3ByCat[cat] || 0) + s3v;
 
             productFootprints.push({
                 product_id: product.id,
                 name: product.name,
-                category: product.category,
+                category: cat,
                 total: fp.total_footprint_kgCO2e,
+                scope1: s1v, scope2: s2v, scope3: s3v,
                 grade: fp.grade,
                 grade_color: fp.grade_color
             });
@@ -215,12 +227,22 @@ class CarbonEngine {
 
         const total = scope1Total + scope2Total + scope3Total;
 
+        // Build per-scope breakdown items from category accumulators
+        const buildItems = (byCat, scopeTotal) => Object.entries(byCat)
+            .map(([category, value]) => ({
+                category,
+                value: Math.round(value * 100) / 100,
+                kgCO2e: Math.round(value * 100) / 100,
+                percentage: scopeTotal > 0 ? Math.round(value / scopeTotal * 100) : 0
+            }))
+            .sort((a, b) => b.value - a.value);
+
         return {
             total_emissions_kgCO2e: Math.round(total * 100) / 100,
             total_emissions_tonnes: Math.round(total / 1000 * 100) / 100,
-            scope_1: { total: Math.round(scope1Total * 100) / 100, pct: total > 0 ? Math.round(scope1Total / total * 100) : 0, label: 'Direct Manufacturing' },
-            scope_2: { total: Math.round(scope2Total * 100) / 100, pct: total > 0 ? Math.round(scope2Total / total * 100) : 0, label: 'Energy & Warehousing' },
-            scope_3: { total: Math.round(scope3Total * 100) / 100, pct: total > 0 ? Math.round(scope3Total / total * 100) : 0, label: 'Transport & Distribution' },
+            scope_1: { total: Math.round(scope1Total * 100) / 100, pct: total > 0 ? Math.round(scope1Total / total * 100) : 0, label: 'Direct Manufacturing', items: buildItems(s1ByCat, scope1Total) },
+            scope_2: { total: Math.round(scope2Total * 100) / 100, pct: total > 0 ? Math.round(scope2Total / total * 100) : 0, label: 'Energy & Warehousing', items: buildItems(s2ByCat, scope2Total) },
+            scope_3: { total: Math.round(scope3Total * 100) / 100, pct: total > 0 ? Math.round(scope3Total / total * 100) : 0, label: 'Transport & Distribution', items: buildItems(s3ByCat, scope3Total) },
             products_assessed: productFootprints.length,
             product_rankings: productFootprints.sort((a, b) => b.total - a.total),
             reduction_targets: {
