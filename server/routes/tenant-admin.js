@@ -722,77 +722,232 @@ router.get('/governance/dashboard', async (req, res) => {
     }
 });
 
-// ─── Governance: KPI Overview (Company Admin Deep Dashboard) ─────────────────
+// ─── Governance: KPI Overview — RISK-FIRST ARCHITECTURE ─────────────────
 router.get('/governance/kpi-overview', async (req, res) => {
     try {
         const tid = req.tenantId;
+        const PRODUCT_AVG_VALUE = 150; // USD estimate per product unit for exposure calc
 
-        const [products, scanTotals, scan7d, scan30d, alerts, topProducts, weeklySeries] = await Promise.all([
-            db.get(`SELECT COUNT(*) as total, SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active FROM products WHERE org_id = $1`, [tid]),
+        const [
+            fraudTotals, fraud7d, fraudPrev7d,
+            alertsSummary, slaBreached, alertsBySeverity,
+            regionRisk, productRisk,
+            weeklyFraud, weeklyAlerts,
+            trustStats,
+        ] = await Promise.all([
+            // Overall fraud metrics
             db.get(`SELECT COUNT(*) as total,
-                    SUM(CASE WHEN result = 'authentic' THEN 1 ELSE 0 END) as authentic,
+                    SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged,
                     SUM(CASE WHEN result = 'counterfeit' THEN 1 ELSE 0 END) as counterfeit,
-                    SUM(CASE WHEN result = 'suspicious' THEN 1 ELSE 0 END) as suspicious,
-                    ROUND(AVG(trust_score)::numeric, 1) as avg_trust,
-                    ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud
+                    ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud,
+                    ROUND(AVG(trust_score)::numeric, 1) as avg_trust
                     FROM scan_events WHERE org_id = $1`, [tid]),
+            // Last 7 days
             db.get(`SELECT COUNT(*) as total,
-                    SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged
+                    SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged,
+                    SUM(CASE WHEN result = 'counterfeit' THEN 1 ELSE 0 END) as counterfeit
                     FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '7 days'`, [tid]),
+            // Previous 7 days (for WoW calculation)
             db.get(`SELECT COUNT(*) as total,
                     SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged
-                    FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '30 days'`, [tid]),
+                    FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '14 days' AND scanned_at < NOW() - INTERVAL '7 days'`, [tid]),
+            // Alert summary
             db.get(`SELECT COUNT(*) as total,
                     SUM(CASE WHEN fa.status != 'resolved' THEN 1 ELSE 0 END) as open,
-                    SUM(CASE WHEN fa.severity = 'critical' AND fa.status != 'resolved' THEN 1 ELSE 0 END) as critical_open
+                    SUM(CASE WHEN fa.severity = 'critical' AND fa.status != 'resolved' THEN 1 ELSE 0 END) as critical_open,
+                    SUM(CASE WHEN fa.severity = 'high' AND fa.status != 'resolved' THEN 1 ELSE 0 END) as high_open
                     FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1`, [tid]),
-            db.all(`SELECT p.name, COUNT(se.id) as scans,
+            // SLA breached (open alerts > 48h old)
+            db.get(`SELECT COUNT(*) as overdue
+                    FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id
+                    WHERE p.org_id = $1 AND fa.status != 'resolved' AND fa.created_at < NOW() - INTERVAL '48 hours'`, [tid]),
+            // Alerts by severity breakdown
+            db.all(`SELECT fa.severity, COUNT(*) as count, SUM(CASE WHEN fa.status != 'resolved' THEN 1 ELSE 0 END) as open
+                    FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id
+                    WHERE p.org_id = $1 GROUP BY fa.severity ORDER BY count DESC`, [tid]),
+            // Risk by region (top 8)
+            db.all(`SELECT se.geo_country as region, COUNT(*) as scans,
                     SUM(CASE WHEN se.result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged,
+                    ROUND(AVG(se.fraud_score)::numeric, 3) as avg_fraud
+                    FROM scan_events se WHERE se.org_id = $1 AND se.geo_country IS NOT NULL
+                    GROUP BY se.geo_country ORDER BY flagged DESC LIMIT 8`, [tid]),
+            // Risk by product (all, sorted by risk)
+            db.all(`SELECT p.id, p.name, p.category, p.weight, COUNT(se.id) as scans,
+                    SUM(CASE WHEN se.result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged,
+                    ROUND(AVG(se.fraud_score)::numeric, 3) as avg_fraud,
                     ROUND(AVG(se.trust_score)::numeric, 1) as avg_trust
                     FROM products p
                     LEFT JOIN scan_events se ON se.product_id = p.id
                     WHERE p.org_id = $1
-                    GROUP BY p.id, p.name
-                    ORDER BY scans DESC LIMIT 10`, [tid]),
+                    GROUP BY p.id, p.name, p.category, p.weight
+                    HAVING COUNT(se.id) > 0
+                    ORDER BY flagged DESC, avg_fraud DESC LIMIT 15`, [tid]),
+            // Weekly fraud trend (12 weeks)
             db.all(`SELECT DATE_TRUNC('week', scanned_at)::date as week,
                     COUNT(*) as scans,
                     SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged,
-                    ROUND(AVG(trust_score)::numeric, 1) as avg_trust
+                    ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud
                     FROM scan_events WHERE org_id = $1
                     AND scanned_at >= NOW() - INTERVAL '12 weeks'
                     GROUP BY DATE_TRUNC('week', scanned_at)
                     ORDER BY week ASC`, [tid]),
+            // Weekly alert trend (resolved vs created)
+            db.all(`SELECT DATE_TRUNC('week', fa.created_at)::date as week,
+                    COUNT(*) as created,
+                    SUM(CASE WHEN fa.status = 'resolved' THEN 1 ELSE 0 END) as resolved
+                    FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id
+                    WHERE p.org_id = $1 AND fa.created_at >= NOW() - INTERVAL '12 weeks'
+                    GROUP BY DATE_TRUNC('week', fa.created_at)
+                    ORDER BY week ASC`, [tid]),
+            // Trust stability (stddev)
+            db.get(`SELECT ROUND(STDDEV(trust_score)::numeric, 2) as trust_stddev,
+                    ROUND(AVG(trust_score)::numeric, 1) as avg_trust
+                    FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '30 days'`, [tid]),
         ]);
 
-        const totalScans = parseInt(scanTotals?.total) || 0;
-        const fraudRate = totalScans > 0 ? Math.round(((parseInt(scanTotals?.counterfeit) || 0) + (parseInt(scanTotals?.suspicious) || 0)) / totalScans * 10000) / 100 : 0;
-        const detectionRate = totalScans > 0 ? Math.round((parseInt(scanTotals?.authentic) || 0) / totalScans * 10000) / 100 : 0;
+        // ── Computed Metrics ──
+        const totalScans = parseInt(fraudTotals?.total) || 0;
+        const totalFlagged = parseInt(fraudTotals?.flagged) || 0;
+        const totalCounterfeit = parseInt(fraudTotals?.counterfeit) || 0;
+        const fraudRate = totalScans > 0 ? Math.round(totalFlagged / totalScans * 10000) / 100 : 0;
+
+        const flagged7d = parseInt(fraud7d?.flagged) || 0;
+        const scans7d = parseInt(fraud7d?.total) || 0;
+        const flaggedPrev7d = parseInt(fraudPrev7d?.flagged) || 0;
+        const scansPrev7d = parseInt(fraudPrev7d?.total) || 0;
+        const fraudRate7d = scans7d > 0 ? Math.round(flagged7d / scans7d * 10000) / 100 : 0;
+        const fraudRatePrev = scansPrev7d > 0 ? Math.round(flaggedPrev7d / scansPrev7d * 10000) / 100 : 0;
+        const fraudVelocity = fraudRatePrev > 0 ? Math.round((fraudRate7d - fraudRatePrev) / fraudRatePrev * 100) : 0;
+
+        // Exposure = counterfeit scans × avg product value
+        const exposure = totalCounterfeit * PRODUCT_AVG_VALUE;
+        const exposure7d = (parseInt(fraud7d?.counterfeit) || 0) * PRODUCT_AVG_VALUE;
+
+        // SLA
+        const slaOverdue = parseInt(slaBreached?.overdue) || 0;
+        const criticalOpen = parseInt(alertsSummary?.critical_open) || 0;
+        const highOpen = parseInt(alertsSummary?.high_open) || 0;
+        const openAlerts = parseInt(alertsSummary?.open) || 0;
+
+        // Severity index (weighted: critical=4, high=3, medium=2, low=1)
+        const sevWeights = { critical: 4, high: 3, medium: 2, low: 1 };
+        let sevTotal = 0, sevCount = 0;
+        (alertsBySeverity || []).forEach(s => {
+            const w = sevWeights[s.severity] || 1;
+            const o = parseInt(s.open) || 0;
+            sevTotal += w * o;
+            sevCount += o;
+        });
+        const severityIndex = sevCount > 0 ? Math.round(sevTotal / sevCount * 100) / 100 : 0;
+
+        // Trust stability (lower stddev = more stable)
+        const trustStddev = parseFloat(trustStats?.trust_stddev) || 0;
+        const trustStability = Math.max(0, Math.round((100 - trustStddev * 2) * 10) / 10);
+
+        // Risk level
+        const riskLevel = criticalOpen > 10 || fraudRate > 8 ? 'CRITICAL' :
+            criticalOpen > 0 || fraudRate > 5 || slaOverdue > 5 ? 'HIGH' :
+                fraudRate > 2 || openAlerts > 10 ? 'ELEVATED' : 'NORMAL';
+
+        // Region spikes (>5% fraud rate)
+        const regionSpikes = (regionRisk || []).filter(r => {
+            const sc = parseInt(r.scans) || 0;
+            const fl = parseInt(r.flagged) || 0;
+            return sc > 5 && fl / sc > 0.05;
+        });
+
+        // Products with >5% flag rate
+        const highRiskProducts = (productRisk || []).filter(p => {
+            const sc = parseInt(p.scans) || 0;
+            const fl = parseInt(p.flagged) || 0;
+            return sc > 3 && fl / sc > 0.05;
+        });
 
         res.json({
-            products: { total: parseInt(products?.total) || 0, active: parseInt(products?.active) || 0 },
-            scans: {
-                total: totalScans,
-                last_7d: parseInt(scan7d?.total) || 0,
-                last_30d: parseInt(scan30d?.total) || 0,
-                flagged_7d: parseInt(scan7d?.flagged) || 0,
-                flagged_30d: parseInt(scan30d?.flagged) || 0,
+            // ① Risk Command Bar
+            risk_command: {
+                level: riskLevel,
+                exposure: exposure,
+                exposure_7d: exposure7d,
+                wow_trend: fraudVelocity,
+                sla_overdue: slaOverdue,
             },
-            fraud_rate: fraudRate,
-            detection_rate: detectionRate,
-            avg_trust: parseFloat(scanTotals?.avg_trust) || 0,
-            alerts: { total: parseInt(alerts?.total) || 0, open: parseInt(alerts?.open) || 0, critical_open: parseInt(alerts?.critical_open) || 0 },
-            top_products: topProducts.map(p => ({
-                name: p.name, scans: parseInt(p.scans) || 0,
-                flagged: parseInt(p.flagged) || 0, avg_trust: parseFloat(p.avg_trust) || 0,
-            })),
-            weekly: weeklySeries.map(w => ({
-                week: w.week, scans: parseInt(w.scans) || 0,
-                flagged: parseInt(w.flagged) || 0, avg_trust: parseFloat(w.avg_trust) || 0,
-            })),
+            // ② Critical Action Queue
+            critical_actions: {
+                critical_alerts: criticalOpen,
+                high_alerts: highOpen,
+                sla_overdue: slaOverdue,
+                flagged_products: highRiskProducts.length,
+                region_spikes: regionSpikes.length,
+                open_alerts: openAlerts,
+            },
+            // ③ Risk Health Snapshot
+            health: {
+                severity_index: severityIndex,
+                fraud_rate: fraudRate,
+                fraud_velocity: fraudVelocity,
+                fraud_rate_7d: fraudRate7d,
+                trust_stability: trustStability,
+                avg_trust: parseFloat(fraudTotals?.avg_trust) || 0,
+            },
+            // ④ Risk Distribution
+            distribution: {
+                by_region: (regionRisk || []).map(r => ({
+                    region: r.region,
+                    scans: parseInt(r.scans) || 0,
+                    flagged: parseInt(r.flagged) || 0,
+                    fraud_rate: parseInt(r.scans) > 0 ? Math.round(parseInt(r.flagged) / parseInt(r.scans) * 10000) / 100 : 0,
+                })),
+                by_product: highRiskProducts.map(p => ({
+                    name: p.name, category: p.category,
+                    flagged: parseInt(p.flagged) || 0,
+                    flag_rate: parseInt(p.scans) > 0 ? Math.round(parseInt(p.flagged) / parseInt(p.scans) * 10000) / 100 : 0,
+                })),
+                region_spikes: regionSpikes.length,
+            },
+            // ⑤ Trend Intelligence
+            trends: {
+                fraud_weekly: (weeklyFraud || []).map(w => ({
+                    week: w.week,
+                    scans: parseInt(w.scans) || 0,
+                    flagged: parseInt(w.flagged) || 0,
+                    fraud_rate: parseInt(w.scans) > 0 ? Math.round(parseInt(w.flagged) / parseInt(w.scans) * 10000) / 100 : 0,
+                })),
+                alert_weekly: (weeklyAlerts || []).map(w => ({
+                    week: w.week,
+                    created: parseInt(w.created) || 0,
+                    resolved: parseInt(w.resolved) || 0,
+                })),
+            },
+            // ⑥ Exposure & Impact
+            exposure: {
+                counterfeit_value: exposure,
+                counterfeit_count: totalCounterfeit,
+                high_risk_products: highRiskProducts.length,
+                total_products: (productRisk || []).length,
+                high_risk_pct: (productRisk || []).length > 0 ? Math.round(highRiskProducts.length / (productRisk || []).length * 100) : 0,
+                brand_impact_index: Math.min(100, Math.round(fraudRate * 10 + criticalOpen * 2 + slaOverdue)),
+            },
+            // ⑦ Investigation Table
+            investigation: (productRisk || []).map(p => {
+                const sc = parseInt(p.scans) || 0;
+                const fl = parseInt(p.flagged) || 0;
+                const flagRate = sc > 0 ? Math.round(fl / sc * 10000) / 100 : 0;
+                const riskScore = Math.round(flagRate * 2 + (parseFloat(p.avg_fraud) || 0) * 100 + (fl > 3 ? 20 : 0));
+                return {
+                    name: p.name, category: p.category,
+                    scans: sc, flagged: fl,
+                    flag_rate: flagRate,
+                    avg_trust: parseFloat(p.avg_trust) || 0,
+                    risk_score: riskScore,
+                    exposure_est: fl * PRODUCT_AVG_VALUE,
+                    severity: riskScore > 50 ? 'critical' : riskScore > 25 ? 'high' : riskScore > 10 ? 'medium' : 'low',
+                };
+            }).sort((a, b) => b.risk_score - a.risk_score),
         });
     } catch (err) {
-        console.error('[Governance] KPI overview error:', err);
-        res.status(500).json({ error: 'Failed to load KPI data' });
+        console.error('[Governance] KPI risk-first error:', err);
+        res.status(500).json({ error: 'Failed to load risk data' });
     }
 });
 
