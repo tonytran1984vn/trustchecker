@@ -7,6 +7,7 @@
  */
 import { icon } from '../../core/icons.js';
 import { API as api } from '../../core/api.js';
+import { fmtNum, fmtUSD } from '../../core/format.js';
 
 let _data = null;
 
@@ -17,7 +18,7 @@ export function renderPage() {
   const stats = _data.stats || {};
   if (!trend.length) return `<div class="exec-page"><div style="text-align:center;padding:4rem;color:var(--text-secondary)">No trend data available yet.</div></div>`;
 
-  const fmtM = v => v >= 1e6 ? '$' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v;
+  const fmtM = fmtUSD;
   const latest = trend[trend.length - 1];
   const prev = trend.length > 1 ? trend[trend.length - 2] : latest;
   const tcarDelta = prev.tcar > 0 ? Math.round((latest.tcar - prev.tcar) / prev.tcar * 100) : 0;
@@ -39,7 +40,7 @@ export function renderPage() {
     <div class="exec-page">
       <div class="exec-header">
         <h1>${icon('barChart', 28)} Risk Trends — Deep Analysis</h1>
-        <div class="exec-timestamp">${trend.length}-week history · ${daily.length} daily data points · ${(stats.scans?.total || 0).toLocaleString()} total scans</div>
+        <div class="exec-timestamp">${trend.length}-week history · ${daily.length} daily data points · ${fmtNum(stats.scans?.total || 0)} total scans</div>
       </div>
 
       <!-- Statistical Summary -->
@@ -49,7 +50,7 @@ export function renderPage() {
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
           ${statCard('TCAR', fmtM(stats.tcar.avg), fmtM(stats.tcar.min), fmtM(stats.tcar.max), 'σ=' + fmtM(stats.tcar.std), '#ef4444')}
           ${statCard('P(Fraud)', stats.pFraud.avg + '%', stats.pFraud.min + '%', stats.pFraud.max + '%', '', '#f59e0b')}
-          ${statCard('Scans/Week', stats.scans.avg.toLocaleString(), stats.scans.min.toLocaleString(), stats.scans.max.toLocaleString(), 'Total: ' + stats.scans.total.toLocaleString(), '#6366f1')}
+          ${statCard('Scans/Week', fmtNum(stats.scans.avg), fmtNum(stats.scans.min), fmtNum(stats.scans.max), 'Total: ' + fmtNum(stats.scans.total), '#6366f1')}
           ${statCard('Trust Score', stats.trust.avg + '', stats.trust.min + '', stats.trust.max + '', '', '#22c55e')}
         </div>
         <div style="display:flex;gap:16px;margin-top:10px;font-size:0.72rem;opacity:0.5">
@@ -110,7 +111,7 @@ export function renderPage() {
               <div style="font-size:1.3rem;font-weight:800;margin:8px 0">${fmtM(q.avgTcar)}</div>
               <div style="font-size:0.7rem;opacity:0.5">Avg TCAR</div>
               ${prevQ ? `<div style="font-size:0.68rem;font-weight:600;color:${color};margin-top:4px">${tcarDelta > 0 ? '↑' : '↓'} ${Math.abs(tcarDelta)}% vs ${quarters[i - 1].label}</div>` : ''}
-              <div style="font-size:0.62rem;opacity:0.35;margin-top:6px">P(F): ${q.avgPF}% · ${q.totalScans.toLocaleString()} scans</div>
+              <div style="font-size:0.62rem;opacity:0.35;margin-top:6px">P(F): ${q.avgPF}% · ${fmtNum(q.totalScans)} scans</div>
             </div>`;
   }).join('')}
         </div>
@@ -132,7 +133,7 @@ export function renderPage() {
     const deltaPct = prevT > 0 ? Math.round(delta / prevT * 100) : 0;
     return `<tr>
                 <td><strong>${formatWeek(w.week)}</strong></td>
-                <td>${w.scans.toLocaleString()}</td>
+                <td>${fmtNum(w.scans)}</td>
                 <td style="color:#f59e0b">${w.suspicious}</td>
                 <td style="color:#ef4444">${w.counterfeit}</td>
                 <td style="font-weight:600;color:${w.pFraud > 5 ? '#ef4444' : w.pFraud > 2 ? '#f59e0b' : '#22c55e'}">${w.pFraud}%</td>

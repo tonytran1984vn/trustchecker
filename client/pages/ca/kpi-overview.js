@@ -5,9 +5,10 @@
  * CRCE = 0.30×T1 + 0.30×T2 + 0.25×T3 + 0.15×T4
  */
 import { API as api } from '../../core/api.js';
+import { fmtNum, fmtUSD, fmtPct } from '../../core/format.js';
 
 let _d = null;
-const $ = v => v >= 1e6 ? '$' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '$' + (v / 1e3).toFixed(1) + 'K' : '$' + v;
+const $ = fmtUSD;
 
 export function renderPage() {
   if (!_d) { load(); return '<div class="loading"><div class="spinner"></div><span style="color:var(--text-muted)">Computing CRCE...</span></div>'; }

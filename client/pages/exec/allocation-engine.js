@@ -6,18 +6,19 @@
  */
 import { icon } from '../../core/icons.js';
 import { API as api } from '../../core/api.js';
+import { fmtNum } from '../../core/format.js';
 
 let _baseline = null;
 let _result = null;
 let _investments = {};
 
 export function renderPage() {
-    if (!_baseline) { loadBaseline(); return loadingState(); }
-    const b = _baseline.baseline;
-    const opts = _baseline.investment_options;
-    const r = _result;
+  if (!_baseline) { loadBaseline(); return loadingState(); }
+  const b = _baseline.baseline;
+  const opts = _baseline.investment_options;
+  const r = _result;
 
-    return `
+  return `
     <div class="exec-page" style="font-feature-settings:'tnum'">
       <div class="exec-header">
         <h1>${icon('target', 28)} Capital Allocation Engine</h1>
@@ -68,8 +69,8 @@ export function renderPage() {
 }
 
 function renderResults(r) {
-    const p = r.projections;
-    return `
+  const p = r.projections;
+  return `
     <!-- ROI Banner -->
     <div class="exec-card" style="background:linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.08));border:1px solid rgba(99,102,241,0.2);margin-bottom:1.25rem">
       <div style="display:flex;align-items:center;gap:2rem;text-align:center;justify-content:center">
@@ -124,29 +125,29 @@ function renderResults(r) {
 }
 
 async function loadBaseline() {
-    try {
-        _baseline = await api.get('/tenant/owner/ccs/allocation-baseline');
-        _baseline.investment_options.forEach(o => { _investments[o.id] = 0; });
-        const el = document.getElementById('main-content');
-        if (el) el.innerHTML = renderPage();
-    } catch (e) { console.error('[AllocationEngine]', e); }
+  try {
+    _baseline = await api.get('/tenant/owner/ccs/allocation-baseline');
+    _baseline.investment_options.forEach(o => { _investments[o.id] = 0; });
+    const el = document.getElementById('main-content');
+    if (el) el.innerHTML = renderPage();
+  } catch (e) { console.error('[AllocationEngine]', e); }
 }
 
 function loadingState() {
-    return `<div class="exec-page"><div style="text-align:center;padding:4rem"><div class="loading-spinner"></div><div style="margin-top:1rem;color:var(--text-secondary)">Loading allocation engine...</div></div></div>`;
+  return `<div class="exec-page"><div style="text-align:center;padding:4rem"><div class="loading-spinner"></div><div style="margin-top:1rem;color:var(--text-secondary)">Loading allocation engine...</div></div></div>`;
 }
 
-function fmt(n) { return Number(n || 0).toLocaleString(); }
+function fmt(n) { return fmtNum(n); }
 
 function bkpi(label, value, color) {
-    return `<div class="exec-kpi-card">
+  return `<div class="exec-kpi-card">
     <div class="exec-kpi-value" style="font-size:1.1rem;color:${color}">${value}</div>
     <div class="exec-kpi-label" style="letter-spacing:0.025em">${label}</div>
   </div>`;
 }
 
 function slider(opt) {
-    return `
+  return `
     <div style="padding:0.75rem 0">
       <div style="display:flex;justify-content:space-between;margin-bottom:0.4rem">
         <label style="font-size:0.88rem;font-weight:500"><span style="margin-right:0.3rem">${opt.icon}</span> ${opt.label}</label>
@@ -160,11 +161,11 @@ function slider(opt) {
 }
 
 function delta(label, current, projected, change, higherIsGood, color) {
-    const isPositive = higherIsGood ? change > 0 : change < 0;
-    const arrow = change > 0 ? '↑' : change < 0 ? '↓' : '—';
-    const changeColor = isPositive ? '#22c55e' : change === 0 ? 'var(--text-secondary)' : '#ef4444';
-    const displayChange = typeof change === 'number' ? (change > 0 ? '+$' + fmt(change) : change < 0 ? '-$' + fmt(Math.abs(change)) : '$0') : change;
-    return `<div class="exec-kpi-card">
+  const isPositive = higherIsGood ? change > 0 : change < 0;
+  const arrow = change > 0 ? '↑' : change < 0 ? '↓' : '—';
+  const changeColor = isPositive ? '#22c55e' : change === 0 ? 'var(--text-secondary)' : '#ef4444';
+  const displayChange = typeof change === 'number' ? (change > 0 ? '+$' + fmt(change) : change < 0 ? '-$' + fmt(Math.abs(change)) : '$0') : change;
+  return `<div class="exec-kpi-card">
     <div style="font-size:0.72rem;opacity:0.5;margin-bottom:0.25rem">${typeof current === 'string' ? current : '$' + fmt(current)}</div>
     <div class="exec-kpi-value" style="font-size:1.1rem;color:${color}">${typeof projected === 'string' ? projected : '$' + fmt(projected)}</div>
     <div class="exec-kpi-label" style="letter-spacing:0.025em">${label}</div>
@@ -173,7 +174,7 @@ function delta(label, current, projected, change, higherIsGood, color) {
 }
 
 function compBar(label, current, projected, color) {
-    return `
+  return `
     <div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.04))">
       <div style="flex:1;font-size:0.85rem;font-weight:500">${label}</div>
       <div style="font-size:0.82rem;opacity:0.5;width:75px;text-align:right">${current}</div>
@@ -184,49 +185,49 @@ function compBar(label, current, projected, color) {
 
 // Window handlers
 window._updateSlider = function (id, value) {
-    _investments[id] = Number(value);
-    const valEl = document.getElementById('cae-val-' + id);
-    if (valEl) valEl.textContent = '$' + fmt(value);
-    const total = Object.values(_investments).reduce((s, v) => s + v, 0);
-    const totalEl = document.getElementById('cae-total');
-    if (totalEl) totalEl.textContent = '$' + fmt(total);
+  _investments[id] = Number(value);
+  const valEl = document.getElementById('cae-val-' + id);
+  if (valEl) valEl.textContent = '$' + fmt(value);
+  const total = Object.values(_investments).reduce((s, v) => s + v, 0);
+  const totalEl = document.getElementById('cae-total');
+  if (totalEl) totalEl.textContent = '$' + fmt(total);
 };
 
 window._runSimulation = async function () {
-    try {
-        const total = Object.values(_investments).reduce((s, v) => s + v, 0);
-        if (total === 0) { alert('Adjust at least one investment slider'); return; }
+  try {
+    const total = Object.values(_investments).reduce((s, v) => s + v, 0);
+    if (total === 0) { alert('Adjust at least one investment slider'); return; }
 
-        const btn = document.querySelector('button[onclick*="_runSimulation"]');
-        if (btn) { btn.textContent = '⏳ Simulating...'; btn.disabled = true; }
+    const btn = document.querySelector('button[onclick*="_runSimulation"]');
+    if (btn) { btn.textContent = '⏳ Simulating...'; btn.disabled = true; }
 
-        _result = await api.post('/tenant/owner/ccs/allocation-simulate', {
-            investments: _investments,
-            baseline: _baseline.baseline,
-        });
+    _result = await api.post('/tenant/owner/ccs/allocation-simulate', {
+      investments: _investments,
+      baseline: _baseline.baseline,
+    });
 
-        const section = document.getElementById('cae-results-section');
-        const results = document.getElementById('cae-results');
-        if (section) section.style.display = '';
-        if (results) results.innerHTML = renderResults(_result);
-        if (btn) { btn.textContent = '⚡ Run Simulation'; btn.disabled = false; }
-    } catch (e) {
-        console.error('[AllocationEngine] Simulation error:', e);
-        alert('Simulation failed — check console');
-    }
+    const section = document.getElementById('cae-results-section');
+    const results = document.getElementById('cae-results');
+    if (section) section.style.display = '';
+    if (results) results.innerHTML = renderResults(_result);
+    if (btn) { btn.textContent = '⚡ Run Simulation'; btn.disabled = false; }
+  } catch (e) {
+    console.error('[AllocationEngine] Simulation error:', e);
+    alert('Simulation failed — check console');
+  }
 };
 
 window._resetSliders = function () {
-    Object.keys(_investments).forEach(id => {
-        _investments[id] = 0;
-        const slider = document.getElementById('cae-' + id);
-        const val = document.getElementById('cae-val-' + id);
-        if (slider) slider.value = 0;
-        if (val) val.textContent = '$0';
-    });
-    const totalEl = document.getElementById('cae-total');
-    if (totalEl) totalEl.textContent = '$0';
-    const section = document.getElementById('cae-results-section');
-    if (section) section.style.display = 'none';
-    _result = null;
+  Object.keys(_investments).forEach(id => {
+    _investments[id] = 0;
+    const slider = document.getElementById('cae-' + id);
+    const val = document.getElementById('cae-val-' + id);
+    if (slider) slider.value = 0;
+    if (val) val.textContent = '$0';
+  });
+  const totalEl = document.getElementById('cae-total');
+  if (totalEl) totalEl.textContent = '$0';
+  const section = document.getElementById('cae-results-section');
+  if (section) section.style.display = 'none';
+  _result = null;
 };

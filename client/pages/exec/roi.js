@@ -8,6 +8,7 @@
  */
 import { icon } from '../../core/icons.js';
 import { API as api } from '../../core/api.js';
+import { fmtNum, fmtUSD } from '../../core/format.js';
 
 let _data = null;
 
@@ -17,8 +18,8 @@ export function renderPage() {
   const monthly = r.monthly || [];
   const cats = r.categories || [];
   const topProds = r.top_products || [];
-  const fmtM = v => v >= 1e6 ? '$' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '$' + (v / 1e3).toFixed(1) + 'K' : '$' + (v || 0);
-  const fmtFull = v => '$' + Math.round(v || 0).toLocaleString();
+  const fmtM = fmtUSD;
+  const fmtFull = fmtUSD;
 
   const totalValue = (r.detection_value || 0) + (r.cost_savings || 0);
   const dvPct = totalValue > 0 ? Math.round((r.detection_value || 0) / totalValue * 100) : 0;
@@ -31,7 +32,7 @@ export function renderPage() {
     <div class="exec-page">
       <div class="exec-header">
         <h1>${icon('creditCard', 28)} Platform ROI — Deep Analysis</h1>
-        <div class="exec-timestamp">${r.months_active || 0} months active · ${(r.total_scans || 0).toLocaleString()} scans · ${monthly.length} monthly data points</div>
+        <div class="exec-timestamp">${r.months_active || 0} months active · ${fmtNum(r.total_scans || 0)} scans · ${monthly.length} monthly data points</div>
       </div>
 
       <!-- ROI Hero -->
@@ -53,9 +54,9 @@ export function renderPage() {
         <h2 class="exec-section-title">${icon('layers', 20)} Value Breakdown</h2>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           ${valueCard('Detection Value', r.detection_value, dvPct, '#22c55e',
-    `Counterfeits: ${(r.counterfeits_detected || 0).toLocaleString()} · Unit value: ${fmtFull(r.avg_unit_value)} · Formula: counterfeits × unit value`)}
+    `Counterfeits: ${fmtNum(r.counterfeits_detected || 0)} · Unit value: ${fmtFull(r.avg_unit_value)} · Formula: counterfeits × unit value`)}
           ${valueCard('Cost Savings', r.cost_savings, 100 - dvPct, '#6366f1',
-      `Scans: ${(r.total_scans || 0).toLocaleString()} · Manual cost: $${r.manual_cost_per_check || 5}/check · Formula: scans × manual cost`)}
+      `Scans: ${fmtNum(r.total_scans || 0)} · Manual cost: $${r.manual_cost_per_check || 5}/check · Formula: scans × manual cost`)}
         </div>
       </section>
 
@@ -88,7 +89,7 @@ export function renderPage() {
             ${monthly.slice().reverse().map(m => `
             <tr>
               <td><strong>${formatMonth(m.month)}</strong></td>
-              <td>${m.scans.toLocaleString()}</td>
+              <td>${fmtNum(m.scans)}</td>
               <td style="color:#ef4444">${m.counterfeit}</td>
               <td style="color:#22c55e">${fmtM(m.detection_value)}</td>
               <td style="color:#6366f1">${fmtM(m.cost_savings)}</td>
@@ -172,7 +173,7 @@ export function renderPage() {
 }
 
 function valueCard(label, value, pct, color, detail) {
-  const fmtM = v => v >= 1e6 ? '$' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '$' + (v / 1e3).toFixed(1) + 'K' : '$' + (v || 0);
+  const fmtM = fmtUSD;
   return `
     <div style="background:linear-gradient(135deg,${color}08,transparent);border:1px solid ${color}15;border-radius:14px;padding:20px">
       <div style="font-size:0.68rem;opacity:0.5;text-transform:uppercase;letter-spacing:0.08em">${label}</div>
@@ -201,7 +202,7 @@ function renderMonthlyChart(monthly, h) {
   const ch = h - 50;
   const mx = Math.max(...monthly.map(m => m.total_value)) * 1.15 || 1;
   const barW = Math.min(50, cw / monthly.length * 0.6);
-  const fmtM = v => v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v;
+  const fmtM = fmtUSD;
 
   return `
     <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto">
@@ -230,7 +231,7 @@ function renderBreakEvenChart(monthly, platformCost, h) {
   const ch = h - 40;
   const cumVals = monthly.map(m => m.cumulative_value);
   const mx = Math.max(...cumVals, platformCost) * 1.15 || 1;
-  const fmtM = v => v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v;
+  const fmtM = fmtUSD;
 
   // Platform cost line
   const costY = 20 + ch - (platformCost / mx) * ch;
