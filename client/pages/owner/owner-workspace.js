@@ -72,7 +72,7 @@ window._ownerTab = function (tab) {
             <div style="font-size:0.78rem;color:var(--text-muted)">Loading ${OWNER_TABS.find(t => t.id === tab)?.label || tab}…</div>
         </div>`;
   }
-  if (tab === 'dashboard') { if (_ownerData.total_users !== undefined) renderOwnerContent(); loadOwnerData(); }
+  if (tab === 'dashboard') { renderOwnerContent(); loadOwnerData(); }
   else if (tab === 'privilege') loadPrivilegeData();
   else if (tab === 'risk') { _riskMonLoaded = false; _govLogLoaded = false; loadRiskMonitoring(); loadGovernanceLog(); }
   else if (tab === 'team') loadTeamData();
