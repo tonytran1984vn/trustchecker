@@ -330,21 +330,21 @@ function renderBriefing(d) {
       <div style="padding:14px 16px">
 
         <div style="margin-bottom:14px">
-          <div style="font-size:0.72rem;font-weight:800;color:var(--text-primary);margin-bottom:6px">1. ĐANG CÓ RỦI RO GÌ?</div>
+          <div style="font-size:0.72rem;font-weight:800;color:var(--text-primary);margin-bottom:6px">1. WHAT RISKS DO WE HAVE?</div>
           <div style="font-size:0.78rem;color:var(--text-secondary);line-height:1.6;padding-left:12px;border-left:2px solid ${borderColor}30">
             ${risks.map(r => `<div style="margin-bottom:3px">→ ${r}</div>`).join('')}
           </div>
         </div>
 
         <div style="margin-bottom:14px">
-          <div style="font-size:0.72rem;font-weight:800;color:var(--text-primary);margin-bottom:6px">2. NGHIÊM TRỌNG ĐẾN ĐÂU?</div>
+          <div style="font-size:0.72rem;font-weight:800;color:var(--text-primary);margin-bottom:6px">2. HOW SEVERE IS IT?</div>
           <div style="font-size:0.78rem;color:var(--text-secondary);line-height:1.6;padding-left:12px;border-left:2px solid ${borderColor}30">
             ${severity.map(s => `<div style="margin-bottom:3px">→ ${s}</div>`).join('')}
           </div>
         </div>
 
         <div>
-          <div style="font-size:0.72rem;font-weight:800;color:var(--text-primary);margin-bottom:8px">3. PHẢI LÀM GÌ NGAY?</div>
+          <div style="font-size:0.72rem;font-weight:800;color:var(--text-primary);margin-bottom:8px">3. WHAT TO DO NOW?</div>
           <div style="display:grid;gap:5px">
             ${actions.map(a => `
             <div style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:8px;background:${a.pri === 1 ? 'rgba(239,68,68,0.06)' : a.pri === 2 ? 'rgba(245,158,11,0.05)' : a.pri === 3 ? 'rgba(59,130,246,0.05)' : 'rgba(34,197,94,0.05)'};border-left:3px solid ${a.pri === 1 ? '#ef4444' : a.pri === 2 ? '#f59e0b' : a.pri === 3 ? '#3b82f6' : '#22c55e'}">
