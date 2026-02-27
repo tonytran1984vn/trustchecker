@@ -149,13 +149,16 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
             .map(([month, kgCO2e]) => ({ month, kgCO2e: Math.round(kgCO2e * 100) / 100 }));
 
         // Per-product detail
-        scopeData.products_detail = (products || []).slice(0, 30).map(p => ({
-            name: p.name || p.sku || 'Unknown',
-            category: p.category || p.type || '',
-            weight_kg: p.weight_kg || p.weight || 0,
-            kgCO2e: Math.round((p.weight_kg || p.weight || 1) * 0.062 * 100) / 100,
-            percentage: 0
-        }));
+        scopeData.products_detail = (products || []).slice(0, 30).map(p => {
+            const w = Number(p.weight_kg || p.weight || 0);
+            return {
+                name: p.name || p.sku || 'Unknown',
+                category: p.category || p.type || '',
+                weight_kg: w,
+                kgCO2e: Math.round((w || 1) * 0.062 * 100) / 100,
+                percentage: 0
+            };
+        });
         // Compute percentages
         const totalProd = scopeData.products_detail.reduce((s, p) => s + p.kgCO2e, 0) || 1;
         scopeData.products_detail.forEach(p => { p.percentage = Math.round(p.kgCO2e / totalProd * 1000) / 10; });
