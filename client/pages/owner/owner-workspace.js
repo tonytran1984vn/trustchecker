@@ -37,11 +37,11 @@ let _riskSubTab = 'signals'; // 'signals' or 'activity'
 // ─── Tab Registry ───────────────────────────────────────────
 const OWNER_TABS = [
   { id: 'dashboard', label: 'Governance Overview', icon: '📊' },
-  { id: 'authority', label: 'Ownership & Authority', icon: '🔑' },
+  { id: 'risk', label: 'Risk & Activity', icon: '⚠️' },
   { id: 'team', label: 'Team & People', icon: '👥' },
   { id: 'privilege', label: 'Privilege & Access', icon: '🛡️' },
-  { id: 'risk', label: 'Risk & Activity', icon: '⚠️' },
   { id: 'compliance', label: 'Compliance & Legal', icon: '📋' },
+  { id: 'authority', label: 'Ownership & Authority', icon: '🔑' },
   { id: 'financial', label: 'Financial & Plan', icon: '💰' },
   { id: 'emergency', label: 'Emergency Controls', icon: '🚨' },
 ];
