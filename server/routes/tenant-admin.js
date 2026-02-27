@@ -1568,6 +1568,9 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
 router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
     try {
         const tid = req.tenantId;
+        const isFullRange = req.query.range === 'full';
+        const weekInterval = isFullRange ? '52 weeks' : '12 weeks';
+
         const weeks = await db.all(`
             SELECT DATE_TRUNC('week', scanned_at)::date as week_start,
                    COUNT(*) as total,
@@ -1577,7 +1580,7 @@ router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
                    ROUND(AVG(trust_score)::numeric, 2) as avg_trust,
                    ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud
             FROM scan_events WHERE org_id = $1
-            AND scanned_at >= NOW() - INTERVAL '12 weeks'
+            AND scanned_at >= NOW() - INTERVAL '${weekInterval}'
             GROUP BY DATE_TRUNC('week', scanned_at)
             ORDER BY week_start ASC`, [tid]);
 
@@ -1586,7 +1589,7 @@ router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
         const annualRevenue = Number(fin.annual_revenue) || 0;
         const brandValue = Number(fin.brand_value_estimate) || 0;
 
-        const trend = weeks.map(w => {
+        const mapRow = (w) => {
             const total = parseInt(w.total) || 1;
             const flagged = (parseInt(w.suspicious) || 0) + (parseInt(w.counterfeit) || 0);
             const pFraud = Math.round((flagged / total) * 10000) / 100;
@@ -1602,12 +1605,57 @@ router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
                 scans: parseInt(w.total),
                 suspicious: parseInt(w.suspicious) || 0,
                 counterfeit: parseInt(w.counterfeit) || 0,
-                pFraud,
-                erl, ebi, tcar,
+                pFraud, erl, ebi, tcar,
                 avg_trust: parseFloat(w.avg_trust) || 0,
             };
-        });
-        res.json({ trend, weeks: trend.length });
+        };
+
+        const trend = weeks.map(mapRow);
+        const result = { trend, weeks: trend.length };
+
+        // Full range: add daily data + statistical summary
+        if (isFullRange) {
+            const daily = await db.all(`
+                SELECT scanned_at::date as day,
+                       COUNT(*) as total,
+                       COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
+                       COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
+                       COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
+                       ROUND(AVG(trust_score)::numeric, 2) as avg_trust
+                FROM scan_events WHERE org_id = $1
+                AND scanned_at >= NOW() - INTERVAL '30 days'
+                GROUP BY scanned_at::date
+                ORDER BY day ASC`, [tid]);
+
+            result.daily = daily.map(d => ({
+                day: d.day, scans: parseInt(d.total),
+                suspicious: parseInt(d.suspicious) || 0,
+                counterfeit: parseInt(d.counterfeit) || 0,
+                authentic: parseInt(d.authentic) || 0,
+                avg_trust: parseFloat(d.avg_trust) || 0,
+            }));
+
+            // Statistical summary
+            if (trend.length > 0) {
+                const avg = (arr) => arr.reduce((s, v) => s + v, 0) / arr.length;
+                const std = (arr) => { const m = avg(arr); return Math.sqrt(arr.reduce((s, v) => s + (v - m) ** 2, 0) / arr.length); };
+                const tcars = trend.map(t => t.tcar);
+                const pFrauds = trend.map(t => t.pFraud);
+                const scansArr = trend.map(t => t.scans);
+                const trusts = trend.map(t => t.avg_trust);
+
+                result.stats = {
+                    tcar: { avg: Math.round(avg(tcars)), min: Math.min(...tcars), max: Math.max(...tcars), std: Math.round(std(tcars)) },
+                    pFraud: { avg: Math.round(avg(pFrauds) * 100) / 100, min: Math.min(...pFrauds), max: Math.max(...pFrauds) },
+                    scans: { avg: Math.round(avg(scansArr)), min: Math.min(...scansArr), max: Math.max(...scansArr), total: scansArr.reduce((s, v) => s + v, 0) },
+                    trust: { avg: Math.round(avg(trusts) * 10) / 10, min: Math.min(...trusts), max: Math.max(...trusts) },
+                    peak_risk_week: trend.reduce((mx, t) => t.tcar > mx.tcar ? t : mx, trend[0]).week,
+                    lowest_risk_week: trend.reduce((mn, t) => t.tcar < mn.tcar ? t : mn, trend[0]).week,
+                };
+            }
+        }
+
+        res.json(result);
     } catch (err) {
         console.error('[CCS] Trends error:', err);
         res.status(500).json({ error: 'Failed to load trend data' });
