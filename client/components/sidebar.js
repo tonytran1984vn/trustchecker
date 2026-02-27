@@ -1240,7 +1240,7 @@ function renderOrgOwnerSidebar() {
     <nav class="sidebar sidebar-ca" role="navigation" aria-label="Governance navigation"
       style="--sidebar-accent:#8b5cf6">
       <div class="sidebar-header">
-        <div class="sidebar-logo" onclick="goHome()" style="cursor:pointer">
+        <div class="sidebar-logo" onclick="window._ownerTab&&window._ownerTab('dashboard');document.querySelectorAll('[data-owner-tab]').forEach(e=>e.classList.remove('active'));document.querySelector('[data-owner-tab=dashboard]')?.classList.add('active')" style="cursor:pointer">
           <div class="logo-icon" style="background:#8b5cf6;color:#fff;border-radius:8px;padding:4px">${icon('shield', 22)}</div>
           <div>
             <div class="logo-text">${brandName}</div>
