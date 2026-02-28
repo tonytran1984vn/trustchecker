@@ -10781,3 +10781,8 @@ input:focus-visible {
 [data-theme="light"] .cb-track[style*="color:#1e293b"] {
   color: #e2e8f0 !important;
 }
+
+/* Light: regulatory description text */
+[data-theme="light"] .cb-inner [style*="color:#cbd5e1"] {
+  color: #64748b !important;
+}

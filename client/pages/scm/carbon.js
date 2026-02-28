@@ -181,9 +181,9 @@ function renderContent() {
                         <span style="font-size:14px">${['🌱', '📊', '⚡', '🎯', '🏆'][idx] || '📋'}</span>
                         <div style="flex:1">
                             <div style="color:${idx < mat.current_level ? '#f1f5f9' : '#64748b'};font-weight:${idx === mat.current_level - 1 ? '700' : '500'};font-size:0.82rem">${l.name}</div>
-                            <div style="color:#475569;font-size:0.72rem">${l.description}</div>
+                            <div style="color:#94a3b8;font-size:0.72rem">${l.description}</div>
                         </div>
-                        <span style="color:#475569;font-size:0.72rem">${l.target}</span>
+                        <span style="color:#94a3b8;font-size:0.72rem">${l.target}</span>
                     </div>
                 `).join('') || ''}
                 ` : '<div style="text-align:center;padding:30px;color:#64748b">Loading...</div>'}
@@ -204,8 +204,8 @@ function renderContent() {
                     <div class="cb-inner" style="padding:8px 12px;border-radius:8px;margin-bottom:4px;display:flex;align-items:center;gap:10px">
                         <span style="font-size:14px">${f.icon || (f.region === 'EU' ? '🇪🇺' : '🌐')}</span>
                         <div style="flex:1">
-                            <div style="color:#f1f5f9;font-weight:600;font-size:0.82rem">${f.name} <span style="color:#475569;font-size:0.72rem">${f.region || ''}</span></div>
-                            <div style="color:#64748b;font-size:0.72rem">${f.full || ''}</div>
+                            <div style="color:#f1f5f9;font-weight:600;font-size:0.82rem">${f.name} <span style="color:#94a3b8;font-size:0.72rem">${f.region || ''}</span></div>
+                            <div style="color:#cbd5e1;font-size:0.72rem">${f.full || ''}</div>
                         </div>
                         <div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.78rem;color:#fff;background:${isReady ? '#10b981' : '#f59e0b'}">${pct}%</div>
                     </div>
