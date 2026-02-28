@@ -316,40 +316,6 @@ function renderContent() {
             ` : '<div style="text-align:center;padding:20px;color:#64748b">Loading...</div>'}
         </div>
 
-        <!-- ═════ STRATEGIC POSITIONING ═════ -->
-        <div class="sa-card" style="margin-bottom:20px">
-            <h3 style="margin:0 0 12px;color:#f1f5f9">${icon('target')} Strategic Positioning — Governance Amplifier</h3>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
-                ${[
-            { label: 'Anti-Counterfeit', icon: '🔐', color: '#ef4444' },
-            { label: 'Risk Governance', icon: '🎯', color: '#f59e0b' },
-            { label: 'ESG Compliance', icon: '⚖️', color: '#10b981' },
-            { label: 'Investor Trust', icon: '💎', color: '#8b5cf6' }
-        ].map((s, i) => `
-                    <div style="text-align:center;padding:14px 8px;background:${s.color}11;border-radius:10px;border:1px solid ${s.color}33;position:relative">
-                        <div style="font-size:24px;margin-bottom:4px">${s.icon}</div>
-                        <div style="color:${s.color};font-weight:700;font-size:0.82rem">${s.label}</div>
-                        ${i < 3 ? `<div style="position:absolute;right:-12px;top:50%;transform:translateY(-50%);color:#475569;font-size:14px">→</div>` : ''}
-                    </div>
-                `).join('')}
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-                ${[
-            { market: 'ESG Compliance', size: '$50B+', role: 'GRI/CSRD/CBAM' },
-            { market: 'Green Finance', size: '$500B+', role: 'ESG risk for green bonds' },
-            { market: 'Carbon Trading', size: '$900B+', role: 'Offset verification' }
-        ].map(m => `
-                    <div class="cb-inner" style="padding:12px;border-radius:8px;text-align:center">
-                        <div style="color:#f1f5f9;font-weight:700;font-size:13px">${m.market}</div>
-                        <div style="color:#10b981;font-weight:700;font-size:18px;margin:4px 0">${m.size}</div>
-                        <div style="color:#64748b;font-size:0.78rem">${m.role}</div>
-                    </div>
-                `).join('')}
-            </div>
-            <div style="text-align:center;margin-top:12px;padding:8px;background:rgba(16,185,129,0.06);border-radius:8px;color:#10b981;font-size:0.82rem;font-weight:600">
-                Carbon Passport = Governance Amplifier Module — cross-cutting across the entire TrustChecker architecture
-            </div>
-        </div>
     </div>`;
 }
 
