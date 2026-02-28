@@ -273,12 +273,13 @@ async function loadPassports(from, to) {
 
 async function loadCompliance() {
   try {
-    const [regulatory, maturity, csrd] = await Promise.all([
+    const [regulatory, maturity, csrd, risk] = await Promise.all([
       API.get('/scm/carbon/regulatory').catch(() => ({})),
       API.get('/scm/carbon/maturity').catch(() => ({})),
       API.get('/scm/carbon/report/csrd').catch(() => ({})),
+      API.get('/scm/carbon/risk-factors').catch(() => ({})),
     ]);
-    _complianceData = { regulatory, maturity, csrd };
+    _complianceData = { regulatory, maturity, csrd, risk };
     _complianceLoaded = true;
     renderContent();
   } catch (e) { _complianceData = {}; _complianceLoaded = true; renderContent(); }
@@ -636,7 +637,7 @@ function renderCredits() {
       <td style="font-size:0.72rem">${s.route_type || '—'}</td>
       <td style="font-size:0.72rem">${s.distance_km || 0} km</td>
       <td style="font-size:0.72rem;font-weight:700">${(s.actual_emission || 0).toFixed(2)} kg</td>
-      <td style="font-size:0.72rem;color:${(s.reduction_pct || 0)>= 20 ? '#10b981' : '#f59e0b'};font-weight:700">${(s.reduction_pct || 0).toFixed(1)}%</td>
+      <td style="font-size:0.72rem;color:${(s.reduction_pct || 0) >= 20 ? '#10b981' : '#f59e0b'};font-weight:700">${(s.reduction_pct || 0).toFixed(1)}%</td>
       <td><span style="font-size:0.65rem;padding:2px 8px;border-radius:10px;font-weight:600;background:${eligible ? '#10b98120' : '#f59e0b20'};color:${eligible ? '#10b981' : '#f59e0b'}">${eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}</span></td>
     </tr> `;
   }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;font-size:0.72rem">No simulations yet</td></tr>';
