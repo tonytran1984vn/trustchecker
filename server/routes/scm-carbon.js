@@ -752,7 +752,7 @@ router.get('/factors/history', async (req, res) => {
 // ─── GET /scope3-deep — Scope 3 deep dive with per-category breakdown ────────
 router.get('/scope3-deep', cacheMiddleware(180), async (req, res) => {
     try {
-        const orgId = req.tenantId;
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
         // Build per-category Scope 3 breakdown from product footprints
         const catMap = {};
@@ -792,7 +792,7 @@ router.get('/scope3-deep', cacheMiddleware(180), async (req, res) => {
 // ─── GET /marketplace — Carbon credit marketplace listings ───────────────────
 router.get('/marketplace', cacheMiddleware(120), async (req, res) => {
     try {
-        const orgId = req.tenantId;
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         // Generate marketplace listings from available offset data
         const offsets = await db.all(
             `SELECT * FROM carbon_offsets WHERE org_id = ? ORDER BY created_at DESC LIMIT 20`,
@@ -800,8 +800,8 @@ router.get('/marketplace', cacheMiddleware(120), async (req, res) => {
         ).catch(() => []);
         const listings = offsets.map(o => ({
             project_type: o.project_type || 'Verified Carbon Standard',
-            quantity_tCO2e: o.quantity_tCO2e || 0,
-            price_per_tCO2e: o.price_per_tCO2e || (15 + Math.random() * 30).toFixed(2),
+            quantity_tCO2e: o.quantity_tco2e || o.quantity_tCO2e || 0,
+            price_per_tCO2e: o.price_per_tco2e || o.price_per_tCO2e || (15 + Math.random() * 30).toFixed(2),
             registry: o.registry || 'Verra',
             vintage: o.vintage_year || new Date().getFullYear(),
             evaluation: {
@@ -825,7 +825,7 @@ router.get('/marketplace', cacheMiddleware(120), async (req, res) => {
 // ─── GET /report/csrd — CSRD / ESRS E1 compliance report ───────────────────
 router.get('/report/csrd', cacheMiddleware(180), async (req, res) => {
     try {
-        const orgId = req.tenantId;
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
         const totalKg = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
         const totalT = +(totalKg / 1000).toFixed(2);
@@ -856,7 +856,7 @@ router.get('/report/csrd', cacheMiddleware(180), async (req, res) => {
 // ─── GET /benchmark/cross-tenant — Cross-tenant carbon benchmark ─────────────
 router.get('/benchmark/cross-tenant', cacheMiddleware(300), async (req, res) => {
     try {
-        const orgId = req.tenantId;
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         // Get current org's carbon intensity
         const products = await getOrgProducts(orgId);
         const totalKg = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
