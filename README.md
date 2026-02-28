@@ -5,7 +5,7 @@
 **License**: Private · **Port**: 4000
 
 > Enterprise-grade supply chain trust, carbon governance, and ESG compliance platform.  
-> Multi-tenant architecture with 19 RBAC roles and 143 fine-grained permissions.
+> Multi-tenant architecture with 18 RBAC roles, 143 permissions, and 24 SoD conflict pairs.
 
 ---
 
@@ -283,35 +283,49 @@ trustchecker/
 
 ---
 
-## RBAC Roles
+## RBAC Roles (18 Roles × 5 Tiers)
 
-TrustChecker uses a 19-role RBAC system. Each role has specific permissions:
+> See [ROLE_REGISTRY.md](ROLE_REGISTRY.md) for full details including 143 permissions, 24 SoD pairs, and lineage ACL matrix.
 
-### Platform Roles (cross-tenant)
+**Design Principles:** No role has create + approve + deploy power. Platform ≠ Business. Governance ≠ Execution.
 
-| Role               | Description                        | Key Permissions           |
-|--------------------|------------------------------------|---------------------------|
-| `super_admin`      | Full system access                 | All                       |
-| `platform_security`| Security operations                | Security, audit           |
-| `data_gov_officer` | Data governance & lineage          | Data policies, compliance |
+```
+L5  Platform Layer
+     ├── 1. Super Admin (Infrastructure Custodian — NOT business authority)
+     ├── 2. Platform Security Officer (10 perms)
+     └── 3. Data Governance Officer (7 perms)
 
-### Tenant Roles (org-scoped)
+L4  Global Governance Layer
+     ├── 4. GGC Member (Graph Governance Committee)
+     ├── 5. Risk Committee (Decision Logic Owner)
+     ├── 6. Compliance Officer (17 perms)
+     └── 7. IVU — Independent Validation Unit
 
-| Role                 | Workspace       | Description                           |
-|----------------------|-----------------|---------------------------------------|
-| `executive` / `owner`| Owner Dashboard | Company overview, governance, KPIs    |
-| `company_admin`      | Admin Panel     | Users, settings, tenant config        |
-| `ops_manager`        | Ops Dashboard   | Operations, inventory, logistics      |
-| `scm_analyst`        | SCM Workspace   | Supply chain, traceability, partners  |
-| `carbon_officer`     | Carbon Workspace| Emissions, credits, ESG compliance    |
-| `risk_officer`       | Risk Analytics  | Risk scoring, radar, fraud detection  |
-| `compliance_officer` | Compliance      | Regulatory, GDPR, audit              |
-| `blockchain_operator`| Blockchain      | On-chain ops, NFT minting            |
-| `auditor`            | Audit View      | Read-only audit access                |
-| `developer`          | API Docs        | API testing, integrations             |
-| `ggc_member`         | Governance      | Global Governance Committee           |
-| `risk_committee`     | Risk Committee  | Risk approval workflows               |
-| `ivu_validator`      | Validation      | Independent validation unit           |
+L3  Tenant Governance Layer
+     ├── 8. Company Admin (Tenant IAM)
+     ├── 9. Executive / CEO
+     └── 10. Carbon Officer
+
+L2  Operational Layer
+     ├── 11. Operations Manager (27 perms)
+     ├── 12. Risk Officer
+     └── 13. SCM Analyst
+
+L1  Technical Execution Layer
+     ├── 14. Developer (8 perms)
+     ├── 15. Blockchain Operator (anchor/verify only)
+     ├── 16. Operator (day-to-day tasks)
+     ├── 17. Auditor (5 perms — read-only)
+     └── 18. Viewer (5 perms — read-only)
+```
+
+| Layer | Roles | Purpose |
+|-------|-------|---------|
+| **L5** | Super Admin, Security, Data Gov | Platform infra — cannot approve fraud or mint carbon |
+| **L4** | GGC, Risk Committee, Compliance, IVU | Governance — schema, weight, compliance decisions |
+| **L3** | Company Admin, CEO, Carbon Officer | Tenant governance — org config, ESG strategy |
+| **L2** | Ops Manager, Risk Officer, SCM Analyst | Operational — daily ops, risk investigation, supply chain |
+| **L1** | Developer, Blockchain Op, Operator, Auditor, Viewer | Execution — API, anchoring, read-only audit |
 
 ---
 
