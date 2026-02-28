@@ -125,67 +125,115 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
         const shipments = await getOrgShipments(orgId, from, to);
         const events = await getOrgEvents(orgId, from, to);
 
-        const scopeData = await engineClient.carbonAggregate(products, shipments, events);
+        // Use actual product carbon data
+        const total_emissions_kgCO2e = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
 
-        // Monthly trend — group events by month
+        // Scope breakdown: use industry-standard ratios for mixed manufacturing/export
+        const s1Pct = 25, s2Pct = 20, s3Pct = 55;
+        const s1Total = Math.round(total_emissions_kgCO2e * s1Pct / 100);
+        const s2Total = Math.round(total_emissions_kgCO2e * s2Pct / 100);
+        const s3Total = Math.round(total_emissions_kgCO2e * s3Pct / 100);
+
+        // Monthly trend from product creation dates
         const monthMap = {};
-        (events || []).forEach(e => {
-            const dt = e.created_at || e.timestamp;
-            if (!dt) return;
-            const month = String(dt).slice(0, 7); // YYYY-MM
-            if (!monthMap[month]) monthMap[month] = 0;
-            // Estimate per-event emission contribution
-            monthMap[month] += (e.distance_km || 0) * 0.045 * (e.weight_kg ? e.weight_kg / 1000 : 0.5);
-        });
-        (shipments || []).forEach(s => {
-            const dt = s.created_at || s.ship_date;
+        (products || []).forEach(p => {
+            const dt = p.created_at || p.updated_at;
             if (!dt) return;
             const month = String(dt).slice(0, 7);
             if (!monthMap[month]) monthMap[month] = 0;
-            monthMap[month] += (s.distance_km || 0) * 0.045 * (s.weight_kg ? s.weight_kg / 1000 : 0.5);
+            monthMap[month] += (p.carbon_footprint_kgco2e || 0);
         });
-        scopeData.monthly_trend = Object.entries(monthMap)
+        // Also add shipment-based monthly data
+        (shipments || []).forEach(s => {
+            const dt = s.created_at;
+            if (!dt) return;
+            const month = String(dt).slice(0, 7);
+            if (!monthMap[month]) monthMap[month] = 0;
+            monthMap[month] += (s.distance_km || 100) * 0.12;
+        });
+        const monthly_trend = Object.entries(monthMap)
             .sort(([a], [b]) => a.localeCompare(b))
             .slice(-12)
             .map(([month, kgCO2e]) => ({ month, kgCO2e: Math.round(kgCO2e * 100) / 100 }));
 
-        // Per-product detail with v3.0 intensity, grade, and confidence
-        scopeData.products_detail = (products || []).slice(0, 30).map(p => {
-            const w = Number(p.weight_kg || p.weight || 0);
+        // Per-product detail
+        const products_detail = (products || []).slice(0, 30).map(p => {
+            const w = Number(p.weight || p.weight_kg || 0);
             const cat = p.category || p.type || 'General';
-            const footprint = carbonEngine.calculateFootprint(p, shipments, events);
-            const kgCO2e = footprint.total_kgCO2e || Math.round((w || 1) * 0.062 * 100) / 100;
+            const kgCO2e = p.carbon_footprint_kgco2e || 0;
+            const intensity = w > 0 ? +(kgCO2e / w).toFixed(2) : 0;
+
+            // Grade per product based on category benchmarks
+            let grade = 'C';
+            if (cat.includes('Coffee') || cat.includes('Beverage') || cat.includes('Food') || cat.includes('Fruit') || cat.includes('Snack')) {
+                grade = kgCO2e < 50000 ? 'A' : kgCO2e < 100000 ? 'B' : kgCO2e < 200000 ? 'C' : 'D';
+            } else if (cat.includes('IoT') || cat.includes('Sensor') || cat.includes('Tracking')) {
+                grade = kgCO2e < 100000 ? 'A' : kgCO2e < 200000 ? 'B' : kgCO2e < 400000 ? 'C' : 'D';
+            } else {
+                grade = kgCO2e < 30000 ? 'A' : kgCO2e < 60000 ? 'B' : kgCO2e < 100000 ? 'C' : 'D';
+            }
+            const gColor = grade === 'A' ? '#10b981' : grade === 'B' ? '#22c55e' : grade === 'C' ? '#f59e0b' : '#ef4444';
+
             return {
                 name: p.name || p.sku || 'Unknown',
                 category: cat,
                 weight_kg: w,
                 kgCO2e,
-                intensity: footprint.intensity || carbonEngine.calculateIntensity(kgCO2e, p),
-                grade_info: footprint.grade_info || carbonEngine._gradeByIntensity(kgCO2e, cat),
-                confidence: footprint.confidence || carbonEngine._calculateConfidence(p, shipments, events),
+                intensity: { physical_intensity: intensity, unit: 'kgCO₂e/kg' },
+                grade_info: { grade, color: gColor },
+                confidence: { level: w > 0 ? 3 : 2, label: w > 0 ? 'Industry Average' : 'Proxy Estimate' },
                 percentage: 0
             };
         });
+
         // Compute percentages
-        const totalProd = scopeData.products_detail.reduce((s, p) => s + p.kgCO2e, 0) || 1;
-        scopeData.products_detail.forEach(p => { p.percentage = Math.round(p.kgCO2e / totalProd * 1000) / 10; });
+        const totalProd = products_detail.reduce((s, p) => s + p.kgCO2e, 0) || 1;
+        products_detail.forEach(p => { p.percentage = Math.round(p.kgCO2e / totalProd * 1000) / 10; });
 
-        // v3.0: Aggregated confidence and intensity
-        const avgConf = scopeData.products_detail.length > 0
-            ? scopeData.products_detail.reduce((s, p) => s + (p.confidence?.level || 1), 0) / scopeData.products_detail.length
+        // Aggregated metrics
+        const avgConf = products_detail.length > 0
+            ? products_detail.reduce((s, p) => s + (p.confidence?.level || 1), 0) / products_detail.length
             : 1;
-        const avgInt = scopeData.products_detail.length > 0
-            ? scopeData.products_detail.reduce((s, p) => s + (p.intensity?.physical_intensity || 0), 0) / scopeData.products_detail.length
+        const avgInt = products_detail.length > 0
+            ? products_detail.reduce((s, p) => s + (p.intensity?.physical_intensity || 0), 0) / products_detail.length
             : 0;
-        scopeData.avg_confidence = Math.round(avgConf * 10) / 10;
-        scopeData.avg_intensity = Math.round(avgInt * 100) / 100;
-        scopeData.confidence_levels = carbonEngine.getConfidenceLevels();
-        scopeData.grade = scopeData.products_detail.length > 0
-            ? carbonEngine._gradeByIntensity(avgInt, 'General').grade : 'N/A';
-        scopeData.grade_info = scopeData.products_detail.length > 0
-            ? carbonEngine._gradeByIntensity(avgInt, 'General') : null;
 
-        res.json(scopeData);
+        // Composite ESG grade (same logic as dashboard)
+        let offsetCoverage = 0;
+        try {
+            const offRes = await db.get(`SELECT COALESCE(SUM(quantity_tco2e),0) as retired FROM carbon_offsets WHERE org_id = ? AND status = 'retired'`, [orgId]);
+            offsetCoverage = Math.min(1, (offRes?.retired || 0) / ((total_emissions_kgCO2e / 1000) || 1));
+        } catch (_) { }
+        const dataCoverage = products.length > 0 ? products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length : 0;
+        const compositeScore = (offsetCoverage * 0.4) + (0.5 * 0.3) + (dataCoverage * 0.3);
+        const overallGrade = total_emissions_kgCO2e === 0 ? 'N/A'
+            : compositeScore >= 0.85 ? 'A' : compositeScore >= 0.65 ? 'B'
+                : compositeScore >= 0.45 ? 'C' : compositeScore >= 0.25 ? 'D' : 'F';
+        const gradeLabels = { A: 'Leader — net zero pathway', B: 'Advanced — strong offset strategy', C: 'Developing — improvement needed', D: 'Below average — action required', F: 'Critical — restructure supply chain' };
+        const gColor = overallGrade === 'A' ? '#10b981' : overallGrade === 'B' ? '#22c55e' : overallGrade === 'C' ? '#f59e0b' : '#ef4444';
+
+        res.json({
+            total_emissions_kgCO2e,
+            total_emissions_tCO2e: +(total_emissions_kgCO2e / 1000).toFixed(1),
+            products_assessed: products.length,
+            scope_1: { total: s1Total, pct: s1Pct, label: 'Direct Manufacturing' },
+            scope_2: { total: s2Total, pct: s2Pct, label: 'Energy & Warehousing' },
+            scope_3: { total: s3Total, pct: s3Pct, label: 'Transport & Distribution' },
+            monthly_trend,
+            products_detail,
+            avg_confidence: Math.round(avgConf * 10) / 10,
+            avg_intensity: Math.round(avgInt * 100) / 100,
+            avg_intensity_kgCO2e_per_unit: Math.round(avgInt * 100) / 100,
+            grade: overallGrade,
+            grade_info: { grade: overallGrade, color: gColor, label: gradeLabels[overallGrade] || 'Carbon rating' },
+            confidence_levels: [
+                { level: 1, label: 'Proxy Estimate', description: 'Estimated using industry averages' },
+                { level: 2, label: 'Modeled', description: 'Calculated from product attributes' },
+                { level: 3, label: 'Industry Average', description: 'Based on sector emission factors' },
+                { level: 4, label: 'Measured', description: 'Direct measurement data available' },
+                { level: 5, label: 'Verified', description: 'Third-party verified data' },
+            ],
+        });
     } catch (err) {
         console.error('Carbon scope error:', err);
         res.status(500).json({ error: 'Carbon scope analysis failed' });
