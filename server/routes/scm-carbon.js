@@ -233,6 +233,13 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
                 { level: 4, label: 'Measured', description: 'Direct measurement data available' },
                 { level: 5, label: 'Verified', description: 'Third-party verified data' },
             ],
+            // Paris-aligned reduction target: 42% reduction from current by 2030
+            reduction_targets: {
+                paris_aligned_2030: Math.round(total_emissions_kgCO2e * 0.58),
+                net_zero_2050: 0,
+                baseline_year: 2025,
+                baseline_kgCO2e: total_emissions_kgCO2e,
+            },
         });
     } catch (err) {
         console.error('Carbon scope error:', err);
@@ -291,11 +298,26 @@ router.get('/report', cacheMiddleware(180), async (req, res) => {
                 code, id: code, ...d
             }));
         }
-        // Enrich report with scope context
-        report.products_assessed = scopeData.products_assessed || products.length;
+        // Enrich report with actual product data (not engine estimates)
+        const actualKgCO2e = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
+        report.products_assessed = products.length;
         report.supply_chain_nodes = shipments.length;
-        report.total_kgCO2e = scopeData.total_emissions_kgCO2e || 0;
-        report.grade = report.overall_esg_grade || null;
+        report.total_kgCO2e = actualKgCO2e || scopeData.total_emissions_kgCO2e || 0;
+
+        // Override ESG grade with composite scoring (consistent with dashboard/scope)
+        let offsetCov = 0;
+        try {
+            const off = await db.get('SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE org_id = ? AND status = ?', [orgId, 'retired']);
+            offsetCov = Math.min(1, (off?.r || 0) / ((actualKgCO2e / 1000) || 1));
+        } catch (_) { }
+        const dataCov = products.length > 0 ? products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length : 0;
+        const compScore = (offsetCov * 0.4) + (Math.min(1, 5 / 7) * 0.3) + (dataCov * 0.3);
+        const esgGrade = actualKgCO2e === 0 ? 'N/A'
+            : compScore >= 0.85 ? 'A' : compScore >= 0.65 ? 'B'
+                : compScore >= 0.45 ? 'C' : compScore >= 0.25 ? 'D' : 'F';
+        report.overall_esg_grade = esgGrade;
+        report.grade = esgGrade;
+
         report.standard = report.report_standard || 'GHG Protocol';
         report.period = report.reporting_period ? `${report.reporting_period.from} — ${report.reporting_period.to}` : new Date().getFullYear().toString();
 
