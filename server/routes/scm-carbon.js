@@ -12,6 +12,7 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/engine-client');
 const carbonEngine = require('../engines/carbon-engine');
+const factorService = require('../engines/carbon-factor-service');
 const { cacheMiddleware } = require('../cache');
 
 router.use(authMiddleware);
@@ -162,6 +163,9 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
         // Compute percentages
         const totalProd = scopeData.products_detail.reduce((s, p) => s + p.kgCO2e, 0) || 1;
         scopeData.products_detail.forEach(p => { p.percentage = Math.round(p.kgCO2e / totalProd * 1000) / 10; });
+
+        // v3.0: Include confidence and intensity aggregates from scope data
+        scopeData.confidence_levels = carbonEngine.getConfidenceLevels();
 
         res.json(scopeData);
     } catch (err) {
@@ -460,6 +464,81 @@ router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
     } catch (err) {
         console.error('Carbon benchmark error:', err);
         res.status(500).json({ error: 'Carbon benchmark analysis failed' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// v3.0 — EMISSION FACTOR MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── GET /api/scm/carbon/factors — List current emission factors ────────────
+router.get('/factors', cacheMiddleware(300), async (req, res) => {
+    try {
+        const { category } = req.query;
+        const factors = await factorService.loadFactors(category || null);
+
+        // Also include industry benchmarks and confidence levels
+        res.json({
+            title: 'Emission Factor Registry (v3.0)',
+            total: factors.length,
+            factors,
+            industry_benchmarks: carbonEngine.getIndustryBenchmarks(),
+            confidence_levels: carbonEngine.getConfidenceLevels(),
+            risk_thresholds: carbonEngine.getRiskThresholds(),
+            methodology: 'DEFRA/GHG Protocol 2025'
+        });
+    } catch (err) {
+        console.error('Factors list error:', err);
+        res.status(500).json({ error: 'Failed to load emission factors' });
+    }
+});
+
+// ─── PUT /api/scm/carbon/factors/:id — Update emission factor ───────────────
+router.put('/factors/:id', requirePermission('esg:manage'), async (req, res) => {
+    try {
+        const result = await factorService.updateFactor(
+            req.params.id,
+            req.body,
+            req.user?.id || 'unknown'
+        );
+
+        // Audit log
+        const { v4: uuidv4 } = require('uuid');
+        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
+            VALUES (?, ?, 'emission_factor_updated', 'emission_factor', ?, ?, datetime('now'))
+        `).run(
+            uuidv4(), req.user?.id, result.id,
+            JSON.stringify({ factor_key: result.factor_key, old_value: result.old_value, new_value: result.new_value, version: result.version })
+        );
+
+        res.json({
+            message: 'Factor updated with version tracking',
+            ...result
+        });
+    } catch (err) {
+        console.error('Factor update error:', err);
+        res.status(err.message === 'Factor not found' ? 404 : 500)
+            .json({ error: err.message || 'Factor update failed' });
+    }
+});
+
+// ─── GET /api/scm/carbon/factors/history — Factor version history ───────────
+router.get('/factors/history', async (req, res) => {
+    try {
+        const { category, factor_key } = req.query;
+        if (!category || !factor_key) {
+            return res.status(400).json({ error: 'category and factor_key required' });
+        }
+        const history = await factorService.getFactorHistory(category, factor_key);
+        res.json({
+            category,
+            factor_key,
+            versions: history.length,
+            history
+        });
+    } catch (err) {
+        console.error('Factor history error:', err);
+        res.status(500).json({ error: 'Factor history query failed' });
     }
 });
 

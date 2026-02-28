@@ -192,11 +192,11 @@ function renderIngestionModule() {
 // ─── Module 2: Emission Calculation Engine ───────────────────────────
 function renderEmissionModule() {
     const calculations = [
-        { batch: 'BATCH-2024-001', product: 'Organic Coffee 1kg', scope1: 0.12, scope2: 0.08, scope3: 0.45, total: 0.65, intensity: 0.65, unit: 'kgCO₂e/unit', method: 'GHG-v4.2', confidence: 94 },
-        { batch: 'BATCH-2024-002', product: 'Fair Trade Tea 500g', scope1: 0.05, scope2: 0.04, scope3: 0.28, total: 0.37, intensity: 0.74, unit: 'kgCO₂e/unit', method: 'GHG-v4.2', confidence: 91 },
-        { batch: 'BATCH-2024-003', product: 'Cacao Powder 2kg', scope1: 0.22, scope2: 0.15, scope3: 1.18, total: 1.55, intensity: 0.78, unit: 'kgCO₂e/unit', method: 'GHG-v4.2', confidence: 88 },
-        { batch: 'BATCH-2024-004', product: 'Raw Cotton Bundle', scope1: 0.35, scope2: 0.18, scope3: 2.47, total: 3.00, intensity: 1.50, unit: 'kgCO₂e/kg', method: 'GHG-v4.2', confidence: 85 },
-        { batch: 'BATCH-2024-005', product: 'Bamboo Textile Roll', scope1: 0.08, scope2: 0.06, scope3: 0.31, total: 0.45, intensity: 0.23, unit: 'kgCO₂e/m²', method: 'GHG-v4.2', confidence: 92 },
+        { batch: 'BATCH-2024-001', product: 'Organic Coffee 1kg', scope1: 0.12, scope2: 0.08, scope3: 0.45, total: 0.65, intensity: 0.65, unit: 'kgCO₂e/unit', method: 'GHG-v4.2', confidence: 2, conf_label: 'Industry avg' },
+        { batch: 'BATCH-2024-002', product: 'Fair Trade Tea 500g', scope1: 0.05, scope2: 0.04, scope3: 0.28, total: 0.37, intensity: 0.74, unit: 'kgCO₂e/unit', method: 'GHG-v4.2', confidence: 3, conf_label: 'Supplier' },
+        { batch: 'BATCH-2024-003', product: 'Cacao Powder 2kg', scope1: 0.22, scope2: 0.15, scope3: 1.18, total: 1.55, intensity: 0.78, unit: 'kgCO₂e/unit', method: 'GHG-v4.2', confidence: 1, conf_label: 'Proxy' },
+        { batch: 'BATCH-2024-004', product: 'Raw Cotton Bundle', scope1: 0.35, scope2: 0.18, scope3: 2.47, total: 3.00, intensity: 1.50, unit: 'kgCO₂e/kg', method: 'GHG-v4.2', confidence: 4, conf_label: 'Meter' },
+        { batch: 'BATCH-2024-005', product: 'Bamboo Textile Roll', scope1: 0.08, scope2: 0.06, scope3: 0.31, total: 0.45, intensity: 0.23, unit: 'kgCO₂e/m²', method: 'GHG-v4.2', confidence: 2, conf_label: 'Industry avg' },
     ];
 
     const totalEmission = calculations.reduce((a, c) => a + c.total, 0);
@@ -209,7 +209,7 @@ function renderEmissionModule() {
             { l: 'Total Emission', v: totalEmission.toFixed(2) + ' kgCO₂e', c: '#ef4444', i: '🏭' },
             { l: 'Scope 1 (Direct)', v: calculations.reduce((a, c) => a + c.scope1, 0).toFixed(2), c: '#3b82f6', i: '🔥' },
             { l: 'Scope 3 (Supply)', v: calculations.reduce((a, c) => a + c.scope3, 0).toFixed(2), c: '#f59e0b', i: '🚛' },
-            { l: 'Avg Confidence', v: avgConfidence.toFixed(0) + '%', c: '#10b981', i: '🎯' },
+            { l: 'Avg Confidence', v: avgConfidence.toFixed(1) + '/5', c: avgConfidence >= 3 ? '#10b981' : avgConfidence >= 2 ? '#f59e0b' : '#ef4444', i: '🎯' },
         ].map(k => `
                 <div class="sa-card" style="text-align:center;padding:12px">
                     <div style="font-size:16px">${k.i}</div>
@@ -244,7 +244,7 @@ function renderEmissionModule() {
                         <td style="padding:5px;text-align:center">${scopeBadge(3)} <span style="color:#94a3b8">${c.scope3}</span></td>
                         <td style="padding:5px;text-align:center;color:#ef4444;font-weight:700">${c.total}</td>
                         <td style="padding:5px;text-align:center;color:#f59e0b;font-size:0.72rem">${c.intensity} ${c.unit}</td>
-                        <td style="padding:5px;text-align:center"><span style="padding:2px 6px;border-radius:3px;background:${scoreColor(c.confidence)}18;color:${scoreColor(c.confidence)};font-weight:700;font-size:0.72rem">${c.confidence}%</span></td>
+                        <td style="padding:5px;text-align:center"><span style="padding:2px 6px;border-radius:3px;background:${c.confidence >= 4 ? '#10b981' : c.confidence >= 3 ? '#3b82f6' : c.confidence >= 2 ? '#f59e0b' : '#ef4444'}18;color:${c.confidence >= 4 ? '#10b981' : c.confidence >= 3 ? '#3b82f6' : c.confidence >= 2 ? '#f59e0b' : '#ef4444'};font-weight:700;font-size:0.72rem" title="${c.conf_label}">${c.confidence}/5</span></td>
                     </tr>
                 `).join('')}</tbody>
             </table>
@@ -580,7 +580,7 @@ function renderOverclaimModule() {
                     </div>
                 `).join('')}
                 <div style="margin-top:8px;padding:6px 8px;background:rgba(239,68,68,0.06);border-radius:6px;font-size:0.68rem;color:#94a3b8">
-                    <strong style="color:#ef4444">Threshold:</strong> Score > 70 → Block approval · > 85 → Auto-escalate to Risk Committee
+                    <strong style="color:#ef4444">Threshold:</strong> Score > 80 → Soft block · > 90 → Mandatory review · > 95 → System freeze
                 </div>
             </div>
         </div>`;
@@ -1068,9 +1068,9 @@ function renderSettingsModule() {
         { source: 'Air Freight', scope: 3, factor: 0.60, unit: 'kgCO₂e/t·km', region: 'Global', lastUpdated: '2024-11-15', citation: 'DEFRA 2024' },
     ];
     const riskThresholds = [
-        { name: 'Block Approval', threshold: 70, action: 'Passport blocked from approval', color: '#f59e0b' },
-        { name: 'Auto-Escalate', threshold: 85, action: 'Auto-escalate to Risk Committee', color: '#ef4444' },
-        { name: 'Emergency Freeze', threshold: 95, action: 'Freeze all CIPs + notify GGC', color: '#dc2626' },
+        { name: 'Soft Block', threshold: 80, action: 'Passport blocked from approval', color: '#f59e0b' },
+        { name: 'Mandatory Review', threshold: 90, action: 'Auto-escalate to Risk Committee', color: '#ef4444' },
+        { name: 'System Freeze', threshold: 95, action: 'Freeze all CIPs + notify GGC', color: '#dc2626' },
         { name: 'Overclaim Alert', threshold: 20, action: 'Flag if benchmark delta > threshold %', color: '#f97316' },
     ];
     const validators = [

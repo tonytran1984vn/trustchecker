@@ -113,12 +113,11 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
         const s2 = scopeData?.scope_2 || {};
         const s3 = scopeData?.scope_3 || {};
 
-        // Determine ESG grade from product rankings
-        const rankings = scopeData?.product_rankings || [];
-        const avgGrade = rankings.length > 0 ? rankings[0].grade : null;
+        // v3.0: Use intensity-based grading instead of absolute thresholds
+        const avgIntensity = products.length > 0 ? total_emissions / products.length : 0;
         const esgGrade = total_emissions === 0 ? 'N/A'
-            : total_emissions < 1000 ? 'A' : total_emissions < 5000 ? 'B'
-                : total_emissions < 20000 ? 'C' : total_emissions < 50000 ? 'D' : 'F';
+            : avgIntensity <= 5 ? 'A' : avgIntensity <= 15 ? 'B'
+                : avgIntensity <= 35 ? 'C' : avgIntensity <= 55 ? 'D' : 'F';
 
         res.json({
             // KPIs
@@ -158,6 +157,11 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
             // Counts
             products_tracked: products.length,
             shipments_tracked: shipments.length,
+
+            // v3.0: Confidence & intensity metrics
+            avg_confidence: scopeData?.avg_confidence || 1,
+            high_confidence_ratio_pct: scopeData?.high_confidence_ratio_pct || 0,
+            avg_intensity_kgCO2e_per_unit: scopeData?.avg_intensity_kgCO2e_per_unit || 0,
         });
     } catch (err) {
         console.error('[carbon-officer] Dashboard error:', err);

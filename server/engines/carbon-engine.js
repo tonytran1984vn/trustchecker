@@ -1,9 +1,15 @@
 /**
- * TrustChecker Carbon & ESG Engine v2.0
+ * TrustChecker Carbon & ESG Engine v3.0 (CIE Phase 1A)
  * Cross-Cutting ESG Governance Intelligence
  * 
  * Scope 1/2/3 emissions calculation, carbon passport, GRI reporting,
  * Risk factor integration, regulatory alignment, maturity assessment
+ * 
+ * v3.0 Upgrades:
+ *   - Intensity-based percentile grading (replaces absolute grading)
+ *   - Confidence scoring (1-5 scale: proxy → measured)
+ *   - Updated risk thresholds (80/90/95)
+ *   - Industry benchmark database for percentile comparison
  * 
  * Emission factors based on DEFRA/GHG Protocol 2025 guidelines
  */
@@ -55,7 +61,7 @@ const MANUFACTURING_FACTORS = {
     'Agriculture': 1.8
 };
 
-// Carbon grade thresholds
+// Carbon grade thresholds (legacy absolute — kept for backward compatibility)
 const GRADE_THRESHOLDS = [
     { max: 5, grade: 'A+', label: 'Excellent — Net Zero ready', color: '#10b981' },
     { max: 10, grade: 'A', label: 'Very Good', color: '#34d399' },
@@ -64,6 +70,50 @@ const GRADE_THRESHOLDS = [
     { max: 70, grade: 'D', label: 'Poor — Energy transition needed', color: '#ef4444' },
     { max: Infinity, grade: 'F', label: 'Fail — Restructure supply chain', color: '#991b1b' }
 ];
+
+// ─── v3.0: Industry Benchmarks (kgCO₂e per unit, DEFRA/GHG Protocol 2025) ────
+// Used for intensity-based percentile grading
+// p20 = top 20% threshold, median = industry median, p80 = bottom 20% threshold
+const INDUSTRY_BENCHMARKS = {
+    'F&B': { p20: 2.0, median: 4.5, p80: 8.0, unit: 'kgCO₂e/unit', source: 'DEFRA Food 2025' },
+    'F&B Artisan': { p20: 2.5, median: 5.5, p80: 9.0, unit: 'kgCO₂e/unit', source: 'DEFRA Food 2025' },
+    'F&B Heritage': { p20: 2.2, median: 5.0, p80: 8.5, unit: 'kgCO₂e/unit', source: 'DEFRA Food 2025' },
+    'F&B Organic': { p20: 1.0, median: 2.8, p80: 5.0, unit: 'kgCO₂e/unit', source: 'DEFRA Food 2025' },
+    'F&B Premium': { p20: 2.8, median: 6.0, p80: 10.0, unit: 'kgCO₂e/unit', source: 'DEFRA Food 2025' },
+    'Electronics': { p20: 12.0, median: 28.0, p80: 55.0, unit: 'kgCO₂e/unit', source: 'IEA Electronics 2024' },
+    'IoT': { p20: 8.0, median: 22.0, p80: 40.0, unit: 'kgCO₂e/unit', source: 'IEA Electronics 2024' },
+    'Sensor': { p20: 6.0, median: 18.0, p80: 35.0, unit: 'kgCO₂e/unit', source: 'IEA Electronics 2024' },
+    'Semiconductor': { p20: 25.0, median: 55.0, p80: 100.0, unit: 'kgCO₂e/unit', source: 'SEMI ESG 2024' },
+    'Fashion': { p20: 5.0, median: 14.0, p80: 28.0, unit: 'kgCO₂e/unit', source: 'DEFRA Textiles 2025' },
+    'Healthcare': { p20: 4.0, median: 10.0, p80: 20.0, unit: 'kgCO₂e/unit', source: 'NHS Carbon Footprint 2024' },
+    'Pharmaceutical': { p20: 6.0, median: 14.0, p80: 25.0, unit: 'kgCO₂e/unit', source: 'NHS Carbon Footprint 2024' },
+    'Industrial': { p20: 15.0, median: 40.0, p80: 75.0, unit: 'kgCO₂e/unit', source: 'IEA Industry 2024' },
+    'Luxury Watch': { p20: 12.0, median: 30.0, p80: 55.0, unit: 'kgCO₂e/unit', source: 'FH Swiss Watch Industry 2024' },
+    'Jewelry': { p20: 18.0, median: 45.0, p80: 80.0, unit: 'kgCO₂e/unit', source: 'RJC 2024' },
+    'Coffee': { p20: 2.5, median: 6.0, p80: 12.0, unit: 'kgCO₂e/kg', source: 'ICO LCA 2024' },
+    'Seafood': { p20: 3.0, median: 8.0, p80: 16.0, unit: 'kgCO₂e/kg', source: 'FAO Fisheries 2024' },
+    'Meat': { p20: 8.0, median: 22.0, p80: 45.0, unit: 'kgCO₂e/kg', source: 'FAO Livestock 2024' },
+    'Agriculture': { p20: 1.0, median: 3.5, p80: 7.0, unit: 'kgCO₂e/kg', source: 'FAO Agriculture 2024' },
+    'Laptop': { p20: 180.0, median: 350.0, p80: 550.0, unit: 'kgCO₂e/unit', source: 'IEA ICT 2024' },
+    'Energy': { p20: 18.0, median: 45.0, p80: 80.0, unit: 'kgCO₂e/unit', source: 'IEA Energy 2024' },
+    '_default': { p20: 5.0, median: 15.0, p80: 35.0, unit: 'kgCO₂e/unit', source: 'GHG Protocol Generic 2025' }
+};
+
+// ─── v3.0: Confidence level definitions ──────────────────────────────────────
+const CONFIDENCE_LEVELS = [
+    { level: 5, label: 'Measured', description: 'Direct IoT/meter measurement', color: '#10b981' },
+    { level: 4, label: 'Meter-based', description: 'Utility bills or supplier meters', color: '#34d399' },
+    { level: 3, label: 'Supplier-reported', description: 'Supplier-provided data', color: '#3b82f6' },
+    { level: 2, label: 'Industry average', description: 'Published industry factors', color: '#f59e0b' },
+    { level: 1, label: 'Proxy estimate', description: 'Category-based proxy calculation', color: '#ef4444' }
+];
+
+// ─── v3.0: Risk thresholds (updated from 70/85/95) ──────────────────────────
+const RISK_THRESHOLDS = {
+    soft_block: 80,
+    mandatory_review: 90,
+    system_freeze: 95
+};
 
 // Regulatory framework definitions
 const REGULATORY_FRAMEWORKS = [
@@ -86,7 +136,8 @@ const MATURITY_LEVELS = [
 
 class CarbonEngine {
     /**
-     * Calculate product carbon footprint (cradle-to-gate) — v2.0
+     * Calculate product carbon footprint (cradle-to-gate) — v3.0
+     * Now includes intensity metrics, confidence scoring, and percentile grading
      */
     calculateFootprint(product, shipments = [], events = [], partner = null) {
         const category = product.category || 'General';
@@ -148,22 +199,38 @@ class CarbonEngine {
         };
 
         const totalFootprint = scope1.value + scope2.value + scope3.value;
-        const gradeInfo = this._carbonGradeInfo(totalFootprint);
+
+        // v3.0: Intensity-based grading (replaces absolute grading)
+        const intensity = this.calculateIntensity(totalFootprint, product);
+        const percentileGrade = this._gradeByIntensity(intensity.physical_intensity, category);
+        const confidence = this._calculateConfidence(product, shipments, events);
+
+        // Legacy grade kept for backward compatibility
+        const legacyGrade = this._carbonGradeLegacy(totalFootprint);
 
         return {
             product_id: product.id,
             product_name: product.name,
             category,
             total_footprint_kgCO2e: Math.round(totalFootprint * 100) / 100,
-            grade: gradeInfo.grade,
-            grade_label: gradeInfo.label,
-            grade_color: gradeInfo.color,
+            // v3.0: Primary grade is now percentile-based
+            grade: percentileGrade.grade,
+            grade_label: percentileGrade.label,
+            grade_color: percentileGrade.color,
+            grade_method: 'percentile',
+            // v3.0: Legacy absolute grade for backward compat
+            legacy_grade: legacyGrade.grade,
+            legacy_grade_label: legacyGrade.label,
             scopes: [scope1, scope2, scope3],
             scope_breakdown: {
                 scope_1_pct: totalFootprint > 0 ? Math.round(scope1.value / totalFootprint * 100) : 0,
                 scope_2_pct: totalFootprint > 0 ? Math.round(scope2.value / totalFootprint * 100) : 0,
                 scope_3_pct: totalFootprint > 0 ? Math.round(scope3.value / totalFootprint * 100) : 0
             },
+            // v3.0: Intensity metrics
+            intensity,
+            // v3.0: Confidence scoring
+            confidence,
             equivalent: {
                 trees_needed: Math.round(totalFootprint / 22 * 10) / 10,
                 driving_km: Math.round(totalFootprint / 0.192 * 10) / 10,
@@ -183,6 +250,9 @@ class CarbonEngine {
         const productFootprints = [];
         // Per-category breakdown accumulators
         const s1ByCat = {}, s2ByCat = {}, s3ByCat = {};
+        // v3.0: Confidence accumulators
+        let totalConfidence = 0;
+        const confidenceCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
 
         for (const product of products) {
             // Match shipments: try batch chain first, then proportional fallback
@@ -209,6 +279,10 @@ class CarbonEngine {
             scope2Total += s2v;
             scope3Total += s3v;
 
+            // v3.0: Accumulate confidence
+            totalConfidence += fp.confidence.level;
+            confidenceCounts[fp.confidence.level] = (confidenceCounts[fp.confidence.level] || 0) + 1;
+
             // Accumulate per category
             s1ByCat[cat] = (s1ByCat[cat] || 0) + s1v;
             s2ByCat[cat] = (s2ByCat[cat] || 0) + s2v;
@@ -221,11 +295,21 @@ class CarbonEngine {
                 total: fp.total_footprint_kgCO2e,
                 scope1: s1v, scope2: s2v, scope3: s3v,
                 grade: fp.grade,
-                grade_color: fp.grade_color
+                grade_color: fp.grade_color,
+                // v3.0 additions
+                intensity: fp.intensity?.physical_intensity || 0,
+                confidence_level: fp.confidence?.level || 1,
+                benchmark_percentile: fp.intensity?.benchmark_percentile || 50
             });
         }
 
         const total = scope1Total + scope2Total + scope3Total;
+        const avgIntensity = productFootprints.length > 0
+            ? Math.round(productFootprints.reduce((s, p) => s + (p.intensity || 0), 0) / productFootprints.length * 100) / 100
+            : 0;
+        const avgConfidence = productFootprints.length > 0
+            ? Math.round(totalConfidence / productFootprints.length * 10) / 10
+            : 0;
 
         // Build per-scope breakdown items from category accumulators
         const buildItems = (byCat, scopeTotal) => Object.entries(byCat)
@@ -237,6 +321,12 @@ class CarbonEngine {
             }))
             .sort((a, b) => b.value - a.value);
 
+        // v3.0: High-confidence data ratio (levels 3-5)
+        const highConfidenceCount = (confidenceCounts[3] || 0) + (confidenceCounts[4] || 0) + (confidenceCounts[5] || 0);
+        const highConfidenceRatio = productFootprints.length > 0
+            ? Math.round(highConfidenceCount / productFootprints.length * 100)
+            : 0;
+
         return {
             total_emissions_kgCO2e: Math.round(total * 100) / 100,
             total_emissions_tonnes: Math.round(total / 1000 * 100) / 100,
@@ -245,6 +335,11 @@ class CarbonEngine {
             scope_3: { total: Math.round(scope3Total * 100) / 100, pct: total > 0 ? Math.round(scope3Total / total * 100) : 0, label: 'Transport & Distribution', items: buildItems(s3ByCat, scope3Total) },
             products_assessed: productFootprints.length,
             product_rankings: productFootprints.sort((a, b) => b.total - a.total),
+            // v3.0: Intensity & confidence aggregates
+            avg_intensity_kgCO2e_per_unit: avgIntensity,
+            avg_confidence: avgConfidence,
+            confidence_breakdown: confidenceCounts,
+            high_confidence_ratio_pct: highConfidenceRatio,
             reduction_targets: {
                 paris_aligned_2030: Math.round(total * 0.55 * 100) / 100,
                 net_zero_2050: Math.round(total * 0.1 * 100) / 100
@@ -315,15 +410,16 @@ class CarbonEngine {
     calculateRiskFactors(scopeData, leaderboard) {
         const risks = [];
         const total = scopeData?.total_emissions_kgCO2e || 0;
-        const avgGrade = this._carbonGradeInfo(total / Math.max(1, scopeData?.products_assessed || 1));
+        const avgIntensity = scopeData?.avg_intensity_kgCO2e_per_unit || (total / Math.max(1, scopeData?.products_assessed || 1));
+        const avgGrade = this._gradeByIntensity(avgIntensity, '_default');
 
-        // Supply chain carbon risk
+        // Supply chain carbon risk (v3.0: based on intensity grade)
         if (avgGrade.grade === 'D' || avgGrade.grade === 'F') {
             risks.push({
                 id: 'carbon_supply_risk',
                 name: 'Supply Chain Carbon Risk',
                 severity: 'high',
-                signal: `Average product grade: ${avgGrade.grade}`,
+                signal: `Average intensity grade: ${avgGrade.grade} (${avgIntensity} kgCO₂e/unit)`,
                 impact: 'Brand Risk Index (BRI)',
                 action: 'Restructure high-emission supply routes',
                 score_impact: avgGrade.grade === 'F' ? 25 : 15
@@ -372,12 +468,28 @@ class CarbonEngine {
             });
         }
 
+        // v3.0: Low confidence data risk
+        const avgConfidence = scopeData?.avg_confidence || 1;
+        if (avgConfidence < 2.5) {
+            risks.push({
+                id: 'data_confidence_risk',
+                name: 'Low Data Confidence Risk',
+                severity: avgConfidence < 1.5 ? 'high' : 'medium',
+                signal: `Average confidence: ${avgConfidence}/5 (${avgConfidence < 1.5 ? 'proxy-only' : 'mostly estimates'})`,
+                impact: 'Audit Readiness',
+                action: 'Upgrade to supplier-reported or metered data for key products',
+                score_impact: avgConfidence < 1.5 ? 12 : 6
+            });
+        }
+
         const totalRiskScore = risks.reduce((s, r) => s + r.score_impact, 0);
 
         return {
-            title: 'Carbon → Risk Factor Mapping (v2.0)',
+            title: 'Carbon → Risk Factor Mapping (v3.0)',
             total_risk_factors: risks.length,
             total_risk_score_impact: Math.min(100, totalRiskScore),
+            // v3.0: Updated thresholds
+            thresholds: RISK_THRESHOLDS,
             severity_summary: {
                 critical: risks.filter(r => r.severity === 'critical').length,
                 high: risks.filter(r => r.severity === 'high').length,
@@ -499,6 +611,53 @@ class CarbonEngine {
         };
     }
 
+    // ─── v3.0: Intensity Calculation ──────────────────────────────────────────
+
+    /**
+     * Calculate physical and financial intensity for a product
+     */
+    calculateIntensity(totalFootprint, product) {
+        const category = product.category || 'General';
+        const weight = product.weight || product.weight_kg || 0.5;
+        const price = product.price || product.unit_price || 0;
+        const benchmark = INDUSTRY_BENCHMARKS[category] || INDUSTRY_BENCHMARKS['_default'];
+
+        // Physical intensity: kgCO₂e per unit
+        const physicalIntensity = Math.round(totalFootprint * 100) / 100;
+        // Weight-based intensity: kgCO₂e per kg
+        const weightIntensity = weight > 0 ? Math.round(totalFootprint / weight * 100) / 100 : 0;
+
+        // Benchmark percentile (linear interpolation)
+        let percentile;
+        if (physicalIntensity <= benchmark.p20) {
+            percentile = Math.round((physicalIntensity / benchmark.p20) * 20);
+        } else if (physicalIntensity <= benchmark.median) {
+            percentile = 20 + Math.round(((physicalIntensity - benchmark.p20) / (benchmark.median - benchmark.p20)) * 30);
+        } else if (physicalIntensity <= benchmark.p80) {
+            percentile = 50 + Math.round(((physicalIntensity - benchmark.median) / (benchmark.p80 - benchmark.median)) * 30);
+        } else {
+            percentile = 80 + Math.min(20, Math.round(((physicalIntensity - benchmark.p80) / benchmark.p80) * 20));
+        }
+        percentile = Math.max(0, Math.min(100, percentile));
+
+        return {
+            physical_intensity: physicalIntensity,
+            physical_unit: 'kgCO₂e/unit',
+            weight_intensity: weightIntensity,
+            weight_unit: 'kgCO₂e/kg',
+            financial_intensity: price > 0 ? Math.round(totalFootprint / price * 10000) / 10000 : null,
+            financial_unit: price > 0 ? 'kgCO₂e/€' : null,
+            benchmark_percentile: percentile,
+            benchmark_category: category,
+            benchmark_median: benchmark.median,
+            benchmark_source: benchmark.source,
+            vs_industry: physicalIntensity <= benchmark.p20 ? 'top_performer'
+                : physicalIntensity <= benchmark.median ? 'above_average'
+                    : physicalIntensity <= benchmark.p80 ? 'below_average'
+                        : 'critical'
+        };
+    }
+
     // ─── Internal Helpers ────────────────────────────────────────────────────
     _estimateDistance(shipment) {
         if (shipment.current_lat && shipment.current_lng) {
@@ -513,15 +672,110 @@ class CarbonEngine {
         return 500;
     }
 
-    _carbonGrade(kgCO2e) {
-        return this._carbonGradeInfo(kgCO2e).grade;
+    /**
+     * v3.0: Grade by intensity percentile against industry benchmark
+     * Replaces absolute grading with relative performance assessment
+     */
+    _gradeByIntensity(intensity, category) {
+        const benchmark = INDUSTRY_BENCHMARKS[category] || INDUSTRY_BENCHMARKS['_default'];
+
+        if (intensity <= benchmark.p20) {
+            return { grade: 'A', label: `Top performer (≤${benchmark.p20} ${benchmark.unit})`, color: '#10b981', percentile: 'top_20' };
+        } else if (intensity <= benchmark.p20 + (benchmark.median - benchmark.p20) * 0.5) {
+            return { grade: 'B', label: `Above average (industry median: ${benchmark.median})`, color: '#3b82f6', percentile: '20_40' };
+        } else if (intensity <= benchmark.median) {
+            return { grade: 'B', label: `Near median (industry median: ${benchmark.median})`, color: '#3b82f6', percentile: '40_50' };
+        } else if (intensity <= benchmark.p80) {
+            return { grade: 'C', label: `Below average — improvement needed`, color: '#f59e0b', percentile: '50_80' };
+        } else if (intensity <= benchmark.p80 * 1.5) {
+            return { grade: 'D', label: `Poor — energy transition needed`, color: '#ef4444', percentile: '80_90' };
+        } else {
+            return { grade: 'F', label: `Critical — restructure supply chain`, color: '#991b1b', percentile: 'bottom_10' };
+        }
     }
 
-    _carbonGradeInfo(kgCO2e) {
+    /**
+     * v3.0: Confidence scoring based on data source quality
+     * Returns { level: 1-5, label, description, color, rationale }
+     */
+    _calculateConfidence(product, shipments, events) {
+        let score = 1; // Default: proxy estimate
+        const rationale = [];
+
+        // Check if product has direct measurement data (IoT readings)
+        const hasIoT = events.some(e => e.event_type === 'iot_reading' || e.event_type === 'meter_reading');
+        if (hasIoT) {
+            score = 5;
+            rationale.push('Direct IoT/meter measurements available');
+        }
+
+        // Check if product has utility bill data
+        const hasUtilityData = events.some(e => e.event_type === 'utility_bill' || e.event_type === 'energy_report');
+        if (hasUtilityData && score < 4) {
+            score = 4;
+            rationale.push('Utility bill data available');
+        }
+
+        // Check if product has supplier-reported data
+        const hasSupplierData = product.supplier_emission_data || product.emission_reported_by;
+        if (hasSupplierData && score < 3) {
+            score = 3;
+            rationale.push('Supplier-reported emission data');
+        }
+
+        // Check if we have real transport data (not default distance)
+        const hasRealTransport = shipments.some(s => s.distance_km && s.distance_km > 0);
+        if (hasRealTransport && score < 2) {
+            score = 2;
+            rationale.push('Real transport distance data');
+        }
+
+        // Check if we have actual events (not just proxy)
+        const hasEvents = events.length > 0;
+        if (hasEvents && score < 2) {
+            score = 2;
+            rationale.push('Supply chain event data available');
+        }
+
+        if (rationale.length === 0) {
+            rationale.push('Category-based proxy factors (DEFRA 2025)');
+        }
+
+        const levelInfo = CONFIDENCE_LEVELS.find(l => l.level === score) || CONFIDENCE_LEVELS[4];
+
+        return {
+            level: score,
+            label: levelInfo.label,
+            description: levelInfo.description,
+            color: levelInfo.color,
+            rationale,
+            data_sources: {
+                has_iot: hasIoT,
+                has_utility_data: hasUtilityData || false,
+                has_supplier_data: !!hasSupplierData,
+                has_transport_data: hasRealTransport,
+                event_count: events.length,
+                shipment_count: shipments.length
+            }
+        };
+    }
+
+    // Legacy grading methods (kept for backward compatibility)
+    _carbonGrade(kgCO2e) {
+        return this._carbonGradeLegacy(kgCO2e).grade;
+    }
+
+    /** Legacy absolute grading — used by backward-compatible code paths */
+    _carbonGradeLegacy(kgCO2e) {
         for (const t of GRADE_THRESHOLDS) {
             if (kgCO2e <= t.max) return t;
         }
         return GRADE_THRESHOLDS[GRADE_THRESHOLDS.length - 1];
+    }
+
+    /** Alias for backward compat — delegates to legacy */
+    _carbonGradeInfo(kgCO2e) {
+        return this._carbonGradeLegacy(kgCO2e);
     }
 
     _overallESGGrade(scopeData, leaderboard) {
@@ -531,6 +785,11 @@ class CarbonEngine {
         const combined = (100 - Math.min(100, total / 10)) * 0.5 + avgPartnerScore * 0.5;
         return combined >= 80 ? 'A' : combined >= 60 ? 'B' : combined >= 40 ? 'C' : 'D';
     }
+
+    /** v3.0: Expose constants for API consumers */
+    getIndustryBenchmarks() { return INDUSTRY_BENCHMARKS; }
+    getConfidenceLevels() { return CONFIDENCE_LEVELS; }
+    getRiskThresholds() { return RISK_THRESHOLDS; }
 }
 
 module.exports = new CarbonEngine();
