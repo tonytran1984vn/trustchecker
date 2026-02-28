@@ -509,7 +509,15 @@ router.get('/maturity', async (req, res) => {
 
         res.json({
             level,
+            current_level: level,
             label,
+            levels: [
+                { level: 1, name: 'Foundation', description: 'Basic carbon awareness and initial data collection', target: 'Scope 1 tracking' },
+                { level: 2, name: 'Developing', description: 'Active data collection across Scope 1 & 2, initial reporting', target: 'Automated reporting' },
+                { level: 3, name: 'Intermediate', description: 'Offset recording, risk integration, and GRI-aligned reporting', target: 'Scope 3 screening' },
+                { level: 4, name: 'Advanced', description: 'Full Scope 1-3 coverage, partner ESG scoring, materiality assessment', target: 'SBTi alignment' },
+                { level: 5, name: 'Leader', description: 'Net zero pathway with cross-tenant benchmarks, blockchain-anchored verification', target: 'Net Zero by 2030' },
+            ],
             features_detected: features,
             products_count: productCount,
             offsets_count: offsetCount,
