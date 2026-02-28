@@ -668,9 +668,9 @@ router.get('/net-position', cacheMiddleware(60), async (req, res) => {
             });
         } catch (_) { /* carbon_offsets table may not exist */ }
 
-        const retiredT = +(retired / 1000).toFixed(3);
-        const availableT = +(available / 1000).toFixed(3);
-        const netT = +(grossT - retiredT).toFixed(3);
+        const retiredT = +retired.toFixed(1);
+        const availableT = +available.toFixed(1);
+        const netT = +(grossT - retiredT).toFixed(1);
         const netZeroProgress = grossT > 0 ? Math.min(100, Math.round((retiredT / grossT) * 100)) : 0;
 
         res.json({
