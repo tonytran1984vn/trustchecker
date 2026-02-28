@@ -46,10 +46,28 @@ function showAddProduct() {
       <div class="modal-title">📦 Register New Product</div>
       <div class="input-group"><label>Product Name *</label><input class="input" id="np-name" placeholder="e.g. Premium Coffee – Reserve Edition"></div>
       <div class="input-group"><label>SKU *</label><input class="input" id="np-sku" placeholder="e.g. COFFEE-PR-001"></div>
-      <div class="input-group"><label>Category</label><input class="input" id="np-cat" placeholder="e.g. F&B, Electronics"></div>
+      <div class="input-group"><label>Category</label>
+        <select class="input" id="np-cat" style="width:100%">
+          <option value="">— Select Category —</option>
+          <option>Coffee</option><option>Tea</option><option>Textiles</option>
+          <option>Electronics</option><option>Automotive</option><option>Pharmaceutical</option>
+          <option>Food & Beverage</option><option>Agriculture</option><option>Healthcare</option>
+          <option>Building Materials</option><option>Cosmetics</option><option>General</option>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div class="input-group"><label>Weight (kg) *</label><input class="input" id="np-weight" type="number" step="0.01" min="0" placeholder="e.g. 0.5"></div>
+        <div class="input-group"><label>Quantity *</label><input class="input" id="np-qty" type="number" min="1" placeholder="e.g. 100" value="1"></div>
+        <div class="input-group"><label>Price (USD)</label><input class="input" id="np-price" type="number" step="0.01" min="0" placeholder="e.g. 12.50"></div>
+      </div>
       <div class="input-group"><label>Manufacturer</label><input class="input" id="np-mfr" placeholder="e.g. Highland Coffee Co."></div>
-      <div class="input-group"><label>Batch Number</label><input class="input" id="np-batch" placeholder="e.g. BATCH-2026-001"></div>
-      <div class="input-group"><label>Origin Country</label><input class="input" id="np-origin" placeholder="e.g. Vietnam"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="input-group"><label>Batch Number</label><input class="input" id="np-batch" placeholder="e.g. BATCH-2026-001"></div>
+        <div class="input-group"><label>Origin Country</label><input class="input" id="np-origin" placeholder="e.g. Vietnam"></div>
+      </div>
+      <div style="padding:8px 12px;background:var(--border);border-radius:8px;font-size:0.72rem;color:var(--text-muted);margin-top:8px">
+        🌿 <strong>Carbon Note:</strong> Weight & Category are used to automatically calculate carbon footprint (Scope 1/2/3).
+      </div>
       <div style="display:flex;gap:10px;margin-top:16px">
         <button class="btn btn-primary" onclick="addProduct()" style="flex:1">Register & Generate QR</button>
         <button class="btn" onclick="State.modal=null;render()">Cancel</button>
@@ -67,10 +85,13 @@ async function addProduct() {
       category: document.getElementById('np-cat').value,
       manufacturer: document.getElementById('np-mfr').value,
       batch_number: document.getElementById('np-batch').value,
-      origin_country: document.getElementById('np-origin').value
+      origin_country: document.getElementById('np-origin').value,
+      weight_kg: parseFloat(document.getElementById('np-weight').value) || 0,
+      quantity: parseInt(document.getElementById('np-qty').value) || 1,
+      price: parseFloat(document.getElementById('np-price').value) || 0,
     });
     State.modal = null;
-    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Product registered! QR code generated.', 'success');
+    showToast('<span class="status-icon status-pass" aria-label="Pass">✓</span> Product registered! QR code generated. Carbon footprint calculated.', 'success');
     navigate('products');
   } catch (e) {
     showToast('Failed: ' + e.message, 'error');

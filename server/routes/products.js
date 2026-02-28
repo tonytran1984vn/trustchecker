@@ -103,10 +103,18 @@ router.get('/:id', async (req, res) => {
     }
 });
 
+// ─── Ensure carbon columns exist ────────────────────────────────────────────
+(async () => {
+    const carbonCols = ['weight_kg', 'quantity', 'price'];
+    for (const col of carbonCols) {
+        try { await db.exec(`ALTER TABLE products ADD COLUMN ${col} REAL DEFAULT 0`); } catch (_) { /* already exists */ }
+    }
+})();
+
 // ─── POST /api/products ─────────────────────────────────────────────────────
 router.post('/', requirePermission('product:create'), validate(schemas.createProduct), async (req, res) => {
     try {
-        const { name, sku, description, category, manufacturer, batch_number, origin_country } = req.body;
+        const { name, sku, description, category, manufacturer, batch_number, origin_country, weight_kg, quantity, price } = req.body;
 
         if (!name || !sku) {
             return res.status(400).json({ error: 'Name and SKU are required' });
@@ -128,11 +136,12 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
             color: { dark: '#0ff', light: '#0a0a1a' }
         });
 
-        // Insert product
+        // Insert product (with carbon fields)
         await db.prepare(`
-      INSERT INTO products (id, name, sku, description, category, manufacturer, batch_number, origin_country, registered_by, org_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(productId, name, sku, description || '', category || '', manufacturer || '', batch_number || '', origin_country || '', req.user.id, req.user.orgId || null);
+      INSERT INTO products (id, name, sku, description, category, manufacturer, batch_number, origin_country, registered_by, org_id, weight_kg, quantity, price)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(productId, name, sku, description || '', category || '', manufacturer || '', batch_number || '', origin_country || '', req.user.id, req.user.orgId || null,
+            parseFloat(weight_kg) || 0, parseInt(quantity) || 1, parseFloat(price) || 0);
 
         // Insert QR code
         await db.prepare(`
@@ -142,7 +151,7 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
 
         // Audit log
         await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
-            .run(uuidv4(), req.user.id, 'PRODUCT_REGISTERED', 'product', productId, JSON.stringify({ name, sku }));
+            .run(uuidv4(), req.user.id, 'PRODUCT_REGISTERED', 'product', productId, JSON.stringify({ name, sku, weight_kg, quantity }));
 
         eventBus.emitEvent(EVENT_TYPES.PRODUCT_REGISTERED, {
             product_id: productId,
@@ -152,7 +161,7 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
         });
 
         res.status(201).json({
-            product: { id: productId, name, sku, trust_score: 100 },
+            product: { id: productId, name, sku, trust_score: 100, weight_kg: parseFloat(weight_kg) || 0, quantity: parseInt(quantity) || 1 },
             qr_code: { id: qrCodeId, qr_data: qrData, qr_image_base64: qrImageBase64 }
         });
     } catch (err) {

@@ -149,6 +149,72 @@ window._carbonRunCompare = async function () {
 let _compareMode = false;
 let _compareData = null;
 
+// ─── IoT Reading Form ───────────────────────────────────────
+window._carbonShowIoT = function () {
+  const el = document.getElementById('carbon-content');
+  if (!el) return;
+  const modal = document.createElement('div');
+  modal.id = 'iot-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:1000;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:var(--bg-card,#1e293b);border-radius:16px;padding:24px;width:440px;max-width:90vw;border:1px solid var(--border)">
+      <h3 style="margin:0 0 16px;color:var(--text-primary,#f1f5f9)">📡 Submit IoT / Meter Reading</h3>
+      <div style="margin-bottom:10px">
+        <label style="font-size:0.72rem;color:var(--text-muted);display:block;margin-bottom:4px">Reading Type *</label>
+        <select id="iot-type" class="input" style="width:100%">
+          <option value="meter_reading">⚡ Energy Meter (kWh)</option>
+          <option value="iot_energy">🔌 IoT Energy Sensor (kWh)</option>
+          <option value="sensor_emission">💨 Emission Sensor (kgCO₂e)</option>
+          <option value="fuel_consumption">⛽ Fuel Consumption (L)</option>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div>
+          <label style="font-size:0.72rem;color:var(--text-muted);display:block;margin-bottom:4px">Value *</label>
+          <input id="iot-value" class="input" type="number" step="0.01" placeholder="e.g. 50" style="width:100%">
+        </div>
+        <div>
+          <label style="font-size:0.72rem;color:var(--text-muted);display:block;margin-bottom:4px">Unit</label>
+          <input id="iot-unit" class="input" placeholder="kWh / L / kgCO₂e" style="width:100%" value="kWh">
+        </div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:0.72rem;color:var(--text-muted);display:block;margin-bottom:4px">Device / Source ID</label>
+        <input id="iot-device" class="input" placeholder="e.g. METER-HCM-01" style="width:100%">
+      </div>
+      <div style="padding:8px 12px;background:var(--border);border-radius:8px;font-size:0.72rem;color:var(--text-muted);margin-bottom:12px">
+        🔬 <strong>Confidence upgrade:</strong> IoT readings replace proxy estimates with C5 (measured) data, improving accuracy.
+      </div>
+      <div id="iot-result" style="display:none;padding:10px;background:#10b98120;border-radius:8px;margin-bottom:10px;font-size:0.78rem;color:#10b981"></div>
+      <div style="display:flex;gap:8px">
+        <button onclick="window._submitIoT()" style="flex:1;padding:10px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Submit Reading</button>
+        <button onclick="document.getElementById('iot-modal')?.remove()" style="padding:10px 16px;background:var(--border);color:var(--text-primary,#f1f5f9);border:none;border-radius:8px;cursor:pointer">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+};
+
+window._submitIoT = async function () {
+  const type = document.getElementById('iot-type')?.value || 'meter_reading';
+  const value = parseFloat(document.getElementById('iot-value')?.value);
+  const unit = document.getElementById('iot-unit')?.value || 'kWh';
+  const device_id = document.getElementById('iot-device')?.value || '';
+  if (isNaN(value) || value <= 0) return;
+  try {
+    const body = { type, [type === 'fuel_consumption' ? 'liters' : 'kwh']: value, unit, device_id };
+    if (type === 'sensor_emission') body.kgCO2e = value;
+    const res = await API.post('/scm/carbon/iot-reading', body);
+    const el = document.getElementById('iot-result');
+    if (el) {
+      el.style.display = 'block';
+      el.innerHTML = `✅ Recorded: ${res.measured_kgCO2e || 0} kgCO₂e · Confidence: C${res.confidence || 5} · Type: ${res.measurement_type || type}`;
+    }
+  } catch (e) {
+    const el = document.getElementById('iot-result');
+    if (el) { el.style.display = 'block'; el.style.background = '#ef444420'; el.style.color = '#ef4444'; el.innerHTML = '❌ ' + (e.message || 'Failed'); }
+  }
+};
+
 // ─── Data Loaders ───────────────────────────────────────────
 async function loadDashboard() {
   try {
@@ -424,6 +490,9 @@ function renderEmissions() {
 
   return `
     ${buildDatePicker()}
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button onclick="window._carbonShowIoT()" style="font-size:0.68rem;padding:5px 12px;border-radius:8px;border:1px solid #3b82f6;background:#3b82f620;color:#3b82f6;font-weight:700;cursor:pointer">📡 Submit IoT Reading</button>
+    </div>
     ${alertBanner}
     <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
       ${kpi('Total Emissions', `${(totalKg / 1000).toFixed(2)} t`, '#f59e0b', `${totalKg.toLocaleString()} kgCO₂e`)}
