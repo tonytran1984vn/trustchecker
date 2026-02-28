@@ -10656,3 +10656,128 @@ input:focus-visible {
 .sa-page [style*="padding: 2px 0"] {
   padding: 5px 0 !important;
 }
+
+/* ════════════════════════════════════════════════════════════════
+   CARBON PASSPORT — Theme-Adaptive Inner Elements
+   Default = dark mode. Light overrides below.
+   ════════════════════════════════════════════════════════════════ */
+
+/* Dark defaults (matching #141824 card bg) */
+.cb-inner {
+  background: #0f172a;
+}
+
+.cb-text {
+  color: #f1f5f9;
+}
+
+.cb-muted {
+  color: #94a3b8;
+}
+
+.cb-dim {
+  color: #64748b;
+}
+
+.cb-dimmer {
+  color: #475569;
+}
+
+.cb-border {
+  border-color: #1e293b;
+}
+
+.cb-track {
+  background: #1e293b;
+}
+
+.cb-flow-card {
+  background: #0f172a;
+}
+
+/* Light mode overrides */
+[data-theme="light"] .cb-inner {
+  background: #f8fafc;
+}
+
+[data-theme="light"] .cb-text {
+  color: #1e293b;
+}
+
+[data-theme="light"] .cb-muted {
+  color: #64748b;
+}
+
+[data-theme="light"] .cb-dim {
+  color: #94a3b8;
+}
+
+[data-theme="light"] .cb-dimmer {
+  color: #94a3b8;
+}
+
+[data-theme="light"] .cb-border {
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .cb-track {
+  background: #e2e8f0;
+}
+
+[data-theme="light"] .cb-flow-card {
+  background: #f8fafc;
+}
+
+/* Light: text inside inner elements */
+[data-theme="light"] .cb-inner [style*="color:#f1f5f9"],
+[data-theme="light"] .cb-flow-card [style*="color:#f1f5f9"] {
+  color: #1e293b !important;
+}
+
+[data-theme="light"] .cb-inner [style*="color:#94a3b8"],
+[data-theme="light"] .cb-flow-card [style*="color:#94a3b8"] {
+  color: #64748b !important;
+}
+
+[data-theme="light"] .cb-inner [style*="color:#64748b"],
+[data-theme="light"] .cb-flow-card [style*="color:#64748b"] {
+  color: #94a3b8 !important;
+}
+
+[data-theme="light"] .cb-inner [style*="color:#475569"],
+[data-theme="light"] .cb-flow-card [style*="color:#475569"] {
+  color: #94a3b8 !important;
+}
+
+/* Light: card heading h3 text */
+[data-theme="light"] .sa-card h3[style*="color:#f1f5f9"] {
+  color: #1e293b !important;
+}
+
+/* Light: table borders */
+[data-theme="light"] .sa-card tr[style*="border-bottom:1px solid #1e293b"],
+[data-theme="light"] .sa-card tr[style*="border-bottom:2px solid #1e293b"] {
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .sa-card th[style*="color:#94a3b8"] {
+  color: #64748b !important;
+}
+
+[data-theme="light"] .sa-card td[style*="color:#f1f5f9"] {
+  color: #1e293b !important;
+}
+
+[data-theme="light"] .sa-card td[style*="color:#94a3b8"] {
+  color: #64748b !important;
+}
+
+/* Light: subtitle and label text */
+[data-theme="light"] .sa-page p[style*="color:#94a3b8"] {
+  color: #64748b !important;
+}
+
+/* Light: SVG gauge track */
+[data-theme="light"] .cb-track[style*="color:#1e293b"] {
+  color: #e2e8f0 !important;
+}
