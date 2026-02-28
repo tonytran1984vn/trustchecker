@@ -558,14 +558,14 @@ function renderEmissions() {
           ℹ️ ${esc(m.guidance || '')}
         </div>
       </div>`;
-    ${
-        (() => {
-          const dd = _emissionData.scope3Deep || {};
-          const cats = dd.categories || [];
-          if (cats.length === 0) return '';
-          const maxKg = Math.max(...cats.map(c => c.kgCO2e || 0), 1);
-          const confColor = c => c >= 4 ? '#10b981' : c >= 3 ? '#3b82f6' : c >= 2 ? '#f59e0b' : '#ef4444';
-          const bars = cats.map(c => `
+    })()}
+    ${(() => {
+      const dd = _emissionData.scope3Deep || {};
+      const cats = dd.categories || [];
+      if (cats.length === 0) return '';
+      const maxKg = Math.max(...cats.map(c => c.kgCO2e || 0), 1);
+      const confColor = c => c >= 4 ? '#10b981' : c >= 3 ? '#3b82f6' : c >= 2 ? '#f59e0b' : '#ef4444';
+      const bars = cats.map(c => `
         <div style="margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:3px">
             <span style="font-weight:700">Cat ${c.id}: ${esc(c.name)}</span>
@@ -579,7 +579,7 @@ function renderEmissions() {
           </div>
           <div style="font-size:0.6rem;color:var(--text-muted);margin-top:2px">${esc(c.methodology)}</div>
         </div>`).join('');
-          return `
+      return `
       <div class="card" style="border-left:4px solid #3b82f6;margin-top:16px">
         <div class="card-header">
           <div class="card-title">🔬 Scope 3 Deep Dive — Full Calculation</div>
@@ -595,8 +595,8 @@ function renderEmissions() {
           ${bars}
         </div>
       </div>`;
-        })()
-      }
+    })()
+    }
       `;
 }
 
@@ -618,27 +618,27 @@ function renderCredits() {
   };
 
   const creditRows = credits.slice(0, 30).map(c => `
-        < tr >
+        <tr>
       <td style="font-size:0.68rem;font-family:monospace;color:var(--text-muted)">${esc((c.credit_id || c.id || '').substring(0, 12))}…</td>
       <td style="font-size:0.72rem;font-weight:700">${c.quantity_tCO2e || c.quantity_tco2e || c.quantity || 0} tCO₂e</td>
       <td><span style="font-size:0.65rem;padding:2px 8px;border-radius:10px;font-weight:600;background:${statusColor(c.status)}20;color:${statusColor(c.status)}">${(c.status || 'unknown').toUpperCase()}</span></td>
       <td style="font-size:0.68rem;color:var(--text-muted)">${c.vintage || c.vintage_year || '—'}</td>
       <td style="font-size:0.68rem;color:var(--text-muted)">${c.methodology || c.project_type || '—'}</td>
       <td style="font-size:0.68rem;color:var(--text-muted)">${timeAgo(c.created_at || c.minted_at)}</td>
-    </tr >
+    </tr>
         `).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;font-size:0.72rem">No credits in registry</td></tr>';
 
   const simRows = sims.slice(0, 15).map(s => {
     const eligible = s.credit_eligible || s.pipeline_result === 'minted';
     return `
-        < tr >
+        <tr>
       <td style="font-size:0.68rem;font-family:monospace;color:var(--text-muted)">${esc((s.simulation_id || s.id || '').substring(0, 10))}…</td>
       <td style="font-size:0.72rem">${s.route_type || '—'}</td>
       <td style="font-size:0.72rem">${s.distance_km || 0} km</td>
       <td style="font-size:0.72rem;font-weight:700">${(s.actual_emission || 0).toFixed(2)} kg</td>
-      <td style="font-size:0.72rem;color:${(s.reduction_pct || 0) >= 20 ? '#10b981' : '#f59e0b'};font-weight:700">${(s.reduction_pct || 0).toFixed(1)}%</td>
+      <td style="font-size:0.72rem;color:${(s.reduction_pct || 0)>= 20 ? '#10b981' : '#f59e0b'};font-weight:700">${(s.reduction_pct || 0).toFixed(1)}%</td>
       <td><span style="font-size:0.65rem;padding:2px 8px;border-radius:10px;font-weight:600;background:${eligible ? '#10b98120' : '#f59e0b20'};color:${eligible ? '#10b981' : '#f59e0b'}">${eligible ? 'ELIGIBLE' : 'NOT ELIGIBLE'}</span></td>
-    </tr > `;
+    </tr> `;
   }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;font-size:0.72rem">No simulations yet</td></tr>';
 
   const minted = credits.filter(c => c.status === 'minted' || c.status === 'active').length;
@@ -651,7 +651,7 @@ function renderCredits() {
   const netColor = netProgress >= 100 ? '#10b981' : netProgress >= 50 ? '#3b82f6' : netProgress > 0 ? '#f59e0b' : '#6b7280';
 
   const netPositionCard = net.gross_emissions_tCO2e !== undefined ? `
-        < div class="card" style = "border-left:4px solid ${netColor};margin-bottom:16px" >
+        <div class="card" style = "border-left:4px solid ${netColor};margin-bottom:16px">
       <div class="card-header">
         <div class="card-title">🌍 Net Emissions Position</div>
         <div style="font-size:0.72rem;font-weight:700;color:${netColor}">${net.status_label || 'Calculating...'}</div>
@@ -673,17 +673,17 @@ function renderCredits() {
           </div>
         </div>
       </div>
-    </div > ` : '';
+    </div> ` : '';
 
   return `
-        < div style = "display:flex;gap:12px;margin-bottom:16px" >
-          ${ kpi('Total Credits', credits.length, 'var(--text-primary,#1e293b)', 'In registry') }
-      ${ kpi('Active / Minted', minted, '#10b981', 'Available credits') }
-      ${ kpi('Pending', pending, '#f59e0b', 'Awaiting MRV') }
-      ${ kpi('Retired', retired, '#6b7280', 'Used / retired') }
-    </div >
+        <div style = "display:flex;gap:12px;margin-bottom:16px">
+          ${kpi('Total Credits', credits.length, 'var(--text-primary,#1e293b)', 'In registry')}
+      ${kpi('Active / Minted', minted, '#10b981', 'Available credits')}
+      ${kpi('Pending', pending, '#f59e0b', 'Awaiting MRV')}
+      ${kpi('Retired', retired, '#6b7280', 'Used / retired')}
+    </div>
 
-        ${ netPositionCard }
+        ${netPositionCard}
 
     <div class="card" style="margin-bottom:16px;border-left:4px solid #10b981">
       <div class="card-header">
@@ -711,14 +711,13 @@ function renderCredits() {
       </div>
     </div>
 
-    ${
-        (() => {
-          const mp = _creditData.marketplace || {};
-          const listings = mp.listings || [];
-          if (listings.length === 0 && !mp.title) return '';
-          const listingCards = listings.slice(0, 8).map(l => {
-            const ev = l.evaluation || {};
-            return `<div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:8px;padding:12px;min-width:200px">
+    ${(() => {
+      const mp = _creditData.marketplace || {};
+      const listings = mp.listings || [];
+      if (listings.length === 0 && !mp.title) return '';
+      const listingCards = listings.slice(0, 8).map(l => {
+        const ev = l.evaluation || {};
+        return `<div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:8px;padding:12px;min-width:200px">
           <div style="display:flex;justify-content:space-between;margin-bottom:8px">
             <span style="font-size:0.72rem;font-weight:700">${esc(l.project_type || 'Carbon Credit')}</span>
             <span style="font-size:0.6rem;padding:2px 8px;border-radius:10px;font-weight:700;background:${ev.risk_color || '#6b7280'}20;color:${ev.risk_color || '#6b7280'}">${(ev.risk_level || 'N/A').toUpperCase()}</span>
@@ -727,8 +726,8 @@ function renderCredits() {
           <div style="font-size:0.72rem;color:var(--text-muted)">$${l.price_per_tCO2e || 0}/t · ${l.registry || 'Unknown'} · ${l.vintage || ''}</div>
           <div style="font-size:0.68rem;margin-top:6px;color:#3b82f6">Fair: $${ev.fair_price_per_tCO2e || '?'}/t</div>
         </div>`;
-          }).join('');
-          return `
+      }).join('');
+      return `
       <div class="card" style="border-left:4px solid #8b5cf6;margin-top:16px">
         <div class="card-header">
           <div class="card-title">🏪 Carbon Credit Marketplace</div>
@@ -738,8 +737,8 @@ function renderCredits() {
           <div style="display:flex;gap:12px;padding-bottom:8px">${listingCards || '<div style="color:var(--text-muted);font-size:0.8rem">No listings yet</div>'}</div>
         </div>
       </div>`;
-        })()
-      }
+    })()
+    }
       `;
 }
 
@@ -755,22 +754,22 @@ function renderPassports() {
   const grade = scope.grade || report.grade || 'N/A';
   const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
 
-  const periodLabel = _dateFrom && _dateTo ? `${ _dateFrom } — ${ _dateTo } ` : _dateFrom ? `From ${ _dateFrom } ` : _dateTo ? `Until ${ _dateTo } ` : report.period || 'All Time';
+  const periodLabel = _dateFrom && _dateTo ? `${_dateFrom} — ${_dateTo} ` : _dateFrom ? `From ${_dateFrom} ` : _dateTo ? `Until ${_dateTo} ` : report.period || 'All Time';
 
   // Per-product passport detail
   const products = scope.products_detail || scope.scope_3?.breakdown || [];
   const productRows = products.slice(0, 20).map(p => `
-        < tr >
+        <tr>
       <td style="font-size:0.72rem;font-weight:600">${esc(p.name || p.category || '—')}</td>
       <td style="font-size:0.72rem;text-align:right">${(p.weight_kg || p.kgCO2e || 0).toLocaleString()}</td>
       <td style="font-size:0.72rem;text-align:right;font-weight:700;color:#3b82f6">${(p.kgCO2e || p.value || 0).toLocaleString()}</td>
       <td style="font-size:0.68rem;color:var(--text-muted)">${p.percentage || 0}%</td>
-    </tr >
+    </tr>
         `).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No per-product data</td></tr>';
 
   // Period comparison
   const compareSection = _compareMode ? `
-        < div class="card" style = "border-left:4px solid #8b5cf6;margin-bottom:16px" >
+        <div class="card" style = "border-left:4px solid #8b5cf6;margin-bottom:16px">
       <div class="card-header">
         <div class="card-title">⚡ Period Comparison</div>
         <button onclick="_carbonComparePeriods()" style="font-size:0.65rem;padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer">✕ Close</button>
@@ -801,17 +800,17 @@ function renderPassports() {
             </div>`;
     })() : '<div style="font-size:0.72rem;color:var(--text-muted)">Select two date ranges and click Compare</div>'}
       </div>
-    </div > ` : '';
+    </div> ` : '';
 
 
   // GRI disclosures
   const disclosures = (report.disclosures || []).map(d => `
-        < tr >
+        <tr>
       <td style="font-size:0.72rem;font-weight:700;color:#3b82f6">${esc(d.code || d.id)}</td>
       <td style="font-size:0.72rem">${esc(d.title || d.name)}</td>
       <td style="font-size:0.72rem;font-weight:600">${typeof d.value === 'number' ? d.value.toLocaleString() : esc(d.value || '—')}</td>
       <td style="font-size:0.68rem;color:var(--text-muted)">${esc(d.unit || '—')}</td>
-    </tr >
+    </tr>
         `).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No GRI disclosures available</td></tr>';
 
   // Scope summary
@@ -819,14 +818,14 @@ function renderPassports() {
     const data = scope[s] || {};
     const label = s === 'scope_1' ? 'Scope 1' : s === 'scope_2' ? 'Scope 2' : 'Scope 3';
     const color = s === 'scope_1' ? '#ef4444' : s === 'scope_2' ? '#f59e0b' : '#3b82f6';
-    return `< div style = "display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.72rem" >
+    return `<div style = "display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
       <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:6px"></span>${label}</span>
       <span style="font-weight:700">${(data.total || 0).toLocaleString()} kgCO₂e</span>
-    </div > `;
+    </div> `;
   }).join('');
 
   return `
-    ${ buildDatePicker() }
+    ${buildDatePicker()}
       <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
         <div style="flex:1;display:flex;gap:12px">
           ${kpi('ESG Grade', grade, gradeColor, 'Carbon Integrity Rating')}
@@ -839,7 +838,7 @@ function renderPassports() {
         </div>
       </div>
 
-    ${ compareSection }
+    ${compareSection}
 
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px">
         <div>
@@ -899,18 +898,18 @@ function renderCompliance() {
   const fwRows = frameworks.map(fw => {
     const statusColor = fw.status === 'compliant' ? '#10b981' : fw.status === 'partial' ? '#f59e0b' : fw.status === 'active' ? '#3b82f6' : '#ef4444';
     return `
-        < tr >
+        <tr>
       <td style="font-size:0.72rem;font-weight:700">${esc(fw.name || fw.id)}</td>
       <td style="font-size:0.68rem;color:var(--text-muted)">${esc(fw.full || fw.description || '—')}</td>
       <td style="font-size:0.68rem">${esc(fw.region || '—')}</td>
       <td style="font-size:0.68rem">${(fw.scopes_required || []).join(', ') || '—'}</td>
       <td><span style="font-size:0.65rem;padding:2px 10px;border-radius:10px;font-weight:700;background:${statusColor}20;color:${statusColor}">${(fw.status || 'unknown').toUpperCase()}</span></td>
       <td style="font-size:0.68rem;color:var(--text-muted)">${fw.effective || '—'}</td>
-    </tr > `;
+    </tr> `;
   }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No regulatory frameworks configured</td></tr>';
 
   const riskRows = riskFactors.map(f => `
-        < div style = "display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)" >
+        <div style = "display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
       <div style="flex:1">
         <div style="font-weight:700;font-size:0.75rem">${esc(f.name || f.factor)}</div>
         <div style="font-size:0.68rem;color:var(--text-muted)">${esc(f.description || f.mitigation || f.impact || '—')}</div>
@@ -919,17 +918,17 @@ function renderCompliance() {
         <span style="font-size:0.68rem;padding:3px 10px;border-radius:10px;font-weight:700;background:${f.severity === 'high' || f.level === 'high' ? '#ef444420' : f.severity === 'medium' || f.level === 'medium' ? '#f59e0b20' : '#10b98120'};color:${f.severity === 'high' || f.level === 'high' ? '#ef4444' : f.severity === 'medium' || f.level === 'medium' ? '#f59e0b' : '#10b981'}">${f.severity || f.level || 'low'}</span>
         ${f.score !== undefined ? `<span style="font-size:0.68rem;font-weight:700">${f.score}</span>` : ''}
       </div>
-    </div >
+    </div>
         `).join('') || '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.72rem">No ESG risk factors</div>';
 
   const compliant = frameworks.filter(f => f.status === 'compliant').length;
 
   return `
-        < div style = "display:flex;gap:12px;margin-bottom:16px" >
-          ${ kpi('Frameworks', frameworks.length, 'var(--text-primary,#1e293b)', 'Regulatory frameworks tracked') }
-      ${ kpi('Compliant', compliant, '#10b981', `${frameworks.length > 0 ? Math.round(compliant / frameworks.length * 100) : 0}% alignment`) }
-      ${ kpi('Risk Factors', riskFactors.length, riskFactors.some(f => f.severity === 'high' || f.level === 'high') ? '#ef4444' : '#f59e0b', 'ESG risk signals') }
-    </div >
+        <div style = "display:flex;gap:12px;margin-bottom:16px">
+          ${kpi('Frameworks', frameworks.length, 'var(--text-primary,#1e293b)', 'Regulatory frameworks tracked')}
+      ${kpi('Compliant', compliant, '#10b981', `${frameworks.length > 0 ? Math.round(compliant / frameworks.length * 100) : 0}% alignment`)}
+      ${kpi('Risk Factors', riskFactors.length, riskFactors.some(f => f.severity === 'high' || f.level === 'high') ? '#ef4444' : '#f59e0b', 'ESG risk signals')}
+    </div>
 
     <div class="card" style="margin-bottom:16px;border-left:4px solid #3b82f6">
       <div class="card-header">
@@ -949,19 +948,18 @@ function renderCompliance() {
       <div class="card-body" style="max-height:350px;overflow-y:auto">${riskRows}</div>
     </div>
 
-    ${
-        (() => {
-          const csrd = _complianceData.csrd || {};
-          const disclosures = csrd.disclosures || {};
-          const entries = Object.entries(disclosures);
-          if (entries.length === 0) return '';
-          const dRows = entries.map(([code, d]) => {
-            const val = d.total_kgCO2e !== undefined ? `${d.total_kgCO2e.toLocaleString()} kgCO₂e` :
-              d.status || d.detail || (d.target_reduction_pct ? `${d.target_reduction_pct}% by ${d.target_year}` : '');
-            return `<tr><td style="font-weight:700;font-size:0.72rem">${code}</td><td style="font-size:0.72rem">${esc(d.title || '')}</td><td style="font-size:0.72rem">${esc(val)}</td></tr>`;
-          }).join('');
-          const cbam = csrd.cbam_annex || {};
-          return `
+    ${(() => {
+      const csrd = _complianceData.csrd || {};
+      const disclosures = csrd.disclosures || {};
+      const entries = Object.entries(disclosures);
+      if (entries.length === 0) return '';
+      const dRows = entries.map(([code, d]) => {
+        const val = d.total_kgCO2e !== undefined ? `${d.total_kgCO2e.toLocaleString()} kgCO₂e` :
+          d.status || d.detail || (d.target_reduction_pct ? `${d.target_reduction_pct}% by ${d.target_year}` : '');
+        return `<tr><td style="font-weight:700;font-size:0.72rem">${code}</td><td style="font-size:0.72rem">${esc(d.title || '')}</td><td style="font-size:0.72rem">${esc(val)}</td></tr>`;
+      }).join('');
+      const cbam = csrd.cbam_annex || {};
+      return `
       <div class="card" style="border-left:4px solid #059669;margin-top:16px">
         <div class="card-header">
           <div class="card-title">📋 CSRD / ESRS E1 Report</div>
@@ -976,8 +974,8 @@ function renderCompliance() {
         </div>
         ${cbam.applicable ? `<div style="padding:10px 16px;font-size:0.68rem;border-top:1px solid var(--border);color:var(--text-muted)">🇪🇺 CBAM: ${cbam.products_assessed || 0} products assessed · Avg ${cbam.avg_embedded_kgCO2e || 0} kgCO₂e embedded</div>` : ''}
       </div>`;
-        })()
-      }
+    })()
+    }
       `;
 }
 
@@ -998,14 +996,14 @@ function renderBenchmark() {
     const isCurrent = l.level === currentLevel;
     const isPast = l.level < currentLevel;
     return `
-        < div style = "display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)" >
+        <div style = "display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">
       <div style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:0.82rem;color:#fff;background:${isCurrent ? '#8b5cf6' : isPast ? '#10b981' : 'var(--border)'}">${l.level}</div>
       <div style="flex:1">
         <div style="font-weight:700;font-size:0.75rem;color:${isCurrent ? '#8b5cf6' : isPast ? '#10b981' : 'var(--text-muted)'}">${esc(l.name)} ${isCurrent ? '← Current' : ''}</div>
         <div style="font-size:0.68rem;color:var(--text-muted)">${esc(l.description || '')}</div>
       </div>
       <span style="font-size:0.65rem;padding:3px 10px;border-radius:10px;font-weight:600;background:${isCurrent ? '#8b5cf620' : isPast ? '#10b98120' : 'var(--border)'};color:${isCurrent ? '#8b5cf6' : isPast ? '#10b981' : 'var(--text-muted)'}">${isCurrent ? 'CURRENT' : isPast ? 'ACHIEVED' : l.target || 'LOCKED'}</span>
-    </div > `;
+    </div> `;
   }).join('') || '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.72rem">Maturity data unavailable</div>';
 
   // Partner leaderboard
@@ -1013,21 +1011,21 @@ function renderBenchmark() {
     const esgGrade = p.esg_grade || p.grade || 'N/A';
     const gColor = esgGrade.startsWith('A') ? '#10b981' : esgGrade.startsWith('B') ? '#22c55e' : esgGrade.startsWith('C') ? '#f59e0b' : '#ef4444';
     return `
-        < tr >
+        <tr>
       <td style="font-size:0.72rem;font-weight:700;color:${i < 3 ? '#f59e0b' : 'var(--text-primary)'}">#${i + 1}</td>
       <td style="font-size:0.72rem;font-weight:600">${esc(p.name || p.partner_name || '—')}</td>
       <td style="font-size:0.72rem">${(p.total_kgCO2e || p.emissions || 0).toLocaleString()} kg</td>
       <td style="font-size:0.72rem;text-align:center"><span style="font-weight:800;color:${gColor}">${esgGrade}</span></td>
       <td style="font-size:0.72rem">${(p.score || p.esg_score || 0).toFixed(1)}</td>
-    </tr > `;
+    </tr> `;
   }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No partner data available</td></tr>';
 
   return `
-        < div style = "display:flex;gap:12px;margin-bottom:16px" >
-          ${ kpi('Maturity Level', `L${currentLevel}`, '#8b5cf6', maturity.current_name || maturity.name || 'Not Assessed') }
-      ${ kpi('Partners Tracked', partners.length, 'var(--text-primary,#1e293b)', 'ESG leaderboard') }
-      ${ kpi('Features Active', (maturity.features_detected || maturity.features || []).length, '#059669', 'Carbon capabilities') }
-    </div >
+        <div style = "display:flex;gap:12px;margin-bottom:16px">
+          ${kpi('Maturity Level', `L${currentLevel}`, '#8b5cf6', maturity.current_name || maturity.name || 'Not Assessed')}
+      ${kpi('Partners Tracked', partners.length, 'var(--text-primary,#1e293b)', 'ESG leaderboard')}
+      ${kpi('Features Active', (maturity.features_detected || maturity.features || []).length, '#059669', 'Carbon capabilities')}
+    </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
           <div class="card" style="border-left:4px solid #8b5cf6">
@@ -1051,20 +1049,19 @@ function renderBenchmark() {
           </div>
         </div>
 
-    ${
-        (() => {
-          const ct = _benchmarkData.crossTenant || {};
-          if (!ct.percentile && ct.percentile !== 0) return '';
-          const pct = ct.percentile || 0;
-          const pColor = pct >= 80 ? '#10b981' : pct >= 50 ? '#3b82f6' : pct >= 20 ? '#f59e0b' : '#ef4444';
-          const lb = ct.leaderboard || [];
-          const lbRows = lb.map(o => `
+    ${(() => {
+      const ct = _benchmarkData.crossTenant || {};
+      if (!ct.percentile && ct.percentile !== 0) return '';
+      const pct = ct.percentile || 0;
+      const pColor = pct >= 80 ? '#10b981' : pct >= 50 ? '#3b82f6' : pct >= 20 ? '#f59e0b' : '#ef4444';
+      const lb = ct.leaderboard || [];
+      const lbRows = lb.map(o => `
         <tr style="${o.is_you ? 'background:#3b82f610;font-weight:700' : ''}">
           <td style="font-size:0.72rem">${o.rank}</td>
           <td style="font-size:0.72rem">${esc(o.label)}</td>
           <td style="font-size:0.72rem;text-align:right">${o.intensity_kgCO2e_per_product} kgCO₂e/product</td>
         </tr>`).join('');
-          return `
+      return `
       <div class="card" style="border-left:4px solid ${pColor};margin-top:16px">
         <div class="card-header">
           <div class="card-title">🏢 Cross-Tenant Carbon Benchmark</div>
@@ -1090,8 +1087,8 @@ function renderBenchmark() {
         </div>
         <div style="padding:10px 16px;font-size:0.64rem;color:var(--text-muted);border-top:1px solid var(--border)">${esc(ct.methodology || '')}</div>
       </div>`;
-        })()
-      }
+    })()
+    }
       `;
 }
 
@@ -1107,12 +1104,12 @@ function buildDatePicker() {
   ];
   const btns = presets.map(p => {
     const isActive = _datePreset === p.id;
-    return `< button onclick = "_carbonDatePreset('${p.id}')" style = "
-      padding: 5px 14px; border - radius: 8px; border: 1px solid ${ isActive ? '#3b82f6' : 'var(--border)' };
-      background:${ isActive ? '#3b82f620' : 'transparent' }; color:${ isActive ? '#3b82f6' : 'var(--text-muted)' };
-      font - size: 0.7rem; font - weight:${ isActive ? '700' : '500' }; cursor: pointer; transition:all .2s;
+    return `<button onclick = "_carbonDatePreset('${p.id}')" style = "
+      padding: 5px 14px; border-radius: 8px; border: 1px solid ${isActive ? '#3b82f6' : 'var(--border)'};
+      background:${isActive ? '#3b82f620' : 'transparent'}; color:${isActive ? '#3b82f6' : 'var(--text-muted)'};
+      font-size: 0.7rem; font-weight:${isActive ? '700' : '500'}; cursor: pointer; transition:all .2s;
       ">${p.label}</button>`;
-    }).join('');
+  }).join('');
   const showCustom = _datePreset === 'custom';
   return `
     <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
