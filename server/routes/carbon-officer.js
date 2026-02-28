@@ -103,21 +103,40 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
         } catch (_) { }
 
         // ── Carbon intensity (per product average) ──────────────────
-        const total_emissions = scopeData?.total_emissions_kgCO2e || 0;
+        // Use actual product carbon data instead of engine estimates
+        const total_emissions = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0) || (scopeData?.total_emissions_kgCO2e || 0);
         const carbon_intensity = products.length > 0
             ? (total_emissions / products.length).toFixed(2)
             : 0;
 
-        // Map scope_1/scope_2/scope_3 from engine to consistent client format
-        const s1 = scopeData?.scope_1 || {};
-        const s2 = scopeData?.scope_2 || {};
-        const s3 = scopeData?.scope_3 || {};
+        // Override scope breakdown based on industry ratios for products
+        const s1Total = Math.round(total_emissions * 0.25); // Scope 1: ~25% direct manufacturing
+        const s2Total = Math.round(total_emissions * 0.20); // Scope 2: ~20% energy
+        const s3Total = Math.round(total_emissions * 0.55); // Scope 3: ~55% supply chain
+        const s1 = { total: s1Total, pct: 25, label: 'Direct Manufacturing' };
+        const s2 = { total: s2Total, pct: 20, label: 'Energy & Warehousing' };
+        const s3 = { total: s3Total, pct: 55, label: 'Transport & Distribution' };
 
-        // v3.0: Use intensity-based grading instead of absolute thresholds
-        const avgIntensity = products.length > 0 ? total_emissions / products.length : 0;
+        // v3.0: ESG grade based on composite score:
+        // 1. Offset coverage (40%): what % of gross emissions have been retired
+        // 2. Data maturity (30%): features detected / total possible
+        // 3. Product coverage (30%): how many products have carbon data
+        let offsetCoverage = 0;
+        try {
+            const offRes = await db.get(`SELECT COALESCE(SUM(quantity_tco2e),0) as retired FROM carbon_offsets WHERE org_id = ? AND status = 'retired'`, [orgId]);
+            offsetCoverage = Math.min(1, (offRes?.retired || 0) / ((total_emissions / 1000) || 1));
+        } catch (_) { }
+
+        const productsWithCarbon = products.filter(p => p.carbon_footprint_kgco2e > 0).length;
+        const dataCoverage = products.length > 0 ? productsWithCarbon / products.length : 0;
+        const maturityScore = features.length / 7; // max 7 features
+
+        const compositeScore = (offsetCoverage * 0.4) + (maturityScore * 0.3) + (dataCoverage * 0.3);
         const esgGrade = total_emissions === 0 ? 'N/A'
-            : avgIntensity <= 5 ? 'A' : avgIntensity <= 15 ? 'B'
-                : avgIntensity <= 35 ? 'C' : avgIntensity <= 55 ? 'D' : 'F';
+            : compositeScore >= 0.85 ? 'A'
+                : compositeScore >= 0.65 ? 'B'
+                    : compositeScore >= 0.45 ? 'C'
+                        : compositeScore >= 0.25 ? 'D' : 'F';
 
         res.json({
             // KPIs
