@@ -1,0 +1,2607 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrustChecker — RBAC Architecture v9.4.1</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+    --bg: #0f172a; --bg-card: #1e293b; --bg-hover: #334155;
+    --text: #f1f5f9; --text-muted: #94a3b8; --border: #334155;
+    --accent: #3b82f6; --accent-glow: #3b82f620;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; }
+.container { max-width:1200px; margin:0 auto; padding:24px; }
+
+/* Header */
+.hero { text-align:center; padding:60px 20px 40px; background:linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%); border-bottom:1px solid var(--border); }
+.hero h1 { font-size:2.2rem; font-weight:900; background:linear-gradient(135deg,#60a5fa,#a78bfa,#34d399); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:8px; }
+.hero .subtitle { font-size:0.9rem; color:var(--text-muted); margin-bottom:24px; }
+.stats { display:flex; justify-content:center; gap:24px; flex-wrap:wrap; }
+.stat { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px 24px; min-width:140px; }
+.stat .num { font-size:1.8rem; font-weight:900; color:var(--accent); }
+.stat .label { font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; }
+
+/* Navigation */
+.nav { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; padding:16px 0; position:sticky; top:0; background:var(--bg); z-index:100; border-bottom:1px solid var(--border); }
+.nav a { padding:6px 14px; border-radius:8px; font-size:0.75rem; font-weight:600; text-decoration:none; color:var(--text-muted); border:1px solid var(--border); transition:all .2s; }
+.nav a:hover { background:var(--bg-card); color:var(--text); border-color:var(--accent); }
+
+/* Section */
+.section { margin:40px 0; }
+.section-title { font-size:1.4rem; font-weight:800; margin-bottom:8px; display:flex; align-items:center; gap:10px; }
+.section-desc { font-size:0.8rem; color:var(--text-muted); margin-bottom:20px; }
+
+/* Role Cards */
+.role-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:16px; transition:transform .2s, box-shadow .2s; }
+.role-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.3); }
+.role-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; }
+.role-header h3 { font-size:1rem; font-weight:700; margin-bottom:4px; }
+.role-id { font-size:0.7rem; padding:2px 8px; border-radius:4px; background:#1e1b4b; color:#a78bfa; font-weight:600; }
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:0.6rem; font-weight:700; margin-left:8px; text-transform:uppercase; }
+.badge.system { background:#7c3aed20; color:#a78bfa; border:1px solid #7c3aed40; }
+.badge.business { background:#3b82f620; color:#60a5fa; border:1px solid #3b82f640; }
+.badge.perm-count { background:#10b98120; color:#34d399; border:1px solid #10b98140; }
+.role-desc { font-size:0.78rem; color:var(--text-muted); margin-bottom:12px; line-height:1.5; }
+.perm-list { display:flex; flex-wrap:wrap; gap:2px; }
+
+/* Principles */
+.principles { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; }
+.principle { background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:14px; font-size:0.8rem; }
+.principle strong { color:#f59e0b; }
+
+/* SoD Table */
+table.sod { width:100%; border-collapse:collapse; font-size:0.75rem; }
+table.sod th { background:#1e1b4b; color:#a78bfa; padding:10px 14px; text-align:left; font-weight:700; }
+table.sod td { padding:8px 14px; border-bottom:1px solid var(--border); font-family:monospace; }
+table.sod tr:hover { background:var(--bg-hover); }
+
+/* Flow Diagram */
+.flow { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:20px; margin:16px 0; }
+.flow h4 { font-size:0.85rem; font-weight:700; margin-bottom:12px; color:#60a5fa; }
+.flow-steps { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.flow-step { background:#1e1b4b; border:1px solid #4c1d95; border-radius:8px; padding:6px 12px; font-size:0.72rem; font-weight:600; color:#c4b5fd; }
+.flow-arrow { color:#4c1d95; font-size:1.2rem; font-weight:900; }
+
+/* Perm Category */
+.perm-cat { background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px; }
+.perm-cat-title { font-size:0.82rem; font-weight:700; margin-bottom:8px; color:#60a5fa; }
+.perm-row { display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #1e293b; font-size:0.72rem; }
+.perm-row:last-child { border-bottom:none; }
+.perm-row .pid { font-family:monospace; font-weight:600; color:#34d399; }
+.perm-row .pdesc { color:var(--text-muted); }
+.perm-row .proles { font-size:0.65rem; color:#f59e0b; max-width:300px; text-align:right; }
+
+/* Lineage Matrix */
+.matrix { overflow-x:auto; }
+table.lineage { width:100%; border-collapse:collapse; font-size:0.72rem; }
+table.lineage th { background:#1e1b4b; color:#a78bfa; padding:8px 12px; font-weight:700; text-align:center; }
+table.lineage th:first-child { text-align:left; }
+table.lineage td { padding:8px 12px; border-bottom:1px solid var(--border); text-align:center; }
+table.lineage td:first-child { text-align:left; font-weight:600; }
+.yes { color:#10b981; font-weight:700; }
+.no { color:#ef4444; }
+.limited { color:#f59e0b; font-weight:600; }
+
+@media (max-width:768px) {
+    .hero h1 { font-size:1.4rem; }
+    .stats { gap:12px; }
+    .stat { min-width:100px; padding:12px; }
+    .stat .num { font-size:1.3rem; }
+    .principles { grid-template-columns:1fr; }
+}
+@media print {
+    body { background:#fff; color:#000; }
+    .nav { display:none; }
+    .role-card, .flow, .perm-cat, .principle, .stat { border-color:#ddd; background:#fafafa; }
+}
+</style>
+</head>
+<body>
+
+<div class="hero">
+    <h1>🔐 TrustChecker — RBAC Architecture</h1>
+    <div class="subtitle">Version 9.4.1 · Infrastructure-Grade · Audit-Ready · Neutral Trust Architecture</div>
+    <div class="stats">
+        <div class="stat"><div class="num">39</div><div class="label">Total Roles</div></div>
+        <div class="stat"><div class="num">198</div><div class="label">Permissions</div></div>
+        <div class="stat"><div class="num">24</div><div class="label">SoD Pairs</div></div>
+        <div class="stat"><div class="num">5</div><div class="label">Authority Layers</div></div>
+        <div class="stat"><div class="num">13</div><div class="label">Lineage ACL</div></div>
+    </div>
+</div>
+
+<div class="container">
+
+<div class="nav">
+    <a href="#principles">Design Principles</a>
+    <a href="#hierarchy">Role Hierarchy</a>
+    <a href="#L5">🔴 L5</a><a href="#L4">🟣 L4</a><a href="#L3">🟠 L3</a><a href="#L2">🟢 L2</a><a href="#L1">🔵 L1</a><a href="#CIE">🌱 CIE</a>
+    <a href="#sod">SoD Matrix</a>
+    <a href="#lineage">Lineage ACL</a>
+    <a href="#permissions">All Permissions</a>
+    <a href="#flows">Workflow Flows</a>
+    <a href="#ca-forbidden">CA Forbidden</a>
+</div>
+
+<!-- DESIGN PRINCIPLES -->
+<div class="section" id="principles">
+    <div class="section-title">📐 Design Principles</div>
+    <div class="section-desc">7 constitutional principles that govern role separation across the entire system</div>
+    <div class="principles">
+        <div class="principle"><strong>1. Platform ≠ Business</strong> — Super Admin controls infrastructure but cannot approve fraud cases, mint carbon credits, or access trust scores</div>
+        <div class="principle"><strong>2. Governance ≠ Execution</strong> — L4 roles (GGC, Risk Committee) govern decision logic; L2 roles (Ops, Risk Officer) execute operations</div>
+        <div class="principle"><strong>3. Validation ≠ Deployment</strong> — IVU validates models and CIP passports but cannot deploy or modify production systems</div>
+        <div class="principle"><strong>4. Anchoring ≠ Minting</strong> — Blockchain Operator anchors hashes on-chain but cannot approve mint or create carbon credits</div>
+        <div class="principle"><strong>5. Observability ≠ Data Access</strong> — Platform Security monitors access logs and incidents but cannot view business data or trust scores</div>
+        <div class="principle"><strong>6. No Omnipotent Role</strong> — No single role holds create + approve + deploy power for any critical resource</div>
+        <div class="principle"><strong>7. SoD Waivers</strong> — Small organizations (&lt;50 people) can request time-limited, audit-logged waivers for specific SoD conflicts</div>
+    </div>
+</div>
+
+<!-- ROLE HIERARCHY -->
+<div class="section" id="hierarchy">
+    <div class="section-title">🏗️ Authority Hierarchy (L1–L5)</div>
+    <div class="section-desc">Roles are organized into 5 authority layers, from technical execution (L1) to platform infrastructure (L5)</div>
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;font-family:monospace;font-size:0.78rem;line-height:1.8;white-space:pre;overflow-x:auto">
+L5  Platform Infrastructure  <span style="color:#dc2626">━━━━━━━━━━━━━━━━━━━━━━━━━</span>
+     ├── Super Admin (Infra Custodian — NOT business)
+     ├── Platform Security Officer
+     ├── Data Governance Officer
+     ├── Global Risk Committee
+     ├── Change Management Officer
+     ├── Incident Response Lead
+     └── Emission Engine [SYSTEM — non-human]
+
+L4  Global Governance  <span style="color:#7c3aed">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
+     ├── GGC Member (Graph Governance Committee)
+     ├── Risk Committee (Decision Logic Owner)
+     ├── Compliance Officer (17 perms)
+     ├── IVU Validator (Independent Validation)
+     ├── IVU Registry Admin
+     ├── MGB Member (Methodology Board)
+     └── Blockchain Operator (Anchor Authority)
+
+L3  Tenant Governance  <span style="color:#ea580c">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
+     ├── Organization Owner (Legal representative)
+     ├── Company Admin (Tenant IAM)
+     ├── Executive / CEO
+     ├── Carbon Officer
+     └── Tenant Security Officer
+
+L2  Operational  <span style="color:#16a34a">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
+     ├── Operations Manager (27 perms)
+     ├── Risk Officer
+     └── SCM Analyst
+
+L1  Technical Execution  <span style="color:#2563eb">━━━━━━━━━━━━━━━━━━━━━━━━━━━</span>
+     ├── Developer (8 perms)
+     ├── Operator
+     ├── Auditor (read-only forensic)
+     └── Viewer (5 perms)
+
+CIE Extended (v2.0–v3.0)  <span style="color:#059669">━━━━━━━━━━━━━━━━━━━━━━━━━</span>
+     ├── Internal Reviewer · Export Officer
+     ├── Board Observer · Data Steward · Legal Counsel
+     ├── Supplier Contributor · ESG Reporting Manager
+     ├── External Auditor · Financial Viewer
+     ├── Public Verifier · Disclosure Officer
+     └── MGB Member (Methodology Board)
+</div>
+</div>
+
+<!-- LAYER SECTIONS -->
+
+<div class="section" id="L5">
+    <div class="section-title">🔴 L5 — Platform Infrastructure</div>
+    <div class="section-desc">7 roles in this layer</div>
+    
+    <div class="role-card" style="border-left:4px solid #dc2626">
+        <div class="role-header">
+            <div>
+                <h3>Super Admin</h3>
+                <code class="role-id">super_admin</code>
+                <span class="badge system">SYSTEM</span>
+                
+            </div>
+        </div>
+        <p class="role-desc">L1 Infra — platform lifecycle, observability, NOT business authority</p>
+        <div class="perm-list"><span style="color:#94a3b8;font-size:0.75rem">System role — permissions managed via platform configuration</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #dc2626">
+        <div class="role-header">
+            <div>
+                <h3>Platform Security Officer</h3>
+                <code class="role-id">platform_security</code>
+                <span class="badge system">SYSTEM</span>
+                
+            </div>
+        </div>
+        <p class="role-desc">L1 Infra — key rotation, incident, privileged access monitor</p>
+        <div class="perm-list"><span style="color:#94a3b8;font-size:0.75rem">System role — permissions managed via platform configuration</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #dc2626">
+        <div class="role-header">
+            <div>
+                <h3>Data Governance Officer</h3>
+                <code class="role-id">data_gov_officer</code>
+                <span class="badge system">SYSTEM</span>
+                
+            </div>
+        </div>
+        <p class="role-desc">L1 Infra — classification, retention, GDPR masking, cross-border transfer</p>
+        <div class="perm-list"><span style="color:#94a3b8;font-size:0.75rem">System role — permissions managed via platform configuration</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #dc2626">
+        <div class="role-header">
+            <div>
+                <h3>Global Risk Committee</h3>
+                <code class="role-id">global_risk_committee</code>
+                <span class="badge system">SYSTEM</span>
+                
+            </div>
+        </div>
+        <p class="role-desc">L1 Infra — risk scoring weights + anomaly thresholds ONLY. Cannot override CIP.</p>
+        <div class="perm-list"><span style="color:#94a3b8;font-size:0.75rem">System role — permissions managed via platform configuration</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #dc2626">
+        <div class="role-header">
+            <div>
+                <h3>Emission Engine [SYSTEM]</h3>
+                <code class="role-id">emission_engine</code>
+                <span class="badge system">SYSTEM</span>
+                
+            </div>
+        </div>
+        <p class="role-desc">L1 SYSTEM — non-human. Deterministic calculation. Locked formula. No manual override.</p>
+        <div class="perm-list"><span style="color:#94a3b8;font-size:0.75rem">System role — permissions managed via platform configuration</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #dc2626">
+        <div class="role-header">
+            <div>
+                <h3>Change Management Officer</h3>
+                <code class="role-id">change_management_officer</code>
+                <span class="badge system">SYSTEM</span>
+                
+            </div>
+        </div>
+        <p class="role-desc">L1 Infra — system upgrades, change requests, deployment freeze. ISO 27001 / SOC 2.</p>
+        <div class="perm-list"><span style="color:#94a3b8;font-size:0.75rem">System role — permissions managed via platform configuration</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #dc2626">
+        <div class="role-header">
+            <div>
+                <h3>Incident Response Lead</h3>
+                <code class="role-id">incident_response_lead</code>
+                <span class="badge system">SYSTEM</span>
+                
+            </div>
+        </div>
+        <p class="role-desc">L1 Infra — incident protocol, anchor freeze, forensic logging. Cannot edit data.</p>
+        <div class="perm-list"><span style="color:#94a3b8;font-size:0.75rem">System role — permissions managed via platform configuration</span></div>
+    </div>
+</div>
+
+<div class="section" id="L4">
+    <div class="section-title">🟣 L4 — Global Governance</div>
+    <div class="section-desc">7 roles in this layer</div>
+    
+    <div class="role-card" style="border-left:4px solid #7c3aed">
+        <div class="role-header">
+            <div>
+                <h3>IVU Registry Admin</h3>
+                <code class="role-id">ivu_registry_admin</code>
+                <span class="badge system">SYSTEM</span>
+                
+            </div>
+        </div>
+        <p class="role-desc">L2 Federation — validator registry. Cannot validate CIP.</p>
+        <div class="perm-list"><span style="color:#94a3b8;font-size:0.75rem">System role — permissions managed via platform configuration</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #7c3aed">
+        <div class="role-header">
+            <div>
+                <h3>Methodology Governance Board</h3>
+                <code class="role-id">mgb_member</code>
+                <span class="badge system">SYSTEM</span>
+                
+            </div>
+        </div>
+        <p class="role-desc">L2 Federation — methodology governance. NOT tenant employee. Cannot access tenant data.</p>
+        <div class="perm-list"><span style="color:#94a3b8;font-size:0.75rem">System role — permissions managed via platform configuration</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #7c3aed">
+        <div class="role-header">
+            <div>
+                <h3>Blockchain Anchor Authority</h3>
+                <code class="role-id">blockchain_operator</code>
+                <span class="badge system">SYSTEM</span>
+                
+            </div>
+        </div>
+        <p class="role-desc">L2 Federation — anchor hashes. Federated for trust. Cannot create/modify CIP.</p>
+        <div class="perm-list"><span style="color:#94a3b8;font-size:0.75rem">System role — permissions managed via platform configuration</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #7c3aed">
+        <div class="role-header">
+            <div>
+                <h3>Compliance Officer</h3>
+                <code class="role-id">compliance_officer</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">22 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.0 — Final CIP compliance approval. Cannot modify calculation or override IVU.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">esg:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">esg:export</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">esg:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">sustainability:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">compliance:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">compliance:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">compliance:freeze</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">regulatory_export:approve</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">gdpr_masking:execute</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">graph_weight:approve</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">carbon_credit:approve_mint</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:replay</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:export</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:export</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">audit_log:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:approve</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_replay:forensic</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #7c3aed">
+        <div class="role-header">
+            <div>
+                <h3>Graph Governance Committee</h3>
+                <code class="role-id">ggc_member</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">10 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">Structural governance — schema approve/reject, NOT scoring logic</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">trustgraph:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">graph_schema:propose</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">graph_schema:approve</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">graph_schema:reject</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">graph_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">compliance:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:export</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #7c3aed">
+        <div class="role-header">
+            <div>
+                <h3>Risk Committee</h3>
+                <code class="role-id">risk_committee</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">21 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">Decision logic owner — risk scoring, weight proposals, lineage replay, contamination analysis</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">risk_radar:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">fraud:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">fraud:resolve</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">fraud_case:create</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">fraud_case:approve</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">anomaly:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">anomaly:resolve</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">graph_weight:propose</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">graph_override:request</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">graph_override:approve</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">graph_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">risk_model:create</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">risk_model:approve</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:replay</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:impact</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lrgf_case:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lrgf_case:assign</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lrgf_case:override</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">evidence:view</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #7c3aed">
+        <div class="role-header">
+            <div>
+                <h3>Independent Validation Unit (IVU)</h3>
+                <code class="role-id">ivu_validator</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">15 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.0 — Independent CIP validation. Issues validation status. Cannot modify data or approve compliance.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">risk_model:validate</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">model_certification:issue</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">feature_drift:monitor</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">bias_audit:perform</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:replay</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">graph_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">trustgraph:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">anomaly:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:validate</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_replay:forensic</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span></div>
+    </div>
+</div>
+
+<div class="section" id="L3">
+    <div class="section-title">🟠 L3 — Tenant Governance</div>
+    <div class="section-desc">5 roles in this layer</div>
+    
+    <div class="role-card" style="border-left:4px solid #ea580c">
+        <div class="role-header">
+            <div>
+                <h3>Organization Owner</h3>
+                <code class="role-id">org_owner</code>
+                <span class="badge system">SYSTEM</span>
+                
+            </div>
+        </div>
+        <p class="role-desc">L3 Tenant — Legal representative. Appoints/removes Company Admin. Does not participate in daily operations.</p>
+        <div class="perm-list"><span style="color:#94a3b8;font-size:0.75rem">System role — permissions managed via platform configuration</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #ea580c">
+        <div class="role-header">
+            <div>
+                <h3>Company Admin</h3>
+                <code class="role-id">company_admin</code>
+                <span class="badge system">SYSTEM</span>
+                
+            </div>
+        </div>
+        <p class="role-desc">L3 Tenant — Operational IAM controller. Manages roles/users/config within boundary. CANNOT grant governance permissions (SoD, compliance, risk deploy).</p>
+        <div class="perm-list"><span style="color:#94a3b8;font-size:0.75rem">System role — permissions managed via platform configuration</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #ea580c">
+        <div class="role-header">
+            <div>
+                <h3>Tenant Security Officer</h3>
+                <code class="role-id">security_officer</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">12 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">L3 Tenant — Monitors SoD conflicts, privilege escalation, access anomalies. Approves/rejects high-risk role assignments. Cannot modify data or approve business workflows.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">audit_log:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">trust_score:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">risk_radar:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">compliance:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:view_summary</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_audit:view_trail</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_audit:view_sod_violations</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_audit:view_change_history</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_escalation:view_history</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #ea580c">
+        <div class="role-header">
+            <div>
+                <h3>Executive / CEO</h3>
+                <code class="role-id">executive</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">15 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.0 — View-only oversight. CIP status, risk heatmap, benchmark, governance transparency. Trigger escalation, approve strategic disclosure. CANNOT edit data/methodology/approve CIP.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">trust_score:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">stakeholder:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">risk_radar:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">fraud:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">esg:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">sustainability:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">compliance:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:export</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_replay:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_export:report</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_export:share</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #ea580c">
+        <div class="role-header">
+            <div>
+                <h3>Carbon Officer</h3>
+                <code class="role-id">carbon_officer</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">12 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.0 — Operational submitter. Submit emission data, initiate CIP draft. Cannot approve/seal/modify methodology.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">carbon_data:upload</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">emission_model:submit</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">carbon_credit:request_mint</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">carbon_credit:verify</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">esg:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">esg:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">sustainability:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:submit</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_replay:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span></div>
+    </div>
+</div>
+
+<div class="section" id="L2">
+    <div class="section-title">🟢 L2 — Operational</div>
+    <div class="section-desc">3 roles in this layer</div>
+    
+    <div class="role-card" style="border-left:4px solid #16a34a">
+        <div class="role-header">
+            <div>
+                <h3>Operations Manager</h3>
+                <code class="role-id">ops_manager</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">27 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">Full operations & supply chain access</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">product:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">product:create</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">product:update</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">product:export</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">scan:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">scan:create</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">qr:generate</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">evidence:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">evidence:upload</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">evidence:verify</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">trust_score:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">stakeholder:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">stakeholder:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">supply_chain:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">supply_chain:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">inventory:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">inventory:update</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">logistics:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">logistics:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">partner:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">partner:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">epcis:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">epcis:create</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">trustgraph:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">digital_twin:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">digital_twin:simulate</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #16a34a">
+        <div class="role-header">
+            <div>
+                <h3>Risk Officer</h3>
+                <code class="role-id">risk_officer</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">12 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">Risk monitoring and fraud investigation</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">fraud:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">fraud:resolve</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">fraud_case:create</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">risk_radar:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">anomaly:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">anomaly:create</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">anomaly:resolve</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">leak_monitor:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">ai_analytics:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">kyc:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">kyc:manage</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #16a34a">
+        <div class="role-header">
+            <div>
+                <h3>Supply Chain Analyst (SCM)</h3>
+                <code class="role-id">scm_analyst</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">15 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">Route risk analysis, supply chain graph, partner scoring</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">supply_chain:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">supply_chain:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">logistics:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">logistics:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">partner:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">partner:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">epcis:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">epcis:create</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">trustgraph:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">digital_twin:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">digital_twin:simulate</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">risk_radar:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">graph_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">carbon_credit:verify</span></div>
+    </div>
+</div>
+
+<div class="section" id="L1">
+    <div class="section-title">🔵 L1 — Technical Execution</div>
+    <div class="section-desc">5 roles in this layer</div>
+    
+    <div class="role-card" style="border-left:4px solid #2563eb">
+        <div class="role-header">
+            <div>
+                <h3>Developer</h3>
+                <code class="role-id">developer</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">8 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">API and integration management</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">api_key:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">api_key:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">webhook:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">webhook:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">blockchain:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">product:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">scan:view</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #2563eb">
+        <div class="role-header">
+            <div>
+                <h3>Operator</h3>
+                <code class="role-id">operator</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">10 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">Day-to-day operational tasks</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">product:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">product:create</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">product:update</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">scan:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">scan:create</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">qr:generate</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">evidence:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">evidence:upload</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">inventory:view</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #2563eb">
+        <div class="role-header">
+            <div>
+                <h3>Viewer</h3>
+                <code class="role-id">viewer</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">5 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">Read-only access</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">product:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">scan:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">trust_score:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:view</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #2563eb">
+        <div class="role-header">
+            <div>
+                <h3>Blockchain Node Operator</h3>
+                <code class="role-id">blockchain_operator</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">9 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">Anchoring, hash verification, snapshot integrity — sees hash+timestamp+signature only</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">blockchain:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">blockchain:create</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">blockchain_anchor:create</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">blockchain_anchor:verify</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">graph_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">nft:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">carbon_credit:anchor</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">carbon_credit:verify</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #2563eb">
+        <div class="role-header">
+            <div>
+                <h3>Internal Audit</h3>
+                <code class="role-id">auditor</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">14 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.1 — Full audit trail, SoD violation attempts, change history, replay log. Cannot modify or approve.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">audit_log:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:view_summary</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">lineage:replay</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">compliance:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_replay:forensic</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_audit:view_trail</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_audit:view_sod_violations</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_audit:view_change_history</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_escalation:view_history</span></div>
+    </div>
+</div>
+
+<div class="section" id="CIE">
+    <div class="section-title">🌱 CIE — CIE Extended (v2.0–v3.0)</div>
+    <div class="section-desc">12 roles in this layer</div>
+    
+    <div class="role-card" style="border-left:4px solid #059669">
+        <div class="role-header">
+            <div>
+                <h3>Methodology Governance Board (MGB)</h3>
+                <code class="role-id">mgb_member</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">8 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.0 — Proposes/votes methodology versions, freezes emission factors. Cannot edit sealed CIP or tenant data.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_methodology:propose</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_methodology:vote</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_methodology:freeze</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_methodology:publish</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">compliance:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:view</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #059669">
+        <div class="role-header">
+            <div>
+                <h3>Internal Reviewer</h3>
+                <code class="role-id">internal_reviewer</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">7 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.0 — Reviews CIP data quality, comments, requests revision. Cannot seal or approve.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:review</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_replay:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">esg:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">compliance:view</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #059669">
+        <div class="role-header">
+            <div>
+                <h3>Export Officer</h3>
+                <code class="role-id">export_officer</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">10 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.0 — Exports reports, shares CIP, generates PDF. Cannot modify sealed CIP.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_export:report</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_export:share</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_replay:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:export</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">esg:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">esg:export</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #059669">
+        <div class="role-header">
+            <div>
+                <h3>Board Observer</h3>
+                <code class="role-id">board_observer</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">9 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.1 — Read-only strategic oversight for Board/Audit Committee. View dashboard, risk, compliance, escalation. Cannot trigger, approve, or modify.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">trust_score:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">risk_radar:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">compliance:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_replay:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_escalation:view_history</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #059669">
+        <div class="role-header">
+            <div>
+                <h3>Data Steward</h3>
+                <code class="role-id">data_steward</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">9 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.1 — Validate data completeness, reject incomplete submissions, manage metadata quality. Acts BEFORE Carbon Officer. Cannot approve passport.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_data:validate_completeness</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_data:reject_incomplete</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_data:manage_metadata</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_replay:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">carbon_data:upload</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">esg:view</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #059669">
+        <div class="role-header">
+            <div>
+                <h3>Legal Counsel</h3>
+                <code class="role-id">legal_counsel</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">9 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.1 — View sealed CIP, methodology version, liability mapping, responsibility allocation. Cannot modify or approve. Critical for public disclosure and regulatory inquiry.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">compliance:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_replay:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_liability:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_audit:view_trail</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_escalation:view_history</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #059669">
+        <div class="role-header">
+            <div>
+                <h3>Supplier Contributor</h3>
+                <code class="role-id">supplier_contributor</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">3 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.5 — Scoped external input. Submit own supplier emission declaration + upload docs. Cannot view full CIP, approve, or see system benchmarks. Tenant-isolated.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_supplier:submit_emission</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_supplier:upload_docs</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #059669">
+        <div class="role-header">
+            <div>
+                <h3>ESG Reporting Manager</h3>
+                <code class="role-id">esg_reporting_manager</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">12 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.5 — Generate consolidated ESG reports, portfolio carbon reports, investor disclosures. Cannot modify sealed CIP.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">esg:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">esg:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">sustainability:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:export</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_esg:generate_report</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_esg:portfolio_carbon</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_esg:investor_disclosure</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_export:report</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #059669">
+        <div class="role-header">
+            <div>
+                <h3>External Auditor</h3>
+                <code class="role-id">external_auditor</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">8 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v2.5 — Time-bound, logged, auto-revoked. Read-only snapshot, verify hash, view approval flow, sandbox replay. Cannot modify anything.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_external_audit:read_snapshot</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_external_audit:sandbox_replay</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_replay:simulate</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_audit:view_trail</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_audit:view_change_history</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #059669">
+        <div class="role-header">
+            <div>
+                <h3>Financial Institution Viewer</h3>
+                <code class="role-id">financial_viewer</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">5 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v3.0 — Scoped, NDA-bound. View Carbon Integrity Score + selected CIP + verify hash. Cannot view supplier confidential data.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_finance:view_score</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_finance:view_selected_cip</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #059669">
+        <div class="role-header">
+            <div>
+                <h3>Public Verification</h3>
+                <code class="role-id">public_verifier</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">4 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v3.0 — Buyer/marketplace. Verify CIP via QR, check hash, confirm seal status. Cannot view internal governance. Minimal authentication.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_public:verify_qr</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_public:check_hash</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span></div>
+    </div>
+    <div class="role-card" style="border-left:4px solid #059669">
+        <div class="role-header">
+            <div>
+                <h3>Disclosure Officer</h3>
+                <code class="role-id">disclosure_officer</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">7 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">CIE v3.0 — Final sign-off public carbon statement. Links CIP to annual report. Certifies CSRD/ESRS alignment. Carries personal liability.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_disclosure:sign_off</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_disclosure:link_annual_report</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_disclosure:certify_csrd</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_disclosure:view_liability</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_passport:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">cie_snapshot:view</span></div>
+    </div>
+</div>
+
+
+<!-- WORKFLOW FLOWS -->
+<div class="section" id="flows">
+    <div class="section-title">🔄 Cross-Role Workflow Flows</div>
+    <div class="section-desc">How different roles interact in key business processes</div>
+
+    <div class="flow">
+        <h4>Carbon Credit Lifecycle (Mint → Anchor)</h4>
+        <div class="flow-steps">
+            <div class="flow-step">🌱 Carbon Officer<br><small>carbon_data:upload<br>carbon_credit:request_mint</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">🔬 IVU Validator<br><small>cie_passport:validate<br>model_certification:issue</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">🟣 Compliance Officer<br><small>carbon_credit:approve_mint<br>cie_passport:approve</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">⛓ Blockchain Operator<br><small>carbon_credit:anchor<br>blockchain_anchor:create</small></div>
+        </div>
+    </div>
+
+    <div class="flow">
+        <h4>Risk Model Governance (Create → Deploy)</h4>
+        <div class="flow-steps">
+            <div class="flow-step">⚖ Risk Committee<br><small>risk_model:create</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">🔬 IVU Validator<br><small>risk_model:validate</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">⚖ Risk Committee<br><small>risk_model:approve</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">⚙ Developer<br><small>risk_model:deploy (SoD!)</small></div>
+        </div>
+    </div>
+
+    <div class="flow">
+        <h4>Trust Graph Schema Change (RFC → Deploy)</h4>
+        <div class="flow-steps">
+            <div class="flow-step">🏛 GGC Member<br><small>graph_schema:propose</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">🏛 GGC (Vote)<br><small>graph_schema:approve/reject</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">⚖ Risk Committee<br><small>graph_weight:propose</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">🟣 Compliance<br><small>graph_weight:approve</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">⚙ SA / DevOps<br><small>graph_schema:deploy</small></div>
+        </div>
+    </div>
+
+    <div class="flow">
+        <h4>CIE Passport Lifecycle (Draft → Seal)</h4>
+        <div class="flow-steps">
+            <div class="flow-step">📊 Data Steward<br><small>cie_data:validate_completeness</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">🌱 Carbon Officer<br><small>cie_passport:submit</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">📝 Internal Reviewer<br><small>cie_passport:review</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">🔬 IVU<br><small>cie_passport:validate</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">🟣 Compliance<br><small>cie_passport:approve</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">🤖 System<br><small>cie_passport:seal</small></div>
+        </div>
+    </div>
+
+    <div class="flow">
+        <h4>Fraud Investigation Flow</h4>
+        <div class="flow-steps">
+            <div class="flow-step">🔵 Risk Officer<br><small>fraud_case:create<br>fraud:resolve</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">⚖ Risk Committee<br><small>fraud_case:approve<br>lrgf_case:assign</small></div>
+            <span class="flow-arrow">→</span>
+            <div class="flow-step">🟣 Compliance<br><small>compliance:freeze<br>regulatory_export:approve</small></div>
+        </div>
+    </div>
+</div>
+
+<!-- SOD MATRIX -->
+<div class="section" id="sod">
+    <div class="section-title">⚠️ Segregation of Duties — 24 Conflict Pairs</div>
+    <div class="section-desc">No single user should hold both permissions in any pair. SoD waivers available for small orgs via <code>/api/sod/waivers</code></div>
+    <div style="overflow-x:auto">
+    <table class="sod">
+        <thead><tr><th>#</th><th>Permission A</th><th>Permission B</th><th>Rationale</th></tr></thead>
+        <tbody>
+        <tr><td style="color:var(--text-muted)">1</td><td>fraud_case:create</td><td>fraud_case:approve</td><td style="color:var(--text-muted);font-family:sans-serif">Prevent self-approval of fraud investigation</td></tr>
+        <tr><td style="color:var(--text-muted)">2</td><td>payment:create</td><td>payment:approve</td><td style="color:var(--text-muted);font-family:sans-serif">Prevent unilateral fund movement</td></tr>
+        <tr><td style="color:var(--text-muted)">3</td><td>user:create</td><td>user:approve</td><td style="color:var(--text-muted);font-family:sans-serif">Prevent self-provisioning of access</td></tr>
+        <tr><td style="color:var(--text-muted)">4</td><td>role:create</td><td>role:approve</td><td style="color:var(--text-muted);font-family:sans-serif">Prevent privilege escalation</td></tr>
+        <tr><td style="color:var(--text-muted)">5</td><td>risk_model:create</td><td>risk_model:deploy</td><td style="color:var(--text-muted);font-family:sans-serif">Separate model creation from deployment/approval</td></tr>
+        <tr><td style="color:var(--text-muted)">6</td><td>risk_model:deploy</td><td>risk_model:approve</td><td style="color:var(--text-muted);font-family:sans-serif">Separate model creation from deployment/approval</td></tr>
+        <tr><td style="color:var(--text-muted)">7</td><td>evidence:create</td><td>evidence:seal</td><td style="color:var(--text-muted);font-family:sans-serif">Prevent evidence tampering after creation</td></tr>
+        <tr><td style="color:var(--text-muted)">8</td><td>compliance:freeze</td><td>compliance:export</td><td style="color:var(--text-muted);font-family:sans-serif">Separate freeze authority from export</td></tr>
+        <tr><td style="color:var(--text-muted)">9</td><td>threshold:configure</td><td>threshold:override</td><td style="color:var(--text-muted);font-family:sans-serif">Prevent self-serving threshold manipulation</td></tr>
+        <tr><td style="color:var(--text-muted)">10</td><td>event:ingest</td><td>event:delete</td><td style="color:var(--text-muted);font-family:sans-serif">Prevent evidence destruction</td></tr>
+        <tr><td style="color:var(--text-muted)">11</td><td>case:assign</td><td>case:close</td><td style="color:var(--text-muted);font-family:sans-serif">Prevent closing own investigations</td></tr>
+        <tr><td style="color:var(--text-muted)">12</td><td>graph_schema:approve</td><td>graph_schema:deploy</td><td style="color:var(--text-muted);font-family:sans-serif">Separate governance approval from technical deploy</td></tr>
+        <tr><td style="color:var(--text-muted)">13</td><td>graph_weight:propose</td><td>graph_weight:approve</td><td style="color:var(--text-muted);font-family:sans-serif">Prevent unilateral scoring changes</td></tr>
+        <tr><td style="color:var(--text-muted)">14</td><td>graph_override:request</td><td>graph_override:approve</td><td style="color:var(--text-muted);font-family:sans-serif">Prevent self-approved overrides</td></tr>
+        <tr><td style="color:var(--text-muted)">15</td><td>lineage:record</td><td>lineage:modify</td><td style="color:var(--text-muted);font-family:sans-serif">Protect decision trail integrity</td></tr>
+        <tr><td style="color:var(--text-muted)">16</td><td>lineage:replay</td><td>lineage:delete</td><td style="color:var(--text-muted);font-family:sans-serif">Protect decision trail integrity</td></tr>
+        <tr><td style="color:var(--text-muted)">17</td><td>lineage:view_full</td><td>lineage:export_without_approval</td><td style="color:var(--text-muted);font-family:sans-serif">Protect decision trail integrity</td></tr>
+        <tr><td style="color:var(--text-muted)">18</td><td>lineage:approve_export</td><td>lineage:perform_export</td><td style="color:var(--text-muted);font-family:sans-serif">Protect decision trail integrity</td></tr>
+        <tr><td style="color:var(--text-muted)">19</td><td>carbon_credit:request_mint</td><td>carbon_credit:approve_mint</td><td style="color:var(--text-muted);font-family:sans-serif">Multi-party carbon lifecycle</td></tr>
+        <tr><td style="color:var(--text-muted)">20</td><td>carbon_credit:approve_mint</td><td>carbon_credit:anchor</td><td style="color:var(--text-muted);font-family:sans-serif">Multi-party carbon lifecycle</td></tr>
+        <tr><td style="color:var(--text-muted)">21</td><td>support_session:initiate</td><td>support_session:approve</td><td style="color:var(--text-muted);font-family:sans-serif">Prevent unsupervised tenant access</td></tr>
+        <tr><td style="color:var(--text-muted)">22</td><td>incident:declare</td><td>incident:resolve</td><td style="color:var(--text-muted);font-family:sans-serif">Separate incident declaration from resolution</td></tr>
+        <tr><td style="color:var(--text-muted)">23</td><td>data_classification:define</td><td>data_classification:approve</td><td style="color:var(--text-muted);font-family:sans-serif">Dual control on data policies</td></tr>
+        <tr><td style="color:var(--text-muted)">24</td><td>lineage_export:approve</td><td>lineage_export:execute</td><td style="color:var(--text-muted);font-family:sans-serif">Separate approval from execution</td></tr>
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<!-- LINEAGE ACCESS MATRIX -->
+<div class="section" id="lineage">
+    <div class="section-title">🔗 Data Lineage Access Control Matrix</div>
+    <div class="section-desc">5-layer lineage access model — controls who can view, replay, impact-analyze, and modify decision trails</div>
+    <div class="matrix">
+    <table class="lineage">
+        <thead><tr><th>Role</th><th>Access Level</th><th>Replay</th><th>Impact Analysis</th><th>Modify</th></tr></thead>
+        <tbody>
+            <tr><td>🔴 Super Admin</td><td>Metadata only</td><td class="no">❌</td><td class="no">❌</td><td class="no">❌</td></tr>
+            <tr><td>🛡 Platform Security</td><td>None</td><td class="no">❌</td><td class="no">❌</td><td class="no">❌</td></tr>
+            <tr><td>📊 Data Gov Officer</td><td>Summary</td><td class="no">❌</td><td class="no">❌</td><td class="no">❌</td></tr>
+            <tr><td>⚖ Risk Committee</td><td class="yes">Full 5-layer</td><td class="yes">✅</td><td class="yes">✅</td><td class="no">❌</td></tr>
+            <tr><td>🟣 Compliance Officer</td><td class="yes">Full 5-layer</td><td class="yes">✅</td><td class="no">❌</td><td class="no">❌</td></tr>
+            <tr><td>🔬 IVU Validator</td><td class="yes">Full 5-layer</td><td class="yes">✅</td><td class="limited">Limited</td><td class="no">❌</td></tr>
+            <tr><td>🟠 Company Admin</td><td>Tenant summary</td><td class="no">❌</td><td class="no">❌</td><td class="no">❌</td></tr>
+            <tr><td>🟡 Executive / CEO</td><td>Dashboard only</td><td class="no">❌</td><td class="no">❌</td><td class="no">❌</td></tr>
+            <tr><td>🌱 Carbon Officer</td><td>Decision only</td><td class="no">❌</td><td class="no">❌</td><td class="no">❌</td></tr>
+            <tr><td>🟢 Ops / Operator</td><td>Decision outcome</td><td class="no">❌</td><td class="no">❌</td><td class="no">❌</td></tr>
+            <tr><td>🔍 Auditor</td><td>Summary + audit log</td><td class="no">❌</td><td class="no">❌</td><td class="no">❌</td></tr>
+            <tr><td>⚙ Developer</td><td>Ingestion only</td><td class="no">❌</td><td class="no">❌</td><td class="no">❌</td></tr>
+            <tr><td>⛓ Blockchain Op</td><td>Hash only</td><td class="no">❌</td><td class="no">❌</td><td class="no">❌</td></tr>
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<!-- CA FORBIDDEN -->
+<div class="section" id="ca-forbidden">
+    <div class="section-title">🚫 Company Admin Forbidden Permissions (26)</div>
+    <div class="section-desc">Company Admin (Tenant IAM) cannot grant or hold these permissions — enforces "Control the system, not the decisions"</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px">
+        <span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">carbon_credit:approve_mint</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">carbon_credit:anchor</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">cie_passport:approve</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">cie_passport:seal</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">cie_passport:validate</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">cie_methodology:propose</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">cie_methodology:vote</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">cie_methodology:freeze</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">cie_methodology:publish</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">cie_disclosure:sign_off</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">cie_disclosure:certify_csrd</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">risk_model:deploy</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">risk_model:approve</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">risk_model:validate</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">model_certification:issue</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">compliance:freeze</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">regulatory_export:approve</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">gdpr_masking:execute</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">graph_schema:approve</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">graph_schema:deploy</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">graph_weight:approve</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">graph_override:approve</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">evidence:seal</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">evidence:freeze</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">lrgf_case:override</span><span style="display:inline-block;padding:4px 10px;margin:2px;border-radius:8px;font-size:0.72rem;font-family:monospace;background:#fef2f220;border:1px solid #fca5a540;color:#fca5a5">fraud_case:approve</span>
+        </div>
+</div>
+
+<!-- ALL PERMISSIONS -->
+<div class="section" id="permissions">
+    <div class="section-title">📋 Complete Permission Registry (198)</div>
+    <div class="section-desc">All permissions grouped by resource, with assigned roles</div>
+    
+    <div class="perm-cat">
+        <div class="perm-cat-title">Platform (9)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">platform:tenant_create</span>
+                <span class="pdesc" style="margin-left:8px">Create new tenant/company</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">platform:tenant_suspend</span>
+                <span class="pdesc" style="margin-left:8px">Suspend a tenant</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">platform:tenant_delete</span>
+                <span class="pdesc" style="margin-left:8px">Delete a tenant</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">platform:tenant_list</span>
+                <span class="pdesc" style="margin-left:8px">List all tenants</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">platform:billing_update</span>
+                <span class="pdesc" style="margin-left:8px">Update billing/plan</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">platform:feature_flag</span>
+                <span class="pdesc" style="margin-left:8px">Manage feature flags</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">platform:audit_view_all</span>
+                <span class="pdesc" style="margin-left:8px">View global audit logs</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">platform:admin_reset</span>
+                <span class="pdesc" style="margin-left:8px">Reset Company Admin password</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">platform:support_override</span>
+                <span class="pdesc" style="margin-left:8px">Temporary tenant access</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Tenant (12)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">tenant:user_create</span>
+                <span class="pdesc" style="margin-left:8px">Create users in tenant</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">tenant:user_update</span>
+                <span class="pdesc" style="margin-left:8px">Update tenant users</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">tenant:user_delete</span>
+                <span class="pdesc" style="margin-left:8px">Remove users from tenant</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">tenant:user_list</span>
+                <span class="pdesc" style="margin-left:8px">List tenant users</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">tenant:role_create</span>
+                <span class="pdesc" style="margin-left:8px">Create custom roles</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">tenant:role_update</span>
+                <span class="pdesc" style="margin-left:8px">Update custom roles</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">tenant:role_delete</span>
+                <span class="pdesc" style="margin-left:8px">Delete custom roles</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">tenant:role_list</span>
+                <span class="pdesc" style="margin-left:8px">List tenant roles</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">tenant:role_assign</span>
+                <span class="pdesc" style="margin-left:8px">Assign roles to users</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">tenant:policy_create</span>
+                <span class="pdesc" style="margin-left:8px">Create tenant policies</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">tenant:audit_view</span>
+                <span class="pdesc" style="margin-left:8px">View tenant audit logs</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">tenant:settings_update</span>
+                <span class="pdesc" style="margin-left:8px">Update tenant settings</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Dashboard (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">dashboard:view</span>
+                <span class="pdesc" style="margin-left:8px">View dashboard</span>
+            </div>
+            <div class="proles">Tenant Security Officer, Executive / CEO, Operations Manager, Risk Officer, Compliance Officer, Developer, Operator, Viewer, Graph Governance Committee, Risk Committee, Independent Validation Unit (IVU), Supply Chain Analyst (SCM), Blockchain Node Operator, Carbon Officer, Methodology Governance Board (MGB), Internal Reviewer, Export Officer, Internal Audit, Board Observer, Data Steward, Legal Counsel, Supplier Contributor, ESG Reporting Manager, External Auditor, Financial Institution Viewer, Public Verification, Disclosure Officer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Product (5)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">product:view</span>
+                <span class="pdesc" style="margin-left:8px">View products</span>
+            </div>
+            <div class="proles">Operations Manager, Developer, Operator, Viewer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">product:create</span>
+                <span class="pdesc" style="margin-left:8px">Create products</span>
+            </div>
+            <div class="proles">Operations Manager, Operator</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">product:update</span>
+                <span class="pdesc" style="margin-left:8px">Edit products</span>
+            </div>
+            <div class="proles">Operations Manager, Operator</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">product:delete</span>
+                <span class="pdesc" style="margin-left:8px">Delete products</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">product:export</span>
+                <span class="pdesc" style="margin-left:8px">Export products</span>
+            </div>
+            <div class="proles">Operations Manager</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Scan (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">scan:view</span>
+                <span class="pdesc" style="margin-left:8px">View scan history</span>
+            </div>
+            <div class="proles">Operations Manager, Developer, Operator, Viewer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">scan:create</span>
+                <span class="pdesc" style="margin-left:8px">Perform scans</span>
+            </div>
+            <div class="proles">Operations Manager, Operator</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Qr (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">qr:generate</span>
+                <span class="pdesc" style="margin-left:8px">Generate QR codes</span>
+            </div>
+            <div class="proles">Operations Manager, Operator</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Evidence (6)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">evidence:view</span>
+                <span class="pdesc" style="margin-left:8px">View evidence vault</span>
+            </div>
+            <div class="proles">Operations Manager, Operator, Risk Committee</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">evidence:upload</span>
+                <span class="pdesc" style="margin-left:8px">Upload evidence</span>
+            </div>
+            <div class="proles">Operations Manager, Operator</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">evidence:verify</span>
+                <span class="pdesc" style="margin-left:8px">Verify evidence</span>
+            </div>
+            <div class="proles">Operations Manager</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">evidence:delete</span>
+                <span class="pdesc" style="margin-left:8px">Delete evidence</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">evidence:freeze</span>
+                <span class="pdesc" style="margin-left:8px">Freeze evidence chain</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">evidence:seal</span>
+                <span class="pdesc" style="margin-left:8px">Seal evidence (blockchain)</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Trust Score (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">trust_score:view</span>
+                <span class="pdesc" style="margin-left:8px">View trust scores</span>
+            </div>
+            <div class="proles">Tenant Security Officer, Executive / CEO, Operations Manager, Viewer, Board Observer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Stakeholder (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">stakeholder:view</span>
+                <span class="pdesc" style="margin-left:8px">View stakeholder info</span>
+            </div>
+            <div class="proles">Executive / CEO, Operations Manager</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">stakeholder:manage</span>
+                <span class="pdesc" style="margin-left:8px">Manage stakeholders</span>
+            </div>
+            <div class="proles">Operations Manager</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Supply Chain (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">supply_chain:view</span>
+                <span class="pdesc" style="margin-left:8px">View supply chain map</span>
+            </div>
+            <div class="proles">Operations Manager, Supply Chain Analyst (SCM)</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">supply_chain:manage</span>
+                <span class="pdesc" style="margin-left:8px">Manage supply chain</span>
+            </div>
+            <div class="proles">Operations Manager, Supply Chain Analyst (SCM)</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Inventory (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">inventory:view</span>
+                <span class="pdesc" style="margin-left:8px">View inventory</span>
+            </div>
+            <div class="proles">Operations Manager, Operator</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">inventory:update</span>
+                <span class="pdesc" style="margin-left:8px">Update inventory</span>
+            </div>
+            <div class="proles">Operations Manager</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Logistics (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">logistics:view</span>
+                <span class="pdesc" style="margin-left:8px">View logistics</span>
+            </div>
+            <div class="proles">Operations Manager, Supply Chain Analyst (SCM)</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">logistics:manage</span>
+                <span class="pdesc" style="margin-left:8px">Manage logistics</span>
+            </div>
+            <div class="proles">Operations Manager, Supply Chain Analyst (SCM)</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Partner (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">partner:view</span>
+                <span class="pdesc" style="margin-left:8px">View partners</span>
+            </div>
+            <div class="proles">Operations Manager, Supply Chain Analyst (SCM)</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">partner:manage</span>
+                <span class="pdesc" style="margin-left:8px">Manage partners</span>
+            </div>
+            <div class="proles">Operations Manager, Supply Chain Analyst (SCM)</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Epcis (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">epcis:view</span>
+                <span class="pdesc" style="margin-left:8px">View EPCIS events</span>
+            </div>
+            <div class="proles">Operations Manager, Supply Chain Analyst (SCM)</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">epcis:create</span>
+                <span class="pdesc" style="margin-left:8px">Create EPCIS events</span>
+            </div>
+            <div class="proles">Operations Manager, Supply Chain Analyst (SCM)</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Trustgraph (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">trustgraph:view</span>
+                <span class="pdesc" style="margin-left:8px">View TrustGraph</span>
+            </div>
+            <div class="proles">Operations Manager, Graph Governance Committee, Independent Validation Unit (IVU), Supply Chain Analyst (SCM)</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Digital Twin (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">digital_twin:view</span>
+                <span class="pdesc" style="margin-left:8px">View Digital Twin</span>
+            </div>
+            <div class="proles">Operations Manager, Supply Chain Analyst (SCM)</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">digital_twin:simulate</span>
+                <span class="pdesc" style="margin-left:8px">Run simulations</span>
+            </div>
+            <div class="proles">Operations Manager, Supply Chain Analyst (SCM)</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Fraud (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">fraud:view</span>
+                <span class="pdesc" style="margin-left:8px">View fraud alerts</span>
+            </div>
+            <div class="proles">Executive / CEO, Risk Officer, Risk Committee</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">fraud:resolve</span>
+                <span class="pdesc" style="margin-left:8px">Resolve fraud cases</span>
+            </div>
+            <div class="proles">Risk Officer, Risk Committee</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Fraud Case (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">fraud_case:create</span>
+                <span class="pdesc" style="margin-left:8px">Create fraud cases</span>
+            </div>
+            <div class="proles">Risk Officer, Risk Committee</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">fraud_case:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve fraud cases</span>
+            </div>
+            <div class="proles">Risk Committee</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Risk Radar (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">risk_radar:view</span>
+                <span class="pdesc" style="margin-left:8px">View risk radar</span>
+            </div>
+            <div class="proles">Tenant Security Officer, Executive / CEO, Risk Officer, Risk Committee, Supply Chain Analyst (SCM), Board Observer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Anomaly (3)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">anomaly:view</span>
+                <span class="pdesc" style="margin-left:8px">View anomaly monitor</span>
+            </div>
+            <div class="proles">Risk Officer, Risk Committee, Independent Validation Unit (IVU)</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">anomaly:create</span>
+                <span class="pdesc" style="margin-left:8px">Create anomaly scan</span>
+            </div>
+            <div class="proles">Risk Officer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">anomaly:resolve</span>
+                <span class="pdesc" style="margin-left:8px">Resolve anomalies</span>
+            </div>
+            <div class="proles">Risk Officer, Risk Committee</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Leak Monitor (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">leak_monitor:view</span>
+                <span class="pdesc" style="margin-left:8px">View leak monitor</span>
+            </div>
+            <div class="proles">Risk Officer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Ai Analytics (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">ai_analytics:view</span>
+                <span class="pdesc" style="margin-left:8px">View AI analytics</span>
+            </div>
+            <div class="proles">Risk Officer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Kyc (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">kyc:view</span>
+                <span class="pdesc" style="margin-left:8px">View KYC data</span>
+            </div>
+            <div class="proles">Risk Officer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">kyc:manage</span>
+                <span class="pdesc" style="margin-left:8px">Manage KYC</span>
+            </div>
+            <div class="proles">Risk Officer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Esg (3)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">esg:view</span>
+                <span class="pdesc" style="margin-left:8px">View ESG/carbon data</span>
+            </div>
+            <div class="proles">Executive / CEO, Compliance Officer, Carbon Officer, Internal Reviewer, Export Officer, Data Steward, ESG Reporting Manager</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">esg:export</span>
+                <span class="pdesc" style="margin-left:8px">Export ESG reports</span>
+            </div>
+            <div class="proles">Compliance Officer, Export Officer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">esg:manage</span>
+                <span class="pdesc" style="margin-left:8px">Manage ESG data (DID/VC, carbon offsets, credit pipeline)</span>
+            </div>
+            <div class="proles">Compliance Officer, Carbon Officer, ESG Reporting Manager</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Sustainability (3)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">sustainability:view</span>
+                <span class="pdesc" style="margin-left:8px">View sustainability</span>
+            </div>
+            <div class="proles">Executive / CEO, Compliance Officer, Carbon Officer, ESG Reporting Manager</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">sustainability:create</span>
+                <span class="pdesc" style="margin-left:8px">Assess product sustainability</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">sustainability:manage</span>
+                <span class="pdesc" style="margin-left:8px">Issue green certifications</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Compliance (3)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">compliance:view</span>
+                <span class="pdesc" style="margin-left:8px">View compliance</span>
+            </div>
+            <div class="proles">Tenant Security Officer, Executive / CEO, Compliance Officer, Graph Governance Committee, Methodology Governance Board (MGB), Internal Reviewer, Internal Audit, Board Observer, Legal Counsel</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">compliance:manage</span>
+                <span class="pdesc" style="margin-left:8px">Manage compliance</span>
+            </div>
+            <div class="proles">Compliance Officer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">compliance:freeze</span>
+                <span class="pdesc" style="margin-left:8px">Freeze compliance data</span>
+            </div>
+            <div class="proles">Compliance Officer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Report (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">report:view</span>
+                <span class="pdesc" style="margin-left:8px">View reports</span>
+            </div>
+            <div class="proles">Tenant Security Officer, Executive / CEO, Compliance Officer, Viewer, Graph Governance Committee, Independent Validation Unit (IVU), Methodology Governance Board (MGB), Export Officer, Internal Audit, Board Observer, Legal Counsel, ESG Reporting Manager</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">report:export</span>
+                <span class="pdesc" style="margin-left:8px">Export reports</span>
+            </div>
+            <div class="proles">Executive / CEO, Compliance Officer, Graph Governance Committee, Export Officer, ESG Reporting Manager</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Blockchain (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">blockchain:view</span>
+                <span class="pdesc" style="margin-left:8px">View blockchain seals</span>
+            </div>
+            <div class="proles">Developer, Blockchain Node Operator</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">blockchain:create</span>
+                <span class="pdesc" style="margin-left:8px">Create blockchain seals</span>
+            </div>
+            <div class="proles">Blockchain Node Operator</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Nft (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">nft:view</span>
+                <span class="pdesc" style="margin-left:8px">View NFT certificates</span>
+            </div>
+            <div class="proles">Blockchain Node Operator</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">nft:mint</span>
+                <span class="pdesc" style="margin-left:8px">Mint NFT certificates</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Wallet (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">wallet:view</span>
+                <span class="pdesc" style="margin-left:8px">View wallet</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">wallet:manage</span>
+                <span class="pdesc" style="margin-left:8px">Manage wallet</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Api Key (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">api_key:view</span>
+                <span class="pdesc" style="margin-left:8px">View API keys</span>
+            </div>
+            <div class="proles">Developer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">api_key:manage</span>
+                <span class="pdesc" style="margin-left:8px">Manage API keys</span>
+            </div>
+            <div class="proles">Developer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Webhook (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">webhook:view</span>
+                <span class="pdesc" style="margin-left:8px">View webhooks</span>
+            </div>
+            <div class="proles">Developer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">webhook:manage</span>
+                <span class="pdesc" style="margin-left:8px">Manage webhooks</span>
+            </div>
+            <div class="proles">Developer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Notification (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">notification:view</span>
+                <span class="pdesc" style="margin-left:8px">View notifications</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Billing (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">billing:view</span>
+                <span class="pdesc" style="margin-left:8px">View billing</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Settings (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">settings:view</span>
+                <span class="pdesc" style="margin-left:8px">View settings</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">settings:update</span>
+                <span class="pdesc" style="margin-left:8px">Update settings</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Graph Schema (4)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">graph_schema:propose</span>
+                <span class="pdesc" style="margin-left:8px">Propose graph schema change RFC</span>
+            </div>
+            <div class="proles">Graph Governance Committee</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">graph_schema:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve graph schema change</span>
+            </div>
+            <div class="proles">Graph Governance Committee</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">graph_schema:reject</span>
+                <span class="pdesc" style="margin-left:8px">Reject graph schema change</span>
+            </div>
+            <div class="proles">Graph Governance Committee</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">graph_schema:deploy</span>
+                <span class="pdesc" style="margin-left:8px">Deploy graph schema change</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Graph Weight (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">graph_weight:propose</span>
+                <span class="pdesc" style="margin-left:8px">Propose weight recalibration</span>
+            </div>
+            <div class="proles">Risk Committee</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">graph_weight:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve weight recalibration</span>
+            </div>
+            <div class="proles">Compliance Officer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Graph Override (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">graph_override:request</span>
+                <span class="pdesc" style="margin-left:8px">Request trust graph override</span>
+            </div>
+            <div class="proles">Risk Committee</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">graph_override:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve trust graph override</span>
+            </div>
+            <div class="proles">Risk Committee</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Graph Snapshot (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">graph_snapshot:create</span>
+                <span class="pdesc" style="margin-left:8px">Create graph snapshot</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">graph_snapshot:view</span>
+                <span class="pdesc" style="margin-left:8px">View graph snapshots</span>
+            </div>
+            <div class="proles">Graph Governance Committee, Risk Committee, Independent Validation Unit (IVU), Supply Chain Analyst (SCM), Blockchain Node Operator</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Lineage (5)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">lineage:view</span>
+                <span class="pdesc" style="margin-left:8px">View decision lineage</span>
+            </div>
+            <div class="proles">Tenant Security Officer, Compliance Officer, Graph Governance Committee, Risk Committee, Independent Validation Unit (IVU), Internal Audit</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">lineage:replay</span>
+                <span class="pdesc" style="margin-left:8px">Replay decision for determinism check</span>
+            </div>
+            <div class="proles">Compliance Officer, Risk Committee, Independent Validation Unit (IVU), Internal Audit</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">lineage:impact</span>
+                <span class="pdesc" style="margin-left:8px">Run contamination impact analysis</span>
+            </div>
+            <div class="proles">Risk Committee</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">lineage:export</span>
+                <span class="pdesc" style="margin-left:8px">Export lineage for regulatory</span>
+            </div>
+            <div class="proles">Compliance Officer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">lineage:view_summary</span>
+                <span class="pdesc" style="margin-left:8px">View lineage summary (non-full)</span>
+            </div>
+            <div class="proles">Tenant Security Officer, Internal Audit</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Risk Model (4)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">risk_model:create</span>
+                <span class="pdesc" style="margin-left:8px">Create risk model</span>
+            </div>
+            <div class="proles">Risk Committee</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">risk_model:deploy</span>
+                <span class="pdesc" style="margin-left:8px">Deploy risk model</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">risk_model:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve risk model</span>
+            </div>
+            <div class="proles">Risk Committee</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">risk_model:validate</span>
+                <span class="pdesc" style="margin-left:8px">Validate risk model (IVU)</span>
+            </div>
+            <div class="proles">Independent Validation Unit (IVU)</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Model Certification (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">model_certification:issue</span>
+                <span class="pdesc" style="margin-left:8px">Issue model certification</span>
+            </div>
+            <div class="proles">Independent Validation Unit (IVU)</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Feature Drift (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">feature_drift:monitor</span>
+                <span class="pdesc" style="margin-left:8px">Monitor feature drift</span>
+            </div>
+            <div class="proles">Independent Validation Unit (IVU)</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Bias Audit (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">bias_audit:perform</span>
+                <span class="pdesc" style="margin-left:8px">Perform model bias audit</span>
+            </div>
+            <div class="proles">Independent Validation Unit (IVU)</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Carbon Data (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">carbon_data:upload</span>
+                <span class="pdesc" style="margin-left:8px">Upload carbon emission data</span>
+            </div>
+            <div class="proles">Carbon Officer, Data Steward</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Emission Model (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">emission_model:submit</span>
+                <span class="pdesc" style="margin-left:8px">Submit emission model</span>
+            </div>
+            <div class="proles">Carbon Officer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Carbon Credit (4)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">carbon_credit:request_mint</span>
+                <span class="pdesc" style="margin-left:8px">Request carbon credit mint</span>
+            </div>
+            <div class="proles">Carbon Officer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">carbon_credit:approve_mint</span>
+                <span class="pdesc" style="margin-left:8px">Approve carbon credit mint</span>
+            </div>
+            <div class="proles">Compliance Officer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">carbon_credit:anchor</span>
+                <span class="pdesc" style="margin-left:8px">Anchor carbon credit on chain</span>
+            </div>
+            <div class="proles">Blockchain Node Operator</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">carbon_credit:verify</span>
+                <span class="pdesc" style="margin-left:8px">Verify carbon credit chain</span>
+            </div>
+            <div class="proles">Supply Chain Analyst (SCM), Blockchain Node Operator, Carbon Officer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Blockchain Anchor (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">blockchain_anchor:create</span>
+                <span class="pdesc" style="margin-left:8px">Create blockchain anchor</span>
+            </div>
+            <div class="proles">Blockchain Node Operator</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">blockchain_anchor:verify</span>
+                <span class="pdesc" style="margin-left:8px">Verify blockchain anchor</span>
+            </div>
+            <div class="proles">Blockchain Node Operator</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Lrgf Case (3)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">lrgf_case:view</span>
+                <span class="pdesc" style="margin-left:8px">View L-RGF cases</span>
+            </div>
+            <div class="proles">Risk Committee</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">lrgf_case:assign</span>
+                <span class="pdesc" style="margin-left:8px">Assign L-RGF cases</span>
+            </div>
+            <div class="proles">Risk Committee</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">lrgf_case:override</span>
+                <span class="pdesc" style="margin-left:8px">Override L-RGF decision</span>
+            </div>
+            <div class="proles">Risk Committee</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Regulatory Export (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">regulatory_export:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve regulatory export</span>
+            </div>
+            <div class="proles">Compliance Officer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Gdpr Masking (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">gdpr_masking:execute</span>
+                <span class="pdesc" style="margin-left:8px">Execute GDPR masking</span>
+            </div>
+            <div class="proles">Compliance Officer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">gdpr_masking:configure</span>
+                <span class="pdesc" style="margin-left:8px">Configure GDPR masking rules</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Audit Log (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">audit_log:view</span>
+                <span class="pdesc" style="margin-left:8px">View audit logs</span>
+            </div>
+            <div class="proles">Tenant Security Officer, Compliance Officer, Internal Audit</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Key (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">key:rotate</span>
+                <span class="pdesc" style="margin-left:8px">Rotate cryptographic keys</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Privileged Access (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">privileged_access:monitor</span>
+                <span class="pdesc" style="margin-left:8px">Monitor privileged access</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Session Recording (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">session_recording:review</span>
+                <span class="pdesc" style="margin-left:8px">Review session recordings</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Api Access (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">api_access:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve API access requests</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Incident (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">incident:declare</span>
+                <span class="pdesc" style="margin-left:8px">Declare security incident</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">incident:resolve</span>
+                <span class="pdesc" style="margin-left:8px">Resolve security incident</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Support Session (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">support_session:initiate</span>
+                <span class="pdesc" style="margin-left:8px">Initiate support session</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">support_session:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve support session</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Data Classification (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">data_classification:define</span>
+                <span class="pdesc" style="margin-left:8px">Define data classification</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">data_classification:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve data classification</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Retention Policy (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">retention_policy:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve data retention policy</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cross Border Transfer (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cross_border_transfer:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve cross border data transfer</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Lineage Export (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">lineage_export:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve lineage export</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">lineage_export:execute</span>
+                <span class="pdesc" style="margin-left:8px">Execute lineage export</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Emergency Freeze (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">emergency_freeze:trigger</span>
+                <span class="pdesc" style="margin-left:8px">Trigger emergency freeze</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">System Config (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">system_config:update</span>
+                <span class="pdesc" style="margin-left:8px">Update system configuration</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Platform Metrics (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">platform_metrics:view</span>
+                <span class="pdesc" style="margin-left:8px">View platform metrics</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">System Health (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">system_health:view</span>
+                <span class="pdesc" style="margin-left:8px">View system health</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Node Status (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">node_status:view</span>
+                <span class="pdesc" style="margin-left:8px">View node status</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Blockchain Integrity (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">blockchain_integrity:view</span>
+                <span class="pdesc" style="margin-left:8px">View blockchain integrity</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Lineage Registry (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">lineage_registry:integrity_check</span>
+                <span class="pdesc" style="margin-left:8px">Lineage registry integrity check</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Methodology (4)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_methodology:propose</span>
+                <span class="pdesc" style="margin-left:8px">Propose methodology version change</span>
+            </div>
+            <div class="proles">Methodology Governance Board (MGB)</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_methodology:vote</span>
+                <span class="pdesc" style="margin-left:8px">Vote on methodology change</span>
+            </div>
+            <div class="proles">Methodology Governance Board (MGB)</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_methodology:freeze</span>
+                <span class="pdesc" style="margin-left:8px">Freeze emission factor set</span>
+            </div>
+            <div class="proles">Methodology Governance Board (MGB)</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_methodology:publish</span>
+                <span class="pdesc" style="margin-left:8px">Publish methodology change bulletin</span>
+            </div>
+            <div class="proles">Methodology Governance Board (MGB)</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Risk Config (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_risk_config:set_weights</span>
+                <span class="pdesc" style="margin-left:8px">Configure global risk scoring weights</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_risk_config:set_threshold</span>
+                <span class="pdesc" style="margin-left:8px">Set global anomaly threshold</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Ivu Registry (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_ivu_registry:manage</span>
+                <span class="pdesc" style="margin-left:8px">Manage IVU validator registry</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_ivu_registry:verify_qual</span>
+                <span class="pdesc" style="margin-left:8px">Verify IVU qualification</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Passport (7)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_passport:submit</span>
+                <span class="pdesc" style="margin-left:8px">Submit emission data and create CIP draft</span>
+            </div>
+            <div class="proles">Carbon Officer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_passport:calculate</span>
+                <span class="pdesc" style="margin-left:8px">Execute deterministic emission calculation (system)</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_passport:review</span>
+                <span class="pdesc" style="margin-left:8px">Review CIP data quality</span>
+            </div>
+            <div class="proles">Internal Reviewer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_passport:validate</span>
+                <span class="pdesc" style="margin-left:8px">Validate CIP (IVU only)</span>
+            </div>
+            <div class="proles">Independent Validation Unit (IVU)</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_passport:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve CIP for sealing (Compliance only)</span>
+            </div>
+            <div class="proles">Compliance Officer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_passport:seal</span>
+                <span class="pdesc" style="margin-left:8px">Seal CIP (system auto after all gates pass)</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_passport:view</span>
+                <span class="pdesc" style="margin-left:8px">View CIP passport</span>
+            </div>
+            <div class="proles">Executive / CEO, Compliance Officer, Independent Validation Unit (IVU), Carbon Officer, Methodology Governance Board (MGB), Internal Reviewer, Export Officer, Internal Audit, Board Observer, Data Steward, Legal Counsel, ESG Reporting Manager, External Auditor, Financial Institution Viewer, Public Verification, Disclosure Officer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Anchor (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_anchor:create</span>
+                <span class="pdesc" style="margin-left:8px">Anchor CIP hash to blockchain</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Snapshot (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_snapshot:view</span>
+                <span class="pdesc" style="margin-left:8px">View snapshot capsule</span>
+            </div>
+            <div class="proles">Executive / CEO, Compliance Officer, Independent Validation Unit (IVU), Carbon Officer, Internal Reviewer, Export Officer, Internal Audit, Board Observer, Data Steward, Legal Counsel, ESG Reporting Manager, External Auditor, Financial Institution Viewer, Disclosure Officer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Replay (3)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_replay:view</span>
+                <span class="pdesc" style="margin-left:8px">View-only replay (Level 1)</span>
+            </div>
+            <div class="proles">Executive / CEO, Carbon Officer, Internal Reviewer, Export Officer, Board Observer, Data Steward, Legal Counsel</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_replay:simulate</span>
+                <span class="pdesc" style="margin-left:8px">What-if simulation replay (Level 2)</span>
+            </div>
+            <div class="proles">External Auditor</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_replay:forensic</span>
+                <span class="pdesc" style="margin-left:8px">Full lineage forensic replay (Level 3)</span>
+            </div>
+            <div class="proles">Compliance Officer, Independent Validation Unit (IVU), Internal Audit</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Export (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_export:report</span>
+                <span class="pdesc" style="margin-left:8px">Export CIE report / PDF</span>
+            </div>
+            <div class="proles">Executive / CEO, Export Officer, ESG Reporting Manager</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_export:share</span>
+                <span class="pdesc" style="margin-left:8px">Share CIP externally</span>
+            </div>
+            <div class="proles">Executive / CEO, Export Officer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Data (3)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_data:validate_completeness</span>
+                <span class="pdesc" style="margin-left:8px">Validate data completeness (Data Steward)</span>
+            </div>
+            <div class="proles">Data Steward</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_data:reject_incomplete</span>
+                <span class="pdesc" style="margin-left:8px">Reject incomplete submission (Data Steward)</span>
+            </div>
+            <div class="proles">Data Steward</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_data:manage_metadata</span>
+                <span class="pdesc" style="margin-left:8px">Manage metadata quality (Data Steward)</span>
+            </div>
+            <div class="proles">Data Steward</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Audit (3)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_audit:view_trail</span>
+                <span class="pdesc" style="margin-left:8px">View full CIE audit trail</span>
+            </div>
+            <div class="proles">Tenant Security Officer, Internal Audit, Legal Counsel, External Auditor</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_audit:view_sod_violations</span>
+                <span class="pdesc" style="margin-left:8px">View SoD violation attempts</span>
+            </div>
+            <div class="proles">Tenant Security Officer, Internal Audit</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_audit:view_change_history</span>
+                <span class="pdesc" style="margin-left:8px">View CIE change history</span>
+            </div>
+            <div class="proles">Tenant Security Officer, Internal Audit, External Auditor</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Liability (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_liability:view</span>
+                <span class="pdesc" style="margin-left:8px">View liability mapping and responsibility allocation</span>
+            </div>
+            <div class="proles">Legal Counsel</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Escalation (1)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_escalation:view_history</span>
+                <span class="pdesc" style="margin-left:8px">View escalation history</span>
+            </div>
+            <div class="proles">Tenant Security Officer, Internal Audit, Board Observer, Legal Counsel</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Supplier (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_supplier:submit_emission</span>
+                <span class="pdesc" style="margin-left:8px">Submit supplier emission declaration</span>
+            </div>
+            <div class="proles">Supplier Contributor</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_supplier:upload_docs</span>
+                <span class="pdesc" style="margin-left:8px">Upload supplier supporting documents</span>
+            </div>
+            <div class="proles">Supplier Contributor</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Esg (3)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_esg:generate_report</span>
+                <span class="pdesc" style="margin-left:8px">Generate consolidated ESG report</span>
+            </div>
+            <div class="proles">ESG Reporting Manager</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_esg:portfolio_carbon</span>
+                <span class="pdesc" style="margin-left:8px">Extract portfolio carbon report</span>
+            </div>
+            <div class="proles">ESG Reporting Manager</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_esg:investor_disclosure</span>
+                <span class="pdesc" style="margin-left:8px">Prepare investor disclosure</span>
+            </div>
+            <div class="proles">ESG Reporting Manager</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie External Audit (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_external_audit:read_snapshot</span>
+                <span class="pdesc" style="margin-left:8px">Read-only snapshot capsule (external auditor)</span>
+            </div>
+            <div class="proles">External Auditor</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_external_audit:sandbox_replay</span>
+                <span class="pdesc" style="margin-left:8px">Limited sandbox replay (external auditor)</span>
+            </div>
+            <div class="proles">External Auditor</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Finance (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_finance:view_score</span>
+                <span class="pdesc" style="margin-left:8px">View Carbon Integrity Score (financial institution)</span>
+            </div>
+            <div class="proles">Financial Institution Viewer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_finance:view_selected_cip</span>
+                <span class="pdesc" style="margin-left:8px">View selected CIP (no supplier confidential data)</span>
+            </div>
+            <div class="proles">Financial Institution Viewer</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Public (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_public:verify_qr</span>
+                <span class="pdesc" style="margin-left:8px">Public QR verification (unauthenticated)</span>
+            </div>
+            <div class="proles">Public Verification</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_public:check_hash</span>
+                <span class="pdesc" style="margin-left:8px">Public hash check (unauthenticated)</span>
+            </div>
+            <div class="proles">Public Verification</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Change Mgmt (3)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_change_mgmt:approve_upgrade</span>
+                <span class="pdesc" style="margin-left:8px">Approve system upgrade request</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_change_mgmt:track_request</span>
+                <span class="pdesc" style="margin-left:8px">Track change request</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_change_mgmt:freeze_deploy</span>
+                <span class="pdesc" style="margin-left:8px">Freeze deployment window</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Incident (3)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_incident:activate_protocol</span>
+                <span class="pdesc" style="margin-left:8px">Activate incident protocol</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_incident:freeze_anchor</span>
+                <span class="pdesc" style="margin-left:8px">Freeze blockchain anchor process</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_incident:trigger_forensic</span>
+                <span class="pdesc" style="margin-left:8px">Trigger forensic logging</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Cie Disclosure (4)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_disclosure:sign_off</span>
+                <span class="pdesc" style="margin-left:8px">Final sign-off public carbon statement</span>
+            </div>
+            <div class="proles">Disclosure Officer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_disclosure:link_annual_report</span>
+                <span class="pdesc" style="margin-left:8px">Link CIP to annual report</span>
+            </div>
+            <div class="proles">Disclosure Officer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_disclosure:certify_csrd</span>
+                <span class="pdesc" style="margin-left:8px">Certify CSRD/ESRS alignment</span>
+            </div>
+            <div class="proles">Disclosure Officer</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">cie_disclosure:view_liability</span>
+                <span class="pdesc" style="margin-left:8px">View liability mapping for disclosure</span>
+            </div>
+            <div class="proles">Disclosure Officer</div>
+        </div>
+    </div>
+</div>
+
+<!-- FOOTER -->
+<div style="text-align:center;padding:40px;border-top:1px solid var(--border);margin-top:40px">
+    <div style="font-size:0.85rem;font-weight:700;color:var(--text-muted)">TrustChecker v9.4.1 — RBAC Architecture Document</div>
+    <div style="font-size:0.7rem;color:#475569;margin-top:4px">Generated 2026-02-28 · 39 roles · 198 permissions · 0 SoD pairs</div>
+    <div style="font-size:0.65rem;color:#475569;margin-top:8px">Compatible with: Nasdaq, DTCC, ISO 27001 governance patterns</div>
+</div>
+
+</div>
+</body>
+</html>
