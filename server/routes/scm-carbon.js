@@ -305,16 +305,84 @@ router.get('/risk-factors', cacheMiddleware(120), async (req, res) => {
     try {
         const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
-        const shipments = await getOrgShipments(orgId);
-        const events = await getOrgEvents(orgId);
-        const partners = await getOrgPartners(orgId);
-        const violations = await getOrgViolations(orgId);
+        const totalCarbon = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
+        const avgCarbon = products.length > 0 ? totalCarbon / products.length : 0;
+        const highCarbonProducts = products.filter(p => (p.carbon_footprint_kgco2e || 0) > avgCarbon * 1.5);
+        const noDataProducts = products.filter(p => !p.carbon_footprint_kgco2e || p.carbon_footprint_kgco2e === 0);
 
-        const scopeData = await engineClient.carbonAggregate(products, shipments, events);
-        const leaderboard = await engineClient.carbonLeaderboard(partners, shipments, violations);
-        const riskFactors = carbonEngine.calculateRiskFactors(scopeData, leaderboard);
+        const risk_factors = [];
 
-        res.json(riskFactors);
+        // 1. High-carbon products
+        if (highCarbonProducts.length > 0) {
+            risk_factors.push({
+                name: 'High-Carbon Products',
+                factor: 'high_carbon_concentration',
+                description: `${highCarbonProducts.length} products exceed 1.5× average intensity (>${(avgCarbon * 1.5).toFixed(1)} kgCO₂e)`,
+                severity: highCarbonProducts.length > 5 ? 'high' : 'medium',
+                score: Math.min(95, 50 + highCarbonProducts.length * 5),
+                impact: 'Regulatory exposure under CBAM/CSRD if not reduced',
+            });
+        }
+
+        // 2. Data completeness
+        if (noDataProducts.length > 0) {
+            risk_factors.push({
+                name: 'Carbon Data Gaps',
+                factor: 'data_completeness',
+                description: `${noDataProducts.length}/${products.length} products lack emission data — audit risk`,
+                severity: noDataProducts.length > products.length * 0.3 ? 'high' : 'medium',
+                score: Math.min(90, 40 + Math.round(noDataProducts.length / Math.max(1, products.length) * 80)),
+            });
+        }
+
+        // 3. Scope 3 supply chain risk
+        if (totalCarbon > 500) {
+            risk_factors.push({
+                name: 'Scope 3 Upstream Exposure',
+                factor: 'scope3_upstream',
+                description: `Total portfolio: ${(totalCarbon / 1000).toFixed(1)} tCO₂e — likely significant Scope 3 upstream emissions`,
+                severity: totalCarbon > 2000 ? 'high' : 'medium',
+                score: Math.min(85, Math.round(totalCarbon / 50)),
+            });
+        }
+
+        // 4. Regulatory compliance risk
+        risk_factors.push({
+            name: 'CSRD/ESRS E1 Alignment',
+            factor: 'regulatory_csrd',
+            description: 'EU CSRD requires double materiality assessment and Scope 1-3 disclosure by 2026',
+            severity: noDataProducts.length > 0 ? 'high' : 'medium',
+            score: noDataProducts.length > 0 ? 78 : 45,
+        });
+
+        // 5. Carbon price financial risk
+        if (totalCarbon > 100) {
+            const euEtsPrice = 65; // $/tCO2 approx
+            const financialExposure = (totalCarbon / 1000) * euEtsPrice;
+            risk_factors.push({
+                name: 'Carbon Price Exposure',
+                factor: 'carbon_price_risk',
+                description: `At EU ETS €${euEtsPrice}/tCO₂, portfolio exposure ≈ €${financialExposure.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`,
+                severity: financialExposure > 5000 ? 'high' : financialExposure > 1000 ? 'medium' : 'low',
+                score: Math.min(80, Math.round(financialExposure / 100)),
+            });
+        }
+
+        // 6. Category concentration
+        const categories = {};
+        products.forEach(p => { categories[p.category || 'Unknown'] = (categories[p.category || 'Unknown'] || 0) + 1; });
+        const topCategory = Object.entries(categories).sort((a, b) => b[1] - a[1])[0];
+        if (topCategory && topCategory[1] > products.length * 0.4) {
+            risk_factors.push({
+                name: 'Category Concentration Risk',
+                factor: 'category_concentration',
+                description: `${Math.round(topCategory[1] / products.length * 100)}% of products in "${topCategory[0]}" — sector-specific regulation risk`,
+                severity: 'low',
+                score: 35,
+            });
+        }
+
+        res.json({ risk_factors, total_products: products.length, total_carbon_kgCO2e: +totalCarbon.toFixed(2) });
     } catch (err) {
         console.error('Carbon risk factors error:', err);
         res.status(500).json({ error: 'Carbon risk factor analysis failed' });
