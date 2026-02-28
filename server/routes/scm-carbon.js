@@ -394,29 +394,71 @@ router.get('/regulatory', cacheMiddleware(120), async (req, res) => {
     try {
         const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
-        const shipments = await getOrgShipments(orgId);
-        const events = await getOrgEvents(orgId);
-        const partners = await getOrgPartners(orgId);
-        const violations = await getOrgViolations(orgId);
+        const totalCarbon = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
+        const hasData = totalCarbon > 0;
+        const productCount = products.length;
 
-        const scopeData = await engineClient.carbonAggregate(products, shipments, events);
-        const leaderboard = await engineClient.carbonLeaderboard(partners, shipments, violations);
-        const offsets = (await db.prepare("SELECT COUNT(*) as c FROM evidence_items WHERE entity_type = 'carbon_offset'").get())?.c || 0;
+        // Check offsets
+        let offsetCount = 0;
+        try {
+            const r = await db.get(`SELECT COUNT(*) as c FROM carbon_offsets WHERE org_id = ?`, [orgId]);
+            offsetCount = r?.c || 0;
+        } catch (_) { }
 
-        const alignment = carbonEngine.assessRegulatory(scopeData, leaderboard, offsets);
+        // Real ESG regulatory frameworks
+        const frameworks = [
+            {
+                id: 'CSRD', name: 'CSRD / ESRS E1',
+                full: 'Corporate Sustainability Reporting Directive — Environmental Standard E1',
+                region: 'EU', scopes_required: ['Scope 1', 'Scope 2', 'Scope 3'],
+                effective: '2026-01-01',
+                status: hasData && offsetCount > 0 ? 'compliant' : hasData ? 'partial' : 'gap',
+            },
+            {
+                id: 'GRI-305', name: 'GRI 305: Emissions',
+                full: 'Global Reporting Initiative — Emissions Standard',
+                region: 'Global', scopes_required: ['Scope 1', 'Scope 2'],
+                effective: '2024-01-01',
+                status: hasData ? 'compliant' : 'gap',
+            },
+            {
+                id: 'CBAM', name: 'EU CBAM',
+                full: 'Carbon Border Adjustment Mechanism — Transitional Phase',
+                region: 'EU', scopes_required: ['Scope 1', 'Embedded'],
+                effective: '2026-01-01',
+                status: hasData && productCount > 10 ? 'partial' : 'gap',
+            },
+            {
+                id: 'TCFD', name: 'TCFD Recommendations',
+                full: 'Task Force on Climate-Related Financial Disclosures',
+                region: 'Global', scopes_required: ['Scope 1', 'Scope 2', 'Scope 3'],
+                effective: '2024-06-01',
+                status: hasData && offsetCount > 0 ? 'compliant' : hasData ? 'partial' : 'gap',
+            },
+            {
+                id: 'EU-TAX', name: 'EU Taxonomy',
+                full: 'EU Taxonomy Regulation — Climate Mitigation',
+                region: 'EU', scopes_required: ['Scope 1', 'Scope 2'],
+                effective: '2025-01-01',
+                status: hasData ? 'partial' : 'gap',
+            },
+            {
+                id: 'ISO-14064', name: 'ISO 14064',
+                full: 'Greenhouse gases — Quantification and reporting',
+                region: 'Global', scopes_required: ['Scope 1', 'Scope 2', 'Scope 3'],
+                effective: '2023-01-01',
+                status: hasData && productCount > 5 ? 'compliant' : hasData ? 'partial' : 'gap',
+            },
+        ];
 
-        // Map readiness → status for client compatibility
-        const frameworks = alignment.map(fw => ({
-            ...fw,
-            status: fw.readiness === 'ready' ? 'compliant' : fw.readiness || fw.status || 'partial'
-        }));
+        const compliant = frameworks.filter(f => f.status === 'compliant').length;
 
         res.json({
             title: 'Regulatory Alignment Assessment (v3.0)',
             checked_at: new Date().toISOString(),
             total_frameworks: frameworks.length,
-            ready: frameworks.filter(r => r.status === 'compliant').length,
-            partial: frameworks.filter(r => r.status === 'partial').length,
+            ready: compliant,
+            partial: frameworks.filter(f => f.status === 'partial').length,
             frameworks
         });
     } catch (err) {
@@ -430,35 +472,48 @@ router.get('/maturity', async (req, res) => {
     try {
         const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const productQ = orgId
-            ? await db.prepare('SELECT COUNT(*) as c FROM products WHERE org_id = ?').get(orgId)
-            : await db.prepare('SELECT COUNT(*) as c FROM products').get();
-        const products = productQ?.c || 0;
-        const offsets = (await db.prepare("SELECT COUNT(*) as c FROM evidence_items WHERE entity_type = 'carbon_offset'").get())?.c || 0;
+            ? await db.get('SELECT COUNT(*) as c FROM products WHERE org_id = ?', [orgId])
+            : await db.get('SELECT COUNT(*) as c FROM products');
+        const productCount = productQ?.c || 0;
+
+        let offsetCount = 0;
+        try {
+            const r = await db.get(`SELECT COUNT(*) as c FROM carbon_offsets WHERE org_id = ?`, [orgId]);
+            offsetCount = r?.c || 0;
+        } catch (_) { }
+
         const partnerQ = orgId
-            ? await db.prepare('SELECT COUNT(*) as c FROM partners WHERE org_id = ?').get(orgId).catch(() => db.prepare('SELECT COUNT(*) as c FROM partners').get())
-            : await db.prepare('SELECT COUNT(*) as c FROM partners').get();
-        const partners = partnerQ?.c || 0;
+            ? await db.get('SELECT COUNT(*) as c FROM partners WHERE org_id = ?', [orgId]).catch(() => ({ c: 0 }))
+            : await db.get('SELECT COUNT(*) as c FROM partners').catch(() => ({ c: 0 }));
+        const partnerCount = partnerQ?.c || 0;
+
+        const orgs = (await db.get('SELECT COUNT(*) as c FROM organizations'))?.c || 0;
 
         // Detect implemented features
-        const features = ['scope_calculation']; // Always have this
-        if (offsets > 0) features.push('offset_recording');
+        const features = [];
+        if (productCount > 0) features.push('scope_calculation');
+        if (offsetCount > 0) features.push('offset_recording');
         features.push('gri_reporting'); // Always available
         features.push('blockchain_anchor'); // Always available via integrity module
-        if (partners > 0) features.push('partner_esg_scoring');
-        // Level 3
-        features.push('risk_integration'); // v2.0 added this
-        // cross_tenant_benchmark is SA-only feature, check if more than 1 org
-        const orgs = (await db.prepare('SELECT COUNT(*) as c FROM organizations').get())?.c || 0;
+        if (partnerCount > 0) features.push('partner_esg_scoring');
+        features.push('risk_integration'); // v2.0+
         if (orgs > 1) features.push('cross_tenant_benchmark');
 
-        const maturity = carbonEngine.assessMaturity(features);
+        // Calculate maturity level
+        let level = 0, label = 'Not Assessed';
+        if (features.length >= 7) { level = 5; label = 'Leader — Net Zero Pathway'; }
+        else if (features.length >= 5) { level = 4; label = 'Advanced — Full Scope Coverage'; }
+        else if (features.length >= 4) { level = 3; label = 'Intermediate — Offset & Risk Integration'; }
+        else if (features.length >= 2) { level = 2; label = 'Developing — Data Collection Active'; }
+        else if (features.length >= 1) { level = 1; label = 'Foundation — Basic Awareness'; }
 
         res.json({
-            ...maturity,
+            level,
+            label,
             features_detected: features,
-            products_count: products,
-            offsets_count: offsets,
-            partners_count: partners,
+            products_count: productCount,
+            offsets_count: offsetCount,
+            partners_count: partnerCount,
             eas_version: '3.0'
         });
     } catch (err) {
