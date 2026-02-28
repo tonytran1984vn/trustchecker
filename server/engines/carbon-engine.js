@@ -898,6 +898,392 @@ class CarbonEngine {
         };
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // v4.0: SCOPE 3 DEEP DIVE — Full calculation for material categories
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Full kgCO₂e calculation for 4 material Scope 3 categories.
+     * Goes beyond screening scores to actual emissions.
+     */
+    calculateScope3Deep(products = [], shipments = [], events = []) {
+        // ── Cat 1: Purchased Goods & Services ──
+        const cat1Items = products.map(p => {
+            const cat = p.category || 'General';
+            const factor = MANUFACTURING_FACTORS[cat] || 2.5;
+            const qty = p.quantity || 1;
+            const kgCO2e = factor * qty * 0.6; // 60% upstream supply chain
+            return { name: p.name || p.sku || 'Unknown', category: cat, factor, qty, kgCO2e: Math.round(kgCO2e * 100) / 100 };
+        });
+        const cat1Total = cat1Items.reduce((s, i) => s + i.kgCO2e, 0);
+
+        // ── Cat 4: Upstream Transportation ──
+        const cat4Items = shipments.map(sh => {
+            const dist = sh.distance_km || this._estimateDistance(sh);
+            const w = (sh.weight_kg || 10) / 1000;
+            const mode = (sh.transport_mode || 'road').toLowerCase();
+            const factor = TRANSPORT_EMISSION_FACTORS[mode] || 0.045;
+            const kgCO2e = dist * factor * w;
+            return {
+                shipment_id: sh.id || sh.shipment_id || 'Unknown',
+                mode, distance_km: dist, weight_t: w, factor,
+                kgCO2e: Math.round(kgCO2e * 100) / 100
+            };
+        });
+        const cat4Total = cat4Items.reduce((s, i) => s + i.kgCO2e, 0);
+
+        // ── Cat 9: Downstream Transportation ──
+        const downstreamRatio = 0.5; // Industry standard: ~50% of upstream
+        const cat9Total = Math.round(cat4Total * downstreamRatio * 100) / 100;
+        const cat9Items = [{
+            methodology: 'Estimated as 50% of upstream transport (GHG Protocol guidance)',
+            upstream_reference_kgCO2e: cat4Total,
+            ratio: downstreamRatio,
+            kgCO2e: cat9Total
+        }];
+
+        // ── Cat 11: Use of Sold Products ──
+        const GRID_FACTOR = 0.45; // kgCO₂e per kWh (global average)
+        const cat11Items = products.filter(p =>
+            ['Electronics', 'IoT', 'Sensor', 'Laptop', 'Tablet', 'Audio', 'Wearable',
+                'Drone', 'VR', 'Network', 'Peripheral', 'Storage', 'Security', 'eReader'].includes(p.category)
+        ).map(p => {
+            const powerW = p.power_watts || (p.category === 'Laptop' ? 65 : p.category === 'Tablet' ? 10 : 5);
+            const hoursPerYear = p.usage_hours_per_year || 2000;
+            const lifespanYears = p.lifespan_years || 3;
+            const kWh = (powerW / 1000) * hoursPerYear * lifespanYears;
+            const kgCO2e = kWh * GRID_FACTOR;
+            return {
+                name: p.name || p.sku || 'Unknown', category: p.category,
+                power_watts: powerW, hours_per_year: hoursPerYear, lifespan_years: lifespanYears,
+                total_kWh: Math.round(kWh * 10) / 10,
+                kgCO2e: Math.round(kgCO2e * 100) / 100
+            };
+        });
+        const cat11Total = cat11Items.reduce((s, i) => s + i.kgCO2e, 0);
+
+        const grandTotal = cat1Total + cat4Total + cat9Total + cat11Total;
+
+        return {
+            title: 'Scope 3 Deep Dive — Material Categories',
+            methodology: 'GHG Protocol Corporate Value Chain (Scope 3) Standard',
+            total_scope3_kgCO2e: Math.round(grandTotal * 100) / 100,
+            total_scope3_tCO2e: Math.round(grandTotal / 10) / 100,
+            categories: [
+                {
+                    id: 1, name: 'Purchased Goods & Services', kgCO2e: Math.round(cat1Total * 100) / 100,
+                    pct: grandTotal > 0 ? Math.round(cat1Total / grandTotal * 100) : 0,
+                    confidence: products.length > 5 ? 3 : 2,
+                    methodology: 'Product-based: Σ(MANUFACTURING_FACTOR × quantity × 0.6)',
+                    items: cat1Items.slice(0, 20), item_count: cat1Items.length
+                },
+                {
+                    id: 4, name: 'Upstream Transportation', kgCO2e: Math.round(cat4Total * 100) / 100,
+                    pct: grandTotal > 0 ? Math.round(cat4Total / grandTotal * 100) : 0,
+                    confidence: shipments.length > 0 ? 4 : 1,
+                    methodology: 'Distance-based: Σ(distance × factor × weight)',
+                    items: cat4Items.slice(0, 20), item_count: cat4Items.length
+                },
+                {
+                    id: 9, name: 'Downstream Transportation', kgCO2e: cat9Total,
+                    pct: grandTotal > 0 ? Math.round(cat9Total / grandTotal * 100) : 0,
+                    confidence: 2,
+                    methodology: '50% of upstream transport estimate',
+                    items: cat9Items, item_count: 1
+                },
+                {
+                    id: 11, name: 'Use of Sold Products', kgCO2e: Math.round(cat11Total * 100) / 100,
+                    pct: grandTotal > 0 ? Math.round(cat11Total / grandTotal * 100) : 0,
+                    confidence: cat11Items.length > 0 ? 2 : 1,
+                    methodology: 'Energy-based: power × hours × lifespan × grid_factor',
+                    items: cat11Items.slice(0, 20), item_count: cat11Items.length
+                }
+            ],
+            totals: { cat1: Math.round(cat1Total), cat4: Math.round(cat4Total), cat9: cat9Total, cat11: Math.round(cat11Total) }
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // v4.0: GRI/CSRD AUTO-REPORT
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Generate CSRD-format ESG report (ESRS E1 Climate Change)
+     */
+    generateCSRDReport(data) {
+        const { scopeData, leaderboard = [], offsets = [], scope3Deep } = data;
+        const s1 = scopeData?.scope_1?.total || 0;
+        const s2 = scopeData?.scope_2?.total || 0;
+        const s3 = scopeData?.scope_3?.total || 0;
+        const total = s1 + s2 + s3;
+        const target2030 = Math.round(total * 0.55); // 45% reduction = 55% remaining
+
+        return {
+            standard: 'ESRS E1 — Climate Change (EU CSRD)',
+            reporting_period: {
+                from: new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString().slice(0, 10),
+                to: new Date().toISOString().slice(0, 10)
+            },
+            disclosures: {
+                'E1-1': {
+                    title: 'Transition Plan', status: total > 0 ? 'In Progress' : 'Not Started',
+                    detail: `Current: ${total.toLocaleString()} kgCO₂e → Target 2030: ${target2030.toLocaleString()} kgCO₂e (-45%)`
+                },
+                'E1-4': {
+                    title: 'GHG Emission Reduction Targets', base_year: new Date().getFullYear(),
+                    target_year: 2030, target_reduction_pct: 45, paris_aligned: true
+                },
+                'E1-6': {
+                    title: 'Gross Scope 1/2/3 GHG Emissions',
+                    scope_1_kgCO2e: s1, scope_2_kgCO2e: s2, scope_3_kgCO2e: s3 || (scope3Deep?.total_scope3_kgCO2e || 0),
+                    total_kgCO2e: total, total_tCO2e: Math.round(total / 10) / 100
+                },
+                'E1-7': {
+                    title: 'GHG Removals & Carbon Credits',
+                    offsets_tCO2e: offsets.reduce((s, o) => s + (o.quantity_tCO2e || 0), 0),
+                    credits_retired: offsets.filter(o => o.status === 'retired').length
+                },
+                'E1-9': {
+                    title: 'Anticipated Financial Effects',
+                    carbon_price_eur_per_tCO2e: 90,
+                    anticipated_cost_eur: Math.round(total / 1000 * 90)
+                }
+            },
+            cbam_annex: {
+                title: 'EU CBAM — Embedded Emissions Summary',
+                applicable: total > 0,
+                products_assessed: scopeData?.products_assessed || 0,
+                avg_embedded_kgCO2e: scopeData?.products_assessed > 0 ? Math.round(total / scopeData.products_assessed * 100) / 100 : 0
+            },
+            supplier_assessment: {
+                'S2-1': {
+                    title: 'Value Chain Workers',
+                    suppliers_assessed: leaderboard.length,
+                    grade_a_b: leaderboard.filter(p => p.grade === 'A' || p.grade === 'B').length,
+                    grade_d_f: leaderboard.filter(p => p.grade === 'D' || p.grade === 'F').length
+                }
+            },
+            generated_at: new Date().toISOString()
+        };
+    }
+
+    /**
+     * Generate structured HTML report for download/print
+     */
+    generateReportHTML(reportData, format = 'gri') {
+        const r = reportData;
+        const title = format === 'csrd' ? 'CSRD Sustainability Report (ESRS E1)' : 'GRI ESG Report (GRI 305)';
+        const disclosures = r.disclosures || {};
+
+        let rows = '';
+        for (const [code, d] of Object.entries(disclosures)) {
+            const val = d.value !== undefined ? `${d.value.toLocaleString()} ${d.unit || ''}` :
+                d.total_kgCO2e !== undefined ? `${d.total_kgCO2e.toLocaleString()} kgCO₂e` :
+                    d.status || d.detail || JSON.stringify(d);
+            rows += `<tr><td style="font-weight:700;padding:8px;border:1px solid #e2e8f0">${code}</td>
+                <td style="padding:8px;border:1px solid #e2e8f0">${d.title || ''}</td>
+                <td style="padding:8px;border:1px solid #e2e8f0">${val}</td></tr>`;
+        }
+
+        return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>${title}</title>
+<style>body{font-family:'Inter',sans-serif;max-width:900px;margin:40px auto;color:#1e293b;line-height:1.6}
+h1{color:#1e3a5f;border-bottom:3px solid #059669;padding-bottom:12px}
+h2{color:#059669;margin-top:32px}
+table{width:100%;border-collapse:collapse;margin:16px 0}
+th{background:#f1f5f9;padding:10px;text-align:left;border:1px solid #e2e8f0;font-size:0.85rem}
+td{font-size:0.85rem}
+.badge{display:inline-block;padding:4px 12px;border-radius:12px;font-size:0.75rem;font-weight:700}
+.meta{color:#64748b;font-size:0.8rem;margin-bottom:24px}
+</style></head><body>
+<h1>🌿 ${title}</h1>
+<div class="meta">Period: ${r.reporting_period?.from || ''} — ${r.reporting_period?.to || ''} · Generated: ${new Date().toISOString().slice(0, 10)}</div>
+<h2>📋 Disclosure Index</h2>
+<table><thead><tr><th>Code</th><th>Disclosure</th><th>Value</th></tr></thead><tbody>${rows}</tbody></table>
+${r.cbam_annex ? `<h2>🇪🇺 EU CBAM Annex</h2><p>Products assessed: ${r.cbam_annex.products_assessed || 0} · Avg embedded: ${r.cbam_annex.avg_embedded_kgCO2e || 0} kgCO₂e/product</p>` : ''}
+${r.supplier_assessment ? `<h2>🤝 Supplier Assessment</h2><p>Suppliers assessed: ${r.supplier_assessment['S2-1']?.suppliers_assessed || 0} · Grade A/B: ${r.supplier_assessment['S2-1']?.grade_a_b || 0}</p>` : ''}
+<hr style="margin-top:40px"><p style="color:#64748b;font-size:0.75rem">Generated by TrustChecker Carbon Intelligence Engine v4.0 · ${r.standard || r.report_standard || 'GHG Protocol'}</p>
+</body></html>`;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // v4.0: IoT / REAL-TIME DATA INTEGRATION
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Process an IoT energy/emission reading event
+     */
+    processIoTReading(event) {
+        const type = event.type || event.event_type || 'meter_reading';
+        const GRID_FACTOR = 0.45; // kgCO₂e/kWh
+
+        let measured_kgCO2e = 0;
+        let measurement_type = 'unknown';
+
+        if (type === 'meter_reading' || type === 'iot_energy') {
+            const kWh = event.kwh || event.energy_kwh || 0;
+            measured_kgCO2e = kWh * GRID_FACTOR;
+            measurement_type = 'energy_meter';
+        } else if (type === 'sensor_emission') {
+            measured_kgCO2e = event.kgCO2e || event.emission_kgCO2e || 0;
+            measurement_type = 'direct_emission_sensor';
+        } else if (type === 'fuel_consumption') {
+            const liters = event.liters || event.fuel_liters || 0;
+            const fuelFactor = event.fuel_type === 'diesel' ? 2.68 : 2.31; // kgCO₂e per liter
+            measured_kgCO2e = liters * fuelFactor;
+            measurement_type = 'fuel_meter';
+        }
+
+        return {
+            measured_kgCO2e: Math.round(measured_kgCO2e * 100) / 100,
+            measurement_type,
+            confidence: 5, // Direct measurement = highest confidence
+            timestamp: event.timestamp || new Date().toISOString(),
+            source: event.device_id || event.source || 'iot_device',
+            data_quality: 'measured',
+            grid_factor_used: type === 'meter_reading' ? GRID_FACTOR : null
+        };
+    }
+
+    /**
+     * Recalculate product footprint using measured data (replaces proxy)
+     */
+    recalculateWithMeasuredData(product, measuredReadings = []) {
+        const totalMeasured = measuredReadings.reduce((s, r) => {
+            const processed = this.processIoTReading(r);
+            return s + processed.measured_kgCO2e;
+        }, 0);
+
+        if (totalMeasured === 0) return null;
+
+        const cat = product.category || 'General';
+        const proxyEstimate = MANUFACTURING_FACTORS[cat] || 2.5;
+        const improvement = proxyEstimate > 0 ? Math.round((1 - totalMeasured / proxyEstimate) * 100) : 0;
+
+        return {
+            product_id: product.id || product.sku,
+            proxy_estimate_kgCO2e: proxyEstimate,
+            measured_kgCO2e: Math.round(totalMeasured * 100) / 100,
+            delta_kgCO2e: Math.round((totalMeasured - proxyEstimate) * 100) / 100,
+            improvement_pct: improvement,
+            confidence_before: 1,
+            confidence_after: 5,
+            readings_count: measuredReadings.length,
+            methodology: 'Direct measurement replaces proxy estimate'
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // v4.0: CROSS-TENANT BENCHMARK
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Anonymous org-to-org percentile comparison
+     */
+    calculateCrossTenantBenchmark(orgScopeData, allOrgsSummaries = []) {
+        const orgTotal = orgScopeData?.total_emissions_kgCO2e || orgScopeData?.total || 0;
+        const orgProducts = orgScopeData?.products_assessed || 1;
+        const orgIntensity = orgProducts > 0 ? orgTotal / orgProducts : orgTotal;
+
+        // Build anonymous comparison set
+        const allIntensities = allOrgsSummaries.map(o => {
+            const t = o.total_emissions_kgCO2e || o.total || 0;
+            const p = o.products_assessed || 1;
+            return t / p;
+        }).sort((a, b) => a - b);
+
+        // Add own org if not already in the set
+        const combined = [...allIntensities, orgIntensity].sort((a, b) => a - b);
+        const rank = combined.indexOf(orgIntensity) + 1;
+        const percentile = Math.round((1 - rank / combined.length) * 100);
+
+        // Generate anonymous leaderboard
+        const leaderboard = combined.map((intensity, i) => ({
+            label: intensity === orgIntensity ? '🏢 Your Organization' : `Org ${String.fromCharCode(65 + i)}`,
+            intensity_kgCO2e_per_product: Math.round(intensity * 100) / 100,
+            is_you: intensity === orgIntensity,
+            rank: i + 1
+        }));
+
+        return {
+            title: 'Cross-Tenant Carbon Benchmark',
+            your_intensity: Math.round(orgIntensity * 100) / 100,
+            your_total_kgCO2e: Math.round(orgTotal),
+            percentile,
+            rank,
+            total_orgs: combined.length,
+            performance: percentile >= 80 ? 'top_performer' : percentile >= 50 ? 'above_average' : percentile >= 20 ? 'below_average' : 'needs_improvement',
+            performance_label: percentile >= 80 ? '🏆 Top 20% Performer' : percentile >= 50 ? '✅ Above Average' : percentile >= 20 ? '🟡 Below Average' : '⚠️ Needs Improvement',
+            leaderboard: leaderboard.slice(0, 10),
+            methodology: 'Anonymous intensity comparison (kgCO₂e per product) across all organizations'
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // v4.0: CARBON CREDIT MARKETPLACE
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Evaluate a marketplace credit for risk, pricing, and verification
+     */
+    evaluateMarketplaceCredit(credit) {
+        const currentYear = new Date().getFullYear();
+        const vintage = parseInt(credit.vintage || credit.vintage_year || currentYear);
+        const qty = credit.quantity_tCO2e || credit.quantity_tco2e || 0;
+        const registry = (credit.registry || credit.provider || '').toLowerCase();
+        const projectType = (credit.project_type || credit.type || 'unknown').toLowerCase();
+
+        // Risk scoring (0 = safest, 100 = riskiest)
+        let risk_score = 20; // Base risk
+        const risk_factors = [];
+
+        // Vintage penalty
+        const vintageAge = currentYear - vintage;
+        if (vintageAge > 5) { risk_score += 30; risk_factors.push(`Old vintage (${vintage}, ${vintageAge}y ago)`); }
+        else if (vintageAge > 3) { risk_score += 15; risk_factors.push(`Aging vintage (${vintage})`); }
+
+        // Registry premium
+        const premiumRegistries = ['verra', 'gold_standard', 'gold standard'];
+        const validRegistries = ['acr', 'car', 'jcm', 'cdm', ...premiumRegistries];
+        if (!validRegistries.some(r => registry.includes(r))) {
+            risk_score += 25; risk_factors.push(`Unrecognized registry: ${credit.registry || 'Unknown'}`);
+        } else if (premiumRegistries.some(r => registry.includes(r))) {
+            risk_score -= 10; // Premium registry discount
+        }
+
+        // Project type pricing
+        const PROJECT_PRICES = {
+            'renewable_energy': 8, 'solar': 10, 'wind': 9, 'reforestation': 15,
+            'afforestation': 14, 'avoided_deforestation': 18, 'redd+': 20,
+            'cookstove': 6, 'methane_capture': 12, 'direct_air_capture': 150,
+            'blue_carbon': 25, 'biochar': 30, 'unknown': 10
+        };
+        const basePrice = PROJECT_PRICES[projectType] || 10;
+
+        // Vintage discount/premium
+        const vintageMultiplier = vintageAge <= 1 ? 1.1 : vintageAge <= 3 ? 1.0 : vintageAge <= 5 ? 0.85 : 0.6;
+        const fairPrice = Math.round(basePrice * vintageMultiplier * 100) / 100;
+
+        risk_score = Math.max(0, Math.min(100, risk_score));
+
+        return {
+            risk_score,
+            risk_level: risk_score <= 25 ? 'low' : risk_score <= 50 ? 'medium' : risk_score <= 75 ? 'high' : 'critical',
+            risk_color: risk_score <= 25 ? '#10b981' : risk_score <= 50 ? '#f59e0b' : risk_score <= 75 ? '#ef4444' : '#991b1b',
+            risk_factors,
+            fair_price_per_tCO2e: fairPrice,
+            fair_total_price: Math.round(fairPrice * qty * 100) / 100,
+            currency: 'USD',
+            verification: this.verifyOffset(credit),
+            quality_assessment: {
+                vintage_score: vintageAge <= 1 ? 'excellent' : vintageAge <= 3 ? 'good' : vintageAge <= 5 ? 'acceptable' : 'poor',
+                registry_tier: premiumRegistries.some(r => registry.includes(r)) ? 'premium' : validRegistries.some(r => registry.includes(r)) ? 'standard' : 'unverified',
+                project_type: projectType,
+                quantity_tCO2e: qty
+            }
+        };
+    }
+
     // ─── v3.0: Intensity Calculation ──────────────────────────────────────────
 
     /**
