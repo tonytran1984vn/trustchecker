@@ -690,7 +690,7 @@ router.get('/scope3-deep', cacheMiddleware(180), async (req, res) => {
         const catMap = {};
         let totalScope3 = 0;
         for (const p of products) {
-            const fp = p.carbon_footprint_kgCO2e || 0;
+            const fp = p.carbon_footprint_kgco2e || 0;
             // Distribute across Scope 3 categories based on product type
             const cats = [
                 { id: 1, name: 'Purchased Goods & Services', share: 0.35, methodology: 'Spend-based with sector emission factors' },
@@ -759,7 +759,7 @@ router.get('/report/csrd', cacheMiddleware(180), async (req, res) => {
     try {
         const orgId = req.tenantId;
         const products = await getOrgProducts(orgId);
-        const totalKg = products.reduce((s, p) => s + (p.carbon_footprint_kgCO2e || 0), 0);
+        const totalKg = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
         const totalT = +(totalKg / 1000).toFixed(2);
         // Generate CSRD-aligned disclosures
         const disclosures = {
@@ -791,11 +791,11 @@ router.get('/benchmark/cross-tenant', cacheMiddleware(300), async (req, res) => 
         const orgId = req.tenantId;
         // Get current org's carbon intensity
         const products = await getOrgProducts(orgId);
-        const totalKg = products.reduce((s, p) => s + (p.carbon_footprint_kgCO2e || 0), 0);
+        const totalKg = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
         const intensity = products.length > 0 ? +(totalKg / products.length).toFixed(2) : 0;
         // Get all orgs for comparison (multi-tenant)
         const allOrgs = await db.all(
-            `SELECT o.id, o.name, COUNT(p.id) as product_count, COALESCE(SUM(p.carbon_footprint_kgCO2e), 0) as total_kg
+            `SELECT o.id, o.name, COUNT(p.id) as product_count, COALESCE(SUM(p.carbon_footprint_kgco2e), 0) as total_kg
              FROM organizations o LEFT JOIN products p ON p.org_id = o.id
              GROUP BY o.id ORDER BY total_kg ASC`
         ).catch(() => []);
