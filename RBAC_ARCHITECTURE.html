@@ -105,8 +105,8 @@ table.lineage td:first-child { text-align:left; font-weight:600; }
     <h1>🔐 TrustChecker — RBAC Architecture</h1>
     <div class="subtitle">Version 9.4.1 · Infrastructure-Grade · Audit-Ready · Neutral Trust Architecture</div>
     <div class="stats">
-        <div class="stat"><div class="num">39</div><div class="label">Total Roles</div></div>
-        <div class="stat"><div class="num">198</div><div class="label">Permissions</div></div>
+        <div class="stat"><div class="num">40</div><div class="label">Total Roles</div></div>
+        <div class="stat"><div class="num">206</div><div class="label">Permissions</div></div>
         <div class="stat"><div class="num">24</div><div class="label">SoD Pairs</div></div>
         <div class="stat"><div class="num">5</div><div class="label">Authority Layers</div></div>
         <div class="stat"><div class="num">13</div><div class="label">Lineage ACL</div></div>
@@ -550,8 +550,20 @@ CIE Extended (v2.0–v3.0)  <span style="color:#059669">━━━━━━━━
 
 <div class="section" id="CIE">
     <div class="section-title">🌱 CIE — CIE Extended (v2.0–v3.0)</div>
-    <div class="section-desc">12 roles in this layer</div>
+    <div class="section-desc">13 roles in this layer</div>
     
+    <div class="role-card" style="border-left:4px solid #059669">
+        <div class="role-header">
+            <div>
+                <h3>Finance Controller</h3>
+                <code class="role-id">finance_controller</code>
+                <span class="badge business">BUSINESS</span>
+                <span class="badge perm-count">15 perms</span>
+            </div>
+        </div>
+        <p class="role-desc">L3 Tenant Governance — Financial oversight and payment approval. Manages billing, treasury, fee configuration, and wallet. Holds payment:approve (SoD: CANNOT hold payment:create). Reviews carbon credit valuations for financial impact.</p>
+        <div class="perm-list"><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">dashboard:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">payment:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">payment:approve</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">billing:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">billing:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">wallet:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">wallet:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">fee:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">fee:configure</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">treasury:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">treasury:manage</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">esg:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:view</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">report:export</span><span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;font-size:0.7rem;font-family:monospace;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534" title="">audit_log:view</span></div>
+    </div>
     <div class="role-card" style="border-left:4px solid #059669">
         <div class="role-header">
             <div>
@@ -848,7 +860,7 @@ CIE Extended (v2.0–v3.0)  <span style="color:#059669">━━━━━━━━
 
 <!-- ALL PERMISSIONS -->
 <div class="section" id="permissions">
-    <div class="section-title">📋 Complete Permission Registry (198)</div>
+    <div class="section-title">📋 Complete Permission Registry (206)</div>
     <div class="section-desc">All permissions grouped by resource, with assigned roles</div>
     
     <div class="perm-cat">
@@ -1014,7 +1026,7 @@ CIE Extended (v2.0–v3.0)  <span style="color:#059669">━━━━━━━━
                 <span class="pid">dashboard:view</span>
                 <span class="pdesc" style="margin-left:8px">View dashboard</span>
             </div>
-            <div class="proles">Tenant Security Officer, Executive / CEO, Operations Manager, Risk Officer, Compliance Officer, Developer, Operator, Viewer, Graph Governance Committee, Risk Committee, Independent Validation Unit (IVU), Supply Chain Analyst (SCM), Blockchain Node Operator, Carbon Officer, Methodology Governance Board (MGB), Internal Reviewer, Export Officer, Internal Audit, Board Observer, Data Steward, Legal Counsel, Supplier Contributor, ESG Reporting Manager, External Auditor, Financial Institution Viewer, Public Verification, Disclosure Officer</div>
+            <div class="proles">Tenant Security Officer, Executive / CEO, Operations Manager, Risk Officer, Compliance Officer, Developer, Operator, Viewer, Graph Governance Committee, Risk Committee, Independent Validation Unit (IVU), Supply Chain Analyst (SCM), Blockchain Node Operator, Carbon Officer, Finance Controller, Methodology Governance Board (MGB), Internal Reviewer, Export Officer, Internal Audit, Board Observer, Data Steward, Legal Counsel, Supplier Contributor, ESG Reporting Manager, External Auditor, Financial Institution Viewer, Public Verification, Disclosure Officer</div>
         </div>
     </div>
     <div class="perm-cat">
@@ -1399,7 +1411,7 @@ CIE Extended (v2.0–v3.0)  <span style="color:#059669">━━━━━━━━
                 <span class="pid">esg:view</span>
                 <span class="pdesc" style="margin-left:8px">View ESG/carbon data</span>
             </div>
-            <div class="proles">Executive / CEO, Compliance Officer, Carbon Officer, Internal Reviewer, Export Officer, Data Steward, ESG Reporting Manager</div>
+            <div class="proles">Executive / CEO, Compliance Officer, Carbon Officer, Finance Controller, Internal Reviewer, Export Officer, Data Steward, ESG Reporting Manager</div>
         </div>
         <div class="perm-row">
             <div>
@@ -1474,14 +1486,14 @@ CIE Extended (v2.0–v3.0)  <span style="color:#059669">━━━━━━━━
                 <span class="pid">report:view</span>
                 <span class="pdesc" style="margin-left:8px">View reports</span>
             </div>
-            <div class="proles">Tenant Security Officer, Executive / CEO, Compliance Officer, Viewer, Graph Governance Committee, Independent Validation Unit (IVU), Methodology Governance Board (MGB), Export Officer, Internal Audit, Board Observer, Legal Counsel, ESG Reporting Manager</div>
+            <div class="proles">Tenant Security Officer, Executive / CEO, Compliance Officer, Viewer, Graph Governance Committee, Independent Validation Unit (IVU), Finance Controller, Methodology Governance Board (MGB), Export Officer, Internal Audit, Board Observer, Legal Counsel, ESG Reporting Manager</div>
         </div>
         <div class="perm-row">
             <div>
                 <span class="pid">report:export</span>
                 <span class="pdesc" style="margin-left:8px">Export reports</span>
             </div>
-            <div class="proles">Executive / CEO, Compliance Officer, Graph Governance Committee, Export Officer, ESG Reporting Manager</div>
+            <div class="proles">Executive / CEO, Compliance Officer, Graph Governance Committee, Finance Controller, Export Officer, ESG Reporting Manager</div>
         </div>
     </div>
     <div class="perm-cat">
@@ -1528,14 +1540,14 @@ CIE Extended (v2.0–v3.0)  <span style="color:#059669">━━━━━━━━
                 <span class="pid">wallet:view</span>
                 <span class="pdesc" style="margin-left:8px">View wallet</span>
             </div>
-            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+            <div class="proles">Finance Controller</div>
         </div>
         <div class="perm-row">
             <div>
                 <span class="pid">wallet:manage</span>
                 <span class="pdesc" style="margin-left:8px">Manage wallet</span>
             </div>
-            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+            <div class="proles">Finance Controller</div>
         </div>
     </div>
     <div class="perm-cat">
@@ -1586,14 +1598,21 @@ CIE Extended (v2.0–v3.0)  <span style="color:#059669">━━━━━━━━
         </div>
     </div>
     <div class="perm-cat">
-        <div class="perm-cat-title">Billing (1)</div>
+        <div class="perm-cat-title">Billing (2)</div>
         
         <div class="perm-row">
             <div>
                 <span class="pid">billing:view</span>
                 <span class="pdesc" style="margin-left:8px">View billing</span>
             </div>
-            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+            <div class="proles">Finance Controller</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">billing:manage</span>
+                <span class="pdesc" style="margin-left:8px">Manage billing plans and invoices</span>
+            </div>
+            <div class="proles">Finance Controller</div>
         </div>
     </div>
     <div class="perm-cat">
@@ -1612,6 +1631,67 @@ CIE Extended (v2.0–v3.0)  <span style="color:#059669">━━━━━━━━
                 <span class="pdesc" style="margin-left:8px">Update settings</span>
             </div>
             <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Payment (3)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">payment:view</span>
+                <span class="pdesc" style="margin-left:8px">View payment history</span>
+            </div>
+            <div class="proles">Finance Controller</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">payment:create</span>
+                <span class="pdesc" style="margin-left:8px">Create payment requests</span>
+            </div>
+            <div class="proles"><span style="color:#64748b">System/Platform only</span></div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">payment:approve</span>
+                <span class="pdesc" style="margin-left:8px">Approve payment requests (SoD: cannot also create)</span>
+            </div>
+            <div class="proles">Finance Controller</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Fee (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">fee:view</span>
+                <span class="pdesc" style="margin-left:8px">View fee structure</span>
+            </div>
+            <div class="proles">Finance Controller</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">fee:configure</span>
+                <span class="pdesc" style="margin-left:8px">Configure fee distribution</span>
+            </div>
+            <div class="proles">Finance Controller</div>
+        </div>
+    </div>
+    <div class="perm-cat">
+        <div class="perm-cat-title">Treasury (2)</div>
+        
+        <div class="perm-row">
+            <div>
+                <span class="pid">treasury:view</span>
+                <span class="pdesc" style="margin-left:8px">View treasury & liquidity</span>
+            </div>
+            <div class="proles">Finance Controller</div>
+        </div>
+        <div class="perm-row">
+            <div>
+                <span class="pid">treasury:manage</span>
+                <span class="pdesc" style="margin-left:8px">Manage treasury operations</span>
+            </div>
+            <div class="proles">Finance Controller</div>
         </div>
     </div>
     <div class="perm-cat">
@@ -1938,7 +2018,7 @@ CIE Extended (v2.0–v3.0)  <span style="color:#059669">━━━━━━━━
                 <span class="pid">audit_log:view</span>
                 <span class="pdesc" style="margin-left:8px">View audit logs</span>
             </div>
-            <div class="proles">Tenant Security Officer, Compliance Officer, Internal Audit</div>
+            <div class="proles">Tenant Security Officer, Compliance Officer, Finance Controller, Internal Audit</div>
         </div>
     </div>
     <div class="perm-cat">
@@ -2598,7 +2678,7 @@ CIE Extended (v2.0–v3.0)  <span style="color:#059669">━━━━━━━━
 <!-- FOOTER -->
 <div style="text-align:center;padding:40px;border-top:1px solid var(--border);margin-top:40px">
     <div style="font-size:0.85rem;font-weight:700;color:var(--text-muted)">TrustChecker v9.4.1 — RBAC Architecture Document</div>
-    <div style="font-size:0.7rem;color:#475569;margin-top:4px">Generated 2026-02-28 · 39 roles · 198 permissions · 0 SoD pairs</div>
+    <div style="font-size:0.7rem;color:#475569;margin-top:4px">Generated 2026-02-28 · 40 roles · 206 permissions · 0 SoD pairs</div>
     <div style="font-size:0.65rem;color:#475569;margin-top:8px">Compatible with: Nasdaq, DTCC, ISO 27001 governance patterns</div>
 </div>
 

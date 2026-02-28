@@ -122,8 +122,17 @@ const PERMISSIONS = [
     { resource: 'notification', action: 'view', scope: 'tenant', level: 'business', desc: 'View notifications' },
     // Admin & Billing (tenant-level admin)
     { resource: 'billing', action: 'view', scope: 'tenant', level: 'business', desc: 'View billing' },
+    { resource: 'billing', action: 'manage', scope: 'tenant', level: 'business', desc: 'Manage billing plans and invoices' },
     { resource: 'settings', action: 'view', scope: 'tenant', level: 'business', desc: 'View settings' },
     { resource: 'settings', action: 'update', scope: 'tenant', level: 'business', desc: 'Update settings' },
+    // Finance & Treasury
+    { resource: 'payment', action: 'view', scope: 'tenant', level: 'business', desc: 'View payment history' },
+    { resource: 'payment', action: 'create', scope: 'tenant', level: 'business', desc: 'Create payment requests' },
+    { resource: 'payment', action: 'approve', scope: 'tenant', level: 'business', desc: 'Approve payment requests (SoD: cannot also create)' },
+    { resource: 'fee', action: 'view', scope: 'tenant', level: 'business', desc: 'View fee structure' },
+    { resource: 'fee', action: 'configure', scope: 'tenant', level: 'business', desc: 'Configure fee distribution' },
+    { resource: 'treasury', action: 'view', scope: 'tenant', level: 'business', desc: 'View treasury & liquidity' },
+    { resource: 'treasury', action: 'manage', scope: 'tenant', level: 'business', desc: 'Manage treasury operations' },
 
     // ── Governance Permissions (Trust Graph + Data Lineage + Model Risk) ───────
     // Trust Graph Governance
@@ -506,6 +515,24 @@ const DEFAULT_BUSINESS_ROLES = [
             'cie_snapshot:view',
         ],
     },
+    {
+        name: 'finance_controller',
+        display: 'Finance Controller',
+        desc: 'L3 Tenant Governance — Financial oversight and payment approval. Manages billing, treasury, fee configuration, and wallet. Holds payment:approve (SoD: CANNOT hold payment:create). Reviews carbon credit valuations for financial impact.',
+        permissions: [
+            'dashboard:view',
+            // Finance core (SoD: approve only, NOT create)
+            'payment:view', 'payment:approve',
+            'billing:view', 'billing:manage',
+            'wallet:view', 'wallet:manage',
+            'fee:view', 'fee:configure',
+            'treasury:view', 'treasury:manage',
+            // Oversight (read-only)
+            'esg:view',
+            'report:view', 'report:export',
+            'audit_log:view',
+        ],
+    },
     // ── CIE v2.0 Roles (Company Admin creates users and assigns these) ────────
     {
         name: 'mgb_member',
@@ -764,6 +791,8 @@ const TEST_USERS = [
     { email: 'incident@trustchecker.io', role: 'incident_response_lead', user_type: 'platform', password: '123qaz12', company: 'TrustChecker', rbac_role: 'incident_response_lead', must_change_password: 1 },
     // Auditor (upgraded to Internal Audit)
     { email: 'auditor@demo.trustchecker.io', role: 'auditor', user_type: 'tenant', password: '123qaz12', company: 'TrustChecker Demo', rbac_role: 'auditor', must_change_password: 1 },
+    // Finance Controller
+    { email: 'finance@demo.trustchecker.io', role: 'finance_controller', user_type: 'tenant', password: '123qaz12', company: 'TrustChecker Demo', rbac_role: 'finance_controller', must_change_password: 1 },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
