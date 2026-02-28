@@ -938,16 +938,19 @@ router.get('/marketplace', cacheMiddleware(120), async (req, res) => {
             price_per_tCO2e: o.price_per_tco2e || o.price_per_tCO2e || (15 + Math.random() * 30).toFixed(2),
             registry: o.registry || 'Verra',
             vintage: o.vintage_year || new Date().getFullYear(),
+            status: o.status || 'available',
             evaluation: {
                 risk_level: o.risk_level || 'medium',
                 risk_color: o.risk_level === 'low' ? '#10b981' : o.risk_level === 'high' ? '#ef4444' : '#f59e0b',
                 fair_price_per_tCO2e: o.fair_price || (20 + Math.random() * 25).toFixed(2),
             },
         }));
+        const availableListings = listings.filter(l => l.status === 'available');
         res.json({
             title: 'Carbon Credit Marketplace',
             total_listings: listings.length,
-            total_available_tCO2e: listings.reduce((s, l) => s + (l.quantity_tCO2e || 0), 0),
+            total_available_tCO2e: availableListings.reduce((s, l) => s + (l.quantity_tCO2e || 0), 0),
+            total_retired_tCO2e: listings.filter(l => l.status === 'retired').reduce((s, l) => s + (l.quantity_tCO2e || 0), 0),
             listings,
         });
     } catch (err) {
@@ -994,34 +997,57 @@ router.get('/benchmark/cross-tenant', cacheMiddleware(300), async (req, res) => 
         // Get current org's carbon intensity
         const products = await getOrgProducts(orgId);
         const totalKg = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
-        const intensity = products.length > 0 ? +(totalKg / products.length).toFixed(2) : 0;
-        // Get all orgs for comparison (multi-tenant)
+        const totalT = +(totalKg / 1000).toFixed(1);
+
+        // Get all orgs for comparison — rank by total tCO₂e (enterprise metric)
         const allOrgs = await db.all(
             `SELECT o.id, o.name, COUNT(p.id) as product_count, COALESCE(SUM(p.carbon_footprint_kgco2e), 0) as total_kg
              FROM organizations o LEFT JOIN products p ON p.org_id = o.id
              GROUP BY o.id ORDER BY total_kg ASC`
         ).catch(() => []);
+
+        // Rank by total emissions (lower = better)
         const ranked = allOrgs
             .filter(o => o.product_count > 0)
-            .map(o => ({ ...o, intensity: +(o.total_kg / o.product_count).toFixed(2) }))
-            .sort((a, b) => a.intensity - b.intensity);
+            .map(o => ({ ...o, total_tCO2e: +(o.total_kg / 1000).toFixed(1) }))
+            .sort((a, b) => a.total_tCO2e - b.total_tCO2e);
+
         const myRank = ranked.findIndex(o => o.id === orgId) + 1;
         const percentile = ranked.length > 0 ? Math.round(((ranked.length - myRank) / ranked.length) * 100) : 0;
         const labels = { top: 'Top Performer 🏆', good: 'Above Average ✅', avg: 'Industry Average', below: 'Below Average ⚠️' };
         const perfLabel = percentile >= 80 ? labels.top : percentile >= 50 ? labels.good : percentile >= 20 ? labels.avg : labels.below;
+
+        // Offset-adjusted comparison (bonus for companies actively offsetting)
+        let offsetRatio = 0;
+        try {
+            const off = await db.get('SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE org_id = ? AND status = ?', [orgId, 'retired']);
+            offsetRatio = totalT > 0 ? Math.min(1, (off?.r || 0) / totalT) : 0;
+        } catch (_) { }
+
+        const comparison = ranked.map((o, i) => {
+            const isMe = o.id === orgId;
+            return {
+                rank: i + 1,
+                label: isMe ? 'Your Organization' : `Org ${o.id.substring(0, 6)}`,
+                total_tCO2e: o.total_tCO2e,
+                products: o.product_count,
+                performance: o.total_tCO2e < 100 ? 'top_performer' : o.total_tCO2e < 500 ? 'above_average' : 'average',
+                is_you: isMe,
+            };
+        });
+
         res.json({
             percentile,
             rank: myRank || ranked.length,
             total_orgs: ranked.length,
-            your_intensity: intensity,
+            your_total_tCO2e: totalT,
+            your_offset_coverage: Math.round(offsetRatio * 100) + '%',
             performance_label: perfLabel,
-            methodology: 'Cross-tenant benchmarking based on kgCO₂e per product across all TrustChecker organizations',
-            leaderboard: ranked.slice(0, 10).map((o, i) => ({
-                rank: i + 1,
-                label: o.id === orgId ? 'Your Organization' : `Org ${o.id.substring(0, 6)}`,
-                intensity_kgCO2e_per_product: o.intensity,
-                is_you: o.id === orgId,
-            })),
+            methodology: 'Cross-tenant benchmarking based on total tCO₂e emissions across all TrustChecker organizations',
+            leaderboard: comparison.slice(0, 10),
+            insight: offsetRatio >= 0.4
+                ? '✅ Strong offset strategy — ' + Math.round(offsetRatio * 100) + '% of emissions retired'
+                : '⚠️ Consider increasing carbon offset coverage',
         });
     } catch (err) {
         console.error('Cross-tenant benchmark error:', err);
