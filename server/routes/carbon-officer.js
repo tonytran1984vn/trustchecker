@@ -177,9 +177,18 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
             products_tracked: products.length,
             shipments_tracked: shipments.length,
 
-            // v3.0: Confidence & intensity metrics
-            avg_confidence: scopeData?.avg_confidence || 1,
-            high_confidence_ratio_pct: scopeData?.high_confidence_ratio_pct || 0,
+            // v3.0: Confidence based on actual data coverage
+            avg_confidence: (() => {
+                let conf = 1; // baseline
+                const hasCarbon = products.filter(p => p.carbon_footprint_kgco2e > 0).length;
+                if (hasCarbon > 0) conf += 1; // products with carbon data → level 2
+                if (hasCarbon === products.length && products.length > 0) conf += 0.5; // 100% coverage bonus
+                if (shipments.length > 0) conf += 0.5; // supply chain tracking
+                if (credits_minted > 0 || credits_retired > 0) conf += 0.5; // credit activity
+                return Math.min(5, Math.round(conf * 10) / 10);
+            })(),
+            high_confidence_ratio_pct: products.length > 0
+                ? Math.round(products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length * 100) : 0,
             avg_intensity_kgCO2e_per_unit: scopeData?.avg_intensity_kgCO2e_per_unit || 0,
         });
     } catch (err) {
