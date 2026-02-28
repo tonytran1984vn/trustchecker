@@ -582,28 +582,51 @@ router.get('/net-position', cacheMiddleware(60), async (req, res) => {
     try {
         const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
-        const shipments = await getOrgShipments(orgId);
-        const events = await getOrgEvents(orgId);
 
-        const scopeData = await engineClient.carbonAggregate(products, shipments, events);
+        // Calculate gross emissions from products
+        const grossKg = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
+        const grossT = +(grossKg / 1000).toFixed(3);
 
-        // Get offsets from carbon_credits table
-        let offsets = [];
+        // Get offsets from carbon_offsets table
+        let retired = 0, available = 0, offsetDetails = [];
         try {
             const q = orgId
-                ? `SELECT * FROM carbon_credits WHERE org_id = ? ORDER BY created_at DESC`
-                : `SELECT * FROM carbon_credits ORDER BY created_at DESC`;
-            offsets = orgId
-                ? await db.prepare(q).all(orgId)
-                : await db.prepare(q).all();
-            offsets = offsets || [];
-        } catch (_) {
-            // carbon_credits table may not exist yet
-            offsets = [];
-        }
+                ? `SELECT * FROM carbon_offsets WHERE org_id = ? ORDER BY created_at DESC`
+                : `SELECT * FROM carbon_offsets ORDER BY created_at DESC`;
+            const offsets = orgId
+                ? await db.all(q, [orgId])
+                : await db.all(q);
+            (offsets || []).forEach(o => {
+                const qty = o.quantity_tco2e || o.quantity_tCO2e || 0;
+                if (o.status === 'retired') {
+                    retired += qty;
+                } else {
+                    available += qty;
+                }
+                offsetDetails.push({
+                    project: o.project_type,
+                    quantity_tCO2e: qty,
+                    registry: o.registry,
+                    vintage: o.vintage_year,
+                    status: o.status || 'available',
+                });
+            });
+        } catch (_) { /* carbon_offsets table may not exist */ }
 
-        const netPosition = carbonEngine.calculateNetEmissions(scopeData, offsets);
-        res.json(netPosition);
+        const retiredT = +(retired / 1000).toFixed(3);
+        const availableT = +(available / 1000).toFixed(3);
+        const netT = +(grossT - retiredT).toFixed(3);
+        const netZeroProgress = grossT > 0 ? Math.min(100, Math.round((retiredT / grossT) * 100)) : 0;
+
+        res.json({
+            gross_tCO2e: grossT,
+            retired_tCO2e: retiredT,
+            available_tCO2e: availableT,
+            net_tCO2e: netT,
+            net_zero_progress: netZeroProgress,
+            has_offsets: retired > 0 || available > 0,
+            offsets: offsetDetails,
+        });
     } catch (err) {
         console.error('Net position error:', err);
         res.status(500).json({ error: 'Net position calculation failed' });
