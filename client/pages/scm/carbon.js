@@ -12,6 +12,9 @@ let _carbonLoaded = false;
 let _bmPage = 0;
 let _bmPageSize = 5;
 
+/** Format number with thousand separators: 2105400 → 2,105,400 */
+function fmt(v) { return typeof v === 'number' ? v.toLocaleString() : (v ?? 0); }
+
 async function fetchCarbonData() {
     if (_carbonFetching || _carbonLoaded) return;
     _carbonFetching = true;
@@ -78,17 +81,17 @@ function renderContent() {
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
             <div class="sa-card" style="text-align:center;padding:20px">
                 <div style="font-size:28px">🌍</div>
-                <div style="font-size:24px;font-weight:700;color:#10b981;margin:4px 0">${sc?.total_emissions_kgCO2e || 0}</div>
+                <div style="font-size:24px;font-weight:700;color:#10b981;margin:4px 0">${fmt(sc?.total_emissions_kgCO2e)}</div>
                 <div style="color:#94a3b8;font-size:0.82rem">Total kgCO₂e</div>
             </div>
             <div class="sa-card" style="text-align:center;padding:20px">
                 <div style="font-size:28px">📦</div>
-                <div style="font-size:24px;font-weight:700;color:#3b82f6;margin:4px 0">${sc?.products_assessed || 0}</div>
+                <div style="font-size:24px;font-weight:700;color:#3b82f6;margin:4px 0">${fmt(sc?.products_assessed)}</div>
                 <div style="color:#94a3b8;font-size:0.82rem">Products Assessed</div>
             </div>
             <div class="sa-card" style="text-align:center;padding:20px">
                 <div style="font-size:28px">🎯</div>
-                <div style="font-size:24px;font-weight:700;color:#f59e0b;margin:4px 0">${sc?.reduction_targets?.paris_aligned_2030 || 0}</div>
+                <div style="font-size:24px;font-weight:700;color:#f59e0b;margin:4px 0">${fmt(sc?.reduction_targets?.paris_aligned_2030)}</div>
                 <div style="color:#94a3b8;font-size:0.82rem">2030 Target kgCO₂e</div>
             </div>
             <div class="sa-card" style="text-align:center;padding:20px">
@@ -135,7 +138,7 @@ function renderContent() {
                         <div class="cb-inner" style="padding:14px;border-radius:10px;border-left:4px solid ${color}">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
                                 <span style="color:#f1f5f9;font-weight:600;font-size:13px">${label}</span>
-                                <span style="color:${color};font-weight:700;font-size:16px">${data?.total || 0} <span style="font-size:0.78rem;color:#94a3b8">kgCO₂e</span></span>
+                                <span style="color:${color};font-weight:700;font-size:16px">${fmt(data?.total)} <span style="font-size:0.78rem;color:#94a3b8">kgCO₂e</span></span>
                             </div>
                             <div class="cb-track" style="border-radius:4px;height:8px"><div style="width:${data?.pct || 0}%;height:100%;background:${color};border-radius:4px;transition:width 1s ease"></div></div>
                             <div style="text-align:right;color:#64748b;font-size:0.78rem;margin-top:3px">${data?.pct || 0}%</div>
@@ -357,8 +360,8 @@ function _renderBmPage(items) {
                     <span style="font-size:0.72rem;padding:2px 6px;border-radius:4px;background:${c.performance === 'top_performer' ? 'rgba(16,185,129,0.15);color:#10b981' : c.performance === 'above_average' ? 'rgba(59,130,246,0.15);color:#3b82f6' : 'rgba(239,68,68,0.15);color:#ef4444'}">${(c.performance || '').replace(/_/g, ' ')}</span>
                 </div>
                 <div style="display:flex;gap:12px;font-size:0.78rem;color:#94a3b8">
-                    <span>You: <strong style="color:#f1f5f9">${c.your_avg_kgCO2e}</strong></span>
-                    <span>Industry: <strong>${c.industry_median || c.industry_avg_kgCO2e || 'N/A'}</strong></span>
+                    <span>You: <strong style="color:#f1f5f9">${fmt(c.your_avg_kgCO2e)}</strong></span>
+                    <span>Industry: <strong>${fmt(c.industry_median || c.industry_avg_kgCO2e) || 'N/A'}</strong></span>
                     <span>Gap: <strong style="color:${(c.gap_to_median_pct || c.gap_pct || 0) <= 0 ? '#10b981' : '#ef4444'}">${(c.gap_to_median_pct || c.gap_pct || 0) > 0 ? '+' : ''}${c.gap_to_median_pct || c.gap_pct || 0}%</strong></span>
                 </div>
             </div>
