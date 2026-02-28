@@ -166,11 +166,12 @@ async function loadDashboard() {
 async function loadEmissions(from, to) {
   try {
     const qs = (from || to) ? `?${from ? `from=${from}` : ''}${from && to ? '&' : ''}${to ? `to=${to}` : ''}` : '';
-    const [scope, risk] = await Promise.all([
+    const [scope, risk, materiality] = await Promise.all([
       API.get(`/scm/carbon/scope${qs}`).catch(() => ({})),
       API.get(`/scm/carbon/risk-factors${qs}`).catch(() => ({})),
+      API.get('/scm/carbon/scope3-materiality').catch(() => ({})),
     ]);
-    _emissionData = { scope, risk };
+    _emissionData = { scope, risk, materiality };
     _emissionLoaded = true;
     renderContent();
   } catch (e) { _emissionData = {}; _emissionLoaded = true; renderContent(); }
@@ -178,11 +179,12 @@ async function loadEmissions(from, to) {
 
 async function loadCredits() {
   try {
-    const [registry, simulations] = await Promise.all([
+    const [registry, simulations, netPosition] = await Promise.all([
       API.get('/scm/carbon-credit/registry').catch(() => ({ credits: [] })),
       API.get('/scm/carbon-credit/simulations?limit=20').catch(() => ({ simulations: [] })),
+      API.get('/scm/carbon/net-position').catch(() => ({})),
     ]);
-    _creditData = { registry: registry.credits || registry, simulations: simulations.simulations || simulations };
+    _creditData = { registry: registry.credits || registry, simulations: simulations.simulations || simulations, netPosition };
     _creditLoaded = true;
     renderContent();
   } catch (e) { _creditData = {}; _creditLoaded = true; renderContent(); }
@@ -254,6 +256,11 @@ function renderOverview() {
   const grade = d.esg_grade || 'N/A';
   const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
 
+  // v3.0 confidence + intensity
+  const avgConf = d.avg_confidence || 1;
+  const confColor = avgConf >= 4 ? '#10b981' : avgConf >= 3 ? '#3b82f6' : avgConf >= 2 ? '#f59e0b' : '#ef4444';
+  const avgInt = d.avg_intensity_kgCO2e_per_unit || d.carbon_intensity_per_product || 0;
+
   const scopeBar = (label, kg, pct, color) => `
     <div style="margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:4px">
@@ -277,9 +284,10 @@ function renderOverview() {
   return `
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px">
       ${kpi('Total Emissions', `${totalT} t`, totalKg > 0 ? '#f59e0b' : '#10b981', `${(totalKg || 0).toLocaleString()} kgCO₂e`)}
-      ${kpi('ESG Grade', grade, gradeColor, 'Overall carbon rating')}
+      ${kpi('ESG Grade', grade, gradeColor, 'Intensity-based rating')}
+      ${kpi('Avg Confidence', `${avgConf}/5`, confColor, avgConf >= 4 ? 'Measured data' : avgConf >= 2 ? 'Industry average' : 'Proxy estimate')}
+      ${kpi('Avg Intensity', `${avgInt} kg`, '#3b82f6', 'kgCO₂e per product')}
       ${kpi('Credits Minted', d.credits_minted || 0, '#10b981', `${d.credits_total_tCO2e || 0} tCO₂e total`)}
-      ${kpi('Credits Pending', d.credits_pending || 0, '#f59e0b', 'Awaiting approval')}
       ${kpi('Products Tracked', d.products_tracked || 0, 'var(--text-primary,#1e293b)', 'Carbon footprint calculated')}
     </div>
 
@@ -318,8 +326,12 @@ function renderEmissions() {
   const s3 = { kgCO2e: scope.scope_3?.total || 0, percentage: scope.scope_3?.pct || 0, breakdown: scope.scope_3?.breakdown || scope.scope_3?.items || [] };
   const totalKg = scope.total_emissions_kgCO2e || 0;
   const totalT = scope.total_emissions_tonnes || (totalKg / 1000).toFixed(2);
-  const grade = totalKg === 0 ? 'N/A' : totalKg < 1000 ? 'A' : totalKg < 5000 ? 'B' : totalKg < 20000 ? 'C' : totalKg < 50000 ? 'D' : 'F';
+  // v3.0: Use API-returned intensity-based grade instead of hardcoded absolute thresholds
+  const grade = scope.grade || (totalKg === 0 ? 'N/A' : 'B');
+  const gradeLabel = scope.grade_info?.label || 'Carbon rating';
   const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
+  const avgConf = scope.avg_confidence || 1;
+  const confColor = avgConf >= 4 ? '#10b981' : avgConf >= 3 ? '#3b82f6' : avgConf >= 2 ? '#f59e0b' : '#ef4444';
 
   // Threshold alert
   const THRESHOLD = 10000;
@@ -364,6 +376,24 @@ function renderEmissions() {
     </div>`;
   }
 
+  // v3.0: Per-product detail table with intensity, grade, and confidence
+  const productDetail = (scope.products_detail || []).slice(0, 20);
+  const productRows = productDetail.length > 0
+    ? productDetail.map(p => {
+      const g = p.grade_info || {};
+      const conf = p.confidence || {};
+      const confC = (conf.level || 1) >= 4 ? '#10b981' : (conf.level || 1) >= 2 ? '#f59e0b' : '#ef4444';
+      return `<tr>
+        <td style="font-size:0.72rem;font-weight:600">${esc(p.name || '—')}</td>
+        <td style="font-size:0.72rem;text-align:right">${(p.kgCO2e || 0).toLocaleString()}</td>
+        <td style="font-size:0.72rem;text-align:center"><span style="font-weight:800;color:${g.color || '#64748b'}">${g.grade || '—'}</span></td>
+        <td style="font-size:0.72rem;text-align:right">${(p.intensity?.physical_intensity || 0).toLocaleString()} kg/u</td>
+        <td style="font-size:0.68rem;text-align:center"><span style="padding:2px 8px;border-radius:10px;font-weight:600;background:${confC}15;color:${confC}">${conf.level || 1}/5</span></td>
+        <td style="font-size:0.72rem;text-align:right;color:var(--text-muted)">${p.percentage || 0}%</td>
+      </tr>`;
+    }).join('')
+    : '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);font-size:0.72rem;padding:12px">No product data</td></tr>';
+
   const scopeDetail = (label, data, color) => {
     const items = data.breakdown || data.items || [];
     const rows = items.length > 0
@@ -391,15 +421,27 @@ function renderEmissions() {
   return `
     ${buildDatePicker()}
     ${alertBanner}
-    <div style="display:flex;gap:12px;margin-bottom:16px">
+    <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
       ${kpi('Total Emissions', `${(totalKg / 1000).toFixed(2)} t`, '#f59e0b', `${totalKg.toLocaleString()} kgCO₂e`)}
-      ${kpi('ESG Grade', grade, gradeColor, scope.grade_label || 'Carbon rating')}
+      ${kpi('ESG Grade', grade, gradeColor, gradeLabel)}
+      ${kpi('Confidence', `${avgConf.toFixed(1)}/5`, confColor, avgConf >= 4 ? 'Measured' : avgConf >= 2 ? 'Industry avg' : 'Proxy')}
       ${kpi('Scope 1', `${(s1.kgCO2e || 0).toLocaleString()} kg`, '#ef4444', `${s1.percentage || 0}% direct`)}
       ${kpi('Scope 2', `${(s2.kgCO2e || 0).toLocaleString()} kg`, '#f59e0b', `${s2.percentage || 0}% energy`)}
       ${kpi('Scope 3', `${(s3.kgCO2e || 0).toLocaleString()} kg`, '#3b82f6', `${s3.percentage || 0}% supply chain`)}
     </div>
 
     ${trendChart}
+
+    <div class="card" style="border-left:4px solid #06b6d4;margin-bottom:16px">
+      <div class="card-header">
+        <div class="card-title">📦 Per-Product Carbon Profile</div>
+        <div style="font-size:0.68rem;color:var(--text-muted)">${productDetail.length} products · Intensity + Confidence</div>
+      </div>
+      <div class="card-body" style="max-height:280px;overflow-y:auto">
+        <table class="data-table"><thead><tr><th>Product</th><th style="text-align:right">kgCO₂e</th><th style="text-align:center">Grade</th><th style="text-align:right">Intensity</th><th style="text-align:center">Conf.</th><th style="text-align:right">%</th></tr></thead>
+        <tbody>${productRows}</tbody></table>
+      </div>
+    </div>
 
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px">
       <div>
@@ -412,6 +454,38 @@ function renderEmissions() {
         <div class="card-body" style="max-height:600px;overflow-y:auto">${riskFactors}</div>
       </div>
     </div>
+
+    ${(() => {
+      const m = _emissionData.materiality || {};
+      const cats = m.categories || [];
+      if (cats.length === 0) return '';
+      const priorityColor = p => p === 'material' ? '#ef4444' : p === 'needs_data' ? '#f59e0b' : '#10b981';
+      const priorityLabel = p => p === 'material' ? 'MATERIAL' : p === 'needs_data' ? 'NEEDS DATA' : 'IMMATERIAL';
+      const maxScore = Math.max(...cats.map(c => c.screening_score || 0), 1);
+      const catRows = cats.map(c => `
+        <tr>
+          <td style="font-size:0.72rem;font-weight:700">#${c.id}</td>
+          <td style="font-size:0.72rem">${esc(c.name)}</td>
+          <td style="font-size:0.68rem;color:var(--text-muted)">${esc(c.data_availability)}</td>
+          <td style="font-size:0.72rem;text-align:right">${c.estimated_kgCO2e > 0 ? c.estimated_kgCO2e.toLocaleString() : '—'}</td>
+          <td><div style="width:${Math.max(c.screening_score / maxScore * 100, 3)}%;height:12px;background:${priorityColor(c.priority)};border-radius:3px;transition:width 0.4s"></div></td>
+          <td><span style="font-size:0.6rem;padding:2px 8px;border-radius:10px;font-weight:700;background:${priorityColor(c.priority)}20;color:${priorityColor(c.priority)}">${priorityLabel(c.priority)}</span></td>
+        </tr>`).join('');
+      return `
+      <div class="card" style="border-left:4px solid #059669;margin-top:16px">
+        <div class="card-header">
+          <div class="card-title">🌍 Scope 3 Materiality Screening</div>
+          <div style="font-size:0.68rem;color:var(--text-muted)">GHG Protocol · ${m.material_count || 0} material, ${m.needs_data_count || 0} needs data, ${m.immaterial_count || 0} immaterial</div>
+        </div>
+        <div class="card-body" style="max-height:400px;overflow-y:auto">
+          <table class="data-table"><thead><tr><th>#</th><th>Category</th><th>Data</th><th style="text-align:right">Est. kgCO₂e</th><th>Score</th><th>Priority</th></tr></thead>
+          <tbody>${catRows}</tbody></table>
+        </div>
+        <div style="padding:12px 16px;font-size:0.68rem;color:var(--text-muted);border-top:1px solid var(--border)">
+          ℹ️ ${esc(m.guidance || '')}
+        </div>
+      </div>`;
+    })()}
   `;
 }
 
@@ -460,6 +534,36 @@ function renderCredits() {
   const pending = credits.filter(c => c.status === 'pending').length;
   const retired = credits.filter(c => c.status === 'retired').length;
 
+  // v3.0: Net Position
+  const net = _creditData.netPosition || {};
+  const netProgress = net.net_zero_progress || 0;
+  const netColor = netProgress >= 100 ? '#10b981' : netProgress >= 50 ? '#3b82f6' : netProgress > 0 ? '#f59e0b' : '#6b7280';
+
+  const netPositionCard = net.gross_emissions_tCO2e !== undefined ? `
+    <div class="card" style="border-left:4px solid ${netColor};margin-bottom:16px">
+      <div class="card-header">
+        <div class="card-title">🌍 Net Emissions Position</div>
+        <div style="font-size:0.72rem;font-weight:700;color:${netColor}">${net.status_label || 'Calculating...'}</div>
+      </div>
+      <div class="card-body">
+        <div style="display:flex;gap:12px;margin-bottom:12px">
+          ${kpi('Gross', `${net.gross_emissions_tCO2e || 0} t`, '#ef4444', 'Total emissions')}
+          ${kpi('Retired', `${net.retired_offsets_tCO2e || 0} t`, '#059669', 'Offsets applied')}
+          ${kpi('Net', `${net.net_emissions_tCO2e || 0} t`, netColor, 'After offsets')}
+          ${kpi('Available', `${net.available_offsets_tCO2e || 0} t`, '#3b82f6', 'Unused credits')}
+        </div>
+        <div style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;font-size:0.7rem;margin-bottom:4px">
+            <span style="font-weight:700">Net Zero Progress</span>
+            <span style="font-weight:700;color:${netColor}">${netProgress}%</span>
+          </div>
+          <div style="height:12px;background:var(--border);border-radius:6px;overflow:hidden">
+            <div style="width:${Math.max(netProgress, 1)}%;height:100%;background:linear-gradient(90deg,${netColor},${netColor}cc);border-radius:6px;transition:width 0.6s ease"></div>
+          </div>
+        </div>
+      </div>
+    </div>` : '';
+
   return `
     <div style="display:flex;gap:12px;margin-bottom:16px">
       ${kpi('Total Credits', credits.length, 'var(--text-primary,#1e293b)', 'In registry')}
@@ -467,6 +571,8 @@ function renderCredits() {
       ${kpi('Pending', pending, '#f59e0b', 'Awaiting MRV')}
       ${kpi('Retired', retired, '#6b7280', 'Used / retired')}
     </div>
+
+    ${netPositionCard}
 
     <div class="card" style="margin-bottom:16px;border-left:4px solid #10b981">
       <div class="card-header">
@@ -504,7 +610,8 @@ function renderPassports() {
 
   const report = _passportData.report || {};
   const scope = _passportData.scope || {};
-  const grade = (() => { const t = scope.total_emissions_kgCO2e || 0; return report.grade || (t === 0 ? 'N/A' : t < 1000 ? 'A' : t < 5000 ? 'B' : t < 20000 ? 'C' : t < 50000 ? 'D' : 'F'); })();
+  // v3.0: Use API-returned intensity grade
+  const grade = scope.grade || report.grade || 'N/A';
   const gradeColor = grade.startsWith('A') ? '#10b981' : grade.startsWith('B') ? '#22c55e' : grade.startsWith('C') ? '#f59e0b' : '#ef4444';
 
   const periodLabel = _dateFrom && _dateTo ? `${_dateFrom} — ${_dateTo}` : _dateFrom ? `From ${_dateFrom}` : _dateTo ? `Until ${_dateTo}` : report.period || 'All Time';

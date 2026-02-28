@@ -149,14 +149,20 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
             .slice(-12)
             .map(([month, kgCO2e]) => ({ month, kgCO2e: Math.round(kgCO2e * 100) / 100 }));
 
-        // Per-product detail
+        // Per-product detail with v3.0 intensity, grade, and confidence
         scopeData.products_detail = (products || []).slice(0, 30).map(p => {
             const w = Number(p.weight_kg || p.weight || 0);
+            const cat = p.category || p.type || 'General';
+            const footprint = carbonEngine.calculateFootprint(p, shipments, events);
+            const kgCO2e = footprint.total_kgCO2e || Math.round((w || 1) * 0.062 * 100) / 100;
             return {
                 name: p.name || p.sku || 'Unknown',
-                category: p.category || p.type || '',
+                category: cat,
                 weight_kg: w,
-                kgCO2e: Math.round((w || 1) * 0.062 * 100) / 100,
+                kgCO2e,
+                intensity: footprint.intensity || carbonEngine.calculateIntensity(kgCO2e, p),
+                grade_info: footprint.grade_info || carbonEngine._gradeByIntensity(kgCO2e, cat),
+                confidence: footprint.confidence || carbonEngine._calculateConfidence(p, shipments, events),
                 percentage: 0
             };
         });
@@ -164,8 +170,20 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
         const totalProd = scopeData.products_detail.reduce((s, p) => s + p.kgCO2e, 0) || 1;
         scopeData.products_detail.forEach(p => { p.percentage = Math.round(p.kgCO2e / totalProd * 1000) / 10; });
 
-        // v3.0: Include confidence and intensity aggregates from scope data
+        // v3.0: Aggregated confidence and intensity
+        const avgConf = scopeData.products_detail.length > 0
+            ? scopeData.products_detail.reduce((s, p) => s + (p.confidence?.level || 1), 0) / scopeData.products_detail.length
+            : 1;
+        const avgInt = scopeData.products_detail.length > 0
+            ? scopeData.products_detail.reduce((s, p) => s + (p.intensity?.physical_intensity || 0), 0) / scopeData.products_detail.length
+            : 0;
+        scopeData.avg_confidence = Math.round(avgConf * 10) / 10;
+        scopeData.avg_intensity = Math.round(avgInt * 100) / 100;
         scopeData.confidence_levels = carbonEngine.getConfidenceLevels();
+        scopeData.grade = scopeData.products_detail.length > 0
+            ? carbonEngine._gradeByIntensity(avgInt, 'General').grade : 'N/A';
+        scopeData.grade_info = scopeData.products_detail.length > 0
+            ? carbonEngine._gradeByIntensity(avgInt, 'General') : null;
 
         res.json(scopeData);
     } catch (err) {
@@ -417,15 +435,8 @@ router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
 
-        // Industry benchmark (simulated cross-tenant)
-        const industryBenchmarks = {
-            'F&B': { avg_kgCO2e: 8.5, best: 3.2, worst: 22.0, median_grade: 'B' },
-            'Electronics': { avg_kgCO2e: 35.0, best: 12.0, worst: 85.0, median_grade: 'C' },
-            'Fashion': { avg_kgCO2e: 18.0, best: 6.0, worst: 45.0, median_grade: 'B' },
-            'Healthcare': { avg_kgCO2e: 12.0, best: 4.5, worst: 30.0, median_grade: 'B' },
-            'Industrial': { avg_kgCO2e: 55.0, best: 20.0, worst: 120.0, median_grade: 'D' },
-            'Agriculture': { avg_kgCO2e: 5.0, best: 1.5, worst: 15.0, median_grade: 'A' }
-        };
+        // v3.0: Use engine's INDUSTRY_BENCHMARKS (DEFRA/GHG Protocol 2025)
+        const industryBenchmarks = carbonEngine.getIndustryBenchmarks();
 
         // Calculate per-category stats from own data
         const categoryStats = {};
@@ -439,24 +450,30 @@ router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
 
         const comparison = Object.entries(categoryStats).map(([cat, stats]) => {
             const avg = stats.total_kgCO2e / stats.products;
-            const benchmark = industryBenchmarks[cat] || industryBenchmarks['F&B'];
+            const benchmark = industryBenchmarks[cat] || industryBenchmarks['_default'];
+            const gradeInfo = carbonEngine._gradeByIntensity(avg, cat);
             return {
                 category: cat,
                 your_avg_kgCO2e: Math.round(avg * 100) / 100,
-                industry_avg_kgCO2e: benchmark.avg_kgCO2e,
-                industry_best: benchmark.best,
-                industry_worst: benchmark.worst,
-                performance: avg <= benchmark.best ? 'top_performer' : avg <= benchmark.avg_kgCO2e ? 'above_average' : avg <= benchmark.worst ? 'below_average' : 'critical',
-                gap_pct: Math.round((avg - benchmark.avg_kgCO2e) / benchmark.avg_kgCO2e * 100)
+                industry_p20: benchmark.p20,
+                industry_median: benchmark.median,
+                industry_p80: benchmark.p80,
+                benchmark_source: benchmark.source,
+                grade: gradeInfo.grade,
+                grade_label: gradeInfo.label,
+                performance: avg <= benchmark.p20 ? 'top_performer' : avg <= benchmark.median ? 'above_average' : avg <= benchmark.p80 ? 'below_average' : 'critical',
+                percentile: carbonEngine.calculateIntensity(avg, { category: cat }).benchmark_percentile,
+                gap_to_median_pct: Math.round((avg - benchmark.median) / benchmark.median * 100)
             };
         });
 
         res.json({
-            title: 'Industry Carbon Benchmark (v3.0)',
+            title: 'Industry Carbon Benchmark (v3.0 — DEFRA/GHG Protocol)',
             your_total_kgCO2e: scopeData.total_emissions_kgCO2e,
             your_products: scopeData.products_assessed,
             industry_benchmarks: industryBenchmarks,
             your_comparison: comparison,
+            methodology: 'Percentile comparison against DEFRA/GHG Protocol 2025 benchmarks',
             insight: comparison.some(c => c.performance === 'top_performer') ? '✅ Top performer in some categories' :
                 comparison.some(c => c.performance === 'above_average') ? '🟡 Above industry average' :
                     '⚠️ Below industry average — improvement needed'
@@ -468,6 +485,128 @@ router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// v3.0 — SCOPE 3 MATERIALITY SCREENING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── GET /api/scm/carbon/scope3-materiality — 15-category screening matrix ──
+router.get('/scope3-materiality', cacheMiddleware(180), async (req, res) => {
+    try {
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const products = await getOrgProducts(orgId);
+        const shipments = await getOrgShipments(orgId);
+        const events = await getOrgEvents(orgId);
+        const partners = await getOrgPartners(orgId);
+
+        const result = carbonEngine.assessScope3Materiality(products, shipments, events, partners);
+        res.json(result);
+    } catch (err) {
+        console.error('Scope 3 materiality error:', err);
+        res.status(500).json({ error: 'Scope 3 materiality screening failed' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// v3.0 — NET EMISSIONS & OFFSET RETIREMENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── GET /api/scm/carbon/net-position — Gross vs Net emissions ──────────────
+router.get('/net-position', cacheMiddleware(60), async (req, res) => {
+    try {
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const products = await getOrgProducts(orgId);
+        const shipments = await getOrgShipments(orgId);
+        const events = await getOrgEvents(orgId);
+
+        const scopeData = await engineClient.carbonAggregate(products, shipments, events);
+
+        // Get offsets from carbon_credits table
+        let offsets = [];
+        try {
+            const q = orgId
+                ? `SELECT * FROM carbon_credits WHERE org_id = ? ORDER BY created_at DESC`
+                : `SELECT * FROM carbon_credits ORDER BY created_at DESC`;
+            offsets = orgId
+                ? await db.prepare(q).all(orgId)
+                : await db.prepare(q).all();
+            offsets = offsets || [];
+        } catch (_) {
+            // carbon_credits table may not exist yet
+            offsets = [];
+        }
+
+        const netPosition = carbonEngine.calculateNetEmissions(scopeData, offsets);
+        res.json(netPosition);
+    } catch (err) {
+        console.error('Net position error:', err);
+        res.status(500).json({ error: 'Net position calculation failed' });
+    }
+});
+
+// ─── POST /api/scm/carbon/offset/retire — Retire credits against emissions ──
+router.post('/offset/retire', requirePermission('esg:manage'), async (req, res) => {
+    try {
+        const { credit_id, quantity_tCO2e } = req.body;
+        if (!credit_id) {
+            return res.status(400).json({ error: 'credit_id is required' });
+        }
+
+        // Fetch the credit
+        let credit;
+        try {
+            credit = await db.prepare('SELECT * FROM carbon_credits WHERE id = ? OR credit_id = ?').get(credit_id, credit_id);
+        } catch (_) {
+            return res.status(404).json({ error: 'Credit not found or carbon_credits table does not exist' });
+        }
+        if (!credit) {
+            return res.status(404).json({ error: 'Credit not found' });
+        }
+
+        // Verify offset eligibility
+        const verification = carbonEngine.verifyOffset(credit);
+        if (!verification.eligible) {
+            return res.status(400).json({
+                error: 'Credit not eligible for retirement',
+                issues: verification.issues,
+                verification: verification.verification
+            });
+        }
+
+        // Retire the credit
+        const qty = quantity_tCO2e || credit.quantity_tCO2e || credit.quantity_tco2e || 0;
+        try {
+            await db.prepare('UPDATE carbon_credits SET status = ?, retired_at = ?, retired_by = ? WHERE id = ?')
+                .run('retired', new Date().toISOString(), req.user?.id || 'system', credit.id);
+        } catch (e) {
+            // Fallback column names
+            await db.prepare('UPDATE carbon_credits SET status = ? WHERE id = ?')
+                .run('retired', credit.id);
+        }
+
+        // Audit log
+        const { v4: uuidv4 } = require('uuid');
+        try {
+            await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
+                VALUES (?, ?, 'carbon_credit_retired', 'carbon_credit', ?, ?, datetime('now'))
+            `).run(
+                uuidv4(), req.user?.id || 'system', credit.id,
+                JSON.stringify({ quantity_tCO2e: qty, credit_id: credit_id, verification })
+            );
+        } catch (_) { }
+
+        res.json({
+            message: 'Carbon credit retired successfully',
+            credit_id: credit.id,
+            quantity_tCO2e: qty,
+            status: 'retired',
+            verification,
+            retired_by: req.user?.email || 'system',
+            retired_at: new Date().toISOString()
+        });
+    } catch (err) {
+        console.error('Offset retire error:', err);
+        res.status(500).json({ error: 'Credit retirement failed' });
+    }
+});
 // v3.0 — EMISSION FACTOR MANAGEMENT
 // ═══════════════════════════════════════════════════════════════════════════════
 

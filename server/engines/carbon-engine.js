@@ -611,6 +611,293 @@ class CarbonEngine {
         };
     }
 
+    // ─── v3.0: Scope 3 Materiality Screening Engine ──────────────────────────
+
+    /**
+     * Screen all 15 GHG Protocol Scope 3 categories for materiality.
+     * Returns priority ranking + data availability assessment.
+     * Per user strategy: build screening, not full 15-category coverage.
+     */
+    assessScope3Materiality(products = [], shipments = [], events = [], partners = []) {
+        const totalProducts = products.length || 1;
+        const totalShipments = shipments.length;
+        const totalPartners = partners.length;
+
+        // Estimate Scope 3 magnitudes from available data
+        const transportEmissions = shipments.reduce((s, sh) => {
+            const dist = sh.distance_km || 500;
+            const w = (sh.weight_kg || 10) / 1000;
+            const mode = (sh.transport_mode || 'road').toLowerCase();
+            const factor = TRANSPORT_EMISSION_FACTORS[mode] || 0.045;
+            return s + dist * factor * w;
+        }, 0);
+
+        const mfgEstimate = products.reduce((s, p) => {
+            const cat = p.category || 'General';
+            return s + (MANUFACTURING_FACTORS[cat] || 2.5);
+        }, 0);
+
+        const categories = [
+            {
+                id: 1, name: 'Purchased Goods & Services',
+                description: 'Cradle-to-gate emissions of purchased products',
+                estimated_kgCO2e: Math.round(mfgEstimate * 0.6),
+                data_availability: products.length > 5 ? 'medium' : 'low',
+                data_sources: ['Product categories', 'Manufacturing factors'],
+                priority: 'material',
+                screening_score: 85,
+                recommendation: 'Use spend-based or product-based estimation from manufacturing factors'
+            },
+            {
+                id: 2, name: 'Capital Goods',
+                description: 'Emissions from purchased capital equipment',
+                estimated_kgCO2e: 0,
+                data_availability: 'low',
+                data_sources: [],
+                priority: 'needs_data',
+                screening_score: 15,
+                recommendation: 'Requires CAPEX data — defer to Phase 3'
+            },
+            {
+                id: 3, name: 'Fuel & Energy Activities',
+                description: 'T&D losses, well-to-tank emissions',
+                estimated_kgCO2e: Math.round(mfgEstimate * 0.08),
+                data_availability: 'low',
+                data_sources: ['Grid factor estimates'],
+                priority: 'immaterial',
+                screening_score: 25,
+                recommendation: 'Typically <5% of total — use grid emission factor proxies'
+            },
+            {
+                id: 4, name: 'Upstream Transportation',
+                description: 'Inbound logistics (supplier → you)',
+                estimated_kgCO2e: Math.round(transportEmissions),
+                data_availability: totalShipments > 0 ? 'high' : 'low',
+                data_sources: totalShipments > 0 ? ['Shipment records', 'Distance/mode data'] : [],
+                priority: totalShipments > 0 ? 'material' : 'needs_data',
+                screening_score: totalShipments > 0 ? 90 : 30,
+                recommendation: totalShipments > 0 ? 'Already calculated from shipment data — highest confidence' : 'Add shipment records for accurate calculation'
+            },
+            {
+                id: 5, name: 'Waste Generated in Operations',
+                description: 'Disposal of operational waste',
+                estimated_kgCO2e: Math.round(totalProducts * 0.3),
+                data_availability: 'low',
+                data_sources: [],
+                priority: 'immaterial',
+                screening_score: 10,
+                recommendation: 'Typically <2% — use industry waste intensity proxies'
+            },
+            {
+                id: 6, name: 'Business Travel',
+                description: 'Employee travel emissions',
+                estimated_kgCO2e: 0,
+                data_availability: 'low',
+                data_sources: [],
+                priority: 'needs_data',
+                screening_score: 20,
+                recommendation: 'Requires travel expense data — integrate with expense system'
+            },
+            {
+                id: 7, name: 'Employee Commuting',
+                description: 'Employee commute emissions',
+                estimated_kgCO2e: 0,
+                data_availability: 'low',
+                data_sources: [],
+                priority: 'immaterial',
+                screening_score: 8,
+                recommendation: 'Use employee count × average commute proxy'
+            },
+            {
+                id: 8, name: 'Upstream Leased Assets',
+                description: 'Emissions from leased assets',
+                estimated_kgCO2e: 0,
+                data_availability: 'low',
+                data_sources: [],
+                priority: 'immaterial',
+                screening_score: 5,
+                recommendation: 'Relevant only if significant leased assets'
+            },
+            {
+                id: 9, name: 'Downstream Transportation',
+                description: 'Outbound logistics (you → customer)',
+                estimated_kgCO2e: Math.round(transportEmissions * 0.5),
+                data_availability: totalShipments > 0 ? 'medium' : 'low',
+                data_sources: totalShipments > 0 ? ['Estimated from upstream transport'] : [],
+                priority: totalShipments > 0 ? 'material' : 'needs_data',
+                screening_score: totalShipments > 0 ? 60 : 20,
+                recommendation: 'Estimate as 40-60% of upstream transport unless last-mile data available'
+            },
+            {
+                id: 10, name: 'Processing of Sold Products',
+                description: 'Emissions from further processing by customers',
+                estimated_kgCO2e: 0,
+                data_availability: 'low',
+                data_sources: [],
+                priority: 'immaterial',
+                screening_score: 5,
+                recommendation: 'Only relevant for intermediate products'
+            },
+            {
+                id: 11, name: 'Use of Sold Products',
+                description: 'End-user emissions from product use',
+                estimated_kgCO2e: Math.round(totalProducts * 0.2),
+                data_availability: 'low',
+                data_sources: ['Product type assumptions'],
+                priority: products.some(p => ['Electronics', 'IoT', 'Sensor'].includes(p.category)) ? 'material' : 'immaterial',
+                screening_score: products.some(p => ['Electronics', 'IoT', 'Sensor'].includes(p.category)) ? 55 : 10,
+                recommendation: 'Material for electronics (energy-using products) — use power consumption × grid factor'
+            },
+            {
+                id: 12, name: 'End-of-Life Treatment',
+                description: 'Disposal and recycling of sold products',
+                estimated_kgCO2e: Math.round(totalProducts * 0.15),
+                data_availability: 'low',
+                data_sources: ['Product weight estimates'],
+                priority: 'immaterial',
+                screening_score: 12,
+                recommendation: 'Use product weight × waste disposal factors'
+            },
+            {
+                id: 13, name: 'Downstream Leased Assets',
+                description: 'Emissions from assets leased to others',
+                estimated_kgCO2e: 0,
+                data_availability: 'low',
+                data_sources: [],
+                priority: 'immaterial',
+                screening_score: 3,
+                recommendation: 'Not applicable unless assets are leased out'
+            },
+            {
+                id: 14, name: 'Franchises',
+                description: 'Emissions from franchisee operations',
+                estimated_kgCO2e: 0,
+                data_availability: 'low',
+                data_sources: [],
+                priority: 'immaterial',
+                screening_score: 3,
+                recommendation: 'Not applicable unless operating franchise model'
+            },
+            {
+                id: 15, name: 'Investments',
+                description: 'Emissions from equity investments',
+                estimated_kgCO2e: 0,
+                data_availability: 'low',
+                data_sources: [],
+                priority: 'immaterial',
+                screening_score: 5,
+                recommendation: 'Only material for financial institutions'
+            }
+        ];
+
+        // Sort by screening score (highest priority first)
+        const sorted = [...categories].sort((a, b) => b.screening_score - a.screening_score);
+        const material = sorted.filter(c => c.priority === 'material');
+        const needsData = sorted.filter(c => c.priority === 'needs_data');
+        const immaterial = sorted.filter(c => c.priority === 'immaterial');
+
+        return {
+            title: 'Scope 3 Materiality Screening (GHG Protocol)',
+            methodology: 'GHG Protocol Corporate Value Chain (Scope 3) Standard — Screening approach',
+            total_categories: 15,
+            material_count: material.length,
+            needs_data_count: needsData.length,
+            immaterial_count: immaterial.length,
+            total_estimated_kgCO2e: categories.reduce((s, c) => s + c.estimated_kgCO2e, 0),
+            categories: sorted,
+            summary: {
+                material: material.map(c => ({ id: c.id, name: c.name, score: c.screening_score })),
+                needs_data: needsData.map(c => ({ id: c.id, name: c.name, score: c.screening_score })),
+                immaterial: immaterial.map(c => ({ id: c.id, name: c.name, score: c.screening_score }))
+            },
+            guidance: 'Focus on material categories first. Immaterial categories can be reported with proxy estimates. "Needs Data" categories require additional data integration.'
+        };
+    }
+
+    // ─── v3.0: Net Emissions & Offset Verification ──────────────────────────
+
+    /**
+     * Calculate gross vs net emissions position.
+     * offsets: array of { quantity_tCO2e, status, vintage, registry, certificate_id }
+     */
+    calculateNetEmissions(scopeData, offsets = []) {
+        const grossKg = scopeData?.total_emissions_kgCO2e || 0;
+        const grossT = grossKg / 1000;
+
+        const activeOffsets = offsets.filter(o => o.status === 'retired' || o.status === 'active' || o.status === 'minted');
+        const retiredOffsets = offsets.filter(o => o.status === 'retired');
+        const totalOffsetT = activeOffsets.reduce((s, o) => s + (o.quantity_tCO2e || o.quantity_tco2e || 0), 0);
+        const retiredT = retiredOffsets.reduce((s, o) => s + (o.quantity_tCO2e || o.quantity_tco2e || 0), 0);
+
+        const netT = Math.max(0, grossT - retiredT);
+        const coveragePct = grossT > 0 ? Math.min(100, Math.round(retiredT / grossT * 100)) : 0;
+        const netZeroProgress = coveragePct;
+
+        return {
+            gross_emissions_tCO2e: Math.round(grossT * 1000) / 1000,
+            gross_emissions_kgCO2e: Math.round(grossKg),
+            total_offsets_tCO2e: Math.round(totalOffsetT * 1000) / 1000,
+            retired_offsets_tCO2e: Math.round(retiredT * 1000) / 1000,
+            available_offsets_tCO2e: Math.round((totalOffsetT - retiredT) * 1000) / 1000,
+            net_emissions_tCO2e: Math.round(netT * 1000) / 1000,
+            net_emissions_kgCO2e: Math.round(netT * 1000),
+            coverage_pct: coveragePct,
+            net_zero_progress: netZeroProgress,
+            status: coveragePct >= 100 ? 'net_zero' : coveragePct >= 50 ? 'on_track' : coveragePct > 0 ? 'started' : 'no_offsets',
+            status_label: coveragePct >= 100 ? '✅ Net Zero Achieved' : coveragePct >= 50 ? '🟡 On Track (>50%)' : coveragePct > 0 ? '🟠 Started (<50%)' : '⚪ No Offsets',
+            offsets_summary: {
+                total: offsets.length,
+                active: activeOffsets.length,
+                retired: retiredOffsets.length,
+                pending: offsets.filter(o => o.status === 'pending').length
+            }
+        };
+    }
+
+    /**
+     * Verify a carbon offset for retirement eligibility.
+     * Checks vintage, registry, double-counting safeguards.
+     */
+    verifyOffset(offset) {
+        const issues = [];
+        const currentYear = new Date().getFullYear();
+        const vintage = parseInt(offset.vintage || offset.vintage_year || 0);
+
+        // Vintage check: must be within 5 years
+        if (vintage && (currentYear - vintage) > 5) {
+            issues.push({ severity: 'warning', message: `Vintage ${vintage} is ${currentYear - vintage} years old (max recommended: 5 years)` });
+        }
+
+        // Registry check
+        const validRegistries = ['verra', 'gold_standard', 'acr', 'car', 'jcm', 'cdm'];
+        const registry = (offset.registry || offset.provider || '').toLowerCase();
+        if (registry && !validRegistries.some(r => registry.includes(r))) {
+            issues.push({ severity: 'warning', message: `Registry "${offset.registry || offset.provider}" not in recognized list (Verra, Gold Standard, ACR, CAR)` });
+        }
+
+        // Quantity check
+        const qty = offset.quantity_tCO2e || offset.quantity_tco2e || 0;
+        if (qty <= 0) {
+            issues.push({ severity: 'error', message: 'Offset quantity must be > 0 tCO₂e' });
+        }
+
+        // Status check — already retired?
+        if (offset.status === 'retired') {
+            issues.push({ severity: 'error', message: 'Credit already retired — cannot retire again (double-counting)' });
+        }
+
+        return {
+            eligible: issues.filter(i => i.severity === 'error').length === 0,
+            issues,
+            verification: {
+                vintage_valid: !vintage || (currentYear - vintage) <= 5,
+                registry_recognized: !registry || validRegistries.some(r => registry.includes(r)),
+                quantity_valid: qty > 0,
+                not_retired: offset.status !== 'retired'
+            }
+        };
+    }
+
     // ─── v3.0: Intensity Calculation ──────────────────────────────────────────
 
     /**
