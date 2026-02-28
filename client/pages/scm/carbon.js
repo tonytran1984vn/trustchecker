@@ -43,10 +43,10 @@ function maturityGauge(level) {
     const colors = ['#6b7280', '#f59e0b', '#3b82f6', '#8b5cf6', '#10b981', '#ec4899'];
     const c = colors[level] || '#6b7280';
     return `<div style="text-align:center"><svg width="160" height="110" viewBox="0 0 200 130">
-        <path d="M 20 120 A 80 80 0 0 1 180 120" fill="none" stroke="#1e293b" stroke-width="14" stroke-linecap="round"/>
+        <path d="M 20 120 A 80 80 0 0 1 180 120" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/>
         <path d="M 20 120 A 80 80 0 0 1 180 120" fill="none" stroke="${c}" stroke-width="14" stroke-linecap="round" stroke-dasharray="${pct * 2.51} 251" style="transition:stroke-dasharray 1s ease"/>
         <text x="100" y="85" text-anchor="middle" fill="${c}" font-size="30" font-weight="bold">L${level}</text>
-        <text x="100" y="115" text-anchor="middle" fill="#94a3b8" font-size="11">of 5</text>
+        <text x="100" y="115" text-anchor="middle" fill="#64748b" font-size="11">of 5</text>
     </svg></div>`;
 }
 
@@ -68,7 +68,7 @@ function renderContent() {
     <div class="sa-page">
         <div class="sa-page-title">
             <h1>${icon('barChart')} Carbon Passport (v3.0)</h1>
-            <p style="color:#94a3b8;margin:4px 0 16px">Cross-Cutting ESG Governance Intelligence — GHG Protocol + DEFRA 2025</p>
+            <p style="color:#64748b;margin:4px 0 16px">Cross-Cutting ESG Governance Intelligence — GHG Protocol + DEFRA 2025</p>
             <div class="sa-page-actions">
                 <button onclick="window.refreshCarbon()" style="padding:8px 16px;background:#10b981;color:#fff;border:none;border-radius:8px;cursor:pointer">${icon('workflow')} Refresh</button>
             </div>
@@ -79,43 +79,43 @@ function renderContent() {
             <div class="sa-card" style="text-align:center;padding:20px">
                 <div style="font-size:28px">🌍</div>
                 <div style="font-size:24px;font-weight:700;color:#10b981;margin:4px 0">${sc?.total_emissions_kgCO2e || 0}</div>
-                <div style="color:#94a3b8;font-size:0.82rem">Total kgCO₂e</div>
+                <div style="color:#64748b;font-size:0.82rem">Total kgCO₂e</div>
             </div>
             <div class="sa-card" style="text-align:center;padding:20px">
                 <div style="font-size:28px">📦</div>
                 <div style="font-size:24px;font-weight:700;color:#3b82f6;margin:4px 0">${sc?.products_assessed || 0}</div>
-                <div style="color:#94a3b8;font-size:0.82rem">Products Assessed</div>
+                <div style="color:#64748b;font-size:0.82rem">Products Assessed</div>
             </div>
             <div class="sa-card" style="text-align:center;padding:20px">
                 <div style="font-size:28px">🎯</div>
                 <div style="font-size:24px;font-weight:700;color:#f59e0b;margin:4px 0">${sc?.reduction_targets?.paris_aligned_2030 || 0}</div>
-                <div style="color:#94a3b8;font-size:0.82rem">2030 Target kgCO₂e</div>
+                <div style="color:#64748b;font-size:0.82rem">2030 Target kgCO₂e</div>
             </div>
             <div class="sa-card" style="text-align:center;padding:20px">
                 <div style="font-size:28px">📊</div>
                 <div style="font-size:24px;font-weight:700;color:#8b5cf6;margin:4px 0">${rpt?.overall_esg_grade || 'N/A'}</div>
-                <div style="color:#94a3b8;font-size:0.82rem">ESG Grade</div>
+                <div style="color:#64748b;font-size:0.82rem">ESG Grade</div>
             </div>
         </div>
 
         <!-- ═════ GOVERNANCE FLOW ═════ -->
         <div class="sa-card" style="margin-bottom:20px">
-            <h3 style="margin:0 0 16px;color:#f1f5f9">${icon('workflow')} Carbon Governance Flow</h3>
+            <h3 style="margin:0 0 16px;color:#1e293b">${icon('workflow')} Carbon Governance Flow</h3>
             ${flow?.flow ? `
             <div style="display:flex;align-items:stretch;gap:4px;overflow-x:auto;padding:8px 0">
                 ${flow.flow.map((s, i) => `
                     <div style="flex:1;min-width:140px;text-align:center">
-                        <div style="background:${['#0f172a', '#0f172a', '#0f172a', '#0f172a', '#0f172a', '#0f172a'][i]};border:2px solid ${['#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#f59e0b', '#3b82f6'][i]};border-radius:12px;padding:14px 10px">
+                        <div style="background:#f8fafc;border:2px solid ${['#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#f59e0b', '#3b82f6'][i]};border-radius:12px;padding:14px 10px">
                             <div style="font-size:24px;margin-bottom:6px">${s.icon}</div>
-                            <div style="color:#f1f5f9;font-weight:700;font-size:0.82rem;margin-bottom:4px">${s.name}</div>
+                            <div style="color:#1e293b;font-weight:700;font-size:0.82rem;margin-bottom:4px">${s.name}</div>
                             <div style="color:${['#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#f59e0b', '#3b82f6'][i]};font-size:0.72rem;font-style:italic">${s.layer}</div>
-                            <div style="margin-top:6px;text-align:left">${s.components.map(c => `<div style="color:#94a3b8;font-size:0.72rem">• ${c}</div>`).join('')}</div>
+                            <div style="margin-top:6px;text-align:left">${s.components.map(c => `<div style="color:#64748b;font-size:0.72rem">• ${c}</div>`).join('')}</div>
                         </div>
-                        ${i < flow.flow.length - 1 ? '<div style="color:#475569;font-size:18px;margin-top:8px">→</div>' : ''}
+                        ${i < flow.flow.length - 1 ? '<div style="color:#94a3b8;font-size:18px;margin-top:8px">→</div>' : ''}
                     </div>
                 `).join('')}
             </div>
-            <div style="text-align:center;margin-top:10px;color:#94a3b8;font-size:0.78rem;font-style:italic">${flow.principle || ''}</div>
+            <div style="text-align:center;margin-top:10px;color:#64748b;font-size:0.78rem;font-style:italic">${flow.principle || ''}</div>
             ` : '<div style="text-align:center;padding:20px;color:#64748b">Loading...</div>'}
         </div>
 
@@ -124,7 +124,7 @@ function renderContent() {
 
             <!-- SCOPE 1/2/3 -->
             <div class="sa-card">
-                <h3 style="margin:0 0 12px;color:#f1f5f9">${icon('barChart')} Scope 1 / 2 / 3 Breakdown</h3>
+                <h3 style="margin:0 0 12px;color:#1e293b">${icon('barChart')} Scope 1 / 2 / 3 Breakdown</h3>
                 ${sc ? `
                 <div style="display:grid;gap:10px">
                     ${[
@@ -132,13 +132,13 @@ function renderContent() {
                 ['Scope 2 — Energy/Warehousing', sc.scope_2, '#f59e0b'],
                 ['Scope 3 — Transport', sc.scope_3, '#3b82f6']
             ].map(([label, data, color]) => `
-                        <div style="padding:14px;background:#0f172a;border-radius:10px;border-left:4px solid ${color}">
+                        <div style="padding:14px;background:#f8fafc;border-radius:10px;border-left:4px solid ${color}">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                                <span style="color:#f1f5f9;font-weight:600;font-size:13px">${label}</span>
-                                <span style="color:${color};font-weight:700;font-size:16px">${data?.total || 0} <span style="font-size:0.78rem;color:#94a3b8">kgCO₂e</span></span>
+                                <span style="color:#1e293b;font-weight:600;font-size:13px">${label}</span>
+                                <span style="color:${color};font-weight:700;font-size:16px">${data?.total || 0} <span style="font-size:0.78rem;color:#64748b">kgCO₂e</span></span>
                             </div>
-                            <div style="background:#1e293b;border-radius:4px;height:8px"><div style="width:${data?.pct || 0}%;height:100%;background:${color};border-radius:4px;transition:width 1s ease"></div></div>
-                            <div style="text-align:right;color:#64748b;font-size:0.78rem;margin-top:3px">${data?.pct || 0}%</div>
+                            <div style="background:#e2e8f0;border-radius:4px;height:8px"><div style="width:${data?.pct || 0}%;height:100%;background:${color};border-radius:4px;transition:width 1s ease"></div></div>
+                            <div style="text-align:right;color:#94a3b8;font-size:0.78rem;margin-top:3px">${data?.pct || 0}%</div>
                         </div>
                     `).join('')}
                 </div>
@@ -147,21 +147,21 @@ function renderContent() {
 
             <!-- RISK FACTORS -->
             <div class="sa-card">
-                <h3 style="margin:0 0 12px;color:#f1f5f9">${icon('alertTriangle')} Carbon → Risk Factors</h3>
+                <h3 style="margin:0 0 12px;color:#1e293b">${icon('alertTriangle')} Carbon → Risk Factors</h3>
                 ${risk ? `
-                <div style="display:flex;justify-content:space-between;margin-bottom:12px;padding:8px 12px;background:#0f172a;border-radius:8px">
-                    <div><span style="color:#94a3b8;font-size:0.78rem">Risk Factors</span><div style="color:#f1f5f9;font-weight:700;font-size:18px">${risk.risk_factors?.length || 0}</div></div>
-                    <div><span style="color:#94a3b8;font-size:0.78rem">Avg Score</span><div style="color:${(risk.risk_factors?.reduce((s, r) => s + (r.score || 0), 0) / (risk.risk_factors?.length || 1)) > 60 ? '#ef4444' : '#f59e0b'};font-weight:700;font-size:18px">${Math.round(risk.risk_factors?.reduce((s, r) => s + (r.score || 0), 0) / (risk.risk_factors?.length || 1))}/100</div></div>
-                    <div><span style="color:#94a3b8;font-size:0.78rem">Critical</span><div style="color:#ef4444;font-weight:700;font-size:18px">${risk.risk_factors?.filter(r => r.severity === 'critical').length || 0}</div></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:12px;padding:8px 12px;background:#f1f5f9;border-radius:8px">
+                    <div><span style="color:#64748b;font-size:0.78rem">Risk Factors</span><div style="color:#1e293b;font-weight:700;font-size:18px">${risk.risk_factors?.length || 0}</div></div>
+                    <div><span style="color:#64748b;font-size:0.78rem">Avg Score</span><div style="color:${(risk.risk_factors?.reduce((s, r) => s + (r.score || 0), 0) / (risk.risk_factors?.length || 1)) > 60 ? '#ef4444' : '#f59e0b'};font-weight:700;font-size:18px">${Math.round(risk.risk_factors?.reduce((s, r) => s + (r.score || 0), 0) / (risk.risk_factors?.length || 1))}/100</div></div>
+                    <div><span style="color:#64748b;font-size:0.78rem">Critical</span><div style="color:#ef4444;font-weight:700;font-size:18px">${risk.risk_factors?.filter(r => r.severity === 'critical').length || 0}</div></div>
                 </div>
                 ${risk.risk_factors?.length > 0 ? risk.risk_factors.map(r => `
-                    <div style="padding:10px 12px;background:#0f172a;border-radius:8px;margin-bottom:6px;border-left:4px solid ${r.severity === 'critical' ? '#ef4444' : r.severity === 'high' ? '#f59e0b' : '#3b82f6'}">
+                    <div style="padding:10px 12px;background:#f8fafc;border-radius:8px;margin-bottom:6px;border-left:4px solid ${r.severity === 'critical' ? '#ef4444' : r.severity === 'high' ? '#f59e0b' : '#3b82f6'}">
                         <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-                            <span style="color:#f1f5f9;font-weight:600;font-size:0.82rem">${r.name}</span>
+                            <span style="color:#1e293b;font-weight:600;font-size:0.82rem">${r.name}</span>
                             <span style="font-size:0.72rem;padding:2px 6px;border-radius:4px;background:${r.severity === 'critical' ? 'rgba(239,68,68,0.15);color:#ef4444' : r.severity === 'high' ? 'rgba(245,158,11,0.15);color:#f59e0b' : 'rgba(59,130,246,0.15);color:#3b82f6'};text-transform:uppercase">${r.severity}</span>
                         </div>
-                        <div style="color:#94a3b8;font-size:0.78rem">${r.description || ''}</div>
-                        <div style="color:#64748b;font-size:0.72rem;margin-top:2px">${r.impact ? '→ ' + r.impact + ' (score: ' + (r.score || 0) + ')' : ''}</div>
+                        <div style="color:#64748b;font-size:0.78rem">${r.description || ''}</div>
+                        <div style="color:#94a3b8;font-size:0.72rem;margin-top:2px">${r.impact ? '→ ' + r.impact + ' (score: ' + (r.score || 0) + ')' : ''}</div>
                     </div>
                 `).join('') : '<div style="text-align:center;padding:20px;color:#10b981;font-weight:600"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> No carbon risk factors detected</div>'}
                 ` : '<div style="text-align:center;padding:30px;color:#64748b">Loading...</div>'}
@@ -173,17 +173,17 @@ function renderContent() {
 
             <!-- MATURITY -->
             <div class="sa-card">
-                <h3 style="margin:0 0 4px;color:#f1f5f9">${icon('target')} Carbon Maturity</h3>
+                <h3 style="margin:0 0 4px;color:#1e293b">${icon('target')} Carbon Maturity</h3>
                 ${mat ? `
                 ${maturityGauge(mat.current_level)}
                 ${mat.levels?.map((l, idx) => `
                     <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;margin-bottom:3px;border-radius:6px;background:${idx < mat.current_level ? 'rgba(16,185,129,0.06)' : 'rgba(100,116,139,0.04)'}">
                         <span style="font-size:14px">${['🌱', '📊', '⚡', '🎯', '🏆'][idx] || '📋'}</span>
                         <div style="flex:1">
-                            <div style="color:${idx < mat.current_level ? '#f1f5f9' : '#64748b'};font-weight:${idx === mat.current_level - 1 ? '700' : '500'};font-size:0.82rem">${l.name}</div>
-                            <div style="color:#475569;font-size:0.72rem">${l.description}</div>
+                            <div style="color:${idx < mat.current_level ? '#1e293b' : '#94a3b8'};font-weight:${idx === mat.current_level - 1 ? '700' : '500'};font-size:0.82rem">${l.name}</div>
+                            <div style="color:#64748b;font-size:0.72rem">${l.description}</div>
                         </div>
-                        <span style="color:#475569;font-size:0.72rem">${l.target}</span>
+                        <span style="color:#94a3b8;font-size:0.72rem">${l.target}</span>
                     </div>
                 `).join('') || ''}
                 ` : '<div style="text-align:center;padding:30px;color:#64748b">Loading...</div>'}
@@ -191,7 +191,7 @@ function renderContent() {
 
             <!-- REGULATORY -->
             <div class="sa-card">
-                <h3 style="margin:0 0 12px;color:#f1f5f9">${icon('shield')} Regulatory Alignment</h3>
+                <h3 style="margin:0 0 12px;color:#1e293b">${icon('shield')} Regulatory Alignment</h3>
                 ${reg ? `
                 <div style="display:flex;gap:8px;margin-bottom:12px">
                     <span style="padding:4px 10px;border-radius:6px;background:rgba(16,185,129,0.1);color:#10b981;font-size:0.82rem"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Ready: ${reg.ready}</span>
@@ -201,10 +201,10 @@ function renderContent() {
                 const isReady = f.status === 'compliant' || f.readiness === 'ready';
                 const pct = isReady ? 100 : (f.status === 'partial' ? 65 : 0);
                 return `
-                    <div style="padding:8px 12px;background:#0f172a;border-radius:8px;margin-bottom:4px;display:flex;align-items:center;gap:10px">
+                    <div style="padding:8px 12px;background:#f8fafc;border-radius:8px;margin-bottom:4px;display:flex;align-items:center;gap:10px">
                         <span style="font-size:14px">${f.icon || (f.region === 'EU' ? '🇪🇺' : '🌐')}</span>
                         <div style="flex:1">
-                            <div style="color:#f1f5f9;font-weight:600;font-size:0.82rem">${f.name} <span style="color:#475569;font-size:0.72rem">${f.region || ''}</span></div>
+                            <div style="color:#1e293b;font-weight:600;font-size:0.82rem">${f.name} <span style="color:#94a3b8;font-size:0.72rem">${f.region || ''}</span></div>
                             <div style="color:#64748b;font-size:0.72rem">${f.full || ''}</div>
                         </div>
                         <div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.78rem;color:#fff;background:${isReady ? '#10b981' : '#f59e0b'}">${pct}%</div>
@@ -217,7 +217,7 @@ function renderContent() {
 
         <!-- ═════ ESG LEADERBOARD ═════ -->
         <div class="sa-card" style="margin-bottom:20px">
-            <h3 style="margin:0 0 12px;color:#f1f5f9">${icon('users')} Partner ESG Leaderboard</h3>
+            <h3 style="margin:0 0 12px;color:#1e293b">${icon('users')} Partner ESG Leaderboard</h3>
             ${lb ? `
             <div style="display:flex;gap:8px;margin-bottom:12px">
                 <span style="padding:4px 10px;border-radius:6px;background:rgba(16,185,129,0.1);color:#10b981;font-size:0.82rem;font-weight:600">A: ${lb.a_grade}</span>
@@ -227,7 +227,7 @@ function renderContent() {
             </div>
             <div style="overflow-x:auto">
                 <table style="width:100%;border-collapse:collapse;font-size:13px">
-                    <thead><tr style="border-bottom:2px solid #1e293b;color:#94a3b8;font-size:0.78rem;text-transform:uppercase">
+                    <thead><tr style="border-bottom:2px solid #e2e8f0;color:#64748b;font-size:0.78rem;text-transform:uppercase">
                         <th style="padding:8px;text-align:left">Partner</th>
                         <th style="padding:8px;text-align:left">Country</th>
                         <th style="padding:8px;text-align:center">ESG Score</th>
@@ -237,12 +237,12 @@ function renderContent() {
                     </tr></thead>
                     <tbody>
                         ${(lb.leaderboard || []).map(p => `
-                        <tr style="border-bottom:1px solid #1e293b">
-                            <td style="padding:8px;color:#f1f5f9;font-weight:600">${p.name}</td>
-                            <td style="padding:8px;color:#94a3b8">${p.country || ''}</td>
+                        <tr style="border-bottom:1px solid #f1f5f9">
+                            <td style="padding:8px;color:#1e293b;font-weight:600">${p.name}</td>
+                            <td style="padding:8px;color:#64748b">${p.country || ''}</td>
                             <td style="padding:8px;text-align:center;color:${p.grade_color || '#94a3b8'};font-weight:700">${p.esg_score}</td>
                             <td style="padding:8px;text-align:center"><span style="padding:2px 8px;border-radius:4px;background:${p.grade_color || '#94a3b8'}22;color:${p.grade_color || '#94a3b8'};font-weight:700;font-size:0.82rem">${p.grade}</span></td>
-                            <td style="padding:8px;text-align:center;color:#94a3b8">${p.metrics?.shipment_reliability || 'N/A'}</td>
+                            <td style="padding:8px;text-align:center;color:#64748b">${p.metrics?.shipment_reliability || 'N/A'}</td>
                             <td style="padding:8px;text-align:center;color:${(p.metrics?.sla_violations || 0) > 0 ? '#ef4444' : '#10b981'}">${p.metrics?.sla_violations || 0}</td>
                         </tr>`).join('')}
                     </tbody>
@@ -256,18 +256,18 @@ function renderContent() {
 
             <!-- GRI DISCLOSURES -->
             <div class="sa-card">
-                <h3 style="margin:0 0 12px;color:#f1f5f9">${icon('scroll')} GRI Disclosures</h3>
+                <h3 style="margin:0 0 12px;color:#1e293b">${icon('scroll')} GRI Disclosures</h3>
                 ${rpt?.disclosures ? `
-                <div style="padding:6px 10px;background:rgba(16,185,129,0.06);border-radius:6px;margin-bottom:10px;font-size:0.78rem;color:#94a3b8">
+                <div style="padding:6px 10px;background:rgba(16,185,129,0.06);border-radius:6px;margin-bottom:10px;font-size:0.78rem;color:#64748b">
                     Standard: ${rpt.report_standard} | Period: ${rpt.reporting_period?.from} → ${rpt.reporting_period?.to}
                 </div>
                 ${Object.entries(rpt.disclosures).map(([code, d]) => `
-                    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#0f172a;border-radius:6px;margin-bottom:3px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#f8fafc;border-radius:6px;margin-bottom:3px">
                         <div>
                             <span style="color:#3b82f6;font-weight:700;font-size:0.82rem">${code}</span>
-                            <span style="color:#94a3b8;font-size:0.78rem;margin-left:6px">${d.title}</span>
+                            <span style="color:#64748b;font-size:0.78rem;margin-left:6px">${d.title}</span>
                         </div>
-                        <span style="color:#f1f5f9;font-weight:700;font-size:13px">${d.value} <span style="color:#64748b;font-size:0.72rem">${d.unit}</span></span>
+                        <span style="color:#1e293b;font-weight:700;font-size:13px">${d.value} <span style="color:#94a3b8;font-size:0.72rem">${d.unit}</span></span>
                     </div>
                 `).join('')}
                 ` : '<div style="text-align:center;padding:20px;color:#64748b">Loading...</div>'}
@@ -275,7 +275,7 @@ function renderContent() {
 
             <!-- INDUSTRY BENCHMARK -->
             <div class="sa-card">
-                <h3 style="margin:0 0 12px;color:#f1f5f9">${icon('target')} Industry Carbon Benchmark</h3>
+                <h3 style="margin:0 0 12px;color:#1e293b">${icon('target')} Industry Carbon Benchmark</h3>
                 ${bm ? `
                 <div style="text-align:center;padding:8px;margin-bottom:10px;background:${bm.insight?.includes('Top') ? 'rgba(16,185,129,0.08)' : bm.insight?.includes('Above') ? 'rgba(245,158,11,0.08)' : 'rgba(239,68,68,0.08)'};border-radius:6px;color:${bm.insight?.includes('Top') ? '#10b981' : bm.insight?.includes('Above') ? '#f59e0b' : '#ef4444'};font-weight:600;font-size:0.82rem">${bm.insight || ''}</div>
                 <div class="bm-paginated">${_renderBmPage(bm.your_comparison || [])}</div>
@@ -285,11 +285,11 @@ function renderContent() {
 
         <!-- ═════ ROLE × CARBON PERMISSION MATRIX ═════ -->
         <div class="sa-card" style="margin-bottom:20px">
-            <h3 style="margin:0 0 12px;color:#f1f5f9">${icon('users')} Role × Carbon Permission Matrix</h3>
+            <h3 style="margin:0 0 12px;color:#1e293b">${icon('users')} Role × Carbon Permission Matrix</h3>
             ${rm?.matrix ? `
             <div style="overflow-x:auto">
                 <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
-                    <thead><tr style="border-bottom:2px solid #1e293b;color:#94a3b8;font-size:0.72rem;text-transform:uppercase">
+                    <thead><tr style="border-bottom:2px solid #e2e8f0;color:#64748b;font-size:0.72rem;text-transform:uppercase">
                         <th style="padding:6px;text-align:left">Action</th>
                         <th style="padding:6px;text-align:center">SCM Ops</th>
                         <th style="padding:6px;text-align:center">Risk</th>
@@ -300,8 +300,8 @@ function renderContent() {
                     </tr></thead>
                     <tbody>
                         ${(rm.actions || []).map(action => `
-                        <tr style="border-bottom:1px solid #1e293b">
-                            <td style="padding:6px;color:#f1f5f9;font-weight:500">${action.replace(/_/g, ' ')}</td>
+                        <tr style="border-bottom:1px solid #f1f5f9">
+                            <td style="padding:6px;color:#1e293b;font-weight:500">${action.replace(/_/g, ' ')}</td>
                             <td style="padding:6px;text-align:center">${permCell(rm.matrix.scm_ops?.[action])}</td>
                             <td style="padding:6px;text-align:center">${permCell(rm.matrix.risk?.[action])}</td>
                             <td style="padding:6px;text-align:center">${permCell(rm.matrix.compliance?.[action])}</td>
@@ -312,13 +312,13 @@ function renderContent() {
                     </tbody>
                 </table>
             </div>
-            <div style="margin-top:8px;padding:6px 10px;background:rgba(139,92,246,0.08);border-radius:6px;color:#a78bfa;font-size:0.78rem">${rm.design_principle || ''}</div>
+            <div style="margin-top:8px;padding:6px 10px;background:rgba(139,92,246,0.08);border-radius:6px;color:#7c3aed;font-size:0.78rem">${rm.design_principle || ''}</div>
             ` : '<div style="text-align:center;padding:20px;color:#64748b">Loading...</div>'}
         </div>
 
         <!-- ═════ STRATEGIC POSITIONING ═════ -->
         <div class="sa-card" style="margin-bottom:20px">
-            <h3 style="margin:0 0 12px;color:#f1f5f9">${icon('target')} Strategic Positioning — Governance Amplifier</h3>
+            <h3 style="margin:0 0 12px;color:#1e293b">${icon('target')} Strategic Positioning — Governance Amplifier</h3>
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
                 ${[
             { label: 'Anti-Counterfeit', icon: '🔐', color: '#ef4444' },
@@ -339,8 +339,8 @@ function renderContent() {
             { market: 'Green Finance', size: '$500B+', role: 'ESG risk for green bonds' },
             { market: 'Carbon Trading', size: '$900B+', role: 'Offset verification' }
         ].map(m => `
-                    <div style="padding:12px;background:#0f172a;border-radius:8px;text-align:center">
-                        <div style="color:#f1f5f9;font-weight:700;font-size:13px">${m.market}</div>
+                    <div style="padding:12px;background:#f8fafc;border-radius:8px;text-align:center;border:1px solid #e2e8f0">
+                        <div style="color:#1e293b;font-weight:700;font-size:13px">${m.market}</div>
                         <div style="color:#10b981;font-weight:700;font-size:18px;margin:4px 0">${m.size}</div>
                         <div style="color:#64748b;font-size:0.78rem">${m.role}</div>
                     </div>
@@ -385,13 +385,13 @@ function _renderBmPage(items) {
             <span style="color:#64748b;font-size:0.75rem">${from}–${to} of ${total}</span>
         </div>
         ${page.map(c => `
-            <div style="padding:10px 12px;background:#0f172a;border-radius:8px;margin-bottom:4px">
+            <div style="padding:10px 12px;background:#f8fafc;border-radius:8px;margin-bottom:4px">
                 <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-                    <span style="color:#f1f5f9;font-weight:600;font-size:0.82rem">${c.category}</span>
+                    <span style="color:#1e293b;font-weight:600;font-size:0.82rem">${c.category}</span>
                     <span style="font-size:0.72rem;padding:2px 6px;border-radius:4px;background:${c.performance === 'top_performer' ? 'rgba(16,185,129,0.15);color:#10b981' : c.performance === 'above_average' ? 'rgba(59,130,246,0.15);color:#3b82f6' : 'rgba(239,68,68,0.15);color:#ef4444'}">${(c.performance || '').replace(/_/g, ' ')}</span>
                 </div>
-                <div style="display:flex;gap:12px;font-size:0.78rem;color:#94a3b8">
-                    <span>You: <strong style="color:#f1f5f9">${c.your_avg_kgCO2e}</strong></span>
+                <div style="display:flex;gap:12px;font-size:0.78rem;color:#64748b">
+                    <span>You: <strong style="color:#1e293b">${c.your_avg_kgCO2e}</strong></span>
                     <span>Industry: <strong>${c.industry_median || c.industry_avg_kgCO2e || 'N/A'}</strong></span>
                     <span>Gap: <strong style="color:${(c.gap_to_median_pct || c.gap_pct || 0) <= 0 ? '#10b981' : '#ef4444'}">${(c.gap_to_median_pct || c.gap_pct || 0) > 0 ? '+' : ''}${c.gap_to_median_pct || c.gap_pct || 0}%</strong></span>
                 </div>
@@ -399,9 +399,9 @@ function _renderBmPage(items) {
         `).join('')}
         ${totalPages > 1 ? `
         <div style="display:flex;justify-content:center;align-items:center;gap:8px;margin-top:8px">
-            <button onclick="window._bmPrev()" ${_bmPage === 0 ? 'disabled' : ''} style="padding:4px 10px;border-radius:4px;border:1px solid #334155;background:transparent;color:${_bmPage === 0 ? '#334155' : '#94a3b8'};cursor:${_bmPage === 0 ? 'default' : 'pointer'};font-size:0.78rem">← Prev</button>
-            <span style="color:#94a3b8;font-size:0.78rem">Page ${_bmPage + 1} / ${totalPages}</span>
-            <button onclick="window._bmNext()" ${_bmPage >= totalPages - 1 ? 'disabled' : ''} style="padding:4px 10px;border-radius:4px;border:1px solid #334155;background:transparent;color:${_bmPage >= totalPages - 1 ? '#334155' : '#94a3b8'};cursor:${_bmPage >= totalPages - 1 ? 'default' : 'pointer'};font-size:0.78rem">Next →</button>
+            <button onclick="window._bmPrev()" ${_bmPage === 0 ? 'disabled' : ''} style="padding:4px 10px;border-radius:4px;border:1px solid #e2e8f0;background:transparent;color:${_bmPage === 0 ? '#cbd5e1' : '#64748b'};cursor:${_bmPage === 0 ? 'default' : 'pointer'};font-size:0.78rem">← Prev</button>
+            <span style="color:#64748b;font-size:0.78rem">Page ${_bmPage + 1} / ${totalPages}</span>
+            <button onclick="window._bmNext()" ${_bmPage >= totalPages - 1 ? 'disabled' : ''} style="padding:4px 10px;border-radius:4px;border:1px solid #e2e8f0;background:transparent;color:${_bmPage >= totalPages - 1 ? '#cbd5e1' : '#64748b'};cursor:${_bmPage >= totalPages - 1 ? 'default' : 'pointer'};font-size:0.78rem">Next →</button>
         </div>` : ''}
     `;
 }
