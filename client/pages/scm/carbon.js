@@ -150,9 +150,9 @@ function renderContent() {
                 <h3 style="margin:0 0 12px;color:#f1f5f9">${icon('alertTriangle')} Carbon → Risk Factors</h3>
                 ${risk ? `
                 <div style="display:flex;justify-content:space-between;margin-bottom:12px;padding:8px 12px;background:#0f172a;border-radius:8px">
-                    <div><span style="color:#94a3b8;font-size:0.78rem">Risk Factors</span><div style="color:#f1f5f9;font-weight:700;font-size:18px">${risk.total_risk_factors}</div></div>
-                    <div><span style="color:#94a3b8;font-size:0.78rem">Impact Score</span><div style="color:${risk.total_risk_score_impact > 30 ? '#ef4444' : risk.total_risk_score_impact > 10 ? '#f59e0b' : '#10b981'};font-weight:700;font-size:18px">${risk.total_risk_score_impact}/100</div></div>
-                    <div><span style="color:#94a3b8;font-size:0.78rem">Critical</span><div style="color:#ef4444;font-weight:700;font-size:18px">${risk.severity_summary?.critical || 0}</div></div>
+                    <div><span style="color:#94a3b8;font-size:0.78rem">Risk Factors</span><div style="color:#f1f5f9;font-weight:700;font-size:18px">${risk.risk_factors?.length || 0}</div></div>
+                    <div><span style="color:#94a3b8;font-size:0.78rem">Avg Score</span><div style="color:${(risk.risk_factors?.reduce((s, r) => s + (r.score || 0), 0) / (risk.risk_factors?.length || 1)) > 60 ? '#ef4444' : '#f59e0b'};font-weight:700;font-size:18px">${Math.round(risk.risk_factors?.reduce((s, r) => s + (r.score || 0), 0) / (risk.risk_factors?.length || 1))}/100</div></div>
+                    <div><span style="color:#94a3b8;font-size:0.78rem">Critical</span><div style="color:#ef4444;font-weight:700;font-size:18px">${risk.risk_factors?.filter(r => r.severity === 'critical').length || 0}</div></div>
                 </div>
                 ${risk.risk_factors?.length > 0 ? risk.risk_factors.map(r => `
                     <div style="padding:10px 12px;background:#0f172a;border-radius:8px;margin-bottom:6px;border-left:4px solid ${r.severity === 'critical' ? '#ef4444' : r.severity === 'high' ? '#f59e0b' : '#3b82f6'}">
@@ -160,10 +160,10 @@ function renderContent() {
                             <span style="color:#f1f5f9;font-weight:600;font-size:0.82rem">${r.name}</span>
                             <span style="font-size:0.72rem;padding:2px 6px;border-radius:4px;background:${r.severity === 'critical' ? 'rgba(239,68,68,0.15);color:#ef4444' : r.severity === 'high' ? 'rgba(245,158,11,0.15);color:#f59e0b' : 'rgba(59,130,246,0.15);color:#3b82f6'};text-transform:uppercase">${r.severity}</span>
                         </div>
-                        <div style="color:#94a3b8;font-size:0.78rem">${r.signal}</div>
-                        <div style="color:#64748b;font-size:0.72rem;margin-top:2px">→ ${r.impact} (+${r.score_impact})</div>
+                        <div style="color:#94a3b8;font-size:0.78rem">${r.description || ''}</div>
+                        <div style="color:#64748b;font-size:0.72rem;margin-top:2px">${r.impact ? '→ ' + r.impact + ' (score: ' + (r.score || 0) + ')' : ''}</div>
                     </div>
-                `).join('') : '<div style="text-align:center;padding:20px;color:#10b981;font-weight:600"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> No carbon risk factors detected</div>'}
+                `).join('') : '<div style="text-align:center;padding:20px;color:#10b981;font-weight:600"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> No carbon risk factors detected</div>'}}
                 ` : '<div style="text-align:center;padding:30px;color:#64748b">Loading...</div>'}
             </div>
         </div>
@@ -176,11 +176,11 @@ function renderContent() {
                 <h3 style="margin:0 0 4px;color:#f1f5f9">${icon('target')} Carbon Maturity</h3>
                 ${mat ? `
                 ${maturityGauge(mat.current_level)}
-                ${mat.levels?.map(l => `
-                    <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;margin-bottom:3px;border-radius:6px;background:${l.achieved ? 'rgba(16,185,129,0.06)' : 'rgba(100,116,139,0.04)'}">
-                        <span style="font-size:14px">${l.icon}</span>
+                ${mat.levels?.map((l, idx) => `
+                    <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;margin-bottom:3px;border-radius:6px;background:${idx < mat.current_level ? 'rgba(16,185,129,0.06)' : 'rgba(100,116,139,0.04)'}">
+                        <span style="font-size:14px">${['🌱', '📊', '⚡', '🎯', '🏆'][idx] || '📋'}</span>
                         <div style="flex:1">
-                            <div style="color:${l.achieved ? '#f1f5f9' : '#64748b'};font-weight:${l.current ? '700' : '500'};font-size:0.82rem">${l.name}</div>
+                            <div style="color:${idx < mat.current_level ? '#f1f5f9' : '#64748b'};font-weight:${idx === mat.current_level - 1 ? '700' : '500'};font-size:0.82rem">${l.name}</div>
                             <div style="color:#475569;font-size:0.72rem">${l.description}</div>
                         </div>
                         <span style="color:#475569;font-size:0.72rem">${l.target}</span>
@@ -197,16 +197,20 @@ function renderContent() {
                     <span style="padding:4px 10px;border-radius:6px;background:rgba(16,185,129,0.1);color:#10b981;font-size:0.82rem"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Ready: ${reg.ready}</span>
                     <span style="padding:4px 10px;border-radius:6px;background:rgba(245,158,11,0.1);color:#f59e0b;font-size:0.82rem"><span class="status-icon status-warn" aria-label="Warning">!</span> Partial: ${reg.partial}</span>
                 </div>
-                ${reg.frameworks?.map(f => `
+                ${reg.frameworks?.map(f => {
+                const isReady = f.status === 'compliant' || f.readiness === 'ready';
+                const pct = isReady ? 100 : (f.status === 'partial' ? 65 : 0);
+                return `
                     <div style="padding:8px 12px;background:#0f172a;border-radius:8px;margin-bottom:4px;display:flex;align-items:center;gap:10px">
-                        <span style="font-size:14px">${f.icon}</span>
+                        <span style="font-size:14px">${f.icon || (f.region === 'EU' ? '🇪🇺' : '🌐')}</span>
                         <div style="flex:1">
-                            <div style="color:#f1f5f9;font-weight:600;font-size:0.82rem">${f.name} <span style="color:#475569;font-size:0.72rem">${f.region}</span></div>
-                            <div style="color:#64748b;font-size:0.72rem">${f.full}</div>
+                            <div style="color:#f1f5f9;font-weight:600;font-size:0.82rem">${f.name} <span style="color:#475569;font-size:0.72rem">${f.region || ''}</span></div>
+                            <div style="color:#64748b;font-size:0.72rem">${f.full || ''}</div>
                         </div>
-                        <div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.78rem;color:#fff;background:${f.readiness === 'ready' ? '#10b981' : '#f59e0b'}">${f.readiness_pct}%</div>
+                        <div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.78rem;color:#fff;background:${isReady ? '#10b981' : '#f59e0b'}">${pct}%</div>
                     </div>
-                `).join('') || ''}
+                    `;
+            }).join('') || ''}
                 ` : '<div style="text-align:center;padding:30px;color:#64748b">Loading...</div>'}
             </div>
         </div>
@@ -384,12 +388,12 @@ function _renderBmPage(items) {
             <div style="padding:10px 12px;background:#0f172a;border-radius:8px;margin-bottom:4px">
                 <div style="display:flex;justify-content:space-between;margin-bottom:4px">
                     <span style="color:#f1f5f9;font-weight:600;font-size:0.82rem">${c.category}</span>
-                    <span style="font-size:0.72rem;padding:2px 6px;border-radius:4px;background:${c.performance === 'top_performer' ? 'rgba(16,185,129,0.15);color:#10b981' : c.performance === 'above_average' ? 'rgba(59,130,246,0.15);color:#3b82f6' : 'rgba(239,68,68,0.15);color:#ef4444'}">${c.performance.replace(/_/g, ' ')}</span>
+                    <span style="font-size:0.72rem;padding:2px 6px;border-radius:4px;background:${c.performance === 'top_performer' ? 'rgba(16,185,129,0.15);color:#10b981' : c.performance === 'above_average' ? 'rgba(59,130,246,0.15);color:#3b82f6' : 'rgba(239,68,68,0.15);color:#ef4444'}">${(c.performance || '').replace(/_/g, ' ')}</span>
                 </div>
                 <div style="display:flex;gap:12px;font-size:0.78rem;color:#94a3b8">
                     <span>You: <strong style="color:#f1f5f9">${c.your_avg_kgCO2e}</strong></span>
-                    <span>Industry: <strong>${c.industry_avg_kgCO2e}</strong></span>
-                    <span>Gap: <strong style="color:${c.gap_pct <= 0 ? '#10b981' : '#ef4444'}">${c.gap_pct > 0 ? '+' : ''}${c.gap_pct}%</strong></span>
+                    <span>Industry: <strong>${c.industry_median || c.industry_avg_kgCO2e || 'N/A'}</strong></span>
+                    <span>Gap: <strong style="color:${(c.gap_to_median_pct || c.gap_pct || 0) <= 0 ? '#10b981' : '#ef4444'}">${(c.gap_to_median_pct || c.gap_pct || 0) > 0 ? '+' : ''}${c.gap_to_median_pct || c.gap_pct || 0}%</strong></span>
                 </div>
             </div>
         `).join('')}
