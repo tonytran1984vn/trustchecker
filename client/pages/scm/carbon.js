@@ -163,7 +163,7 @@ function renderContent() {
                         <div style="color:#94a3b8;font-size:0.78rem">${r.description || ''}</div>
                         <div style="color:#64748b;font-size:0.72rem;margin-top:2px">${r.impact ? '→ ' + r.impact + ' (score: ' + (r.score || 0) + ')' : ''}</div>
                     </div>
-                `).join('') : '<div style="text-align:center;padding:20px;color:#10b981;font-weight:600"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> No carbon risk factors detected</div>'}}
+                `).join('') : '<div style="text-align:center;padding:20px;color:#10b981;font-weight:600"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> No carbon risk factors detected</div>'}
                 ` : '<div style="text-align:center;padding:30px;color:#64748b">Loading...</div>'}
             </div>
         </div>
