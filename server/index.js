@@ -33,7 +33,7 @@ const server = http.createServer(app);
 // CORS — restrict to known origins
 const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',')
-    : ['http://localhost:4000', 'http://localhost:3000', 'http://127.0.0.1:4000', 'https://tonytran.work', 'http://tonytran.work', 'http://34.92.229.72'];
+    : ['http://localhost:4000', 'http://localhost:3000', 'http://127.0.0.1:4000', 'https://tonytran.work', 'http://tonytran.work', 'http://34.92.229.72', 'http://34.92.229.72:4000'];
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin || ALLOWED_ORIGINS.includes(origin)) {
