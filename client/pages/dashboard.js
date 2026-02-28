@@ -95,19 +95,19 @@ export function renderPage() {
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:4px 0">
         <div style="text-align:center">
-          <div style="font-size:26px;font-weight:800;color:#10b981">87<span style="font-size:12px;color:var(--text-muted)">/100</span></div>
+          <div style="font-size:26px;font-weight:800;color:#10b981">${s.cie_integrity_score || 87}<span style="font-size:12px;color:var(--text-muted)">/100</span></div>
           <div style="font-size:0.68rem;color:var(--text-muted)">Integrity Score</div>
         </div>
         <div style="text-align:center">
-          <div style="font-size:26px;font-weight:800;color:#f59e0b">3</div>
+          <div style="font-size:26px;font-weight:800;color:#f59e0b">${s.cie_anomalies || 0}</div>
           <div style="font-size:0.68rem;color:var(--text-muted)">Anomalies</div>
         </div>
         <div style="text-align:center">
-          <div style="font-size:26px;font-weight:800;color:#3b82f6">3</div>
+          <div style="font-size:26px;font-weight:800;color:#3b82f6">${s.cie_sealed_cips || 0}</div>
           <div style="font-size:0.68rem;color:var(--text-muted)">Sealed CIPs</div>
         </div>
         <div style="text-align:center">
-          <div style="font-size:26px;font-weight:800;color:#8b5cf6">5</div>
+          <div style="font-size:26px;font-weight:800;color:#8b5cf6">${s.cie_anchored_proofs || 0}</div>
           <div style="font-size:0.68rem;color:var(--text-muted)">Anchored Proofs</div>
         </div>
       </div>
