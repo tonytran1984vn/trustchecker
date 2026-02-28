@@ -2,7 +2,8 @@
 // Migrated from SQLite (39 tables) to PostgreSQL with proper types, relations, and indexes
 
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "library"
 }
 
 datasource db {
