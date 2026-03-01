@@ -14,3 +14,4 @@ prisma/migrations/
 client/dist/
 # ERQF engine source — only .jsc bytecode should be deployed
 server/engines/erqf-engine.jsc
+backup/*.sql
