@@ -1215,6 +1215,7 @@ function renderCarbonSidebar() {
     { id: 'carbon-workspace', icon: icon('scroll', 16), label: 'Carbon Passports', hash: 'passport' },
     { id: 'carbon-workspace', icon: icon('shield', 16), label: 'ESG & Compliance', hash: 'compliance' },
     { id: 'carbon-workspace', icon: icon('barChart', 16), label: 'Industry Benchmark', hash: 'benchmark' },
+    { id: 'carbon-workspace', icon: icon('zap', 16), label: 'Action Items', hash: 'actions' },
   ];
 
   const navHtml = carbonNav.map(n => {
