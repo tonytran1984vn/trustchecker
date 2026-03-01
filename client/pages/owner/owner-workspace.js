@@ -222,10 +222,11 @@ function renderOverview() {
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-      ${kpi('Carbon Mints (30d)', d.carbon_mints_30d || 0, '#10b981', d.carbon_mints_30d > 0 ? 'Active' : 'No activity')}
+      <div id="owner-pending-actions-kpi">${kpi('⚡ Pending Actions', '…', '#3b82f6', 'Loading…')}</div>
       ${kpi('Risk Model', d.risk_model_version || 'N/A', '#8b5cf6', d.risk_model_version !== 'N/A' ? `Version ${d.risk_model_version}` : 'Not deployed')}
       ${kpi('Self-Elevation (30d)', d.self_elevation_attempts_30d || 0, d.self_elevation_attempts_30d > 0 ? '#f59e0b' : '#10b981', 'Blocked attempts')}
     </div>
+    ${_loadPendingActionsKpi()}
 
     <!-- Company Health Summary -->
     <div class="card" style="margin-top:16px;margin-bottom:16px;border-left:4px solid #3b82f6">
@@ -285,6 +286,27 @@ function healthMini(label, score, weight) {
   </div>`;
 }
 
+function _loadPendingActionsKpi() {
+  setTimeout(async () => {
+    try {
+      const data = await API.get('/carbon-actions').catch(() => ({ actions: [] }));
+      const actions = data.actions || [];
+      const pending = actions.filter(a => a.status === 'open' || a.status === 'in_progress').length;
+      const color = pending > 3 ? '#ef4444' : pending > 0 ? '#f59e0b' : '#10b981';
+      const desc = pending > 0 ? `${actions.filter(a => a.status === 'open').length} open · ${actions.filter(a => a.status === 'in_progress').length} in progress` : 'All clear';
+      const el = document.getElementById('owner-pending-actions-kpi');
+      if (el) {
+        el.innerHTML = `
+          <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px;flex:1;min-width:140px">
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">⚡ Pending Actions</div>
+            <div style="font-size:1.8rem;font-weight:800;color:${color}">${pending}</div>
+            <div style="font-size:0.68rem;color:var(--text-muted);margin-top:4px">${desc}</div>
+          </div>`;
+      }
+    } catch (_) { }
+  }, 200);
+  return '';
+}
 // ═══════════════════════════════════════════════════════════════
 // 2. OWNERSHIP & AUTHORITY
 // ═══════════════════════════════════════════════════════════════
