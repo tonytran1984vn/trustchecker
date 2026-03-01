@@ -1212,19 +1212,26 @@ router.get('/benchmark/cross-tenant', cacheMiddleware(300), async (req, res) => 
         const products = await getOrgProducts(orgId);
         const totalKg = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
         const totalT = +(totalKg / 1000).toFixed(1);
+        const myIntensity = products.length > 0 ? +(totalKg / products.length).toFixed(1) : 0;
 
-        // Get all orgs for comparison — rank by total tCO₂e (enterprise metric)
+        // Get all orgs for comparison — join products via users table
         const allOrgs = await db.all(
-            `SELECT o.id, o.name, COUNT(p.id) as product_count, COALESCE(SUM(p.carbon_footprint_kgco2e), 0) as total_kg
-             FROM organizations o LEFT JOIN products p ON p.org_id = o.id
-             GROUP BY o.id ORDER BY total_kg ASC`
+            `SELECT o.id, o.name, COUNT(p.id)::int as product_count, COALESCE(SUM(p.carbon_footprint_kgco2e), 0)::float as total_kg
+             FROM organizations o
+             LEFT JOIN users u ON u.org_id = o.id
+             LEFT JOIN products p ON p.registered_by = u.id
+             GROUP BY o.id, o.name ORDER BY total_kg ASC`
         ).catch(() => []);
 
-        // Rank by total emissions (lower = better)
+        // Rank by intensity (lower = better)
         const ranked = allOrgs
             .filter(o => o.product_count > 0)
-            .map(o => ({ ...o, total_tCO2e: +(o.total_kg / 1000).toFixed(1) }))
-            .sort((a, b) => a.total_tCO2e - b.total_tCO2e);
+            .map(o => ({
+                ...o,
+                total_tCO2e: +(o.total_kg / 1000).toFixed(1),
+                intensity: o.product_count > 0 ? +(o.total_kg / o.product_count).toFixed(1) : 0
+            }))
+            .sort((a, b) => a.intensity - b.intensity);
 
         const myRank = ranked.findIndex(o => o.id === orgId) + 1;
         const percentile = ranked.length > 0 ? Math.round(((ranked.length - myRank) / ranked.length) * 100) : 0;
@@ -1242,10 +1249,11 @@ router.get('/benchmark/cross-tenant', cacheMiddleware(300), async (req, res) => 
             const isMe = o.id === orgId;
             return {
                 rank: i + 1,
-                label: isMe ? 'Your Organization' : `Org ${o.id.substring(0, 6)}`,
+                label: isMe ? 'Your Organization' : (o.name || `Org ${i + 1}`),
                 total_tCO2e: o.total_tCO2e,
+                intensity: o.intensity,
                 products: o.product_count,
-                performance: o.total_tCO2e < 100 ? 'top_performer' : o.total_tCO2e < 500 ? 'above_average' : 'average',
+                performance: o.intensity < 50 ? 'top_performer' : o.intensity < 200 ? 'above_average' : 'average',
                 is_you: isMe,
             };
         });
@@ -1255,6 +1263,7 @@ router.get('/benchmark/cross-tenant', cacheMiddleware(300), async (req, res) => 
             rank: myRank || ranked.length,
             total_orgs: ranked.length,
             your_total_tCO2e: totalT,
+            your_intensity: myIntensity,
             your_offset_coverage: Math.round(offsetRatio * 100) + '%',
             performance_label: perfLabel,
             methodology: 'Cross-tenant benchmarking based on total tCO₂e emissions across all TrustChecker organizations',
