@@ -12,7 +12,17 @@ async function fetchLogs() {
   if (_loading) return;
   _loading = true;
   try {
-    const res = await API.get('/platform/audit?limit=50');
+    // Await workspace prefetch if it's in flight
+    if (window._saGovReady) {
+      try { await window._saGovReady; } catch { }
+    }
+    const gc = window._saGovCache;
+    let res;
+    if (gc?.auditLogs && gc._loadedAt) {
+      res = gc.auditLogs;
+    } else {
+      res = await API.get('/platform/audit?limit=50');
+    }
     _logs = (res.logs || []).map(l => ({
       time: formatTime(l.timestamp || l.created_at),
       actor: l.actor_name || l.actor_id?.substring(0, 8) || 'System',

@@ -10,25 +10,58 @@ import { showToast } from '../../components/toast.js';
 import { renderPage as renderServices } from './services-status.js';
 import { renderPage as renderIncidents } from './incidents.js';
 
+// Prefetch all Operations APIs in parallel on workspace entry
+if (!window._saOpsCache) window._saOpsCache = {};
+const opsCache = window._saOpsCache;
+if (!opsCache._loading && (!opsCache._loadedAt || Date.now() - opsCache._loadedAt > 30000)) {
+    opsCache._loading = true;
+    window._saOpsReady = Promise.allSettled([
+        API.get('/ops/health').catch(() => null),
+        API.get('/ops/incidents?limit=20').catch(() => ({ incidents: [] })),
+        API.get('/platform/feature-flags').catch(() => ({})),
+    ]).then(results => {
+        const v = results.map(r => r.value);
+        opsCache.health = v[0];
+        opsCache.incidents = v[1];
+        opsCache.featureFlags = v[2];
+        opsCache._loadedAt = Date.now();
+        opsCache._loading = false;
+        console.log('[SA Ops] All 3 APIs prefetched ✓');
+        return opsCache;
+    });
+} else if (opsCache._loadedAt) {
+    window._saOpsReady = Promise.resolve(opsCache);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Feature Flags Tab (DB-backed via platform_feature_flags table)
 // ═══════════════════════════════════════════════════════════════
 let _flagList = null;  // Full flag data from API
 let _flagsLoading = false;
 
-function loadFeatureFlags() {
+async function loadFeatureFlags() {
     if (_flagsLoading) return;
     _flagsLoading = true;
-    API.get('/platform/feature-flags').then(data => {
+    try {
+        // Await workspace prefetch if it's in flight
+        if (window._saOpsReady) {
+            try { await window._saOpsReady; } catch { }
+        }
+        const oc = window._saOpsCache;
+        let data;
+        if (oc?.featureFlags?.flagList && oc._loadedAt && !_flagList) {
+            data = oc.featureFlags;
+        } else {
+            data = await API.get('/platform/feature-flags');
+        }
         if (data?.flagList) {
             _flagList = data.flagList;
-            // Also update State.featureFlags for backward compat
             State.featureFlags = {};
             data.flagList.forEach(f => { State.featureFlags[f.key] = f.enabled; });
         }
-        _flagsLoading = false;
-        window.render();
-    }).catch(() => { _flagsLoading = false; });
+    } catch { }
+    _flagsLoading = false;
+    window.render();
 }
 
 function renderFeatureFlags() {

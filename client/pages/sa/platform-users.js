@@ -32,6 +32,17 @@ async function loadUsers() {
   if (loading) return;
   loading = true;
   try {
+    // Await workspace prefetch if it's in flight
+    if (window._saGovReady) {
+      try { await window._saGovReady; } catch { }
+    }
+    const gc = window._saGovCache;
+    if (gc?.users && gc._loadedAt && users.length === 0) {
+      users = gc.users.users || [];
+      loading = false;
+      window.render();
+      return;
+    }
     const data = await API.get('/platform/users');
     users = data.users || [];
   } catch (e) {

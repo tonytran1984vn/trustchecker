@@ -15,12 +15,22 @@ async function fetchData() {
   if (_loading) return;
   _loading = true;
   try {
-    const [incRes, healthRes] = await Promise.all([
-      API.get('/ops/incidents?limit=20').catch(() => ({ incidents: [] })),
-      API.get('/ops/health').catch(() => null)
-    ]);
-    _incidents = incRes.incidents || [];
-    _health = healthRes;
+    // Await workspace prefetch if it's in flight
+    if (window._saOpsReady) {
+      try { await window._saOpsReady; } catch { }
+    }
+    const oc = window._saOpsCache;
+    if (oc?.incidents && oc?.health && oc._loadedAt) {
+      _incidents = oc.incidents.incidents || [];
+      _health = oc.health;
+    } else {
+      const [incRes, healthRes] = await Promise.all([
+        API.get('/ops/incidents?limit=20').catch(() => ({ incidents: [] })),
+        API.get('/ops/health').catch(() => null)
+      ]);
+      _incidents = incRes.incidents || [];
+      _health = healthRes;
+    }
   } catch (e) {
     console.error('Incidents fetch error:', e);
     _incidents = [];

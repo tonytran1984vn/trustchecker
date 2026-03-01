@@ -31,7 +31,17 @@ let _loaded = false;
 async function loadFromDB() {
   if (_loaded) return;
   try {
-    const res = await API.get('/platform/sa-config/approval_workflows');
+    // Await workspace prefetch if it's in flight
+    if (window._saGovReady) {
+      try { await window._saGovReady; } catch { }
+    }
+    const gc = window._saGovCache;
+    let res;
+    if (gc?.approvalWorkflows && gc._loadedAt) {
+      res = gc.approvalWorkflows;
+    } else {
+      res = await API.get('/platform/sa-config/approval_workflows');
+    }
     if (res.data && res.source === 'database') {
       WORKFLOWS = res.data.workflows || DEFAULT_WORKFLOWS;
       PENDING = res.data.pending || DEFAULT_PENDING;

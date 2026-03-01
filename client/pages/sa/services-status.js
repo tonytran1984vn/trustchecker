@@ -24,7 +24,17 @@ async function fetchHealth() {
     if (_loading) return;
     _loading = true;
     try {
-        const res = await API.get('/ops/health');
+        // Await workspace prefetch if it's in flight
+        if (window._saOpsReady) {
+            try { await window._saOpsReady; } catch { }
+        }
+        const oc = window._saOpsCache;
+        let res;
+        if (oc?.health && oc._loadedAt) {
+            res = oc.health;
+        } else {
+            res = await API.get('/ops/health');
+        }
         _health = res;
 
         // Build services from health response or use DB-driven metrics

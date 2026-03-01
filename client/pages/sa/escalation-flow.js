@@ -39,7 +39,17 @@ let _loaded = false;
 async function loadFromDB() {
   if (_loaded) return;
   try {
-    const res = await API.get('/platform/sa-config/escalation_flow');
+    // Await workspace prefetch if it's in flight
+    if (window._saGovReady) {
+      try { await window._saGovReady; } catch { }
+    }
+    const gc = window._saGovCache;
+    let res;
+    if (gc?.escalationFlow && gc._loadedAt) {
+      res = gc.escalationFlow;
+    } else {
+      res = await API.get('/platform/sa-config/escalation_flow');
+    }
     if (res.data && res.source === 'database') {
       PIPELINE = res.data.pipeline || DEFAULT_PIPELINE;
       ERS_ESCALATION = res.data.ers_escalation || DEFAULT_ERS_ESCALATION;
