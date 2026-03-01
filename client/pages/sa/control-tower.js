@@ -22,6 +22,24 @@ async function loadMetrics() {
         tenants.forEach(t => { const p = (t.plan || 'free').toLowerCase(); planCounts[p] = (planCounts[p] || 0) + 1; });
         metrics = { totalTenants: tenants.length, activeTenants: active, suspended, totalUsers, tenants, planCounts };
         lastLoad = Date.now();
+
+        // Store tenants in global State for other SA pages
+        const { State } = await import('../../core/state.js');
+        State.platformTenants = tenants;
+
+        // Background prefetch billing + pricing for sa-financial (non-blocking)
+        Promise.allSettled([
+            API.get('/billing/plan').catch(() => ({ plan: null, available_plans: [] })),
+            API.get('/billing/usage').catch(() => ({ period: null, usage: {} })),
+            API.get('/billing/invoices').catch(() => ({ invoices: [] })),
+            fetch(API.base + '/billing/pricing').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+        ]).then(([planR, usageR, invoiceR, pricingR]) => {
+            const p = planR.value || {}, u = usageR.value || {}, i = invoiceR.value || {};
+            State.billingData = { plan: p.plan, available: p.available_plans, period: u.period, usage: u.usage, invoices: i.invoices };
+            State.pricingAdminData = pricingR.value || {};
+            State._saFinancialPrefetched = true;
+            console.log('[SA] Financial data prefetched ✓');
+        });
     } catch (e) {
         console.error('[SA] Failed to load metrics:', e);
         metrics = { totalTenants: 0, activeTenants: 0, suspended: 0, totalUsers: 0, tenants: [], planCounts: {} };

@@ -450,21 +450,26 @@ export async function loadPageData(page) {
             State.stakeholderData = { dashboard, certifications: certs.certifications || [], compliance: compliance.records || [] };
             render();
         } else if (page === 'sa-financial') {
-            // Financial workspace needs billing + pricing + tenants data
-            const [planRes, usageRes, invoiceRes, tenantRes] = await Promise.all([
-                API.get('/billing/plan'),
-                API.get('/billing/usage'),
-                API.get('/billing/invoices'),
-                API.get('/platform/tenants').catch(() => ({ tenants: [] })),
-            ]);
-            State.billingData = { plan: planRes.plan, available: planRes.available_plans, period: usageRes.period, usage: usageRes.usage, invoices: invoiceRes.invoices };
-            State.platformTenants = Array.isArray(tenantRes) ? tenantRes : (tenantRes.tenants || []);
-            try {
-                const pRes = await fetch(API.base + '/billing/pricing');
-                if (pRes.ok) State.pricingAdminData = await pRes.json();
-                else State.pricingAdminData = {};
-            } catch (e) { State.pricingAdminData = {}; }
-            render();
+            // Check if prefetched by control-tower
+            if (State._saFinancialPrefetched && State.billingData && State.platformTenants) {
+                render();
+            } else {
+                // Financial workspace needs billing + pricing + tenants data
+                const [planRes, usageRes, invoiceRes, tenantRes] = await Promise.all([
+                    API.get('/billing/plan'),
+                    API.get('/billing/usage'),
+                    API.get('/billing/invoices'),
+                    API.get('/platform/tenants').catch(() => ({ tenants: [] })),
+                ]);
+                State.billingData = { plan: planRes.plan, available: planRes.available_plans, period: usageRes.period, usage: usageRes.usage, invoices: invoiceRes.invoices };
+                State.platformTenants = Array.isArray(tenantRes) ? tenantRes : (tenantRes.tenants || []);
+                try {
+                    const pRes = await fetch(API.base + '/billing/pricing');
+                    if (pRes.ok) State.pricingAdminData = await pRes.json();
+                    else State.pricingAdminData = {};
+                } catch (e) { State.pricingAdminData = {}; }
+                render();
+            }
         } else if (page === 'billing' || page === 'sa-revenue' || page === 'sa-usage') {
             try {
                 const [planRes, usageRes, invoiceRes] = await Promise.all([
