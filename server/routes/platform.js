@@ -14,6 +14,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { authMiddleware } = require('../auth/core');
 const { requirePlatformAdmin } = require('../auth/rbac');
+const { clearCacheByPrefix } = require('../cache');
 
 // All routes require auth + platform admin
 router.use(authMiddleware);
@@ -588,6 +589,7 @@ router.post('/tenants/:id/suspend', async (req, res) => {
         );
 
         if (typeof db.save === 'function') await db.save();
+        clearCacheByPrefix('/api/risk-graph').catch(() => { });
         res.json({ message: 'Tenant suspended', id: req.params.id });
     } catch (err) {
         console.error('[Platform] Suspend tenant error:', err);
@@ -609,6 +611,7 @@ router.post('/tenants/:id/activate', async (req, res) => {
         );
 
         if (typeof db.save === 'function') await db.save();
+        clearCacheByPrefix('/api/risk-graph').catch(() => { });
         res.json({ message: 'Tenant activated', id: req.params.id });
     } catch (err) {
         console.error('[Platform] Activate tenant error:', err);

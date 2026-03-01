@@ -137,7 +137,7 @@ router.get('/risk-analytics', cacheMiddleware(120), requirePermission('admin:man
 
             // Suspicious Tenants (Cases tab) — with top patterns embedded
             db.prepare(`
-                SELECT o.id, o.name, o.slug, o.plan,
+                SELECT o.id, o.name, o.slug, o.plan, o.status as tenant_status,
                        COUNT(fa.id) as fraud_count,
                        SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count,
                        SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count,
@@ -147,8 +147,7 @@ router.get('/risk-analytics', cacheMiddleware(120), requirePermission('admin:man
                 LEFT JOIN products p ON p.org_id = o.id
                 LEFT JOIN fraud_alerts fa ON fa.product_id = p.id
                 LEFT JOIN scan_events se ON se.product_id = p.id AND se.result IN ('suspicious','failed')
-                WHERE o.status = 'active'
-                GROUP BY o.id, o.name, o.slug, o.plan
+                GROUP BY o.id, o.name, o.slug, o.plan, o.status
                 HAVING COUNT(fa.id) > 0
                 ORDER BY fraud_count DESC
                 LIMIT 20
@@ -202,6 +201,8 @@ router.get('/risk-analytics', cacheMiddleware(120), requirePermission('admin:man
         // ── Process Suspicious Tenants ──
         const suspiciousTenants = suspRows.map(t => ({
             ...t,
+            tenant_id: t.id,
+            status: t.tenant_status || 'active',
             risk_score: Math.min(99, Math.round(
                 t.critical_count * 15 + t.open_count * 5 + t.fraud_count * 2 + (t.avg_fraud_score || 0) * 30
             )),
