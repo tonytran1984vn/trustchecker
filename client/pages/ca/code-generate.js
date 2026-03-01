@@ -11,13 +11,20 @@ let data = null, loading = false, generating = false, genResult = null;
 async function load() {
   if (loading) return; loading = true;
   try {
-    const [qrRes, batchRes, prodRes] = await Promise.all([
-      API.get('/qr/scan-history?limit=50').catch(() => ({ scans: [] })),
-      API.get('/scm/batches?limit=20').catch(() => []),
-      API.get('/products?limit=50').catch(() => ({ products: [] })),
-    ]);
-    const codes = qrRes.scans || [];
-    const qrCodes = await API.get('/qr/dashboard-stats').catch(() => ({}));
+    if (window._caIdReady) { try { await window._caIdReady; } catch { } }
+    const ic = window._caIdCache;
+    let qrRes, batchRes, prodRes, qrCodes;
+    if (ic?.scanHistory && ic?.batches && ic?.products && ic?.dashboardStats && ic._loadedAt && !data) {
+      qrRes = ic.scanHistory; batchRes = ic.batches; prodRes = ic.products; qrCodes = ic.dashboardStats;
+    } else {
+      [qrRes, batchRes, prodRes] = await Promise.all([
+        API.get('/qr/scan-history?limit=50').catch(() => ({ scans: [] })),
+        API.get('/scm/batches?limit=20').catch(() => []),
+        API.get('/products?limit=50').catch(() => ({ products: [] })),
+      ]);
+      qrCodes = await API.get('/qr/dashboard-stats').catch(() => ({}));
+    }
+    const codes = (qrRes.scans || qrRes) || [];
 
     // Load generation history in a single query
     let genHistory = [];
@@ -27,10 +34,10 @@ async function load() {
     } catch { }
 
     data = {
-      codes,
+      codes: Array.isArray(codes) ? codes : [],
       batches: Array.isArray(batchRes) ? batchRes : (batchRes.batches || []),
       products: Array.isArray(prodRes) ? prodRes : (prodRes.products || []),
-      stats: qrCodes,
+      stats: qrCodes || {},
       genHistory,
     };
   } catch (e) { data = { codes: [], batches: [], products: [], stats: {}, genHistory: [] }; }

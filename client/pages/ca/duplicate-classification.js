@@ -10,15 +10,21 @@ let data = null, loading = false;
 async function load() {
   if (loading) return; loading = true;
   const emptyData = { total: 0, curiosity: 0, leakage: 0, counterfeit: 0, unclassified: 0, classList: [], duplicates: [] };
-  // Safety timeout — render empty state if API hangs
   const timer = setTimeout(() => {
     if (!data) { data = emptyData; loading = false; const el = document.getElementById('duplicate-classification-root'); if (el) el.innerHTML = renderContent(); }
   }, 5000);
   try {
-    const [classifications, scans] = await Promise.all([
-      API.get('/scm/classify/duplicates?limit=100').catch(() => ({ classifications: [] })),
-      API.get('/scm/classify/duplicates/stats').catch(() => ({ breakdown: {} })),
-    ]);
+    if (window._caIdReady) { try { await window._caIdReady; } catch { } }
+    const ic = window._caIdCache;
+    let classifications, scans;
+    if (ic?.duplicates && ic?.duplicateStats && ic._loadedAt && !data) {
+      classifications = ic.duplicates; scans = ic.duplicateStats;
+    } else {
+      [classifications, scans] = await Promise.all([
+        API.get('/scm/classify/duplicates?limit=100').catch(() => ({ classifications: [] })),
+        API.get('/scm/classify/duplicates/stats').catch(() => ({ breakdown: {} })),
+      ]);
+    }
     const classList = Array.isArray(classifications) ? classifications : (classifications.classifications || []);
     const stats = scans.breakdown || {};
 

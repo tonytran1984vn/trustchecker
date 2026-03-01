@@ -284,10 +284,17 @@ window._caTraceTab = (t) => {
 async function load() {
   if (loading) return; loading = true;
   try {
-    const [evRes, bRes] = await Promise.all([
-      API.get('/scm/events?limit=500').catch(() => ({ events: [] })),
-      API.get('/scm/batches?limit=20').catch(() => ({ batches: [] })),
-    ]);
+    if (window._caOpsReady) { try { await window._caOpsReady; } catch { } }
+    const oc = window._caOpsCache;
+    let evRes, bRes;
+    if (oc?.events && oc?.batches && oc._loadedAt && !events) {
+      evRes = oc.events; bRes = oc.batches;
+    } else {
+      [evRes, bRes] = await Promise.all([
+        API.get('/scm/events?limit=500').catch(() => ({ events: [] })),
+        API.get('/scm/batches?limit=20').catch(() => ({ batches: [] })),
+      ]);
+    }
     events = Array.isArray(evRes) ? evRes : (evRes.events || []);
     batches = Array.isArray(bRes) ? bRes : (bRes.batches || []);
   } catch (e) { events = []; batches = []; }

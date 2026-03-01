@@ -52,7 +52,11 @@ window._caSubmitNode = async () => {
 async function load() {
   if (loading) return; loading = true;
   try {
-    const res = await API.get('/scm/supply/routes');
+    if (window._caOpsReady) { try { await window._caOpsReady; } catch { } }
+    const oc = window._caOpsCache;
+    let res;
+    if (oc?.routes && oc._loadedAt && !nodes) { res = oc.routes; }
+    else { res = await API.get('/scm/supply/routes'); }
     const routes = Array.isArray(res) ? res : (res.routes || []);
     const nodeMap = {};
 

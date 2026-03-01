@@ -10,11 +10,18 @@ let data = null, loading = false;
 async function load() {
   if (loading) return; loading = true;
   try {
-    const [products, scans, anomalies] = await Promise.all([
-      API.get('/products?limit=1&offset=0').catch(() => ({ total: 0 })),
-      API.get('/scm/events?limit=100').catch(() => ({ events: [] })),
-      API.get('/anomaly?limit=100').catch(() => ({ anomalies: [] })),
-    ]);
+    if (window._caRiskReady) { try { await window._caRiskReady; } catch { } }
+    const rc = window._caRiskCache;
+    let products, scans, anomalies;
+    if (rc?.productCount && rc?.events && rc?.anomalies && rc._loadedAt && !data) {
+      products = rc.productCount; scans = rc.events; anomalies = rc.anomalies;
+    } else {
+      [products, scans, anomalies] = await Promise.all([
+        API.get('/products?limit=1&offset=0').catch(() => ({ total: 0 })),
+        API.get('/scm/events?limit=100').catch(() => ({ events: [] })),
+        API.get('/anomaly?limit=100').catch(() => ({ anomalies: [] })),
+      ]);
+    }
     const scanList = Array.isArray(scans) ? scans : (scans.events || []);
     const anomalyList = Array.isArray(anomalies) ? anomalies : (anomalies.anomalies || anomalies.detections || []);
 

@@ -10,29 +10,33 @@ import { showToast } from '../../components/toast.js';
 let _approvals = null, _loading = false;
 
 export function renderPage() {
-    if (!_approvals && !_loading) { _load(); }
-    return `<div id="approval-queue-root">${_render()}</div>`;
+  if (!_approvals && !_loading) { _load(); }
+  return `<div id="approval-queue-root">${_render()}</div>`;
 }
 
 async function _load() {
-    _loading = true;
-    try {
-        const res = await API.get('/tenant/approvals');
-        _approvals = res.approvals || [];
-    } catch (e) { _approvals = []; }
-    _loading = false;
-    const el = document.getElementById('approval-queue-root');
-    if (el) el.innerHTML = _render();
+  _loading = true;
+  try {
+    if (window._caGovReady) { try { await window._caGovReady; } catch { } }
+    const gc = window._caGovCache;
+    let res;
+    if (gc?.approvals && gc._loadedAt && !_approvals) { res = gc.approvals; }
+    else { res = await API.get('/tenant/approvals'); }
+    _approvals = res.approvals || [];
+  } catch (e) { _approvals = []; }
+  _loading = false;
+  const el = document.getElementById('approval-queue-root');
+  if (el) el.innerHTML = _render();
 }
 
 function _render() {
-    if (_loading && !_approvals) return `<div style="text-align:center;padding:60px;color:var(--text-muted)"><div class="spinner"></div> Loading approvals...</div>`;
+  if (_loading && !_approvals) return `<div style="text-align:center;padding:60px;color:var(--text-muted)"><div class="spinner"></div> Loading approvals...</div>`;
 
-    const list = _approvals || [];
-    const pending = list.filter(a => a.status === 'pending');
-    const resolved = list.filter(a => a.status !== 'pending');
+  const list = _approvals || [];
+  const pending = list.filter(a => a.status === 'pending');
+  const resolved = list.filter(a => a.status !== 'pending');
 
-    return `
+  return `
     <div class="sa-page" style="max-width:1000px">
       <div class="sa-page-title">
         <h1>${icon('check', 28)} Role Approval Queue</h1>
@@ -75,16 +79,16 @@ function _render() {
 }
 
 function _renderApproval(a, showActions) {
-    const statusMap = {
-        pending: { color: '#f97316', bg: 'rgba(249,115,22,0.1)', label: 'Pending', icon: '⏳' },
-        approved: { color: '#10b981', bg: 'rgba(16,185,129,0.1)', label: 'Approved', icon: '✅' },
-        rejected: { color: '#ef4444', bg: 'rgba(239,68,68,0.1)', label: 'Rejected', icon: '❌' },
-    };
-    const st = statusMap[a.status] || statusMap.pending;
-    const time = a.created_at ? new Date(a.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-    const resolvedTime = a.resolved_at ? new Date(a.resolved_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  const statusMap = {
+    pending: { color: '#f97316', bg: 'rgba(249,115,22,0.1)', label: 'Pending', icon: '⏳' },
+    approved: { color: '#10b981', bg: 'rgba(16,185,129,0.1)', label: 'Approved', icon: '✅' },
+    rejected: { color: '#ef4444', bg: 'rgba(239,68,68,0.1)', label: 'Rejected', icon: '❌' },
+  };
+  const st = statusMap[a.status] || statusMap.pending;
+  const time = a.created_at ? new Date(a.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  const resolvedTime = a.resolved_at ? new Date(a.resolved_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
-    return `
+  return `
     <div style="padding:14px 16px;background:${st.bg};border-radius:10px;border-left:3px solid ${st.color}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
         <div style="flex:1;min-width:200px">
@@ -120,25 +124,25 @@ function _renderApproval(a, showActions) {
 window._aqRefresh = () => { _approvals = null; _loading = false; _load(); };
 
 window._aqApprove = async (id) => {
-    try {
-        const res = await API.post(`/tenant/approvals/${id}/approve`);
-        showToast(`✅ Role approved: ${res.role || 'Unknown'}`, 'success');
-        _load();
-    } catch (e) {
-        const msg = e.response?.data?.error || e.message || 'Approval failed';
-        showToast(`❌ ${msg}`, 'error');
-    }
+  try {
+    const res = await API.post(`/tenant/approvals/${id}/approve`);
+    showToast(`✅ Role approved: ${res.role || 'Unknown'}`, 'success');
+    _load();
+  } catch (e) {
+    const msg = e.response?.data?.error || e.message || 'Approval failed';
+    showToast(`❌ ${msg}`, 'error');
+  }
 };
 
 window._aqReject = async (id) => {
-    const reason = prompt('Rejection reason (required):');
-    if (!reason) return;
-    try {
-        await API.post(`/tenant/approvals/${id}/reject`, { reason });
-        showToast('❌ Role assignment rejected', 'warning');
-        _load();
-    } catch (e) {
-        const msg = e.response?.data?.error || e.message || 'Rejection failed';
-        showToast(`❌ ${msg}`, 'error');
-    }
+  const reason = prompt('Rejection reason (required):');
+  if (!reason) return;
+  try {
+    await API.post(`/tenant/approvals/${id}/reject`, { reason });
+    showToast('❌ Role assignment rejected', 'warning');
+    _load();
+  } catch (e) {
+    const msg = e.response?.data?.error || e.message || 'Rejection failed';
+    showToast(`❌ ${msg}`, 'error');
+  }
 };

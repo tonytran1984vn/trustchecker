@@ -10,10 +10,17 @@ let data = null, loading = false;
 async function load() {
   if (loading) return; loading = true;
   try {
-    const [qrRes, batchRes] = await Promise.all([
-      API.get('/qr/scan-history?limit=100').catch(() => ({ scans: [] })),
-      API.get('/scm/batches?limit=50').catch(() => []),
-    ]);
+    if (window._caIdReady) { try { await window._caIdReady; } catch { } }
+    const ic = window._caIdCache;
+    let qrRes, batchRes;
+    if (ic?.scanHistory && ic?.batches && ic._loadedAt && !data) {
+      qrRes = ic.scanHistory; batchRes = ic.batches;
+    } else {
+      [qrRes, batchRes] = await Promise.all([
+        API.get('/qr/scan-history?limit=100').catch(() => ({ scans: [] })),
+        API.get('/scm/batches?limit=50').catch(() => []),
+      ]);
+    }
     const codes = qrRes.scans || (Array.isArray(qrRes) ? qrRes : []);
     data = { codes, batches: Array.isArray(batchRes) ? batchRes : (batchRes.batches || []) };
   } catch (e) { data = { codes: [], batches: [] }; }

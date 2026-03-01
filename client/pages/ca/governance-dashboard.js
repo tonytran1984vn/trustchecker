@@ -17,7 +17,10 @@ export function renderPage() {
 async function _load() {
   _loading = true;
   try {
-    _data = await API.get('/tenant/governance/dashboard');
+    if (window._caGovReady) { try { await window._caGovReady; } catch { } }
+    const gc = window._caGovCache;
+    if (gc?.dashboard && gc._loadedAt && !_data) { _data = gc.dashboard; }
+    else { _data = await API.get('/tenant/governance/dashboard'); }
   } catch (e) {
     _data = { pending_approvals: 0, sod_warnings: [], sod_warning_count: 0, high_severity_events: [], total_users: 0, role_distribution: [] };
   }

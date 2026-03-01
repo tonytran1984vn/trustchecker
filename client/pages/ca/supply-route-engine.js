@@ -10,11 +10,18 @@ let data = null, loading = false;
 async function load() {
   if (loading) return; loading = true;
   try {
-    const [routes, rules, breaches] = await Promise.all([
-      API.get('/scm/supply/routes').catch(() => []),
-      API.get('/scm/supply/channel-rules').catch(() => []),
-      API.get('/scm/supply/route-breaches').catch(() => []),
-    ]);
+    if (window._caRiskReady) { try { await window._caRiskReady; } catch { } }
+    const rc = window._caRiskCache;
+    let routes, rules, breaches;
+    if (rc?.supplyRoutes && rc?.channelRules && rc?.routeBreaches && rc._loadedAt && !data) {
+      routes = rc.supplyRoutes; rules = rc.channelRules; breaches = rc.routeBreaches;
+    } else {
+      [routes, rules, breaches] = await Promise.all([
+        API.get('/scm/supply/routes').catch(() => []),
+        API.get('/scm/supply/channel-rules').catch(() => []),
+        API.get('/scm/supply/route-breaches').catch(() => []),
+      ]);
+    }
     data = {
       routes: Array.isArray(routes) ? routes : (routes.routes || []),
       rules: Array.isArray(rules) ? rules : (rules.rules || []),

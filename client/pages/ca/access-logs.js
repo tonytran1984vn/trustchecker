@@ -16,7 +16,11 @@ window._caAccessTab = (t) => { activeTab = t; { const _el = document.getElementB
 async function load() {
   if (loading) return; loading = true;
   try {
-    const res = await API.get('/tenant/audit?limit=100');
+    if (window._caGovReady) { try { await window._caGovReady; } catch { } }
+    const gc = window._caGovCache;
+    let res;
+    if (gc?.auditLogs && gc._loadedAt && !logs) { res = gc.auditLogs; }
+    else { res = await API.get('/tenant/audit?limit=100'); }
     logs = Array.isArray(res) ? res : (res.logs || res.entries || []);
   } catch (e) { logs = []; }
   loading = false;

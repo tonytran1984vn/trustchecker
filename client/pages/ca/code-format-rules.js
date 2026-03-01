@@ -10,12 +10,19 @@ let data = null, loading = false, activeTab = 'rules', editingRuleId = null;
 async function load() {
   if (loading) return; loading = true;
   try {
-    const [rulesRes, statsRes, auditRes, templatesRes] = await Promise.all([
-      API.get('/scm/code-gov/format-rules').catch(() => ({ rules: [] })),
-      API.get('/scm/code-gov/format-rules/stats').catch(() => ({})),
-      API.get('/scm/code-gov/format-rules/audit?limit=30').catch(() => ({ logs: [] })),
-      API.get('/scm/code-gov/format-rules/templates').catch(() => ({ templates: [] })),
-    ]);
+    if (window._caIdReady) { try { await window._caIdReady; } catch { } }
+    const ic = window._caIdCache;
+    let rulesRes, statsRes, auditRes, templatesRes;
+    if (ic?.formatRules && ic?.formatRulesStats && ic?.formatRulesAudit && ic?.formatRulesTemplates && ic._loadedAt && !data) {
+      rulesRes = ic.formatRules; statsRes = ic.formatRulesStats; auditRes = ic.formatRulesAudit; templatesRes = ic.formatRulesTemplates;
+    } else {
+      [rulesRes, statsRes, auditRes, templatesRes] = await Promise.all([
+        API.get('/scm/code-gov/format-rules').catch(() => ({ rules: [] })),
+        API.get('/scm/code-gov/format-rules/stats').catch(() => ({})),
+        API.get('/scm/code-gov/format-rules/audit?limit=30').catch(() => ({ logs: [] })),
+        API.get('/scm/code-gov/format-rules/templates').catch(() => ({ templates: [] })),
+      ]);
+    }
     data = {
       rules: rulesRes.rules || [],
       stats: statsRes || {},

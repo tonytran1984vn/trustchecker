@@ -10,7 +10,11 @@ let logs = null, loading = false;
 async function load() {
   if (loading) return; loading = true;
   try {
-    const res = await API.get('/audit-log?limit=100');
+    if (window._caIdReady) { try { await window._caIdReady; } catch { } }
+    const ic = window._caIdCache;
+    let res;
+    if (ic?.auditLog && ic._loadedAt && !logs) { res = ic.auditLog; }
+    else { res = await API.get('/audit-log?limit=100'); }
     const all = Array.isArray(res) ? res : (res.logs || res.entries || []);
     logs = all;
   } catch (e) { logs = []; }

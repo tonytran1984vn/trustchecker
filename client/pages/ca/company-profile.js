@@ -14,11 +14,18 @@ let data = null, loading = false;
 async function load() {
   if (loading) return; loading = true;
   try {
-    const [org, members, products] = await Promise.all([
-      API.get('/org'),
-      API.get('/org/members').catch(() => ({ members: [], total: 0 })),
-      API.get('/products?limit=1&offset=0').catch(() => ({ total: 0 })),
-    ]);
+    if (window._caSetReady) { try { await window._caSetReady; } catch { } }
+    const sc = window._caSetCache;
+    let org, members, products;
+    if (sc?.org && sc?.members && sc?.productCount && sc._loadedAt && !data) {
+      org = sc.org; members = sc.members; products = sc.productCount;
+    } else {
+      [org, members, products] = await Promise.all([
+        API.get('/org'),
+        API.get('/org/members').catch(() => ({ members: [], total: 0 })),
+        API.get('/products?limit=1&offset=0').catch(() => ({ total: 0 })),
+      ]);
+    }
     data = { org, members: members.members || [], memberCount: members.total || 0, productCount: products.total || 0 };
   } catch (e) { data = { org: {}, members: [], memberCount: 0, productCount: 0 }; }
   loading = false;

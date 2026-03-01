@@ -39,7 +39,11 @@ export function renderPage() {
 
 export async function loadAdminUsers() {
   try {
-    const res = await API.get('/admin/users');
+    if (window._caGovReady) { try { await window._caGovReady; } catch { } }
+    const gc = window._caGovCache;
+    let res;
+    if (gc?.adminUsers && gc._loadedAt) { res = gc.adminUsers; gc.adminUsers = null; /* use once then refresh */ }
+    else { res = await API.get('/admin/users'); }
     const el = document.getElementById('admin-users-list');
     if (!el) return;
 

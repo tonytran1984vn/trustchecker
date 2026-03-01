@@ -66,7 +66,11 @@ export function renderPage() {
 async function load() {
   if (loading) return; loading = true;
   try {
-    const res = await API.get('/scm/batches');
+    if (window._caOpsReady) { try { await window._caOpsReady; } catch { } }
+    const oc = window._caOpsCache;
+    let res;
+    if (oc?.batches && oc._loadedAt && !batches) { res = oc.batches; }
+    else { res = await API.get('/scm/batches'); }
     batches = Array.isArray(res) ? res : (res.batches || []);
   } catch (e) { batches = []; }
   loading = false;

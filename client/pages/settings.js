@@ -58,7 +58,16 @@ export function renderPage() {
 }
 export async function loadSettingsData() {
   try {
-    const me = await API.get('/auth/me');
+    if (window._caSetReady) { try { await window._caSetReady; } catch { } }
+    const sc = window._caSetCache;
+    let me, sessRes;
+    if (sc?.authMe && sc?.sessions && sc._loadedAt) {
+      me = sc.authMe; sessRes = sc.sessions;
+      sc.authMe = null; sc.sessions = null; // use once
+    } else {
+      me = await API.get('/auth/me');
+      sessRes = await API.get('/auth/sessions');
+    }
     const mfaEl = document.getElementById('mfa-status');
     if (mfaEl) {
       mfaEl.innerHTML = me.user.mfa_enabled ? `
@@ -82,7 +91,7 @@ export async function loadSettingsData() {
       `;
     }
 
-    const sessRes = await API.get('/auth/sessions');
+    if (!sessRes) sessRes = await API.get('/auth/sessions');
     const sessList = document.getElementById('sessions-list');
     if (sessList && sessRes.sessions) {
       sessList.innerHTML = sessRes.sessions.length ? sessRes.sessions.map((s, i) => `

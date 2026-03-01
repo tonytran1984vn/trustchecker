@@ -10,16 +10,22 @@ let rules = null, loading = false, showForm = false;
 
 async function load() {
   if (loading) return; loading = true;
-  // Safety timeout — render empty state if API hangs
   const timer = setTimeout(() => {
     if (!rules) { rules = { models: [], risks: [] }; loading = false; const el = document.getElementById('risk-rules-root'); if (el) el.innerHTML = renderContent(); }
   }, 5000);
   try {
-    const [models, risks, rulesConfig] = await Promise.all([
-      API.get('/scm/model/models').catch(() => ({ models: [] })),
-      API.get('/scm/risk/alerts?limit=50').catch(() => ({ alerts: [] })),
-      API.get('/scm/model/rules-config').catch(() => ({ grouped: {} })),
-    ]);
+    if (window._caRiskReady) { try { await window._caRiskReady; } catch { } }
+    const rc = window._caRiskCache;
+    let models, risks, rulesConfig;
+    if (rc?.riskModels && rc?.riskAlerts && rc?.rulesConfig && rc._loadedAt && !rules) {
+      models = rc.riskModels; risks = rc.riskAlerts; rulesConfig = rc.rulesConfig;
+    } else {
+      [models, risks, rulesConfig] = await Promise.all([
+        API.get('/scm/model/models').catch(() => ({ models: [] })),
+        API.get('/scm/risk/alerts?limit=50').catch(() => ({ alerts: [] })),
+        API.get('/scm/model/rules-config').catch(() => ({ grouped: {} })),
+      ]);
+    }
     const modelList = Array.isArray(models) ? models : (models.models || []);
     const riskList = Array.isArray(risks) ? risks : (risks.alerts || risks.rules || []);
     rules = { models: modelList, risks: riskList, config: rulesConfig?.grouped || {} };

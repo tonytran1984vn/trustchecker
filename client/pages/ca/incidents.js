@@ -11,7 +11,11 @@ let incidents = null, loading = false, showForm = false;
 async function load() {
   if (loading) return; loading = true;
   try {
-    const res = await API.get('/ops/incidents');
+    if (window._caRiskReady) { try { await window._caRiskReady; } catch { } }
+    const rc = window._caRiskCache;
+    let res;
+    if (rc?.incidents && rc._loadedAt && !incidents) { res = rc.incidents; }
+    else { res = await API.get('/ops/incidents'); }
     incidents = Array.isArray(res) ? res : (res.incidents || []);
   } catch (e) { incidents = []; }
   loading = false;
