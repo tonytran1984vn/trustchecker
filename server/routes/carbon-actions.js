@@ -17,10 +17,10 @@ const crypto = require('crypto');
 
 router.use(authMiddleware);
 
-// ─── Init table ────────────────────────────────────────────────────────────────
+// ─── Init table (PostgreSQL-compatible) ────────────────────────────────────────
 (async () => {
     try {
-        await db.run(`CREATE TABLE IF NOT EXISTS carbon_actions (
+        const sql = `CREATE TABLE IF NOT EXISTS carbon_actions (
             id TEXT PRIMARY KEY,
             org_id TEXT,
             title TEXT NOT NULL,
@@ -36,9 +36,14 @@ router.use(authMiddleware);
             due_date TEXT,
             completed_at TEXT,
             notes TEXT DEFAULT '',
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now'))
-        )`);
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        )`;
+        // Try db.run first; if Prisma mode skips DDL, use Prisma directly
+        const result = await db.run(sql).catch(() => null);
+        if (!result && db.prisma) {
+            await db.prisma.$executeRawUnsafe(sql).catch(() => { });
+        }
     } catch (e) { console.error('[carbon-actions] Table init:', e.message); }
 })();
 
