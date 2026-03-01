@@ -13,6 +13,25 @@ async function load() {
   setTimeout(() => { const el = document.getElementById('suspicious-tenants-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
+// ═══ Action handlers ═══
+window._saRiskAction = async (action, tenantId, tenantName) => {
+  if (action === 'suspend') {
+    const reason = prompt(`⚠️ Suspend "${tenantName}"?\n\nEnter reason for suspension:`);
+    if (!reason) return; // cancelled
+    try {
+      await API.post(`/platform/tenants/${tenantId}/suspend`, { reason });
+      alert(`✅ "${tenantName}" has been suspended.\nReason: ${reason}`);
+      data = null; load(); // reload
+    } catch (e) {
+      alert(`❌ Failed to suspend: ${e.message || 'Unknown error'}`);
+    }
+  } else if (action === 'review') {
+    window.navigate('sa-tenant-detail', { tenantId });
+  } else if (action === 'monitor') {
+    window.navigate('sa-risk-feed');
+  }
+};
+
 function renderContent() {
   if (!data && !loading) { load(); }
   if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading risk data...</div></div>`;
@@ -85,18 +104,20 @@ function renderContent() {
     const tierLabel = tier === 'crit' || tier === 'high' ? 'High' : tier === 'med' ? 'Medium' : 'Low';
     const tierIcon = tier === 'crit' || tier === 'high' ? '🔥' : tier === 'med' ? '⚡' : '✅';
     const lvClass = tier === 'crit' || tier === 'high' ? 'st-lv-high' : tier === 'med' ? 'st-lv-med' : 'st-lv-low';
+    const tid = t.tenant_id || t.id || '';
+    const tName = (t.name || '').replace(/'/g, "\\'");
     const action = (tier === 'crit' || tier === 'high')
-      ? '<button class="st-btn-solid st-btn-solid-red">Suspend</button>'
+      ? `<button class="st-btn-solid st-btn-solid-red" onclick="event.stopPropagation();_saRiskAction('suspend','${tid}','${tName}')">Suspend</button>`
       : tier === 'med'
-        ? '<button class="st-btn-ghost st-btn-ghost-amber">Review</button>'
-        : '<button class="st-btn-ghost st-btn-ghost-blue">Monitor</button>';
+        ? `<button class="st-btn-ghost st-btn-ghost-amber" onclick="event.stopPropagation();_saRiskAction('review','${tid}','${tName}')">Review</button>`
+        : `<button class="st-btn-ghost st-btn-ghost-blue" onclick="event.stopPropagation();_saRiskAction('monitor','${tid}','${tName}')">Monitor</button>`;
     const tagClass = (tier === 'crit' || tier === 'high') ? 'st-tag-red' : tier === 'med' ? 'st-tag-amber' : 'st-tag-gray';
     var pats = t.top_patterns || [];
     var shown = pats.slice(0, 2).map(function (p) { return '<span class="st-tag ' + tagClass + '">' + p + '</span>'; }).join('');
     if (pats.length > 2) shown += '<span class="st-tag st-tag-more">+' + (pats.length - 2) + '</span>';
     if (!pats.length) shown = '<span class="st-tag st-tag-gray">' + t.pattern_types + ' types</span>';
     var rowCls = s >= 90 ? ' class="st-row-alert"' : '';
-    return '<tr' + rowCls + '>'
+    return '<tr' + rowCls + ' onclick="navigate(\'sa-tenant-detail\',{tenantId:\'' + tid + '\'})">'
       + '<td style="text-align:left"><div class="st-org">' + t.name + '</div><div class="st-slug">' + t.slug + '</div></td>'
       + '<td style="text-align:right"><span class="st-score st-score-' + tier + '">' + s + '</span></td>'
       + '<td style="text-align:right"><span class="st-num">' + t.fraud_count + '</span></td>'
@@ -116,3 +137,4 @@ function renderContent() {
 export function renderPage() {
   return `<div id="suspicious-tenants-root">${renderContent()}</div>`;
 }
+
