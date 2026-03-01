@@ -1,41 +1,61 @@
 /**
  * SuperAdmin – ABAC Policies (Attribute-Based Access Control)
- * Layer on top of RBAC: department, region, time, device, risk-level
+ * Data persisted to PostgreSQL via /api/platform/sa-config/abac_policies
  */
 import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';
 
-const ATTRIBUTES = [
-    { name: 'department', type: 'String', values: 'ops, risk, compliance, it, finance, legal, executive', source: 'User Profile' },
-    { name: 'region', type: 'Enum', values: 'VN, SG, TH, US, EU, JP', source: 'User Profile / GeoIP' },
-    { name: 'time_window', type: 'Time', values: '00:00–23:59', source: 'System Clock (local TZ)' },
-    { name: 'device_trust_level', type: 'Enum', values: 'trusted, untrusted, unknown', source: 'Device Fingerprint' },
-    { name: 'risk_score', type: 'Number', values: '0–100', source: 'Risk Engine' },
-    { name: 'data_classification', type: 'Enum', values: 'public, internal, confidential, restricted', source: 'Data Catalog' },
-    { name: 'ip_location', type: 'String', values: 'CIDR / Country code', source: 'Network Layer' },
-    { name: 'session_mfa', type: 'Boolean', values: 'true / false', source: 'Auth Provider' },
-    { name: 'contract_tier', type: 'Enum', values: 'starter, business, enterprise', source: 'Billing' },
+const DEFAULT_ATTRIBUTES = [
+  { name: 'department', type: 'String', values: 'ops, risk, compliance, it, finance, legal, executive', source: 'User Profile' },
+  { name: 'region', type: 'Enum', values: 'VN, SG, TH, US, EU, JP', source: 'User Profile / GeoIP' },
+  { name: 'time_window', type: 'Time', values: '00:00–23:59', source: 'System Clock (local TZ)' },
+  { name: 'device_trust_level', type: 'Enum', values: 'trusted, untrusted, unknown', source: 'Device Fingerprint' },
+  { name: 'risk_score', type: 'Number', values: '0–100', source: 'Risk Engine' },
+  { name: 'data_classification', type: 'Enum', values: 'public, internal, confidential, restricted', source: 'Data Catalog' },
+  { name: 'ip_location', type: 'String', values: 'CIDR / Country code', source: 'Network Layer' },
+  { name: 'session_mfa', type: 'Boolean', values: 'true / false', source: 'Auth Provider' },
+  { name: 'contract_tier', type: 'Enum', values: 'starter, business, enterprise', source: 'Billing' },
 ];
 
-const POLICIES = [
-    { id: 'ABAC-001', name: 'Restrict PII to local region', rule: 'data_classification = restricted AND region ≠ data.origin_region', effect: 'DENY', target: 'data.pii.access', priority: 1, status: 'active' },
-    { id: 'ABAC-002', name: 'After-hours high-risk block', rule: 'time_window NOT IN [08:00–20:00] AND risk_score > 70', effect: 'DENY', target: 'batch.transfer.*', priority: 2, status: 'active' },
-    { id: 'ABAC-003', name: 'Untrusted device → read-only', rule: 'device_trust_level = untrusted', effect: 'DENY write', target: '*.create, *.edit, *.delete', priority: 3, status: 'active' },
-    { id: 'ABAC-004', name: 'Cross-region transfer approval', rule: 'action = batch.transfer AND sender.region ≠ receiver.region', effect: 'REQUIRE 4-Eyes', target: 'batch.transfer.approve', priority: 4, status: 'active' },
-    { id: 'ABAC-005', name: 'Non-MFA session downgrade', rule: 'session_mfa = false', effect: 'DENY', target: 'user.create, role.assign, sso.config', priority: 1, status: 'active' },
-    { id: 'ABAC-006', name: 'Starter tier feature gate', rule: 'contract_tier = starter', effect: 'DENY', target: 'scim.*, abac.*, sod.*', priority: 5, status: 'active' },
-    { id: 'ABAC-007', name: 'Finance-only billing access', rule: 'department ≠ finance AND department ≠ executive', effect: 'DENY', target: 'billing.*', priority: 3, status: 'active' },
-    { id: 'ABAC-008', name: 'High-risk auto escalate', rule: 'risk_score > 90', effect: 'ESCALATE', target: 'risk.case.*', priority: 1, status: 'active' },
+const DEFAULT_POLICIES = [
+  { id: 'ABAC-001', name: 'Restrict PII to local region', rule: 'data_classification = restricted AND region ≠ data.origin_region', effect: 'DENY', target: 'data.pii.access', priority: 1, status: 'active' },
+  { id: 'ABAC-002', name: 'After-hours high-risk block', rule: 'time_window NOT IN [08:00–20:00] AND risk_score > 70', effect: 'DENY', target: 'batch.transfer.*', priority: 2, status: 'active' },
+  { id: 'ABAC-003', name: 'Untrusted device → read-only', rule: 'device_trust_level = untrusted', effect: 'DENY write', target: '*.create, *.edit, *.delete', priority: 3, status: 'active' },
+  { id: 'ABAC-004', name: 'Cross-region transfer approval', rule: 'action = batch.transfer AND sender.region ≠ receiver.region', effect: 'REQUIRE 4-Eyes', target: 'batch.transfer.approve', priority: 4, status: 'active' },
+  { id: 'ABAC-005', name: 'Non-MFA session downgrade', rule: 'session_mfa = false', effect: 'DENY', target: 'user.create, role.assign, sso.config', priority: 1, status: 'active' },
+  { id: 'ABAC-006', name: 'Starter tier feature gate', rule: 'contract_tier = starter', effect: 'DENY', target: 'scim.*, abac.*, sod.*', priority: 5, status: 'active' },
+  { id: 'ABAC-007', name: 'Finance-only billing access', rule: 'department ≠ finance AND department ≠ executive', effect: 'DENY', target: 'billing.*', priority: 3, status: 'active' },
+  { id: 'ABAC-008', name: 'High-risk auto escalate', rule: 'risk_score > 90', effect: 'ESCALATE', target: 'risk.case.*', priority: 1, status: 'active' },
 ];
 
-const EVAL_LOG = [
-    { ts: '17:38:02', user: 'ops@company.com', action: 'batch.transfer.initiate', attrs: 'region=VN, time=17:38, device=trusted', policy: 'ABAC-004', result: 'ALLOW', reason: 'Same region' },
-    { ts: '17:35:44', user: 'analyst@company.com', action: 'data.pii.access', attrs: 'region=US, data.origin=VN, class=restricted', policy: 'ABAC-001', result: 'DENY', reason: 'Cross-region PII' },
-    { ts: '17:30:12', user: 'admin@company.com', action: 'role.assign', attrs: 'mfa=false, device=unknown', policy: 'ABAC-005', result: 'DENY', reason: 'No MFA session' },
-    { ts: '17:22:08', user: 'ops2@company.com', action: 'batch.create', attrs: 'device=untrusted, region=SG', policy: 'ABAC-003', result: 'DENY', reason: 'Untrusted device' },
+const DEFAULT_EVAL_LOG = [
+  { ts: '17:38:02', user: 'ops@company.com', action: 'batch.transfer.initiate', attrs: 'region=VN, time=17:38, device=trusted', policy: 'ABAC-004', result: 'ALLOW', reason: 'Same region' },
+  { ts: '17:35:44', user: 'analyst@company.com', action: 'data.pii.access', attrs: 'region=US, data.origin=VN, class=restricted', policy: 'ABAC-001', result: 'DENY', reason: 'Cross-region PII' },
+  { ts: '17:30:12', user: 'admin@company.com', action: 'role.assign', attrs: 'mfa=false, device=unknown', policy: 'ABAC-005', result: 'DENY', reason: 'No MFA session' },
+  { ts: '17:22:08', user: 'ops2@company.com', action: 'batch.create', attrs: 'device=untrusted, region=SG', policy: 'ABAC-003', result: 'DENY', reason: 'Untrusted device' },
 ];
+
+let ATTRIBUTES = [...DEFAULT_ATTRIBUTES];
+let POLICIES = [...DEFAULT_POLICIES];
+let EVAL_LOG = [...DEFAULT_EVAL_LOG];
+let _loaded = false;
+
+async function loadFromDB() {
+  if (_loaded) return;
+  try {
+    const res = await API.get('/platform/sa-config/abac_policies');
+    if (res.data && res.source === 'database') {
+      ATTRIBUTES = res.data.attributes || DEFAULT_ATTRIBUTES;
+      POLICIES = res.data.policies || DEFAULT_POLICIES;
+      EVAL_LOG = res.data.eval_log || DEFAULT_EVAL_LOG;
+    }
+  } catch (e) { console.warn('ABAC policies load failed, using defaults:', e.message); }
+  _loaded = true;
+}
 
 export function renderPage() {
-    return `
+  if (!_loaded) { loadFromDB().then(() => window.render?.()); }
+  return `
     <div class="sa-page">
       <div class="sa-page-title"><h1>${icon('shield', 28)} ABAC Policy Engine</h1><div class="sa-title-actions"><span style="font-size:0.78rem;color:var(--text-secondary)">Attribute-Based Access Control — Layer on RBAC</span><button class="btn btn-primary btn-sm" style="margin-left:1rem">+ Create Policy</button></div></div>
 

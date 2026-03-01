@@ -666,4 +666,73 @@ router.get('/audit', async (req, res) => {
     }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SA CONFIG — Generic JSON config storage (approval-workflows, escalation, ABAC)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const SA_CONFIG_KEYS = ['approval_workflows', 'escalation_flow', 'abac_policies'];
+
+// ─── GET /sa-config/:key — Read config ──────────────────────────────────────
+router.get('/sa-config/:key', async (req, res) => {
+    const key = req.params.key;
+    if (!SA_CONFIG_KEYS.includes(key)) {
+        return res.status(400).json({ error: `Invalid config key. Allowed: ${SA_CONFIG_KEYS.join(', ')}` });
+    }
+    try {
+        const row = await db.get(
+            "SELECT setting_value FROM system_settings WHERE category = 'sa_config' AND setting_key = ?",
+            [key]
+        );
+        if (row && row.setting_value) {
+            try {
+                const data = JSON.parse(row.setting_value);
+                return res.json({ key, data, source: 'database' });
+            } catch { /* invalid JSON, fall through */ }
+        }
+        res.json({ key, data: null, source: 'none' });
+    } catch (err) {
+        console.error(`[Platform] SA config read error (${key}):`, err.message);
+        res.json({ key, data: null, source: 'error' });
+    }
+});
+
+// ─── PUT /sa-config/:key — Write config ─────────────────────────────────────
+router.put('/sa-config/:key', async (req, res) => {
+    const key = req.params.key;
+    if (!SA_CONFIG_KEYS.includes(key)) {
+        return res.status(400).json({ error: `Invalid config key. Allowed: ${SA_CONFIG_KEYS.join(', ')}` });
+    }
+    try {
+        const value = JSON.stringify(req.body.data || req.body);
+        // Upsert: try update first, then insert
+        const existing = await db.get(
+            "SELECT id FROM system_settings WHERE category = 'sa_config' AND setting_key = ?",
+            [key]
+        );
+        if (existing) {
+            await db.run(
+                "UPDATE system_settings SET setting_value = ?, updated_by = ?, updated_at = NOW() WHERE category = 'sa_config' AND setting_key = ?",
+                [value, req.user.id, key]
+            );
+        } else {
+            await db.run(
+                "INSERT INTO system_settings (id, category, setting_key, setting_value, description, updated_by) VALUES (?, 'sa_config', ?, ?, ?, ?)",
+                [uuidv4(), key, value, `SA config: ${key}`, req.user.id]
+            );
+        }
+
+        // Audit
+        await db.run(
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'SA_CONFIG_UPDATED', 'sa_config', ?, ?)`,
+            [uuidv4(), req.user.id, key, JSON.stringify({ key, size: value.length })]
+        );
+
+        if (typeof db.save === 'function') await db.save();
+        res.json({ message: `Config "${key}" saved`, key });
+    } catch (err) {
+        console.error(`[Platform] SA config write error (${key}):`, err.message);
+        res.status(500).json({ error: 'Failed to save config' });
+    }
+});
+
 module.exports = router;

@@ -135,7 +135,7 @@ function renderContent() {
               <select onchange="window._rfPageSize(Number(this.value))" style="border:1px solid #e2e8f0;border-radius:6px;padding:2px 6px;font-size:0.72rem;background:#fff;cursor:pointer">
                 ${[10, 20, 50, 100].map(n => '<option value="' + n + '"' + (n === pageSize ? ' selected' : '') + '>' + n + '</option>').join('')}
               </select>
-              <span>/ trang</span>
+              <span>/ page</span>
             </div>
             <span style="font-size:0.65rem;color:#94a3b8">Updated: ${loadedAt ? new Date(loadedAt).toLocaleTimeString('en-US') : '—'}</span>
           </div>
@@ -180,7 +180,7 @@ function renderContent() {
         return acc;
       }, []).join('')}
             <button onclick="window._rfPage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}
-              style="padding:4px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:0.72rem;cursor:${currentPage >= totalPages ? 'default' : 'pointer'};background:${currentPage >= totalPages ? '#f8fafc' : '#fff'};color:${currentPage >= totalPages ? '#cbd5e1' : '#334155'}">Sau →</button>
+              style="padding:4px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:0.72rem;cursor:${currentPage >= totalPages ? 'default' : 'pointer'};background:${currentPage >= totalPages ? '#f8fafc' : '#fff'};color:${currentPage >= totalPages ? '#cbd5e1' : '#334155'}">Next →</button>
           </div>
         </div>
         ` : ''}

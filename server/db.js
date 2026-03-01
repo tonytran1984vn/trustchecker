@@ -64,10 +64,14 @@ class PrismaBackend {
     // datetime('now') → NOW()
     t = t.replace(/datetime\('now'\)/gi, 'NOW()');
 
-    // datetime('now', '-N days/hours/...') → NOW() - INTERVAL 'N unit'
+    // datetime('now', '±N days/hours/...') → NOW() ± INTERVAL 'N unit'
     t = t.replace(
-      /datetime\('now',\s*'(-?\d+)\s*(day|days|hour|hours|minute|minutes|month|months)'\)/gi,
-      (_, n, u) => `NOW() - INTERVAL '${Math.abs(parseInt(n))} ${u.toLowerCase()}'`
+      /datetime\('now',\s*'([+-]?\d+)\s*(day|days|hour|hours|minute|minutes|month|months)'\)/gi,
+      (_, n, u) => {
+        const num = parseInt(n);
+        const op = num >= 0 ? '+' : '-';
+        return `NOW() ${op} INTERVAL '${Math.abs(num)} ${u.toLowerCase()}'`;
+      }
     );
 
     // datetime('now', ?) → NOW() + CAST(? AS INTERVAL)
@@ -102,6 +106,10 @@ class PrismaBackend {
 
     // IFNULL(a, b) → COALESCE(a, b)
     t = t.replace(/IFNULL\(/gi, 'COALESCE(');
+
+    // Boolean/Integer compatibility: revoked = 1 → revoked = true, = 0 → = false
+    t = t.replace(/\b(revoked|is_active|is_system|mfa_enabled|collision_detected|alert_triggered|is_secret|is_latest|must_change_password)\s*=\s*1\b/gi, '$1 = true');
+    t = t.replace(/\b(revoked|is_active|is_system|mfa_enabled|collision_detected|alert_triggered|is_secret|is_latest|must_change_password)\s*=\s*0\b/gi, '$1 = false');
 
     // INSERT OR IGNORE → INSERT ... ON CONFLICT DO NOTHING
     const hadOrIgnore = /INSERT\s+OR\s+IGNORE\s+INTO/i.test(t);

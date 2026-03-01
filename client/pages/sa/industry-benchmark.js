@@ -30,7 +30,7 @@ function renderContent() {
         ${m('Active Organizations', heatmap.length.toString(), 'Across ' + new Set(heatmap.flatMap(h => h.industry.split(', '))).size + ' industries', 'blue', 'building')}
         ${m('Total Scans', heatmap.reduce((s, h) => s + h.scans, 0).toLocaleString(), 'Across all organizations', 'green', 'zap')}
         ${m('Active Fraud Patterns', patterns.length.toString(), 'Alert types detected', 'red', 'alertTriangle')}
-        ${m('High Risk Organizations', heatmap.filter(h => h.tier === 'High').length.toString(), 'Cần audit ngay', 'orange', 'target')}
+        ${m('High Risk Organizations', heatmap.filter(h => h.tier === 'High').length.toString(), 'Audit required', 'orange', 'target')}
       </div>
 
       <!-- TENANT RISK HEATMAP -->
