@@ -1060,7 +1060,7 @@ function renderBenchmark() {
         <tr style="${o.is_you ? 'background:#3b82f610;font-weight:700' : ''}">
           <td style="font-size:0.72rem">${o.rank}</td>
           <td style="font-size:0.72rem">${esc(o.label)}</td>
-          <td style="font-size:0.72rem;text-align:right">${o.intensity_kgCO2e_per_product} kgCO₂e/product</td>
+          <td style="font-size:0.72rem;text-align:right">${o.intensity || o.intensity_kgCO2e_per_product || 0} kgCO₂e/product</td>
         </tr>`).join('');
       return `
       <div class="card" style="border-left:4px solid ${pColor};margin-top:16px">
