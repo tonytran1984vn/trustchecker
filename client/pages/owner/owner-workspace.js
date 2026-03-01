@@ -221,8 +221,8 @@ function renderOverview() {
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-      <div id="owner-pending-actions-kpi">${kpi('⚡ Pending Actions', '…', '#3b82f6', 'Loading…')}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:stretch">
+      <div id="owner-pending-actions-kpi" style="display:flex">${kpi('⚡ Carbon Actions', '…', '#3b82f6', 'Loading…')}</div>
       ${kpi('Risk Model', d.risk_model_version || 'N/A', '#8b5cf6', d.risk_model_version !== 'N/A' ? `Version ${d.risk_model_version}` : 'Not deployed')}
       ${kpi('Self-Elevation (30d)', d.self_elevation_attempts_30d || 0, d.self_elevation_attempts_30d > 0 ? '#f59e0b' : '#10b981', 'Blocked attempts')}
     </div>
@@ -317,7 +317,7 @@ function _loadPendingActionsKpi() {
       const ipC = pendingActions.filter(a => a.status === 'in_progress').length;
 
       el.innerHTML = `
-        <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:16px 20px;flex:1;min-width:140px">
+        <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:16px 20px;flex:1;min-width:140px;display:flex;flex-direction:column;justify-content:center">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">⚡ Carbon Actions</div>
             <div style="font-size:1.2rem;font-weight:800;color:${color}">${pending}</div>
