@@ -9,6 +9,7 @@
 import { State } from '../core/state.js';
 import { PAGE_FEATURE_MAP, PLAN_NAMES, hasFeature, getRequiredPlanForFeature } from '../core/features.js';
 import { icon } from '../core/icons.js';
+import '../components/account-settings.js';
 
 // ═══════════════════════════════════════════════════════════════
 // ROLE-BASED VISIBILITY CONFIG (Tenant Roles)
@@ -683,6 +684,7 @@ function renderExecutiveSidebar() {
           <div class="user-name">${State.user?.email || 'CEO'}</div>
           <div class="user-role"><span class="role-badge role-executive">executive</span></div>
         </div>
+        <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px">⚙</button>
         <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
       </div>
     </nav>
@@ -803,6 +805,7 @@ function renderOpsSidebar() {
           <div class="user-name">${State.user?.email || 'Ops Manager'}</div>
           <div class="user-role"><span class="role-badge role-ops_manager">ops_manager</span></div>
         </div>
+        <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px">⚙</button>
         <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
       </div>
     </nav>
@@ -927,6 +930,7 @@ function renderRiskSidebar() {
           <div class="user-name">${State.user?.email || 'Risk Officer'}</div>
           <div class="user-role"><span class="role-badge role-risk_officer">${getUserRole()}</span></div>
         </div>
+        <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px">⚙</button>
         <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
       </div>
     </nav>
@@ -1046,6 +1050,7 @@ function renderComplianceSidebar() {
           <div class="user-name">${State.user?.email || 'Compliance Officer'}</div>
           <div class="user-role"><span class="role-badge role-compliance_officer">compliance_officer</span></div>
         </div>
+        <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px">⚙</button>
         <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
       </div>
     </nav>
@@ -1156,6 +1161,7 @@ function renderITSidebar() {
           <div class="user-name">${State.user?.email || 'IT Admin'}</div>
           <div class="user-role"><span class="role-badge role-developer">developer</span></div>
         </div>
+        <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px">⚙</button>
         <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
       </div>
     </nav>
@@ -1193,6 +1199,7 @@ function renderSuperAdminSidebar() {
           <div class="user-name">${State.user?.email || 'Super Admin'}</div>
           <div class="user-role"><span class="role-badge role-super_admin">super_admin</span></div>
         </div>
+        <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px">⚙</button>
         <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
       </div>
     </nav>
@@ -1255,6 +1262,7 @@ function renderCarbonSidebar() {
           <div class="user-name">${State.user?.email || 'User'}</div>
           <div class="user-role"><span class="role-badge" style="background:#05966915;color:#059669;border:1px solid #05966940">carbon_officer</span></div>
         </div>
+        <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px">⚙</button>
         <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
       </div>
     </nav>
@@ -1327,6 +1335,7 @@ function renderOrgOwnerSidebar() {
           <div class="user-name">${State.user?.email || 'User'}</div>
           <div class="user-role"><span class="role-badge" style="background:#8b5cf615;color:#8b5cf6;border:1px solid #8b5cf640">org_owner</span></div>
         </div>
+        <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px">⚙</button>
         <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
       </div>
     </nav>
@@ -1360,6 +1369,7 @@ function renderCompanyAdminSidebar() {
           <div class="user-name">${State.user?.email || State.user?.username || 'User'}</div>
           <div class="user-role"><span class="role-badge role-${role}">${role}</span></div>
         </div>
+        <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px">⚙</button>
         <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
       </div>
     </nav>
@@ -1432,6 +1442,7 @@ function renderTenantSidebar() {
           <div class="user-name">${State.user?.email || State.user?.username || 'User'}</div>
           <div class="user-role"><span class="role-badge role-${role}">${role}</span></div>
         </div>
+        <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px">⚙</button>
         <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
       </div>
     </nav>
