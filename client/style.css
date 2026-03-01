@@ -10786,3 +10786,79 @@ input:focus-visible {
 [data-theme="light"] .cb-inner [style*="color:#cbd5e1"] {
   color: #64748b !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LIGHT THEME FIX — SA-Carbon Workspace (CIE)
+   Overrides hardcoded dark inline styles in carbon-credit.js,
+   green-finance.js, and carbon-registry.js
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Inner cards: background:#0f172a → light warm bg */
+[data-theme="light"] .sa-card [style*="background:#0f172a"],
+[data-theme="light"] .sa-page [style*="background:#0f172a"] {
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+/* Inner cards: background:#141824 → light warm bg */
+[data-theme="light"] .sa-card [style*="background:#141824"],
+[data-theme="light"] .sa-page [style*="background:#141824"] {
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+/* Progress bar tracks */
+[data-theme="light"] .sa-card [style*="background:#1e293b"] {
+  background: #e2e8f0 !important;
+}
+
+/* Active tab button and methodology badge backgrounds */
+[data-theme="light"] .sa-card [style*="background:#1e293b"][style*="border-radius:6px"],
+[data-theme="light"] .sa-card [style*="background:#1e293b"][style*="border-radius:20px"] {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Text: #f1f5f9 → dark readable text in light mode */
+[data-theme="light"] .sa-card [style*="color:#f1f5f9"],
+[data-theme="light"] .sa-page [style*="color:#f1f5f9"] {
+  color: #1e293b !important;
+}
+
+/* Text: #94a3b8 → darker muted in light mode */
+[data-theme="light"] .sa-card [style*="color:#94a3b8"],
+[data-theme="light"] .sa-page [style*="color:#94a3b8"] {
+  color: #64748b !important;
+}
+
+/* Text: #64748b → even darker in light mode */
+[data-theme="light"] .sa-card [style*="color:#64748b"],
+[data-theme="light"] .sa-page [style*="color:#64748b"] {
+  color: #475569 !important;
+}
+
+/* Table border rows: #1e293b → light border */
+[data-theme="light"] .sa-card [style*="border-bottom:1px solid #1e293b"],
+[data-theme="light"] .sa-card [style*="border-bottom:2px solid #1e293b"],
+[data-theme="light"] .sa-page [style*="border-bottom:1px solid #1e293b"],
+[data-theme="light"] .sa-page [style*="border-bottom:2px solid #1e293b"] {
+  border-color: #e2e8f0 !important;
+}
+
+/* Border-left accented cards inside .sa-card (e.g., What-If Simulation, Pending Actions) */
+[data-theme="light"] .sa-card [style*="background:#0f172a"][style*="border-left:3px solid"] {
+  background: #f8fafc !important;
+  border-color: inherit !important;
+}
+
+/* Border-color on styled divs with #334155 */
+[data-theme="light"] .sa-card [style*="border:1px solid #334155"],
+[data-theme="light"] .sa-card [style*="border-color:#334155"] {
+  border-color: #cbd5e1 !important;
+}
+
+/* Carbon registry moat cards (Economic Defensibility) */
+[data-theme="light"] .sa-card [style*="background:#0f172a"][style*="border-radius:10px"],
+[data-theme="light"] .sa-card [style*="background:#0f172a"][style*="border-radius:8px"] {
+  background: #f1f5f9 !important;
+}
