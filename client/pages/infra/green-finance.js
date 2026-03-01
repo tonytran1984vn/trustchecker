@@ -8,6 +8,18 @@ let _loaded = false;
 async function load() {
     if (_loading || _loaded) return;
     _loading = true;
+    // Use prefetched data from workspace if available
+    const wc = window._saCarbonCache;
+    if (wc?.greenFinance && wc._loadedAt) {
+        D = wc.greenFinance;
+        _loaded = true;
+        _loading = false;
+        setTimeout(() => {
+            const el = document.getElementById('green-finance-root');
+            if (el) el.innerHTML = renderContent();
+        }, 50);
+        return;
+    }
     const [score, collateral, instruments, dashboard] = await Promise.all([
         API.get('/green-finance/credit-score').catch(() => ({})),
         API.get('/green-finance/collateral').catch(() => ({})),
@@ -17,7 +29,6 @@ async function load() {
     D = { score, collateral, instruments, dashboard };
     _loaded = true;
     _loading = false;
-    // Targeted DOM update — only update green finance content
     setTimeout(() => {
         const el = document.getElementById('green-finance-root');
         if (el) el.innerHTML = renderContent();

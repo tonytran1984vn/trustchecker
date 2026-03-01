@@ -19,7 +19,14 @@ async function fetchCarbonData() {
     if (_carbonFetching || _carbonLoaded) return;
     _carbonFetching = true;
     try {
-        const bundle = await API.get('/scm/carbon/bundle').catch(() => null);
+        // Use prefetched data from workspace if available
+        const wc = window._saCarbonCache;
+        let bundle = null;
+        if (wc?.carbonBundle && wc._loadedAt) {
+            bundle = wc.carbonBundle;
+        } else {
+            bundle = await API.get('/scm/carbon/bundle').catch(() => null);
+        }
         if (bundle) {
             carbon = {
                 scope: bundle.scope, leaderboard: bundle.leaderboard, report: bundle.report,
@@ -28,7 +35,6 @@ async function fetchCarbonData() {
             };
         }
         _carbonLoaded = true;
-        // Targeted DOM update — only update the carbon page content, not the whole app
         setTimeout(() => {
             const el = document.getElementById('carbon-passport-root');
             if (el) el.innerHTML = renderContent();

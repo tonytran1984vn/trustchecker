@@ -13,13 +13,19 @@ async function loadData() {
   if (_data && _data.stats?.products_assessed > 0) return; // skip only if we have real data
   _loading = true;
   try {
+    // Use prefetched data from workspace if available
+    const wc = window._saCarbonCache;
+    if (wc?.sustainability && wc._loadedAt) {
+      _data = wc.sustainability;
+      _loading = false;
+      setTimeout(() => { const el = document.getElementById('sustainability-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
+      return;
+    }
     const [stats, lb] = await Promise.all([
       API.get('/sustainability/stats').catch(() => null),
       API.get('/sustainability/leaderboard').catch(() => null),
     ]);
     _data = { stats: stats || {}, scores: lb?.leaderboard || [] };
-    // Re-render into workspace content
-    // Re-render only if this tab is still active
     setTimeout(() => { const el = document.getElementById('sustainability-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
   } catch (e) { console.error('Sustainability fetch error:', e); }
   _loading = false;

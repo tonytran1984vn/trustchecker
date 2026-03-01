@@ -70,6 +70,12 @@ function getCIETabs() {
 }
 
 async function loadCIE() {
+    // Use prefetched data from workspace if available
+    const wc = window._saCarbonCache;
+    if (wc?.carbonCredit && wc._loadedAt) {
+        CIE = wc.carbonCredit;
+        return;
+    }
     const [summary, passports, benchmarks, ingestion] = await Promise.all([
         API.get('/scm/carbon-credit/balance').catch(() => null),
         API.get('/scm/carbon-credit/registry?limit=20').catch(() => null),

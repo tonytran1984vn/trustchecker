@@ -7,6 +7,14 @@ let _loading = false;
 async function load() {
     if (_loading) return;
     _loading = true;
+    // Use prefetched data from workspace if available
+    const wc = window._saCarbonCache;
+    if (wc?.registry && wc._loadedAt) {
+        D = wc.registry;
+        _loading = false;
+        setTimeout(() => { const el = document.getElementById('carbon-registry-root'); if (el) el.innerHTML = render ? render() : ''; }, 50);
+        return;
+    }
     const [jur, proto, cm, fee, rev, def, stats] = await Promise.all([
         API.get('/hardening/carbon-registry/jurisdictions').catch(() => ({})),
         API.get('/hardening/carbon-registry/protocol').catch(() => ({})),
@@ -18,7 +26,6 @@ async function load() {
     ]);
     D = { jur, proto, cm, fee, rev, def, stats };
     _loading = false;
-    // Re-render only if this tab is still active
     setTimeout(() => { const el = document.getElementById('carbon-registry-root'); if (el) el.innerHTML = render ? render() : ''; }, 50);
 }
 
