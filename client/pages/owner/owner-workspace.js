@@ -17,6 +17,7 @@ import { State, render } from '../../core/state.js';
 import { API } from '../../core/api.js';
 import { showToast } from '../../components/toast.js';
 import { icon } from '../../core/icons.js';
+import { injectMyActionsWidget } from '../../components/my-actions-widget.js';
 
 // ─── State ──────────────────────────────────────────────────
 let _ownerData = {};
@@ -89,6 +90,7 @@ async function loadOwnerData() {
   try {
     _ownerData = await API.get('/tenant/owner/dashboard');
     renderOwnerContent();
+    setTimeout(() => injectMyActionsWidget('my-actions-widget'), 150);
   } catch (e) {
     console.error('[Owner] Dashboard load error:', e);
     _ownerData = {};
@@ -196,6 +198,7 @@ function renderOverview() {
   `).join('') || '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:0.72rem">No recent critical actions</div>';
 
   return `
+    <div id="my-actions-widget" style="display:none"></div>
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px">
       ${kpi('Privilege Risk', `${riskScore}`, riskColor, riskLabel, 'Computed: high-risk density + SoD + inactive + self-elevation attempts')}
       ${kpi('Total Users', d.total_users || 0, 'var(--text-primary, #1e293b)', `${d.total_users || 0} organization members`)}
