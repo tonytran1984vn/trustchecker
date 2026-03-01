@@ -5,39 +5,42 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
+import { injectMyActionsWidget } from '../../components/my-actions-widget.js';
 
 let _data = null, _loading = false;
 
 export function renderPage() {
-    if (!_data && !_loading) { _load(); }
-    return `<div id="gov-dash-root">${_renderContent()}</div>`;
+  if (!_data && !_loading) { _load(); }
+  return `<div id="gov-dash-root">${_renderContent()}</div>`;
 }
 
 async function _load() {
-    _loading = true;
-    try {
-        _data = await API.get('/tenant/governance/dashboard');
-    } catch (e) {
-        _data = { pending_approvals: 0, sod_warnings: [], sod_warning_count: 0, high_severity_events: [], total_users: 0, role_distribution: [] };
-    }
-    _loading = false;
-    const el = document.getElementById('gov-dash-root');
-    if (el) el.innerHTML = _renderContent();
+  _loading = true;
+  try {
+    _data = await API.get('/tenant/governance/dashboard');
+  } catch (e) {
+    _data = { pending_approvals: 0, sod_warnings: [], sod_warning_count: 0, high_severity_events: [], total_users: 0, role_distribution: [] };
+  }
+  _loading = false;
+  const el = document.getElementById('gov-dash-root');
+  if (el) el.innerHTML = _renderContent();
+  setTimeout(() => injectMyActionsWidget('my-actions-widget'), 100);
 }
 
 function _renderContent() {
-    if (_loading && !_data) return `<div style="text-align:center;padding:60px;color:var(--text-muted)"><div class="spinner"></div> Loading Governance Dashboard...</div>`;
-    const d = _data || {};
+  if (_loading && !_data) return `<div style="text-align:center;padding:60px;color:var(--text-muted)"><div class="spinner"></div> Loading Governance Dashboard...</div>`;
+  const d = _data || {};
 
-    const pending = d.pending_approvals || 0;
-    const sodCount = d.sod_warning_count || 0;
-    const totalUsers = d.total_users || 0;
-    const events = d.high_severity_events || [];
-    const roles = d.role_distribution || [];
-    const sodWarnings = d.sod_warnings || [];
+  const pending = d.pending_approvals || 0;
+  const sodCount = d.sod_warning_count || 0;
+  const totalUsers = d.total_users || 0;
+  const events = d.high_severity_events || [];
+  const roles = d.role_distribution || [];
+  const sodWarnings = d.sod_warnings || [];
 
-    return `
+  return `
     <div class="sa-page" style="max-width:1100px">
+      <div id="my-actions-widget" style="display:none"></div>
       <div class="sa-page-title">
         <h1>${icon('shield', 28)} Governance Dashboard</h1>
         <div class="sa-title-actions">
@@ -84,11 +87,11 @@ function _renderContent() {
           ${roles.length === 0 ? `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:0.8rem">No roles configured</div>` : `
             <div style="max-height:260px;overflow-y:auto">
               ${roles.map((r, i) => {
-        const maxCount = Math.max(...roles.map(x => x.count || 0), 1);
-        const pct = Math.round(((r.count || 0) / maxCount) * 100);
-        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#ef4444', '#6366f1'];
-        const color = colors[i % colors.length];
-        return `
+    const maxCount = Math.max(...roles.map(x => x.count || 0), 1);
+    const pct = Math.round(((r.count || 0) / maxCount) * 100);
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#ef4444', '#6366f1'];
+    const color = colors[i % colors.length];
+    return `
                   <div style="margin-bottom:8px">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
                       <span style="font-size:0.78rem;font-weight:500">${r.display_name || r.name}</span>
@@ -98,7 +101,7 @@ function _renderContent() {
                       <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:width 0.5s ease"></div>
                     </div>
                   </div>`;
-    }).join('')}
+  }).join('')}
             </div>
           `}
         </div>
@@ -115,26 +118,26 @@ function _renderContent() {
         ` : `
           <div style="max-height:320px;overflow-y:auto">
             ${events.map(e => {
-        const actionColors = {
-            'SELF_ELEVATION_BLOCKED': '#ef4444',
-            'PERMISSION_CEILING_BLOCKED': '#f59e0b',
-            'HIGH_RISK_ROLE_PENDING': '#3b82f6',
-            'HIGH_RISK_ROLE_APPROVED': '#10b981',
-            'HIGH_RISK_ROLE_REJECTED': '#ef4444',
-        };
-        const actionIcons = {
-            'SELF_ELEVATION_BLOCKED': '🚫',
-            'PERMISSION_CEILING_BLOCKED': '🔒',
-            'HIGH_RISK_ROLE_PENDING': '⏳',
-            'HIGH_RISK_ROLE_APPROVED': '✅',
-            'HIGH_RISK_ROLE_REJECTED': '❌',
-        };
-        const color = actionColors[e.action] || '#64748b';
-        const ic = actionIcons[e.action] || '📌';
-        const time = e.created_at ? new Date(e.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-        let details = '';
-        try { details = JSON.parse(e.details || '{}'); } catch (_) { details = {}; }
-        return `
+    const actionColors = {
+      'SELF_ELEVATION_BLOCKED': '#ef4444',
+      'PERMISSION_CEILING_BLOCKED': '#f59e0b',
+      'HIGH_RISK_ROLE_PENDING': '#3b82f6',
+      'HIGH_RISK_ROLE_APPROVED': '#10b981',
+      'HIGH_RISK_ROLE_REJECTED': '#ef4444',
+    };
+    const actionIcons = {
+      'SELF_ELEVATION_BLOCKED': '🚫',
+      'PERMISSION_CEILING_BLOCKED': '🔒',
+      'HIGH_RISK_ROLE_PENDING': '⏳',
+      'HIGH_RISK_ROLE_APPROVED': '✅',
+      'HIGH_RISK_ROLE_REJECTED': '❌',
+    };
+    const color = actionColors[e.action] || '#64748b';
+    const ic = actionIcons[e.action] || '📌';
+    const time = e.created_at ? new Date(e.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    let details = '';
+    try { details = JSON.parse(e.details || '{}'); } catch (_) { details = {}; }
+    return `
                 <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;margin-bottom:4px;border-radius:8px;background:${color}08;border-left:3px solid ${color}">
                   <span style="font-size:1.1rem;margin-top:2px">${ic}</span>
                   <div style="flex:1;min-width:0">
@@ -150,7 +153,7 @@ function _renderContent() {
                     </div>
                   </div>
                 </div>`;
-    }).join('')}
+  }).join('')}
           </div>
         `}
       </div>
@@ -159,9 +162,9 @@ function _renderContent() {
 }
 
 function _metricCard(emoji, label, value, color, sub) {
-    const colorMap = { green: '#10b981', red: '#ef4444', orange: '#f59e0b', blue: '#3b82f6', purple: '#8b5cf6' };
-    const c = colorMap[color] || '#64748b';
-    return `
+  const colorMap = { green: '#10b981', red: '#ef4444', orange: '#f59e0b', blue: '#3b82f6', purple: '#8b5cf6' };
+  const c = colorMap[color] || '#64748b';
+  return `
     <div class="sa-metric-card" style="border-left:3px solid ${c}">
       <div class="sa-metric-body">
         <div style="font-size:1.4rem;margin-bottom:2px">${emoji}</div>
