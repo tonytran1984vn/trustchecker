@@ -8,6 +8,10 @@ let _loaded = false;
 async function load() {
     if (_loading || _loaded) return;
     _loading = true;
+    // Await workspace prefetch if it's in flight
+    if (window._saCarbonReady) {
+        try { await window._saCarbonReady; } catch { }
+    }
     // Use prefetched data from workspace if available
     const wc = window._saCarbonCache;
     if (wc?.greenFinance && wc._loadedAt) {

@@ -70,6 +70,10 @@ function getCIETabs() {
 }
 
 async function loadCIE() {
+    // Await workspace prefetch if it's in flight
+    if (window._saCarbonReady) {
+        try { await window._saCarbonReady; } catch { }
+    }
     // Use prefetched data from workspace if available
     const wc = window._saCarbonCache;
     if (wc?.carbonCredit && wc._loadedAt) {

@@ -7,6 +7,10 @@ let _loading = false;
 async function load() {
     if (_loading) return;
     _loading = true;
+    // Await workspace prefetch if it's in flight
+    if (window._saCarbonReady) {
+        try { await window._saCarbonReady; } catch { }
+    }
     // Use prefetched data from workspace if available
     const wc = window._saCarbonCache;
     if (wc?.registry && wc._loadedAt) {

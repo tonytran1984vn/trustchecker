@@ -19,6 +19,10 @@ async function fetchCarbonData() {
     if (_carbonFetching || _carbonLoaded) return;
     _carbonFetching = true;
     try {
+        // Await workspace prefetch if it's in flight
+        if (window._saCarbonReady) {
+            try { await window._saCarbonReady; } catch { }
+        }
         // Use prefetched data from workspace if available
         const wc = window._saCarbonCache;
         let bundle = null;

@@ -19,7 +19,8 @@ if (!window._saCarbonCache) window._saCarbonCache = {};
 const cache = window._saCarbonCache;
 if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 60000)) {
     cache._loading = true;
-    Promise.allSettled([
+    // Store promise so tabs can await it
+    window._saCarbonReady = Promise.allSettled([
         // Tab 1: Carbon Footprint (1 API)
         API.get('/scm/carbon/bundle').catch(() => null),
         // Tab 2: Carbon Passport (4 APIs)
@@ -53,7 +54,11 @@ if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 60000
         cache._loadedAt = Date.now();
         cache._loading = false;
         console.log('[SA Carbon] All 18 APIs prefetched ✓');
+        return cache;
     });
+} else if (cache._loadedAt) {
+    // Already loaded, resolve immediately
+    window._saCarbonReady = Promise.resolve(cache);
 }
 
 export function renderPage() {

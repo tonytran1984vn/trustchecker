@@ -13,6 +13,10 @@ async function loadData() {
   if (_data && _data.stats?.products_assessed > 0) return; // skip only if we have real data
   _loading = true;
   try {
+    // Await workspace prefetch if it's in flight
+    if (window._saCarbonReady) {
+      try { await window._saCarbonReady; } catch { }
+    }
     // Use prefetched data from workspace if available
     const wc = window._saCarbonCache;
     if (wc?.sustainability && wc._loadedAt) {
