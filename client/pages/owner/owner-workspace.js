@@ -291,18 +291,46 @@ function _loadPendingActionsKpi() {
     try {
       const data = await API.get('/carbon-actions').catch(() => ({ actions: [] }));
       const actions = data.actions || [];
-      const pending = actions.filter(a => a.status === 'open' || a.status === 'in_progress').length;
+      const pendingActions = actions.filter(a => a.status === 'open' || a.status === 'in_progress');
+      const pending = pendingActions.length;
       const color = pending > 3 ? '#ef4444' : pending > 0 ? '#f59e0b' : '#10b981';
-      const desc = pending > 0 ? `${actions.filter(a => a.status === 'open').length} open · ${actions.filter(a => a.status === 'in_progress').length} in progress` : 'All clear';
       const el = document.getElementById('owner-pending-actions-kpi');
-      if (el) {
-        el.innerHTML = `
-          <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:20px;flex:1;min-width:140px">
-            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">⚡ Pending Actions</div>
-            <div style="font-size:1.8rem;font-weight:800;color:${color}">${pending}</div>
-            <div style="font-size:0.68rem;color:var(--text-muted);margin-top:4px">${desc}</div>
-          </div>`;
-      }
+      if (!el) return;
+
+      const priColors = { critical: '#ef4444', high: '#f59e0b', medium: '#3b82f6', low: '#6b7280' };
+      const statusIcons = { open: '📋', in_progress: '🔄' };
+
+      const actionList = pendingActions.slice(0, 3).map(a => {
+        const pc = priColors[a.priority] || '#6b7280';
+        const si = statusIcons[a.status] || '📋';
+        const assignee = a.assigned_email ? a.assigned_email.split('@')[0] : '—';
+        const title = (a.title || '').length > 30 ? a.title.substring(0, 30) + '…' : (a.title || 'Untitled');
+        return `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border,#e2e8f0);font-size:0.65rem">
+          <span>${si}</span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">${title}</span>
+          <span style="width:6px;height:6px;border-radius:50%;background:${pc};flex-shrink:0" title="${a.priority}"></span>
+          <span style="color:var(--text-muted);flex-shrink:0">→ ${assignee}</span>
+        </div>`;
+      }).join('');
+
+      const openC = pendingActions.filter(a => a.status === 'open').length;
+      const ipC = pendingActions.filter(a => a.status === 'in_progress').length;
+
+      el.innerHTML = `
+        <div style="background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:12px;padding:16px 20px;flex:1;min-width:140px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">⚡ Carbon Actions</div>
+            <div style="font-size:1.2rem;font-weight:800;color:${color}">${pending}</div>
+          </div>
+          ${pending > 0 ? `
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <span style="font-size:0.6rem;padding:2px 8px;border-radius:8px;background:#3b82f612;color:#3b82f6;font-weight:600">📋 ${openC} open</span>
+              <span style="font-size:0.6rem;padding:2px 8px;border-radius:8px;background:#f59e0b12;color:#f59e0b;font-weight:600">🔄 ${ipC} in progress</span>
+            </div>
+            ${actionList}
+            ${pending > 3 ? `<div style="font-size:0.6rem;color:var(--text-muted);text-align:center;padding-top:4px">+ ${pending - 3} more</div>` : ''}
+          ` : `<div style="font-size:0.72rem;color:#10b981;font-weight:600">✅ All clear — no pending actions</div>`}
+        </div>`;
     } catch (_) { }
   }, 200);
   return '';
