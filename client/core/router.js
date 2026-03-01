@@ -206,6 +206,12 @@ const PAGE_LOADERS = {
     'ops-incidents-open': () => import('../pages/ops/incidents-open.js'),
     'ops-incidents-history': () => import('../pages/ops/incidents-history.js'),
 
+    // ─── Ops Workspace Routes (matching CA/SA pattern) ──
+    'ops-production': () => import('../pages/ops/ops-production-workspace.js'),
+    'ops-logistics': () => import('../pages/ops/ops-logistics-workspace.js'),
+    'ops-monitoring': () => import('../pages/ops/ops-monitoring-workspace.js'),
+    'ops-incidents': () => import('../pages/ops/ops-incidents-workspace.js'),
+
     // ─── Risk (Risk Governance Layer) pages ─────────────
     'risk-dashboard': () => import('../pages/risk/dashboard.js'),
     'risk-event-feed': () => import('../pages/risk/event-feed.js'),
@@ -712,7 +718,7 @@ function _defaultPageForRole() {
         super_admin: 'control-tower', platform_security: 'control-tower',
         org_owner: 'owner-governance', security_officer: 'ca-governance',
         data_gov_officer: 'compliance-dashboard', executive: 'exec-overview',
-        ops_manager: 'ops-dashboard', risk_officer: 'risk-dashboard',
+        ops_manager: 'ops-production', risk_officer: 'risk-dashboard',
         compliance_officer: 'compliance-dashboard', developer: 'it-authentication',
         ggc_member: 'trustgraph', risk_committee: 'risk-dashboard',
         ivu_validator: 'risk-dashboard', scm_analyst: 'ops-dashboard',

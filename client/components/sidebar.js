@@ -441,7 +441,7 @@ function switchRole(role) {
     platform_security: 'control-tower',
     data_gov_officer: 'compliance-dashboard',
     executive: 'exec-overview',
-    ops_manager: 'ops-dashboard',
+    ops_manager: 'ops-production',
     risk_officer: 'risk-dashboard',
     compliance_officer: 'compliance-dashboard',
     developer: 'it-authentication',
@@ -692,95 +692,21 @@ function renderExecutiveSidebar() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// OPS SIDEBAR (Operational Control Layer)
+// OPS SIDEBAR (Operational Control Layer — Workspace Pattern)
 // ═══════════════════════════════════════════════════════════════
 
-const OPS_DOMAINS = {
-  'ops-dashboard': [
-    { id: 'ops-dashboard', icon: icon('dashboard'), label: 'Operations Dashboard' },
-  ],
-  'production': [
-    { id: 'ops-batch-create', icon: icon('plus'), label: 'Create Batch' },
-    { id: 'ops-batch-list', icon: icon('products'), label: 'Batch List' },
-    { id: 'ops-batch-split', icon: icon('workflow'), label: 'Split / Merge' },
-    { id: 'ops-batch-recall', icon: icon('alertTriangle'), label: 'Recall / Destroy' },
-  ],
-  'erp-integration': [
-    { id: 'scm-procurement', icon: icon('clipboard'), label: 'Purchase Orders (ERP)' },
-    { id: 'scm-supplier-scoring', icon: icon('users'), label: 'Supplier Scoring' },
-    { id: 'scm-demand-planning', icon: icon('workflow'), label: 'Demand Planning (ERP)' },
-    { id: 'scm-warehouse', icon: icon('building'), label: 'Warehouse (WMS)' },
-    { id: 'scm-inventory', icon: icon('products'), label: 'Inventory (WMS)' },
-    { id: 'scm-quality-control', icon: icon('check'), label: 'Quality Control (QMS)' },
-  ],
-  'shipment': [
-    { id: 'ops-transfer-orders', icon: icon('network'), label: 'Transfer Orders' },
-    { id: 'ops-receiving', icon: icon('check'), label: 'Receiving' },
-    { id: 'ops-mismatch', icon: icon('alert'), label: 'Mismatch' },
-    { id: 'scm-shipment-tracking', icon: icon('globe'), label: 'Shipment Tracking' },
-  ],
-  'verification': [
-    { id: 'ops-scan-monitor', icon: icon('search'), label: 'Scan Monitor' },
-    { id: 'ops-duplicate-alerts', icon: icon('shield'), label: 'Duplicate Alerts' },
-    { id: 'ops-geo-alerts', icon: icon('globe'), label: 'Geo Alerts' },
-  ],
-  'incidents': [
-    { id: 'ops-incidents-open', icon: icon('alertTriangle'), label: 'Open Cases' },
-    { id: 'ops-incidents-history', icon: icon('scroll'), label: 'History' },
-  ],
-};
-
-const OPS_DOMAIN_LABELS = {
-  'ops-dashboard': 'Dashboard',
-  'production': '🏭 Production',
-  'erp-integration': '🔌 ERP Integration',
-  'shipment': '🚚 Shipment',
-  'verification': '🔍 Verification',
-  'incidents': '🧾 Incidents',
-};
+const OPS_NAV = [
+  { id: 'ops-production', icon: icon('factory'), label: 'Production' },
+  { id: 'ops-logistics', icon: icon('truck'), label: 'Logistics' },
+  { id: 'ops-monitoring', icon: icon('search'), label: 'Monitoring' },
+  { id: 'ops-incidents', icon: icon('alertTriangle'), label: 'Incidents' },
+];
 
 function renderOpsSidebar() {
   const brandName = State.branding?.app_name || 'TrustChecker';
   const orgName = State.org?.name || '';
 
-  const domainSections = Object.keys(OPS_DOMAINS).map(domain => {
-    const items = OPS_DOMAINS[domain];
-    const label = OPS_DOMAIN_LABELS[domain];
-
-    if (domain === 'ops-dashboard') {
-      return `
-        <div class="nav-section" data-domain="ops-dashboard">
-          <div class="nav-section-items">
-            ${items.map(n => {
-        const activeClass = State.page === n.id ? 'active' : '';
-        return `<div class="nav-item ${activeClass}" onclick="navigate('${n.id}')">
-                <span class="nav-icon">${n.icon}</span><span>${n.label}</span>
-              </div>`;
-      }).join('')}
-          </div>
-        </div>
-      `;
-    }
-
-    const collapsed = isCollapsed(domain);
-    return `
-      <div class="nav-section ${collapsed ? 'collapsed' : ''}" data-domain="${domain}">
-        <div class="nav-section-label" onclick="toggleNavSection('${domain}')">
-          <span class="nav-domain-dot ops-dot"></span>
-          <span class="nav-section-text">${label}</span>
-          <span class="nav-chevron">▸</span>
-        </div>
-        <div class="nav-section-items">
-          ${items.map(n => {
-      const activeClass = State.page === n.id ? 'active' : '';
-      return `<div class="nav-item ${activeClass}" onclick="navigate('${n.id}')">
-              <span class="nav-icon">${n.icon}</span><span>${n.label}</span>
-            </div>`;
-    }).join('')}
-        </div>
-      </div>
-    `;
-  }).join('');
+  const navItems = OPS_NAV.map(n => renderNavItem(n)).join('');
 
   return `
     <nav class="sidebar sidebar-ops" role="navigation" aria-label="Operations navigation">
@@ -797,7 +723,7 @@ function renderOpsSidebar() {
         </div>` : ''}
       </div>
       <div class="sidebar-nav">
-        ${domainSections}
+        ${navItems}
       </div>
       <div class="sidebar-footer">
         <div class="user-avatar role-ops_manager">${(State.user?.email || 'O')[0].toUpperCase()}</div>
@@ -1480,7 +1406,7 @@ function goHome() {
     platform_security: 'control-tower',
     data_gov_officer: 'compliance-dashboard',
     executive: 'exec-overview',
-    ops_manager: 'ops-dashboard',
+    ops_manager: 'ops-production',
     risk_officer: 'risk-dashboard',
     compliance_officer: 'compliance-dashboard',
     developer: 'it-authentication',
