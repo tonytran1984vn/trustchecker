@@ -285,7 +285,7 @@ async function load() {
   if (loading) return; loading = true;
   try {
     const [evRes, bRes] = await Promise.all([
-      API.get('/scm/events?limit=50').catch(() => ({ events: [] })),
+      API.get('/scm/events?limit=500').catch(() => ({ events: [] })),
       API.get('/scm/batches?limit=20').catch(() => ({ batches: [] })),
     ]);
     events = Array.isArray(evRes) ? evRes : (evRes.events || []);
