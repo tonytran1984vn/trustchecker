@@ -4,6 +4,7 @@
  * 
  * PERF: Prefetches BOTH risk APIs in parallel on workspace entry.
  * All tabs use window._saRiskCache for instant rendering.
+ * Exposes window._saRiskReady promise for tabs to await.
  */
 import { renderWorkspace } from '../../components/workspace.js';
 import { icon } from '../../core/icons.js';
@@ -19,7 +20,8 @@ if (!window._saRiskCache) window._saRiskCache = {};
 const cache = window._saRiskCache;
 if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 30000)) {
     cache._loading = true;
-    Promise.allSettled([
+    // Store promise so tabs can await it
+    window._saRiskReady = Promise.allSettled([
         API.get('/risk-graph/risk-analytics'),
         API.get('/risk-graph/fraud-feed'),
     ]).then(([analyticsR, feedR]) => {
@@ -28,7 +30,11 @@ if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 30000
         cache._loadedAt = Date.now();
         cache._loading = false;
         console.log('[SA Risk] Both APIs prefetched ✓');
+        return cache;
     });
+} else if (cache._loadedAt) {
+    // Already loaded, resolve immediately
+    window._saRiskReady = Promise.resolve(cache);
 }
 
 export function renderPage() {
@@ -46,4 +52,3 @@ export function renderPage() {
         ],
     });
 }
-

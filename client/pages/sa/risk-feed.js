@@ -16,6 +16,10 @@ async function loadFeed() {
   const now = Date.now();
   if (feedData && now - loadedAt < 30000) return; // cache 30s
   loading = true;
+  // Await workspace prefetch if it's in flight
+  if (window._saRiskReady) {
+    try { await window._saRiskReady; } catch { }
+  }
   // Use prefetched data from workspace if available
   const cache = window._saRiskCache;
   if (cache?.fraudFeed && cache._loadedAt && !feedData) {

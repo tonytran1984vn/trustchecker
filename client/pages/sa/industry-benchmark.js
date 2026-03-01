@@ -8,6 +8,10 @@ let data = null, loading = false;
 
 async function load() {
   if (loading) return; loading = true;
+  // Await workspace prefetch if it's in flight
+  if (window._saRiskReady) {
+    try { await window._saRiskReady; } catch { }
+  }
   // Use prefetched data from workspace if available
   const cache = window._saRiskCache;
   if (cache?.riskAnalytics && cache._loadedAt) {
