@@ -1236,10 +1236,29 @@ function renderActions() {
           <button onclick="document.getElementById('action-create-form').style.display='none'" style="font-size:0.68rem;padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text-muted)">✕ Close</button>
         </div>
         <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+            <div>
+              <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px;font-weight:600">① Target Role *</div>
+              <select id="act-role" class="input" style="width:100%" onchange="window._actionRoleChanged()">
+                <option value="">— Select Role —</option>
+                ${Object.entries(ROLE_OPTIONS).map(([k, v]) => `<option value="${k}">${v.icon} ${v.label}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px;font-weight:600">② Assign to User</div>
+              <select id="act-assignee" class="input" style="width:100%">
+                <option value="">— Select role first —</option>
+              </select>
+            </div>
+          </div>
+          <div id="act-templates-panel" style="display:none;margin-bottom:12px">
+            <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:6px;font-weight:600">③ Choose Action Template (or write custom)</div>
+            <div id="act-templates-list" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+          </div>
           <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px">
             <div>
               <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Title *</div>
-              <input id="act-title" class="input" placeholder="E.g. Switch carrier from air to sea freight" style="width:100%">
+              <input id="act-title" class="input" placeholder="Action title…" style="width:100%">
             </div>
             <div>
               <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Priority</div>
@@ -1251,11 +1270,7 @@ function renderActions() {
               </select>
             </div>
           </div>
-          <div style="margin-bottom:10px">
-            <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Description</div>
-            <textarea id="act-desc" class="input" rows="2" placeholder="Detailed description of what needs to be done…" style="width:100%;resize:vertical"></textarea>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
             <div>
               <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Category</div>
               <select id="act-category" class="input" style="width:100%">
@@ -1268,27 +1283,13 @@ function renderActions() {
               </select>
             </div>
             <div>
-              <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Assign to</div>
-              <select id="act-assignee" class="input" style="width:100%">
-                <option value="">— Unassigned —</option>
-                ${userOptions}
-              </select>
-            </div>
-            <div>
-              <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Target Role</div>
-              <select id="act-role" class="input" style="width:100%">
-                <option value="">— None —</option>
-                <option value="coo">COO</option>
-                <option value="cfo">CFO</option>
-                <option value="procurement">Procurement</option>
-                <option value="product_manager">Product Manager</option>
-                <option value="carbon_officer">Carbon Officer</option>
-              </select>
-            </div>
-            <div>
               <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Due Date</div>
               <input id="act-due" class="input" type="date" style="width:100%">
             </div>
+          </div>
+          <div style="margin-bottom:12px">
+            <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Description</div>
+            <textarea id="act-desc" class="input" rows="2" placeholder="Detailed description…" style="width:100%;resize:vertical"></textarea>
           </div>
           <button onclick="window._actionCreate()" style="padding:10px 24px;border-radius:8px;border:none;background:#8b5cf6;color:#fff;font-size:0.75rem;font-weight:700;cursor:pointer">⚡ Create Action</button>
         </div>
@@ -1297,7 +1298,99 @@ function renderActions() {
   `;
 }
 
+// ═══ Role → RBAC mapping + Action Templates ════════════════
+const ROLE_OPTIONS = {
+  ops_manager: { label: 'Operations / COO', icon: '🏭', rbac: ['ops_manager'] },
+  executive: { label: 'CEO / Executive', icon: '👔', rbac: ['executive', 'company_admin'] },
+  org_owner: { label: 'Owner / CFO', icon: '💰', rbac: ['org_owner'] },
+  scm_analyst: { label: 'Supply Chain / Procurement', icon: '🔗', rbac: ['scm_analyst'] },
+  operator: { label: 'Product Manager', icon: '📦', rbac: ['operator'] },
+  risk_officer: { label: 'Risk Officer', icon: '⚠️', rbac: ['risk_officer'] },
+  compliance_officer: { label: 'Compliance Officer', icon: '⚖️', rbac: ['compliance_officer'] },
+  carbon_officer: { label: 'Carbon Officer', icon: '🌱', rbac: ['carbon_officer'] },
+};
+
+const ACTION_TEMPLATES = {
+  ops_manager: [
+    { title: 'Switch carrier: air → sea/rail freight', desc: 'Evaluate and shift high-emission air freight routes to sea or rail to reduce Scope 3 transport emissions.', cat: 'scope_reduction', pri: 'high' },
+    { title: 'Consolidate shipments for route optimization', desc: 'Merge partial loads on top emission routes to reduce per-unit carbon intensity.', cat: 'scope_reduction', pri: 'medium' },
+    { title: 'Replace high-emission supplier', desc: 'Source alternative supplier with lower carbon footprint or better ESG rating.', cat: 'partner_risk', pri: 'high' },
+    { title: 'Implement energy efficiency program', desc: 'Audit factory/warehouse energy consumption and deploy efficiency improvements for Scope 1/2.', cat: 'scope_reduction', pri: 'medium' },
+  ],
+  executive: [
+    { title: 'Approve carbon offset investment', desc: 'Review and authorize purchase of carbon credits to meet neutrality targets.', cat: 'offset', pri: 'high' },
+    { title: 'Set Paris-aligned reduction target', desc: 'Establish science-based emission reduction targets aligned with 1.5°C pathway.', cat: 'compliance', pri: 'critical' },
+    { title: 'Upgrade data quality investment', desc: 'Approve budget for transitioning from proxy estimates to measured/supplier-reported carbon data.', cat: 'compliance', pri: 'medium' },
+  ],
+  org_owner: [
+    { title: 'Allocate budget for carbon credits', desc: 'Approve financial allocation for purchasing verified carbon credits to improve offset coverage ratio.', cat: 'offset', pri: 'high' },
+    { title: 'Review carbon cost integration', desc: 'Incorporate carbon pricing into product costing and margin analysis.', cat: 'product_optimization', pri: 'medium' },
+  ],
+  scm_analyst: [
+    { title: 'Require supplier ESG improvement plan', desc: 'Mandate ESG/carbon improvement plan from partners with trust score below threshold.', cat: 'partner_risk', pri: 'high' },
+    { title: 'Audit supply chain for Scope 3 hotspots', desc: 'Map and quantify Scope 3 emissions across supply chain tiers to identify reduction opportunities.', cat: 'scope_reduction', pri: 'medium' },
+    { title: 'Evaluate alternative low-carbon suppliers', desc: 'Research and qualify alternative suppliers with better carbon performance.', cat: 'partner_risk', pri: 'medium' },
+  ],
+  operator: [
+    { title: 'Update product carbon footprint data', desc: 'Collect and update actual carbon footprint measurements for products currently using proxy estimates.', cat: 'product_optimization', pri: 'medium' },
+    { title: 'Redesign packaging for lower emissions', desc: 'Evaluate and implement lower-emission packaging materials and designs.', cat: 'product_optimization', pri: 'medium' },
+  ],
+  risk_officer: [
+    { title: 'Assess carbon regulatory risk exposure', desc: 'Evaluate exposure to CBAM, EU ETS, and other carbon pricing mechanisms.', cat: 'compliance', pri: 'high' },
+    { title: 'Review partner carbon risk ratings', desc: 'Update carbon risk assessments for all supply chain partners.', cat: 'partner_risk', pri: 'medium' },
+  ],
+  compliance_officer: [
+    { title: 'Prepare GRI/CSRD disclosure report', desc: 'Compile carbon data for mandatory ESG reporting frameworks.', cat: 'compliance', pri: 'high' },
+    { title: 'Audit carbon data integrity', desc: 'Verify accuracy and completeness of carbon accounting data for audit readiness.', cat: 'compliance', pri: 'medium' },
+  ],
+  carbon_officer: [
+    { title: 'Review and improve confidence scores', desc: 'Identify products with low data confidence and plan measurement upgrades.', cat: 'compliance', pri: 'medium' },
+    { title: 'Update emission factors to latest database', desc: 'Refresh emission factors using latest IPCC/IEA/GHG Protocol databases.', cat: 'scope_reduction', pri: 'low' },
+  ],
+};
+
 // ─── Action Item Window Controls ────────────────────────────
+window._actionRoleChanged = function () {
+  const role = document.getElementById('act-role')?.value;
+  const assigneeSelect = document.getElementById('act-assignee');
+  const templatesPanel = document.getElementById('act-templates-panel');
+  const templatesList = document.getElementById('act-templates-list');
+
+  // Filter users by matching RBAC role
+  if (assigneeSelect && role) {
+    const opt = ROLE_OPTIONS[role];
+    const rbacRoles = opt?.rbac || [role];
+    const matched = _actionsUsers.filter(u => rbacRoles.includes(u.role));
+    assigneeSelect.innerHTML = matched.length > 0
+      ? `<option value="">— Select user —</option>` + matched.map(u => `<option value="${u.id}">${esc(u.email)}</option>`).join('')
+      : `<option value="">— No ${opt?.label || role} users found —</option>`;
+    // Auto-select if only one user
+    if (matched.length === 1) assigneeSelect.value = matched[0].id;
+  } else if (assigneeSelect) {
+    assigneeSelect.innerHTML = `<option value="">— Select role first —</option>`;
+  }
+
+  // Show templates
+  if (templatesPanel && templatesList && role && ACTION_TEMPLATES[role]) {
+    const tpls = ACTION_TEMPLATES[role];
+    templatesPanel.style.display = 'block';
+    templatesList.innerHTML = tpls.map((t, i) => `
+      <button onclick="window._actionApplyTemplate('${role}',${i})" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:0.68rem;cursor:pointer;text-align:left;transition:all 0.15s;max-width:280px" onmouseover="this.style.borderColor='#8b5cf6';this.style.background='#8b5cf610'" onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--bg-card,#fff)'">${t.title}</button>
+    `).join('') + `<button onclick="document.getElementById('act-title').value='';document.getElementById('act-desc').value='';document.getElementById('act-title').focus()" style="padding:6px 12px;border-radius:8px;border:1px dashed var(--border);background:transparent;color:var(--text-muted);font-size:0.68rem;cursor:pointer">✏️ Custom action</button>`;
+  } else if (templatesPanel) {
+    templatesPanel.style.display = 'none';
+  }
+};
+
+window._actionApplyTemplate = function (role, idx) {
+  const tpl = (ACTION_TEMPLATES[role] || [])[idx];
+  if (!tpl) return;
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  setVal('act-title', tpl.title);
+  setVal('act-desc', tpl.desc);
+  setVal('act-category', tpl.cat);
+  setVal('act-priority', tpl.pri);
+};
 window._actionShowCreate = function () {
   const form = document.getElementById('action-create-form');
   if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
