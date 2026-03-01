@@ -614,30 +614,32 @@ export async function loadPageData(page) {
             }
             render();
 
-            // ─── CA Workspace data preloads ────────────────────────
+            // ─── CA Workspace data preloads (OPTIMIZED: all parallel) ──
         } else if (page === 'ca-operations') {
-            // Products + Scans are dumb renderers needing State preload
-            const [prodRes, scanRes] = await Promise.all([
+            // Load ALL data in a single parallel batch
+            const [prodRes, scanRes, scope, lb, rpt] = await Promise.all([
                 API.get('/products').catch(() => ({ products: [] })),
                 API.get('/qr/scan-history?limit=50').catch(() => ({ scans: [] })),
+                API.get('/scm/carbon/scope').catch(() => ({})),
+                API.get('/scm/carbon/leaderboard').catch(() => ({})),
+                API.get('/scm/carbon/report').catch(() => ({})),
             ]);
             State.products = prodRes.products || [];
             State.scanHistory = scanRes.scans || [];
-            // Carbon data (optional, tab may self-load)
-            try {
-                const [scope, lb, rpt] = await Promise.all([
-                    API.get('/scm/carbon/scope').catch(() => ({})),
-                    API.get('/scm/carbon/leaderboard').catch(() => ({})),
-                    API.get('/scm/carbon/report').catch(() => ({})),
-                ]);
-                State.carbonData = { scope, leaderboard: lb, report: rpt };
-            } catch (_) { }
+            State.carbonData = { scope, leaderboard: lb, report: rpt };
             render();
+            // Background prefetch other CA workspace data
+            Promise.allSettled([
+                API.get('/qr/fraud-alerts?status=open&limit=50').then(r => { State.fraudAlerts = r.alerts || []; State._caRiskPrefetched = true; }),
+                Promise.all([
+                    API.get('/billing/plan').catch(() => ({ plan: null, available_plans: [] })),
+                    API.get('/billing/usage').catch(() => ({ period: null, usage: {} })),
+                    API.get('/billing/invoices').catch(() => ({ invoices: [] })),
+                ]).then(([p, u, i]) => { State.billingData = { plan: p.plan, available: p.available_plans, period: u.period, usage: u.usage, invoices: i.invoices }; State._caSettingsPrefetched = true; }),
+            ]).then(() => console.log('[CA] Cross-workspace prefetch ✓'));
         } else if (page === 'ca-risk') {
-            // Fraud alerts are dumb renderer
-            const res = await API.get('/qr/fraud-alerts?status=open&limit=50').catch(() => ({ alerts: [] }));
-            State.fraudAlerts = res.alerts || [];
-            render();
+            if (State._caRiskPrefetched) { render(); }
+            else { const res = await API.get('/qr/fraud-alerts?status=open&limit=50').catch(() => ({ alerts: [] })); State.fraudAlerts = res.alerts || []; render(); }
         } else if (page === 'ca-identity') {
             // All tabs self-load — just trigger render
             render();
@@ -648,18 +650,20 @@ export async function loadPageData(page) {
             if (_pageCache['admin-users']?.loadAdminUsers) _pageCache['admin-users'].loadAdminUsers();
             if (_pageCache['role-manager']?.loadRoleManager) _pageCache['role-manager'].loadRoleManager();
         } else if (page === 'ca-settings') {
-            // Settings (security) and billing need preload
-            try {
-                const [planRes, usageRes, invoiceRes] = await Promise.all([
-                    API.get('/billing/plan').catch(() => ({ plan: null, available_plans: [] })),
-                    API.get('/billing/usage').catch(() => ({ period: null, usage: {} })),
-                    API.get('/billing/invoices').catch(() => ({ invoices: [] })),
-                ]);
-                State.billingData = { plan: planRes.plan, available: planRes.available_plans, period: usageRes.period, usage: usageRes.usage, invoices: invoiceRes.invoices };
-            } catch (e) {
-                State.billingData = { plan: null, available: [], period: null, usage: {}, invoices: [] };
+            if (State._caSettingsPrefetched) { render(); }
+            else {
+                try {
+                    const [planRes, usageRes, invoiceRes] = await Promise.all([
+                        API.get('/billing/plan').catch(() => ({ plan: null, available_plans: [] })),
+                        API.get('/billing/usage').catch(() => ({ period: null, usage: {} })),
+                        API.get('/billing/invoices').catch(() => ({ invoices: [] })),
+                    ]);
+                    State.billingData = { plan: planRes.plan, available: planRes.available_plans, period: usageRes.period, usage: usageRes.usage, invoices: invoiceRes.invoices };
+                } catch (e) {
+                    State.billingData = { plan: null, available: [], period: null, usage: {}, invoices: [] };
+                }
+                render();
             }
-            render();
             if (_pageCache['settings']?.loadSettingsData) _pageCache['settings'].loadSettingsData();
         }
     } catch (e) {
