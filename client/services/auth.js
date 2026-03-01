@@ -42,10 +42,6 @@ export function renderLogin() {
               onkeydown="if(event.key==='Enter')doLogin()">
           </div>
           <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="doLogin()">Sign In</button>
-          <div class="login-footer">
-            <a href="#" onclick="navigate('pricing')">Pricing</a> ·
-            <a href="check.html" target="_blank" rel="noopener noreferrer">Public Verify</a>
-          </div>
         `}
       </div>
     </div>
