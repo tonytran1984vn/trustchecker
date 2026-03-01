@@ -4,6 +4,7 @@
  */
 
 import { State, render } from '../core/state.js';
+import { injectMyActionsWidget } from './my-actions-widget.js';
 
 /**
  * Render a domain workspace with tab navigation
@@ -30,6 +31,9 @@ export function renderWorkspace({ domain, title, subtitle, icon, tabs, activeTab
     tabContent = `<div class="ws-loading">Loading…</div>`;
   }
 
+  // Inject My Actions widget after DOM renders
+  setTimeout(() => injectMyActionsWidget('my-actions-widget'), 200);
+
   return `
     <div class="sa-page ws-page" data-ws-domain="${domain}">
       <div class="ws-header">
@@ -51,6 +55,7 @@ export function renderWorkspace({ domain, title, subtitle, icon, tabs, activeTab
           </button>
         `).join('')}
       </div>
+      <div id="my-actions-widget" style="display:none"></div>
       <div class="ws-content">
         ${tabContent}
       </div>
