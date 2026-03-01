@@ -131,9 +131,8 @@ export function render() {
     </div>
 
 </div>`;
-}
-function renderContent() { return { const _el = document.getElementById('carbon-registry-root'); if (_el) _el.innerHTML = renderContent ? renderContent() : ''; } }
 
-export function renderPage() {
-  return `<div id="carbon-registry-root">${renderContent()}</div>`;
-}
+    export function renderPage() {
+        load();
+        return `<div id="carbon-registry-root">${render()}</div>`;
+    }

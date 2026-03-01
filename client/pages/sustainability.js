@@ -120,11 +120,7 @@ function renderContent() {
     </div>`;
 }
 
-function renderContent() {
-  loadData();
-  return renderContent();
-}
-
 export function renderPage() {
+  loadData();
   return `<div id="sustainability-root">${renderContent()}</div>`;
 }
