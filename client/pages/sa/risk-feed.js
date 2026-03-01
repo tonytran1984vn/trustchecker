@@ -16,6 +16,15 @@ async function loadFeed() {
   const now = Date.now();
   if (feedData && now - loadedAt < 30000) return; // cache 30s
   loading = true;
+  // Use prefetched data from workspace if available
+  const cache = window._saRiskCache;
+  if (cache?.fraudFeed && cache._loadedAt && !feedData) {
+    feedData = cache.fraudFeed;
+    loadedAt = cache._loadedAt;
+    loading = false;
+    setTimeout(() => { const el = document.getElementById('risk-feed-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
+    return;
+  }
   try {
     feedData = await API.get('/risk-graph/fraud-feed');
     loadedAt = now;

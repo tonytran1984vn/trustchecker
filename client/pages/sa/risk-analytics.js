@@ -8,6 +8,14 @@ let data = null, loading = false;
 
 async function load() {
   if (loading) return; loading = true;
+  // Use prefetched data from workspace if available
+  const cache = window._saRiskCache;
+  if (cache?.riskAnalytics && cache._loadedAt) {
+    data = cache.riskAnalytics;
+    loading = false;
+    setTimeout(() => { const el = document.getElementById('risk-analytics-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
+    return;
+  }
   try { data = await API.get('/risk-graph/risk-analytics'); } catch (e) { data = {}; }
   loading = false;
   setTimeout(() => { const el = document.getElementById('risk-analytics-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
