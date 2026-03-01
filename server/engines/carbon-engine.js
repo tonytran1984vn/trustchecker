@@ -1,17 +1,24 @@
 /**
- * TrustChecker Carbon & ESG Engine v3.0 (CIE Phase 1A)
- * Cross-Cutting ESG Governance Intelligence
+ * TrustChecker Carbon Intelligence & Screening Engine v3.0
+ * GHG-Aligned Estimation & Risk Screening Framework
  * 
- * Scope 1/2/3 emissions calculation, carbon passport, GRI reporting,
- * Risk factor integration, regulatory alignment, maturity assessment
+ * This engine is a GHG-aligned estimation and screening framework designed to:
+ *   - Estimate product & supply chain emission intensity
+ *   - Benchmark performance against industry peers (percentile-based)
+ *   - Identify carbon-related risk in supply chains
+ *   - Support enterprises preparing for disclosure per GHG Protocol & GRI
  * 
  * v3.0 Upgrades:
  *   - Intensity-based percentile grading (replaces absolute grading)
- *   - Confidence scoring (1-5 scale: proxy → measured)
+ *   - 5-level Data Confidence Framework for estimation transparency
  *   - Updated risk thresholds (80/90/95)
  *   - Industry benchmark database for percentile comparison
  * 
- * Emission factors based on DEFRA/GHG Protocol 2025 guidelines
+ * Emission factors referenced from DEFRA 2025, IEA, FAO, SEMI, RJC, NHS Carbon datasets
+ * 
+ * METHODOLOGY NOTE: Values represent screening-level industry-average estimates.
+ * This engine is not intended to replace ISO 14064 certified inventories,
+ * CSRD statutory filings without validation, or third-party assurance processes.
  */
 
 // Transport emission factors (kgCO2e per tonne-km)
@@ -99,13 +106,16 @@ const INDUSTRY_BENCHMARKS = {
     '_default': { p20: 5.0, median: 15.0, p80: 35.0, unit: 'kgCO₂e/unit', source: 'GHG Protocol Generic 2025' }
 };
 
-// ─── v3.0: Confidence level definitions ──────────────────────────────────────
+// ─── v3.0: Data Confidence Framework ─────────────────────────────────────────
+// TrustChecker applies a 5-level Data Confidence Framework to ensure transparency
+// of estimation quality, enabling enterprises to progressively migrate from
+// proxy-based to measured emissions.
 const CONFIDENCE_LEVELS = [
-    { level: 5, label: 'Measured', description: 'Direct IoT/meter measurement', color: '#10b981' },
+    { level: 5, label: 'Measured', description: 'Direct IoT/meter measurement — highest assurance', color: '#10b981' },
     { level: 4, label: 'Meter-based', description: 'Utility bills or supplier meters', color: '#34d399' },
-    { level: 3, label: 'Supplier-reported', description: 'Supplier-provided data', color: '#3b82f6' },
-    { level: 2, label: 'Industry average', description: 'Published industry factors', color: '#f59e0b' },
-    { level: 1, label: 'Proxy estimate', description: 'Category-based proxy calculation', color: '#ef4444' }
+    { level: 3, label: 'Supplier-reported', description: 'Supplier-provided primary data', color: '#3b82f6' },
+    { level: 2, label: 'Industry average', description: 'Published sector emission factors (DEFRA/IEA)', color: '#f59e0b' },
+    { level: 1, label: 'Proxy estimate', description: 'Category-based screening estimate', color: '#ef4444' }
 ];
 
 // ─── v3.0: Risk thresholds (updated from 70/85/95) ──────────────────────────
@@ -142,16 +152,17 @@ class CarbonEngine {
     calculateFootprint(product, shipments = [], events = [], partner = null) {
         const category = product.category || 'General';
 
-        // Scope 1: Direct emissions (manufacturing)
+        // Scope 1: Modeled production emission estimate
         const scope1 = {
             type: 'scope_1',
-            label: 'Direct Emissions (Manufacturing)',
+            label: 'Scope 1 — Modeled Production Emission Estimate',
             value: MANUFACTURING_FACTORS[category] || 5.0,
             unit: 'kgCO2e',
-            source: 'DEFRA Manufacturing Factors 2025'
+            source: 'DEFRA/IEA/FAO Industry Emission Factors 2025',
+            disclosure: 'Category-based industry-average cradle-to-gate emission intensity estimate. May not reflect facility-specific combustion data.'
         };
 
-        // Scope 2: Indirect emissions (energy for warehousing)
+        // Scope 2: Modeled energy & warehousing emission estimate
         let warehouseEmissions = 0;
         const warehouseType = category === 'Healthcare' || category === 'F&B' ? 'cold_storage' : 'ambient';
         const storageDays = events.filter(e => e.event_type === 'store' || e.event_type === 'receive').length * 3;
@@ -159,11 +170,12 @@ class CarbonEngine {
 
         const scope2 = {
             type: 'scope_2',
-            label: 'Indirect Emissions (Energy/Warehousing)',
+            label: 'Scope 2 — Modeled Energy & Warehousing Estimate',
             value: Math.round(warehouseEmissions * 100) / 100,
             unit: 'kgCO2e',
             storage_days: storageDays,
-            warehouse_type: warehouseType
+            warehouse_type: warehouseType,
+            disclosure: 'Estimated using modeled warehouse emission factors. Where actual electricity consumption data is available, both location-based and market-based approaches may be calculated.'
         };
 
         // Scope 3: Value chain emissions (transport, distribution)
@@ -192,10 +204,11 @@ class CarbonEngine {
 
         const scope3 = {
             type: 'scope_3',
-            label: 'Value Chain Emissions (Transport/Distribution)',
+            label: 'Scope 3 — Transport & Distribution (Cat 4 & 9 Screening)',
             value: Math.round(transportEmissions * 100) / 100,
             unit: 'kgCO2e',
-            transport_breakdown: transportBreakdown
+            transport_breakdown: transportBreakdown,
+            disclosure: 'Scope 3 Categories 4 (Upstream Transportation) & 9 (Downstream Transportation) screening-level estimates based on shipment distance, mode, and product weight.'
         };
 
         const totalFootprint = scope1.value + scope2.value + scope3.value;
@@ -236,7 +249,8 @@ class CarbonEngine {
                 driving_km: Math.round(totalFootprint / 0.192 * 10) / 10,
                 smartphone_charges: Math.round(totalFootprint / 0.008)
             },
-            methodology: 'GHG Protocol Corporate Standard + DEFRA 2025 Factors',
+            methodology: 'GHG-aligned screening framework referencing DEFRA 2025, IEA, FAO emission factors',
+            methodology_note: 'Screening-level estimation for decision-support. Not a substitute for ISO 14064 certified inventory.',
             eas_version: '3.0',
             assessed_at: new Date().toISOString()
         };
@@ -330,9 +344,9 @@ class CarbonEngine {
         return {
             total_emissions_kgCO2e: Math.round(total * 100) / 100,
             total_emissions_tonnes: Math.round(total / 1000 * 100) / 100,
-            scope_1: { total: Math.round(scope1Total * 100) / 100, pct: total > 0 ? Math.round(scope1Total / total * 100) : 0, label: 'Direct Manufacturing', items: buildItems(s1ByCat, scope1Total) },
-            scope_2: { total: Math.round(scope2Total * 100) / 100, pct: total > 0 ? Math.round(scope2Total / total * 100) : 0, label: 'Energy & Warehousing', items: buildItems(s2ByCat, scope2Total) },
-            scope_3: { total: Math.round(scope3Total * 100) / 100, pct: total > 0 ? Math.round(scope3Total / total * 100) : 0, label: 'Transport & Distribution', items: buildItems(s3ByCat, scope3Total) },
+            scope_1: { total: Math.round(scope1Total * 100) / 100, pct: total > 0 ? Math.round(scope1Total / total * 100) : 0, label: 'Scope 1 — Modeled Production Estimate', items: buildItems(s1ByCat, scope1Total) },
+            scope_2: { total: Math.round(scope2Total * 100) / 100, pct: total > 0 ? Math.round(scope2Total / total * 100) : 0, label: 'Scope 2 — Modeled Energy & Warehousing', items: buildItems(s2ByCat, scope2Total) },
+            scope_3: { total: Math.round(scope3Total * 100) / 100, pct: total > 0 ? Math.round(scope3Total / total * 100) : 0, label: 'Scope 3 — Transport & Distribution (Cat 4 & 9)', items: buildItems(s3ByCat, scope3Total) },
             products_assessed: productFootprints.length,
             product_rankings: productFootprints.sort((a, b) => b.total - a.total),
             // v3.0: Intensity & confidence aggregates
@@ -342,8 +356,11 @@ class CarbonEngine {
             high_confidence_ratio_pct: highConfidenceRatio,
             reduction_targets: {
                 paris_aligned_2030: Math.round(total * 0.55 * 100) / 100,
-                net_zero_2050: Math.round(total * 0.1 * 100) / 100
-            }
+                net_zero_2050: Math.round(total * 0.1 * 100) / 100,
+                note: 'Paris-aligned indicative reduction pathway modeled against current baseline. Formal SBTi validation requires organization-level inventory and external review.'
+            },
+            methodology: 'GHG-aligned screening framework referencing DEFRA 2025, IEA, FAO emission factors',
+            benchmark_disclosure: 'Industry benchmarks derived from aggregated public datasets (DEFRA, IEA, FAO, SEMI, RJC, NHS Carbon). Intended for comparative performance screening, not regulatory reporting substitution.'
         };
     }
 
@@ -388,7 +405,8 @@ class CarbonEngine {
         const { scopeData, leaderboard, certifications = [] } = data;
 
         return {
-            report_standard: 'GRI Universal Standards 2021',
+            report_standard: 'Supports disclosure mapping to GRI 305 series',
+            report_note: 'This report supports GRI 305-1/2/3/5 disclosure mapping. It is not a substitute for externally assured sustainability reports.',
             reporting_period: { from: new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) },
             disclosures: {
                 'GRI 305-1': { title: 'Direct GHG Emissions (Scope 1)', value: scopeData?.scope_1?.total || 0, unit: 'kgCO2e' },
@@ -486,6 +504,7 @@ class CarbonEngine {
 
         return {
             title: 'Carbon → Risk Factor Mapping (v3.0)',
+            description: 'Carbon intensity integrated into operational and supply chain risk scoring, enabling proactive mitigation before regulatory or market escalation.',
             total_risk_factors: risks.length,
             total_risk_score_impact: Math.min(100, totalRiskScore),
             // v3.0: Updated thresholds
@@ -498,7 +517,7 @@ class CarbonEngine {
             },
             risk_factors: risks,
             affected_scores: ['BRI (Brand Risk Index)', 'CRS (Channel Risk Score)', 'ERS (Event Risk Score)'],
-            note: 'ESG risk becomes a component of Brand Risk — infrastructure-level positioning'
+            note: 'Carbon risk factors feed into Brand Risk Index (BRI), Channel Risk Score (CRS), and Event Risk Score (ERS). Offset coverage contributes to sustainability maturity score but does not substitute emission reduction performance. Emission intensity remains the primary performance indicator.'
         };
     }
 

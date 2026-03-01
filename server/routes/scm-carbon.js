@@ -400,9 +400,9 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
             total_emissions_kgCO2e,
             total_emissions_tCO2e: +(total_emissions_kgCO2e / 1000).toFixed(1),
             products_assessed: products.length,
-            scope_1: { total: s1Total, pct: s1Pct, label: 'Direct Manufacturing' },
-            scope_2: { total: s2Total, pct: s2Pct, label: 'Energy & Warehousing' },
-            scope_3: { total: s3Total, pct: s3Pct, label: 'Transport & Distribution' },
+            scope_1: { total: s1Total, pct: s1Pct, label: 'Scope 1 — Modeled Production Estimate' },
+            scope_2: { total: s2Total, pct: s2Pct, label: 'Scope 2 — Modeled Energy & Warehousing' },
+            scope_3: { total: s3Total, pct: s3Pct, label: 'Scope 3 — Transport & Distribution (Cat 4 & 9)' },
             monthly_trend,
             products_detail,
             avg_confidence: Math.round(avgConf * 10) / 10,
@@ -417,13 +417,15 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
                 { level: 4, label: 'Measured', description: 'Direct measurement data available' },
                 { level: 5, label: 'Verified', description: 'Third-party verified data' },
             ],
-            // Paris-aligned reduction target: 42% reduction from current by 2030
             reduction_targets: {
                 paris_aligned_2030: Math.round(total_emissions_kgCO2e * 0.58),
                 net_zero_2050: 0,
                 baseline_year: 2025,
                 baseline_kgCO2e: total_emissions_kgCO2e,
+                note: 'Paris-aligned indicative reduction pathway. Formal SBTi validation requires organization-level inventory and external review.'
             },
+            methodology: 'GHG-aligned screening framework referencing DEFRA 2025, IEA, FAO emission factors',
+            benchmark_disclosure: 'Industry benchmarks derived from aggregated public datasets (DEFRA, IEA, FAO, SEMI, RJC, NHS Carbon). Intended for comparative performance screening, not regulatory reporting substitution.',
         });
     } catch (err) {
         console.error('Carbon scope error:', err);

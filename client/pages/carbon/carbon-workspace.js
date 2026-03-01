@@ -366,9 +366,9 @@ function renderOverview() {
       <div class="card" style="border-left:4px solid #059669">
         <div class="card-header"><div class="card-title">🏭 Scope Breakdown</div></div>
         <div class="card-body">
-          ${scopeBar('Scope 1 — Direct', s1.kgCO2e, s1.percentage, '#ef4444')}
-          ${scopeBar('Scope 2 — Energy', s2.kgCO2e, s2.percentage, '#f59e0b')}
-          ${scopeBar('Scope 3 — Supply Chain', s3.kgCO2e, s3.percentage, '#3b82f6')}
+          ${scopeBar('Scope 1 — Production (Modeled)', s1.kgCO2e, s1.percentage, '#ef4444')}
+          ${scopeBar('Scope 2 — Energy (Modeled)', s2.kgCO2e, s2.percentage, '#f59e0b')}
+          ${scopeBar('Scope 3 — Supply Chain (Cat 4 & 9)', s3.kgCO2e, s3.percentage, '#3b82f6')}
         </div>
       </div>
       <div class="card">
@@ -381,6 +381,12 @@ function renderOverview() {
       ${kpi('Maturity Level', `L${d.maturity_level || 0}`, '#8b5cf6', d.maturity_name || 'Not Assessed')}
       ${kpi('Simulations', d.simulations_total || 0, '#06b6d4', `${d.simulations_eligible || 0} credit-eligible`)}
       ${kpi('Regulatory', `${d.regulatory_compliant || 0}/${d.regulatory_total || 0}`, d.regulatory_compliant >= d.regulatory_total ? '#10b981' : '#f59e0b', 'Frameworks aligned')}
+    </div>
+    <div style="margin-top:16px;padding:12px 16px;background:var(--bg-card,#fff);border:1px solid var(--border);border-radius:10px;border-left:3px solid #6b7280">
+      <div style="font-size:0.62rem;color:var(--text-muted);line-height:1.5">
+        <strong>Methodology:</strong> GHG-aligned estimation & screening framework · Emission factors referenced from DEFRA 2025, IEA, FAO, SEMI, RJC, NHS Carbon datasets · 5-level Data Confidence Framework ·
+        Values represent screening-level industry-average estimates for decision-support. Not a substitute for ISO 14064 certified inventory or third-party assurance.
+      </div>
     </div>
   `;
 }
@@ -499,9 +505,9 @@ function renderEmissions() {
       ${kpi('Total Emissions', `${(totalKg / 1000).toFixed(2)} t`, '#f59e0b', `${totalKg.toLocaleString()} kgCO₂e`)}
       ${kpi('ESG Grade', grade, gradeColor, gradeLabel)}
       ${kpi('Confidence', `${avgConf.toFixed(1)}/5`, confColor, avgConf >= 4 ? 'Measured' : avgConf >= 2 ? 'Industry avg' : 'Proxy')}
-      ${kpi('Scope 1', `${(s1.kgCO2e || 0).toLocaleString()} kg`, '#ef4444', `${s1.percentage || 0}% direct`)}
+      ${kpi('Scope 1', `${(s1.kgCO2e || 0).toLocaleString()} kg`, '#ef4444', `${s1.percentage || 0}% production`)}
       ${kpi('Scope 2', `${(s2.kgCO2e || 0).toLocaleString()} kg`, '#f59e0b', `${s2.percentage || 0}% energy`)}
-      ${kpi('Scope 3', `${(s3.kgCO2e || 0).toLocaleString()} kg`, '#3b82f6', `${s3.percentage || 0}% supply chain`)}
+      ${kpi('Scope 3', `${(s3.kgCO2e || 0).toLocaleString()} kg`, '#3b82f6', `${s3.percentage || 0}% transport`)}
     </div>
 
     ${trendChart}
@@ -519,9 +525,9 @@ function renderEmissions() {
 
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px">
       <div>
-        ${scopeDetail('Scope 1 — Direct Emissions', s1, '#ef4444')}
-        ${scopeDetail('Scope 2 — Energy (Indirect)', s2, '#f59e0b')}
-        ${scopeDetail('Scope 3 — Value Chain', s3, '#3b82f6')}
+        ${scopeDetail('Scope 1 — Production Emissions (Modeled)', s1, '#ef4444')}
+        ${scopeDetail('Scope 2 — Energy (Modeled)', s2, '#f59e0b')}
+        ${scopeDetail('Scope 3 — Transport (Cat 4 & 9)', s3, '#3b82f6')}
       </div>
       <div class="card" style="border-left:4px solid #8b5cf6">
         <div class="card-header"><div class="card-title">⚠️ Carbon Risk Factors</div></div>
@@ -830,7 +836,7 @@ function renderPassports() {
       <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
         <div style="flex:1;display:flex;gap:12px">
           ${kpi('ESG Grade', grade, gradeColor, 'Carbon Integrity Rating')}
-          ${kpi('GRI Standard', report.standard || 'GHG Protocol', '#3b82f6', 'Reporting framework')}
+          ${kpi('GRI Standard', report.standard || 'Supports GRI 305 mapping', '#3b82f6', 'Disclosure framework')}
           ${kpi('Report Period', periodLabel, 'var(--text-primary,#1e293b)', 'Current assessment')}
         </div>
         <div style="display:flex;flex-direction:column;gap:6px">
