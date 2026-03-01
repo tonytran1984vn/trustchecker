@@ -110,16 +110,16 @@ router.get('/fraud-feed', requirePermission('admin:manage'), async (req, res) =>
 
         // Generate executive insights
         const insights = [];
-        if (critical > 0) insights.push({ level: 'critical', msg: `${critical} CRITICAL alert${critical > 1 ? 's' : ''} cần xử lý ngay — bao gồm ${alerts.filter(a => a.severity === 'critical').map(a => a.alert_type).filter((v, i, a) => a.indexOf(v) === i).join(', ')}` });
-        if (open > total * 0.5) insights.push({ level: 'warning', msg: `${Math.round(open / total * 100)}% alerts đang Open — cần phân bổ nguồn lực điều tra` });
-        if (topTenants[0]?.pct > 30) insights.push({ level: 'warning', msg: `${topTenants[0].name} chiếm ${topTenants[0].pct}% tổng alerts — cần audit riêng tenant này` });
+        if (critical > 0) insights.push({ level: 'critical', msg: `${critical} CRITICAL alert${critical > 1 ? 's' : ''} require immediate action — including ${alerts.filter(a => a.severity === 'critical').map(a => a.alert_type).filter((v, i, a) => a.indexOf(v) === i).join(', ')}` });
+        if (open > total * 0.5) insights.push({ level: 'warning', msg: `${Math.round(open / total * 100)}% of alerts are Open — resource allocation for investigation needed` });
+        if (topTenants[0]?.pct > 30) insights.push({ level: 'warning', msg: `${topTenants[0].name} accounts for ${topTenants[0].pct}% of total alerts — dedicated tenant audit recommended` });
         const counterfeitCount = typeMap['counterfeit'] || 0;
-        if (counterfeitCount >= 3) insights.push({ level: 'danger', msg: `${counterfeitCount} vụ hàng giả phát hiện — khuyến nghị tăng cường QR verification` });
+        if (counterfeitCount >= 3) insights.push({ level: 'danger', msg: `${counterfeitCount} counterfeit cases detected — recommend strengthening QR verification` });
         const geoAnom = typeMap['geo_anomaly'] || 0;
-        if (geoAnom >= 2) insights.push({ level: 'warning', msg: `${geoAnom} Geo Anomaly — sản phẩm xuất hiện ở vùng không mong muốn hoặc bị cấm vận` });
+        if (geoAnom >= 2) insights.push({ level: 'warning', msg: `${geoAnom} Geo Anomaly — products detected in unauthorized or sanctioned regions` });
         const sanctions = typeMap['sanctions_risk'] || 0;
-        if (sanctions > 0) insights.push({ level: 'critical', msg: `${sanctions} Sanctions Risk — vi phạm OFAC/EU sanctions, cần báo Compliance Officer ngay` });
-        if (insights.length === 0) insights.push({ level: 'info', msg: 'Không có cảnh báo nghiêm trọng — hệ thống đang ổn định' });
+        if (sanctions > 0) insights.push({ level: 'critical', msg: `${sanctions} Sanctions Risk — OFAC/EU sanctions violation detected, notify Compliance Officer immediately` });
+        if (insights.length === 0) insights.push({ level: 'info', msg: 'No critical alerts — system is operating normally' });
 
         res.json({
             alerts,
@@ -130,59 +130,89 @@ router.get('/fraud-feed', requirePermission('admin:manage'), async (req, res) =>
 });
 
 // GET /risk-analytics — Aggregated analytics for Cases, Analytics, Benchmark tabs
-router.get('/risk-analytics', requirePermission('admin:manage'), async (req, res) => {
+router.get('/risk-analytics', cacheMiddleware(120), requirePermission('admin:manage'), async (req, res) => {
     try {
-        // ── Suspicious Tenants (Cases tab) ──
-        const suspRows = await db.prepare(`
-            SELECT o.id, o.name, o.slug, o.plan,
-                   COUNT(fa.id) as fraud_count,
-                   SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count,
-                   SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count,
-                   AVG(CASE WHEN se.fraud_score IS NOT NULL THEN se.fraud_score ELSE 0 END) as avg_fraud_score,
-                   COUNT(DISTINCT fa.alert_type) as pattern_types
-            FROM organizations o
-            LEFT JOIN products p ON p.org_id = o.id
-            LEFT JOIN fraud_alerts fa ON fa.product_id = p.id
-            LEFT JOIN scan_events se ON se.product_id = p.id AND se.result IN ('suspicious','failed')
-            WHERE o.status = 'active'
-            GROUP BY o.id, o.name, o.slug, o.plan
-            ORDER BY fraud_count DESC
-        `).all().catch(() => []);
+        // ── Run ALL independent queries in parallel ──
+        const [suspRows, regionRows, catRows, patternRows, benchRows] = await Promise.all([
 
-        const suspiciousTenants = suspRows
-            .filter(t => t.fraud_count > 0)
-            .map(t => ({
-                ...t,
-                risk_score: Math.min(99, Math.round(
-                    t.critical_count * 15 + t.open_count * 5 + t.fraud_count * 2 + (t.avg_fraud_score || 0) * 30
-                )),
-                top_patterns: []
-            }));
+            // Suspicious Tenants (Cases tab) — with top patterns embedded
+            db.prepare(`
+                SELECT o.id, o.name, o.slug, o.plan,
+                       COUNT(fa.id) as fraud_count,
+                       SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count,
+                       SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count,
+                       AVG(CASE WHEN se.fraud_score IS NOT NULL THEN se.fraud_score ELSE 0 END) as avg_fraud_score,
+                       COUNT(DISTINCT fa.alert_type) as pattern_types
+                FROM organizations o
+                LEFT JOIN products p ON p.org_id = o.id
+                LEFT JOIN fraud_alerts fa ON fa.product_id = p.id
+                LEFT JOIN scan_events se ON se.product_id = p.id AND se.result IN ('suspicious','failed')
+                WHERE o.status = 'active'
+                GROUP BY o.id, o.name, o.slug, o.plan
+                HAVING COUNT(fa.id) > 0
+                ORDER BY fraud_count DESC
+                LIMIT 20
+            `).all().catch(() => []),
 
-        // Get top fraud types per tenant
-        for (const t of suspiciousTenants.slice(0, 10)) {
-            const pats = await db.prepare(`
-                SELECT fa.alert_type, COUNT(*) as c FROM fraud_alerts fa
-                JOIN products p ON fa.product_id = p.id
-                WHERE p.org_id = $1
-                GROUP BY fa.alert_type ORDER BY c DESC LIMIT 3
-            `).all(t.id).catch(() => []);
-            t.top_patterns = pats.map(p => p.alert_type.replace(/_/g, ' '));
-        }
+            // Risk by Region (Analytics tab)
+            db.prepare(`
+                SELECT geo_country, COUNT(*) as total,
+                       SUM(CASE WHEN result IN ('suspicious','failed') THEN 1 ELSE 0 END) as risky
+                FROM scan_events WHERE geo_country IS NOT NULL
+                GROUP BY geo_country ORDER BY risky DESC LIMIT 20
+            `).all().catch(() => []),
 
-        // ── Risk by Region (Analytics tab) ──
-        const regionRows = await db.prepare(`
-            SELECT geo_country, COUNT(*) as total,
-                   SUM(CASE WHEN result IN ('suspicious','failed') THEN 1 ELSE 0 END) as risky
-            FROM scan_events WHERE geo_country IS NOT NULL
-            GROUP BY geo_country ORDER BY risky DESC LIMIT 20
-        `).all().catch(() => []);
+            // Risk by Industry / Category — simple single-join (avoids temp file issues)
+            db.prepare(`
+                SELECT p.category, COUNT(fa.id) as fraud_count, 0 as scan_count
+                FROM products p
+                LEFT JOIN fraud_alerts fa ON fa.product_id = p.id
+                WHERE p.category IS NOT NULL
+                GROUP BY p.category ORDER BY fraud_count DESC LIMIT 10
+            `).all().catch(() => []),
 
-        // Map countries to regions
+            // Fraud Pattern Clustering
+            db.prepare(`
+                SELECT alert_type, COUNT(*) as incidents,
+                       SUM(CASE WHEN severity='critical' THEN 1 ELSE 0 END) as critical,
+                       SUM(CASE WHEN status='open' THEN 1 ELSE 0 END) as open_count
+                FROM fraud_alerts
+                GROUP BY alert_type ORDER BY incidents DESC LIMIT 15
+            `).all().catch(() => []),
+
+            // Tenant Benchmark Heatmap — simplified, limited
+            db.prepare(`
+                SELECT o.name, o.slug,
+                       COUNT(DISTINCT se.id) as scan_count,
+                       SUM(CASE WHEN se.result IN ('suspicious','failed') THEN 1 ELSE 0 END) as bad_scans,
+                       COUNT(DISTINCT fa.id) as fraud_count,
+                       AVG(ts.score) as avg_trust
+                FROM organizations o
+                LEFT JOIN products p ON p.org_id = o.id
+                LEFT JOIN scan_events se ON se.product_id = p.id
+                LEFT JOIN fraud_alerts fa ON fa.product_id = p.id
+                LEFT JOIN trust_scores ts ON ts.product_id = p.id
+                WHERE o.status = 'active'
+                GROUP BY o.name, o.slug
+                ORDER BY fraud_count DESC
+                LIMIT 15
+            `).all().catch(() => []),
+        ]);
+
+        // ── Process Suspicious Tenants ──
+        const suspiciousTenants = suspRows.map(t => ({
+            ...t,
+            risk_score: Math.min(99, Math.round(
+                t.critical_count * 15 + t.open_count * 5 + t.fraud_count * 2 + (t.avg_fraud_score || 0) * 30
+            )),
+            top_patterns: []
+        }));
+
+        // ── Process Regions ──
         const regionMap = {
             VN: 'Asia-Pacific', SG: 'Asia-Pacific', TH: 'Asia-Pacific', JP: 'Asia-Pacific', KR: 'Asia-Pacific',
-            CN: 'Asia-Pacific', IN: 'Asia-Pacific', AU: 'Asia-Pacific', KH: 'Asia-Pacific', KP: 'Asia-Pacific',
-            DE: 'Europe', FR: 'Europe', GB: 'Europe', NL: 'Europe', CH: 'Europe', IT: 'Europe', AT: 'Europe', NO: 'Europe',
+            CN: 'Asia-Pacific', IN: 'Asia-Pacific', AU: 'Asia-Pacific', KH: 'Asia-Pacific',
+            DE: 'Europe', FR: 'Europe', GB: 'Europe', NL: 'Europe', CH: 'Europe', IT: 'Europe',
             US: 'North America', AE: 'Middle East', IR: 'Middle East'
         };
         const regions = {};
@@ -196,58 +226,14 @@ router.get('/risk-analytics', requirePermission('admin:manage'), async (req, res
             .map(([name, d]) => ({ name, total: d.total, risky: d.risky, pct: Math.round(d.risky / (d.total || 1) * 100) }))
             .sort((a, b) => b.risky - a.risky);
 
-        // ── Risk by Industry / Category ──
-        const catRows = await db.prepare(`
-            SELECT p.category, COUNT(DISTINCT fa.id) as fraud_count, COUNT(DISTINCT se.id) as scan_count
-            FROM products p
-            LEFT JOIN fraud_alerts fa ON fa.product_id = p.id
-            LEFT JOIN scan_events se ON se.product_id = p.id
-            GROUP BY p.category ORDER BY fraud_count DESC LIMIT 10
-        `).all().catch(() => []);
-
-        // ── Fraud Pattern Clustering ──
-        const patternRows = await db.prepare(`
-            SELECT alert_type, COUNT(*) as incidents,
-                   SUM(CASE WHEN severity='critical' THEN 1 ELSE 0 END) as critical,
-                   SUM(CASE WHEN status='open' THEN 1 ELSE 0 END) as open_count
-            FROM fraud_alerts
-            GROUP BY alert_type ORDER BY incidents DESC
-        `).all().catch(() => []);
-
-        // ── Tenant Benchmark Heatmap ──
-        const benchRows = await db.prepare(`
-            SELECT o.name, o.slug, p.category as industry,
-                   COUNT(DISTINCT se.id) as scan_count,
-                   SUM(CASE WHEN se.result IN ('suspicious','failed') THEN 1 ELSE 0 END) as bad_scans,
-                   COUNT(DISTINCT fa.id) as fraud_count,
-                   AVG(ts.score) as avg_trust
-            FROM organizations o
-            LEFT JOIN products p ON p.org_id = o.id
-            LEFT JOIN scan_events se ON se.product_id = p.id
-            LEFT JOIN fraud_alerts fa ON fa.product_id = p.id
-            LEFT JOIN trust_scores ts ON ts.product_id = p.id
-            WHERE o.status = 'active'
-            GROUP BY o.name, o.slug, p.category
-            ORDER BY fraud_count DESC
-        `).all().catch(() => []);
-
-        // Aggregate per tenant
-        const tenantBench = {};
-        benchRows.forEach(r => {
-            if (!tenantBench[r.slug]) tenantBench[r.slug] = { name: r.name, slug: r.slug, industries: [], scans: 0, bad: 0, frauds: 0, trust: [] };
-            const tb = tenantBench[r.slug];
-            if (r.industry && !tb.industries.includes(r.industry)) tb.industries.push(r.industry);
-            tb.scans += parseInt(r.scan_count || 0);
-            tb.bad += parseInt(r.bad_scans || 0);
-            tb.frauds += parseInt(r.fraud_count || 0);
-            if (r.avg_trust) tb.trust.push(parseFloat(r.avg_trust));
-        });
-        const heatmap = Object.values(tenantBench).map(t => ({
-            name: t.name, industry: t.industries.slice(0, 2).join(', ') || '—',
-            scans: t.scans, dupRate: t.scans ? Math.round(t.bad / t.scans * 1000) / 10 : 0,
-            fraudCount: t.frauds,
-            avgTrust: t.trust.length ? Math.round(t.trust.reduce((a, b) => a + b, 0) / t.trust.length) : 0,
-            tier: t.frauds >= 8 ? 'High' : t.frauds >= 3 ? 'Medium' : 'Low',
+        // ── Process Heatmap ──
+        const heatmap = benchRows.map(t => ({
+            name: t.name, industry: '—',
+            scans: parseInt(t.scan_count || 0),
+            dupRate: t.scan_count ? Math.round(parseInt(t.bad_scans || 0) / parseInt(t.scan_count) * 1000) / 10 : 0,
+            fraudCount: parseInt(t.fraud_count || 0),
+            avgTrust: t.avg_trust ? Math.round(parseFloat(t.avg_trust)) : 0,
+            tier: parseInt(t.fraud_count || 0) >= 8 ? 'High' : parseInt(t.fraud_count || 0) >= 3 ? 'Medium' : 'Low',
         })).sort((a, b) => b.fraudCount - a.fraudCount);
 
         res.json({

@@ -19,18 +19,14 @@ async function fetchCarbonData() {
     if (_carbonFetching || _carbonLoaded) return;
     _carbonFetching = true;
     try {
-        const [scope, leaderboard, report, risk, regulatory, maturity, flow, roleMatrix, benchmark] = await Promise.all([
-            API.get('/scm/carbon/scope').catch(() => null),
-            API.get('/scm/carbon/leaderboard').catch(() => null),
-            API.get('/scm/carbon/report').catch(() => null),
-            API.get('/scm/carbon/risk-factors').catch(() => null),
-            API.get('/scm/carbon/regulatory').catch(() => null),
-            API.get('/scm/carbon/maturity').catch(() => null),
-            API.get('/scm/carbon/governance-flow').catch(() => null),
-            API.get('/scm/carbon/role-matrix').catch(() => null),
-            API.get('/scm/carbon/benchmark').catch(() => null)
-        ]);
-        carbon = { scope, leaderboard, report, risk, regulatory, maturity, flow, roleMatrix, benchmark };
+        const bundle = await API.get('/scm/carbon/bundle').catch(() => null);
+        if (bundle) {
+            carbon = {
+                scope: bundle.scope, leaderboard: bundle.leaderboard, report: bundle.report,
+                risk: bundle.risk, regulatory: bundle.regulatory, maturity: bundle.maturity,
+                flow: bundle.flow, roleMatrix: bundle.roleMatrix, benchmark: bundle.benchmark
+            };
+        }
         _carbonLoaded = true;
         // Targeted DOM update — only update the carbon page content, not the whole app
         setTimeout(() => {

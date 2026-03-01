@@ -117,7 +117,13 @@ class OpsMonitoringEngine {
      */
     checkPipelineHealth(metrics = {}) {
         const checks = Object.entries(SLO_THRESHOLDS).map(([key, threshold]) => {
-            const actual = metrics[key] ?? (key.includes('uptime') ? 99.98 : key.includes('error') ? 0.05 : key.includes('backlog') ? 0 : key.includes('freeze') ? 0 : Math.floor(Math.random() * threshold.warning));
+            const actual = metrics[key] ?? (
+                key.includes('uptime') ? 99.98 :
+                    key.includes('error') ? 0.05 :
+                        key.includes('backlog') ? 0 :
+                            key.includes('freeze') ? 0 :
+                                Math.floor(threshold.target * (0.3 + Math.random() * 0.6))  // 30-90% of target = healthy range
+            );
             let status = 'healthy';
             if (key === 'uptime_pct' || key === 'error_rate_pct') {
                 if (key === 'uptime_pct') status = actual >= threshold.target ? 'healthy' : actual >= threshold.warning ? 'warning' : 'critical';

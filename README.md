@@ -67,15 +67,41 @@
 
 ## Quick Start (Local)
 
+### ⚡ One-Command Setup
+
+```bash
+git clone https://github.com/tonytran1984vn/trustchecker.git
+cd trustchecker
+./setup.sh
+```
+
+The setup script automatically:
+- ✅ Checks Node.js 18+ and npm
+- ✅ Lets you choose **SQLite** (zero config) or **PostgreSQL**
+- ✅ Runs `npm install`
+- ✅ Creates `.env` with auto-generated secure secrets
+- ✅ Runs Prisma migrations (if PostgreSQL)
+- ✅ Seeds demo data (products, users, scan events, etc.)
+- ✅ Creates required directories
+
+Then start the server:
+
+```bash
+npm run dev
+```
+
+Server starts at **http://localhost:4000**
+
 ### Prerequisites
 
 | Tool        | Version    | Notes                  |
 |-------------|------------|------------------------|
-| **Node.js** | v20+ LTS   | `node -v` to check     |
-| **PostgreSQL** | 15+     | Or use Docker          |
+| **Node.js** | v18+ LTS   | `node -v` to check     |
 | **npm**     | 9+         | Comes with Node.js     |
+| **PostgreSQL** | 15+ (optional) | SQLite used by default for dev |
 
-### Steps
+<details>
+<summary>📋 Manual Setup Steps (alternative to setup.sh)</summary>
 
 ```bash
 # 1. Clone
@@ -85,15 +111,15 @@ cd trustchecker
 # 2. Install dependencies
 npm install
 
-# 3. Create .env file (see Environment Variables below)
-cp .env.example .env  # or create manually
+# 3. Create .env file
+cp .env.example .env
 
-# 4. Setup PostgreSQL (see Database Setup below)
+# 4. Setup PostgreSQL (optional — see Database Setup below)
 
-# 5. Generate Prisma Client
+# 5. Generate Prisma Client (PostgreSQL only)
 npx prisma generate
 
-# 6. Push schema to database (creates all 61 tables)
+# 6. Push schema to database
 npx prisma db push
 
 # 7. Seed demo data
@@ -103,7 +129,7 @@ npm run seed
 npm run dev
 ```
 
-Server starts at **http://localhost:4000**
+</details>
 
 ---
 
@@ -362,9 +388,28 @@ npx jest tests/auth.test.js
 
 ## Production Deployment (VPS)
 
-> See [VPS_DEPLOYMENT.md](VPS_DEPLOYMENT.md) for detailed guide.
+### ⚡ One-Command VPS Deploy (Ubuntu/Debian)
 
-### Quick Deploy
+```bash
+# SSH to a fresh VPS, then:
+git clone https://github.com/tonytran1984vn/trustchecker.git /opt/trustchecker
+cd /opt/trustchecker
+sudo ./deploy-vps.sh
+```
+
+The deploy script automatically installs & configures:
+- ✅ **Node.js 22** + PM2 (auto-restart on reboot)
+- ✅ **PostgreSQL** (user, database, random password)
+- ✅ **Nginx** reverse proxy
+- ✅ **SSL** via Let's Encrypt (if domain provided)
+- ✅ **UFW** firewall
+- ✅ `.env` with production secrets
+- ✅ Prisma migrations + data seeding
+
+> See [VPS_DEPLOYMENT.md](VPS_DEPLOYMENT.md) for detailed manual guide.
+
+<details>
+<summary>📋 Manual Deploy Steps (alternative to deploy-vps.sh)</summary>
 
 ```bash
 # 1. SSH to VPS
@@ -379,50 +424,52 @@ sudo -u postgres createuser -P trustchecker
 sudo -u postgres createdb -O trustchecker trustchecker
 
 # 4. Deploy code
-mkdir -p /opt/trustchecker
-rsync -avz --exclude node_modules --exclude .git ./ root@VPS:/opt/trustchecker/
-
-# 5. Install & setup on VPS
+git clone <repo> /opt/trustchecker
 cd /opt/trustchecker
-npm install --production
-export DATABASE_URL="postgresql://trustchecker:PASSWORD@localhost:5432/trustchecker"
-npx prisma generate
-npx prisma db push
+npm ci --omit=dev
+
+# 5. Configure environment
+cp .env.example .env   # Edit DATABASE_URL, JWT_SECRET, etc.
+
+# 6. Initialize database
+npx prisma generate && npx prisma db push
 npm run seed
 
-# 6. Configure PM2
-cp ecosystem.config.js ecosystem.config.js  # Edit DB password, JWT secrets
+# 7. Start with PM2
 pm2 start ecosystem.config.js
-pm2 save
-pm2 startup
-
-# 7. Configure Nginx (see VPS_DEPLOYMENT.md for full config)
+pm2 save && pm2 startup
 ```
+
+</details>
 
 ### Nginx Configuration
 
 ```nginx
-location /trustchecker/ {
-    proxy_pass http://127.0.0.1:4000/;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 }
 ```
 
 ### Update Deployment
 
 ```bash
-# From local machine
-rsync -avz --exclude node_modules --exclude .git \
-  /path/to/trustchecker/ root@VPS:/opt/trustchecker/
-
-# On VPS
-ssh root@VPS "cd /opt/trustchecker && pm2 restart trustchecker"
+# On VPS — pull latest changes and restart
+cd /opt/trustchecker
+git pull
+npm ci --omit=dev
+pm2 restart trustchecker
 ```
 
 ---
@@ -446,6 +493,8 @@ docker compose down
 
 | Script              | Description                              |
 |---------------------|------------------------------------------|
+| `./setup.sh`        | **One-command local setup**              |
+| `./deploy-vps.sh`   | **One-command VPS production deploy**    |
 | `npm run dev`       | Start dev server (port 4000)             |
 | `npm start`         | Start production server                  |
 | `npm run seed`      | Seed database with demo data             |

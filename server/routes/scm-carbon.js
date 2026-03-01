@@ -18,6 +18,14 @@ const { cacheMiddleware } = require('../cache');
 router.use(authMiddleware);
 
 // ─── Helper: tenant-scoped data fetchers with optional date range ────────────
+// Data cache (60s TTL) — prevents duplicate DB calls when 9 endpoints fire simultaneously
+const _dataCache = new Map();
+function cached(key, ttlSec, fn) {
+    const entry = _dataCache.get(key);
+    if (entry && Date.now() - entry.ts < ttlSec * 1000) return Promise.resolve(entry.data);
+    return fn().then(data => { _dataCache.set(key, { data, ts: Date.now() }); return data; });
+}
+
 function dateClause(col, from, to, params) {
     let clause = '';
     if (from) { clause += ` AND ${col} >= ?`; params.push(from); }
@@ -25,7 +33,7 @@ function dateClause(col, from, to, params) {
     return clause;
 }
 
-async function getOrgProducts(orgId, from, to) {
+async function _getOrgProducts(orgId, from, to) {
     const params = [];
     let q = 'SELECT * FROM products WHERE 1=1';
     if (orgId) { q += ' AND org_id = ?'; params.push(orgId); }
@@ -33,8 +41,11 @@ async function getOrgProducts(orgId, from, to) {
     q += ' LIMIT 200';
     return db.prepare(q).all(...params);
 }
+function getOrgProducts(orgId, from, to) {
+    return cached(`products:${orgId}:${from || ''}:${to || ''}`, 60, () => _getOrgProducts(orgId, from, to));
+}
 
-async function getOrgShipments(orgId, from, to) {
+async function _getOrgShipments(orgId, from, to) {
     if (orgId) {
         const params = [orgId];
         let q = `SELECT s.* FROM shipments s
@@ -49,8 +60,11 @@ async function getOrgShipments(orgId, from, to) {
     q += dateClause('created_at', from, to, params);
     return db.prepare(q).all(...params);
 }
+function getOrgShipments(orgId, from, to) {
+    return cached(`shipments:${orgId}:${from || ''}:${to || ''}`, 60, () => _getOrgShipments(orgId, from, to));
+}
 
-async function getOrgEvents(orgId, from, to) {
+async function _getOrgEvents(orgId, from, to) {
     if (orgId) {
         const params = [orgId];
         let q = 'SELECT * FROM supply_chain_events WHERE org_id = ?';
@@ -71,16 +85,22 @@ async function getOrgEvents(orgId, from, to) {
     q += dateClause('created_at', from, to, params);
     return db.prepare(q).all(...params);
 }
+function getOrgEvents(orgId, from, to) {
+    return cached(`events:${orgId}:${from || ''}:${to || ''}`, 60, () => _getOrgEvents(orgId, from, to));
+}
 
-async function getOrgPartners(orgId) {
+async function _getOrgPartners(orgId) {
     if (orgId) {
         return db.prepare('SELECT * FROM partners WHERE org_id = ?').all(orgId)
             .catch(() => db.prepare('SELECT * FROM partners').all());
     }
     return db.prepare('SELECT * FROM partners').all();
 }
+function getOrgPartners(orgId) {
+    return cached(`partners:${orgId}`, 60, () => _getOrgPartners(orgId));
+}
 
-async function getOrgViolations(orgId) {
+async function _getOrgViolations(orgId) {
     if (orgId) {
         return db.prepare(`
             SELECT v.* FROM sla_violations v
@@ -90,6 +110,168 @@ async function getOrgViolations(orgId) {
     }
     return db.prepare('SELECT * FROM sla_violations').all();
 }
+function getOrgViolations(orgId) {
+    return cached(`violations:${orgId}`, 60, () => _getOrgViolations(orgId));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BUNDLE — Single call that returns ALL carbon dashboard data (replaces 9 calls)
+// ═══════════════════════════════════════════════════════════════════════════════
+router.get('/bundle', cacheMiddleware(180), async (req, res) => {
+    try {
+        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const { from, to } = req.query;
+
+        // Fetch ALL data in parallel (each has 60s data cache)
+        const [products, shipments, events, partners, violations, certifications] = await Promise.all([
+            getOrgProducts(orgId, from, to),
+            getOrgShipments(orgId, from, to),
+            getOrgEvents(orgId, from, to),
+            getOrgPartners(orgId),
+            getOrgViolations(orgId),
+            db.prepare('SELECT * FROM certifications').all().catch(() => [])
+        ]);
+
+        // Run ALL engine calculations in parallel with shared data
+        // Run engine calculations + quick DB counts for maturity in parallel
+        const [scopeData, leaderboardData, flow, roleMatrix, industryBenchmarks,
+            offsetCountQ, partnerCountQ, orgCountQ] = await Promise.all([
+                engineClient.carbonAggregate(products, shipments, events),
+                engineClient.carbonLeaderboard(partners, shipments, violations),
+                Promise.resolve(carbonEngine.getGovernanceFlow()),
+                Promise.resolve(carbonEngine.getRoleMatrix()),
+                Promise.resolve(carbonEngine.getIndustryBenchmarks()),
+                db.get('SELECT COUNT(*) as c FROM carbon_offsets WHERE org_id = ?', [orgId]).catch(() => ({ c: 0 })),
+                db.get('SELECT COUNT(*) as c FROM partners' + (orgId ? ' WHERE org_id = ?' : ''), orgId ? [orgId] : []).catch(() => ({ c: 0 })),
+                db.get('SELECT COUNT(*) as c FROM organizations').catch(() => ({ c: 0 })),
+            ]);
+
+        // Build maturity inline
+        const productCount = products.length;
+        const offsetCount = offsetCountQ?.c || 0;
+        const partnerCount = partnerCountQ?.c || 0;
+        const orgs = orgCountQ?.c || 0;
+        const features = [];
+        if (productCount > 0) features.push('scope_calculation');
+        if (offsetCount > 0) features.push('offset_recording');
+        features.push('gri_reporting', 'blockchain_anchor');
+        if (partnerCount > 0) features.push('partner_esg_scoring');
+        features.push('risk_integration');
+        if (orgs > 1) features.push('cross_tenant_benchmark');
+        let mLevel = 0, mLabel = 'Not Assessed';
+        if (features.length >= 7) { mLevel = 5; mLabel = 'Leader — Net Zero Pathway'; }
+        else if (features.length >= 5) { mLevel = 4; mLabel = 'Advanced — Full Scope Coverage'; }
+        else if (features.length >= 4) { mLevel = 3; mLabel = 'Intermediate — Offset & Risk Integration'; }
+        else if (features.length >= 2) { mLevel = 2; mLabel = 'Developing — Data Collection Active'; }
+        else if (features.length >= 1) { mLevel = 1; mLabel = 'Foundation — Basic Awareness'; }
+        const maturity = {
+            level: mLevel, current_level: mLevel, label: mLabel,
+            levels: [
+                { level: 1, name: 'Foundation', description: 'Basic carbon awareness and initial data collection', target: 'Scope 1 tracking' },
+                { level: 2, name: 'Developing', description: 'Active data collection across Scope 1 & 2, initial reporting', target: 'Automated reporting' },
+                { level: 3, name: 'Intermediate', description: 'Offset recording, risk integration, and GRI-aligned reporting', target: 'Scope 3 screening' },
+                { level: 4, name: 'Advanced', description: 'Full Scope 1-3 coverage, partner ESG scoring, materiality assessment', target: 'SBTi alignment' },
+                { level: 5, name: 'Leader', description: 'Net zero pathway with cross-tenant benchmarks, blockchain-anchored verification', target: 'Net Zero by 2030' },
+            ],
+            features_detected: features, products_count: productCount, offsets_count: offsetCount, partners_count: partnerCount,
+        };
+
+        // Build scope response
+        const total_emissions_kgCO2e = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
+        const scope = {
+            ...scopeData,
+            total_emissions_kgCO2e: total_emissions_kgCO2e || scopeData.total_emissions_kgCO2e,
+            products_assessed: products.length,
+        };
+
+        // Build report
+        const report = await engineClient.carbonGRIReport({ scopeData, leaderboard: leaderboardData, certifications });
+        if (report.disclosures && !Array.isArray(report.disclosures)) {
+            report.disclosures = Object.entries(report.disclosures).map(([code, d]) => ({ code, id: code, ...d }));
+        }
+        report.products_assessed = products.length;
+        report.supply_chain_nodes = shipments.length;
+        report.total_kgCO2e = total_emissions_kgCO2e || scopeData.total_emissions_kgCO2e || 0;
+        // ESG grade
+        let offsetCov = 0;
+        try {
+            const off = await db.get('SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE org_id = ? AND status = ?', [orgId, 'retired']);
+            offsetCov = Math.min(1, (off?.r || 0) / ((total_emissions_kgCO2e / 1000) || 1));
+        } catch (_) { }
+        const dataCov = products.length > 0 ? products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length : 0;
+        const compScore = (offsetCov * 0.4) + (Math.min(1, 5 / 7) * 0.3) + (dataCov * 0.3);
+        const esgGrade = total_emissions_kgCO2e === 0 ? 'N/A'
+            : compScore >= 0.85 ? 'A' : compScore >= 0.65 ? 'B' : compScore >= 0.45 ? 'C' : compScore >= 0.25 ? 'D' : 'F';
+        report.overall_esg_grade = esgGrade;
+        report.grade = esgGrade;
+        report.standard = report.report_standard || 'GHG Protocol';
+        report.period = report.reporting_period ? `${report.reporting_period.from} — ${report.reporting_period.to}` : new Date().getFullYear().toString();
+
+        // Build risk factors
+        const avgCarbon = products.length > 0 ? total_emissions_kgCO2e / products.length : 0;
+        const highCarbonProducts = products.filter(p => (p.carbon_footprint_kgco2e || 0) > avgCarbon * 1.5);
+        const noDataProducts = products.filter(p => !p.carbon_footprint_kgco2e || p.carbon_footprint_kgco2e === 0);
+        const risk_factors = [];
+        if (highCarbonProducts.length > 0) {
+            risk_factors.push({ name: 'High-Carbon Products', factor: 'high_carbon_concentration', description: `${highCarbonProducts.length} products exceed 1.5× average`, severity: highCarbonProducts.length > 5 ? 'high' : 'medium', score: Math.min(95, 50 + highCarbonProducts.length * 5), impact: 'Regulatory exposure under CBAM/CSRD' });
+        }
+        if (noDataProducts.length > 0) {
+            risk_factors.push({ name: 'Carbon Data Gaps', factor: 'data_gaps', description: `${noDataProducts.length} products missing carbon data`, severity: noDataProducts.length > products.length / 2 ? 'high' : 'medium', score: Math.min(90, 40 + noDataProducts.length * 3), impact: 'Audit risk and reporting gaps' });
+        }
+
+        // Build regulatory inline
+        const hasData = total_emissions_kgCO2e > 0;
+        const regFrameworks = [
+            { id: 'CSRD', name: 'CSRD / ESRS E1', full: 'Corporate Sustainability Reporting Directive', region: 'EU', status: hasData && offsetCount > 0 ? 'compliant' : hasData ? 'partial' : 'gap', icon: '🇪🇺' },
+            { id: 'GRI-305', name: 'GRI 305: Emissions', full: 'Global Reporting Initiative', region: 'Global', status: hasData ? 'compliant' : 'gap', icon: '🌐' },
+            { id: 'CBAM', name: 'EU CBAM', full: 'Carbon Border Adjustment Mechanism', region: 'EU', status: hasData ? 'partial' : 'gap', icon: '🇪🇺' },
+            { id: 'TCFD', name: 'TCFD', full: 'Task Force on Climate-Related Financial Disclosures', region: 'Global', status: hasData ? 'compliant' : 'gap', icon: '🌐' },
+            { id: 'SBTi', name: 'SBTi', full: 'Science Based Targets initiative', region: 'Global', status: hasData && offsetCount > 0 ? 'partial' : 'gap', icon: '🎯' },
+        ];
+        const regulatory = {
+            frameworks: regFrameworks,
+            ready: regFrameworks.filter(f => f.status === 'compliant').length,
+            partial: regFrameworks.filter(f => f.status === 'partial').length,
+        };
+
+        // Build benchmark
+        const categoryStats = {};
+        for (const p of (scopeData.product_rankings || [])) {
+            const cat = p.category || 'General';
+            if (!categoryStats[cat]) categoryStats[cat] = { products: 0, total_kgCO2e: 0, grades: [] };
+            categoryStats[cat].products++;
+            categoryStats[cat].total_kgCO2e += p.total;
+            categoryStats[cat].grades.push(p.grade);
+        }
+        const comparison = Object.entries(categoryStats).map(([cat, stats]) => {
+            const avg = stats.total_kgCO2e / stats.products;
+            const benchmark = industryBenchmarks[cat] || industryBenchmarks['_default'];
+            const gradeInfo = carbonEngine._gradeByIntensity(avg, cat);
+            return {
+                category: cat, your_avg_kgCO2e: Math.round(avg * 100) / 100,
+                industry_p20: benchmark.p20, industry_median: benchmark.median, industry_p80: benchmark.p80,
+                grade: gradeInfo.grade, grade_label: gradeInfo.label,
+                performance: avg <= benchmark.p20 ? 'top_performer' : avg <= benchmark.median ? 'above_average' : avg <= benchmark.p80 ? 'below_average' : 'critical',
+                gap_to_median_pct: Math.round((avg - benchmark.median) / benchmark.median * 100)
+            };
+        });
+        const benchmark = {
+            title: 'Industry Carbon Benchmark (v3.0)', your_total_kgCO2e: scopeData.total_emissions_kgCO2e,
+            your_comparison: comparison,
+            insight: comparison.some(c => c.performance === 'top_performer') ? '✅ Top performer in some categories' :
+                comparison.some(c => c.performance === 'above_average') ? '🟡 Above industry average' : '⚠️ Below industry average'
+        };
+
+        res.json({
+            scope, leaderboard: leaderboardData, report,
+            risk: { risk_factors }, regulatory, maturity, flow, roleMatrix: { ...roleMatrix, current_user_role: req.user?.role || 'viewer', eas_version: '3.0' },
+            benchmark
+        });
+    } catch (err) {
+        console.error('Carbon bundle error:', err);
+        res.status(500).json({ error: 'Carbon data bundle failed' });
+    }
+});
 
 // ─── GET /api/scm/carbon/footprint/:productId — Product carbon passport ─────
 router.get('/footprint/:productId', async (req, res) => {
@@ -121,9 +303,11 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
     try {
         const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const { from, to } = req.query;
-        const products = await getOrgProducts(orgId, from, to);
-        const shipments = await getOrgShipments(orgId, from, to);
-        const events = await getOrgEvents(orgId, from, to);
+        const [products, shipments, events] = await Promise.all([
+            getOrgProducts(orgId, from, to),
+            getOrgShipments(orgId, from, to),
+            getOrgEvents(orgId, from, to)
+        ]);
 
         // Use actual product carbon data
         const total_emissions_kgCO2e = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
@@ -251,9 +435,11 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
 router.get('/leaderboard', cacheMiddleware(120), async (req, res) => {
     try {
         const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
-        const partners = await getOrgPartners(orgId);
-        const shipments = await getOrgShipments(orgId);
-        const violations = await getOrgViolations(orgId);
+        const [partners, shipments, violations] = await Promise.all([
+            getOrgPartners(orgId),
+            getOrgShipments(orgId),
+            getOrgViolations(orgId)
+        ]);
 
         const leaderboard = await engineClient.carbonLeaderboard(partners, shipments, violations);
 
@@ -281,12 +467,14 @@ router.get('/report', cacheMiddleware(180), async (req, res) => {
     try {
         const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
         const { from, to } = req.query;
-        const products = await getOrgProducts(orgId, from, to);
-        const shipments = await getOrgShipments(orgId, from, to);
-        const events = await getOrgEvents(orgId, from, to);
-        const partners = await getOrgPartners(orgId);
-        const violations = await getOrgViolations(orgId);
-        const certifications = await db.prepare('SELECT * FROM certifications').all();
+        const [products, shipments, events, partners, violations, certifications] = await Promise.all([
+            getOrgProducts(orgId, from, to),
+            getOrgShipments(orgId, from, to),
+            getOrgEvents(orgId, from, to),
+            getOrgPartners(orgId),
+            getOrgViolations(orgId),
+            db.prepare('SELECT * FROM certifications').all().catch(() => [])
+        ]);
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
         const leaderboard = await engineClient.carbonLeaderboard(partners, shipments, violations);
@@ -612,7 +800,7 @@ router.get('/governance-flow', (req, res) => {
 });
 
 // ─── GET /api/scm/carbon/role-matrix — Role × Carbon permission matrix ──────
-router.get('/role-matrix', (req, res) => {
+router.get('/role-matrix', cacheMiddleware(300), (req, res) => {
     try {
         const matrix = carbonEngine.getRoleMatrix();
         res.json({
@@ -630,9 +818,11 @@ router.get('/role-matrix', (req, res) => {
 router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
     try {
         const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
-        const products = await getOrgProducts(orgId);
-        const shipments = await getOrgShipments(orgId);
-        const events = await getOrgEvents(orgId);
+        const [products, shipments, events] = await Promise.all([
+            getOrgProducts(orgId),
+            getOrgShipments(orgId),
+            getOrgEvents(orgId)
+        ]);
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
 
@@ -693,10 +883,12 @@ router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
 router.get('/scope3-materiality', cacheMiddleware(180), async (req, res) => {
     try {
         const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
-        const products = await getOrgProducts(orgId);
-        const shipments = await getOrgShipments(orgId);
-        const events = await getOrgEvents(orgId);
-        const partners = await getOrgPartners(orgId);
+        const [products, shipments, events, partners] = await Promise.all([
+            getOrgProducts(orgId),
+            getOrgShipments(orgId),
+            getOrgEvents(orgId),
+            getOrgPartners(orgId)
+        ]);
 
         const result = carbonEngine.assessScope3Materiality(products, shipments, events, partners);
         res.json(result);
