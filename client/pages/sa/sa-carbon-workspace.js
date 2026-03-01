@@ -4,11 +4,11 @@
  */
 import { renderWorkspace } from '../../components/workspace.js';
 import { icon } from '../../core/icons.js';
-import { renderPage as renderCarbon } from '../scm/carbon.js?v=3.4';
-import { renderPage as renderCarbonCredit } from '../scm/carbon-credit.js?v=3.4';
-import { renderPage as renderGreenFinance } from '../infra/green-finance.js?v=3.4';
-import { renderPage as renderSustainability } from '../sustainability.js?v=3.4';
-import { renderPage as renderCarbonRegistry } from '../infra/carbon-registry.js?v=3.4';
+import { renderPage as renderCarbon } from '../scm/carbon.js?v=3.5';
+import { renderPage as renderCarbonCredit } from '../scm/carbon-credit.js?v=3.5';
+import { renderPage as renderGreenFinance } from '../infra/green-finance.js?v=3.5';
+import { renderPage as renderSustainability } from '../sustainability.js?v=3.5';
+import { renderPage as renderCarbonRegistry } from '../infra/carbon-registry.js?v=3.5';
 
 export function renderPage() {
     return renderWorkspace({

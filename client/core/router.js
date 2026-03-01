@@ -98,7 +98,7 @@ const PAGE_LOADERS = {
     'sa-governance': () => import('../pages/sa/sa-governance-workspace.js'),
     'sa-financial': () => import('../pages/sa/sa-financial-workspace.js'),
     'sa-operations': () => import('../pages/sa/sa-settings-workspace.js'),
-    'sa-carbon': () => import('../pages/sa/sa-carbon-workspace.js?v=3.4'),
+    'sa-carbon': () => import('../pages/sa/sa-carbon-workspace.js?v=3.5'),
 
     // ─── Super Admin (Platform Governance) pages ────────
     'control-tower': () => import('../pages/sa/control-tower.js'),
