@@ -3,12 +3,14 @@
  */
 import { State } from '../core/state.js';
 import { timeAgo, scoreColor, eventIcon } from '../utils/helpers.js';
+import { injectMyActionsWidget } from '../components/my-actions-widget.js';
 
 export function renderPage() {
   const s = State.dashboardStats;
   if (!s) return '<div class="loading"><div class="spinner"></div><span style="color:var(--text-muted)">Loading dashboard...</span></div>';
 
   return `
+    <div id="my-actions-widget" style="display:none"></div>
     <div class="stats-grid stagger-in">
       <div class="stat-card cyan">
         <div class="stat-icon">📦</div>
@@ -231,6 +233,9 @@ export function initDashboardCharts() {
 }
 
 window.initDashboardCharts = initDashboardCharts;
+
+// Inject assigned action widget after charts
+setTimeout(() => injectMyActionsWidget('my-actions-widget'), 200);
 
 // ── Live Events Toggle (default: off) ──
 function isLiveEventsOn() {

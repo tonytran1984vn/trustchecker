@@ -8,6 +8,7 @@
  * All data from PostgreSQL via org_id-scoped APIs.
  */
 import { icon } from '../../core/icons.js';
+import { injectMyActionsWidget } from '../../components/my-actions-widget.js';
 
 let _exposure = null, _decisions = null, _valuation = null;
 let _trends = null, _alerts = null, _roi = null;
@@ -22,6 +23,7 @@ export function renderPage() {
         <h1>${icon('target', 28)} Capital Command System</h1>
         <div class="exec-timestamp">Live · ${new Date().toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}</div>
       </div>
+      <div id="my-actions-widget" style="display:none"></div>
       <div id="ccs-overview-content">
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
           <div class="spinner"></div>
@@ -44,6 +46,7 @@ async function loadCCSData() {
       API.get('/tenant/owner/ccs/roi').catch(() => null),
     ]);
     renderCCS();
+    setTimeout(() => injectMyActionsWidget('my-actions-widget'), 200);
     // Populate category table after DOM is ready
     setTimeout(() => {
       _catData = (_exposure || {}).category_exposure || [];
