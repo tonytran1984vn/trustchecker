@@ -1136,7 +1136,16 @@ function renderActions() {
   const catLabel = c => ({ scope_reduction: '🏭 Scope Reduction', partner_risk: '🤝 Partner Risk', product_optimization: '📦 Product', offset: '🌱 Offset', compliance: '⚖️ Compliance', other: '📌 Other' })[c] || '📌 ' + c;
   const roleLabel = r => ({ coo: 'COO', cfo: 'CFO', procurement: 'Procurement', product_manager: 'Product Mgr', carbon_officer: 'Carbon Officer' })[r] || r || '—';
 
-  const userOptions = _actionsUsers.map(u => `<option value="${u.id}">${esc(u.email)} (${u.role || '—'})</option>`).join('');
+  // Group users by role label for cleaner dropdown
+  const roleGroups = {};
+  _actionsUsers.forEach(u => {
+    const label = u.role_label || u.role || 'Other';
+    if (!roleGroups[label]) roleGroups[label] = [];
+    roleGroups[label].push(u);
+  });
+  const userOptions = Object.entries(roleGroups).map(([label, users]) =>
+    `<optgroup label="${esc(label)}">${users.map(u => `<option value="${u.id}">${esc(u.email)}</option>`).join('')}</optgroup>`
+  ).join('');
 
   // Action rows
   const actionRows = actions.length > 0

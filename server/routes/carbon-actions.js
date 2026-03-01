@@ -260,16 +260,35 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
-// ─── GET /users — List org users for assignment dropdown ───────────────────────
+// ─── GET /users — List org users with actionable roles for assignment ──────────
+const ACTIONABLE_ROLES = {
+    ops_manager: 'Operations / COO',
+    executive: 'CEO / Executive',
+    company_admin: 'Company Admin',
+    org_owner: 'Owner / CFO',
+    operator: 'Product Manager',
+    scm_analyst: 'Supply Chain / Procurement',
+    risk_officer: 'Risk Officer',
+    compliance_officer: 'Compliance Officer',
+    carbon_officer: 'Carbon Officer',
+};
+const ACTIONABLE_ROLE_LIST = Object.keys(ACTIONABLE_ROLES);
+
 router.get('/users', cacheMiddleware(60), async (req, res) => {
     try {
         const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const placeholders = ACTIONABLE_ROLE_LIST.map(() => '?').join(',');
         const users = await db.all(
-            `SELECT u.id, u.email, u.username, u.role FROM users u WHERE u.org_id = ? ORDER BY u.email`, [orgId]
+            `SELECT u.id, u.email, u.username, u.role FROM users u
+             WHERE u.org_id = ? AND u.role IN (${placeholders})
+             ORDER BY u.role, u.email`,
+            [orgId, ...ACTIONABLE_ROLE_LIST]
         ).catch(() => []);
-        res.json({ users });
+        // Enrich with role labels
+        const enriched = users.map(u => ({ ...u, role_label: ACTIONABLE_ROLES[u.role] || u.role }));
+        res.json({ users: enriched, role_map: ACTIONABLE_ROLES });
     } catch (err) {
-        res.json({ users: [] });
+        res.json({ users: [], role_map: ACTIONABLE_ROLES });
     }
 });
 
