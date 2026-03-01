@@ -84,6 +84,7 @@ function setupRoutes(app) {
     const gapCoverageRoutes = require('../routes/gap-coverage');
     const cieRoutes = require('../routes/cie');
     const carbonOfficerRoutes = require('../routes/carbon-officer');
+    const carbonActionsRoutes = require('../routes/carbon-actions');
     const tenantIntegrationsFactory = require('../routes/tenant-integrations');
 
     // Declarative route table — each route is mounted on both /api and /api/v1
@@ -158,6 +159,7 @@ function setupRoutes(app) {
         ['', apiLimit, gapCoverageRoutes],     // mounts /data-ownership, /infra-metrics, /upgrade-gov
         ['/cie', cieRoutes],                     // CIE v2.0 — Carbon Integrity Engine API
         ['/carbon-officer', carbonOfficerRoutes], // Carbon Officer workspace dashboard
+        ['/carbon-actions', carbonActionsRoutes],   // Carbon Action Items bridge
     ];
 
     // Mount on /api and /api/v1 (versioned alias)

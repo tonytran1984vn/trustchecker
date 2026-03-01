@@ -29,6 +29,10 @@ let _complianceData = {};
 let _complianceLoaded = false;
 let _benchmarkData = {};
 let _benchmarkLoaded = false;
+let _actionsData = {};
+let _actionsLoaded = false;
+let _actionsSuggestions = [];
+let _actionsUsers = [];
 let _activeTab = 'dashboard';
 
 // Date range for report period
@@ -44,6 +48,7 @@ const CARBON_TABS = [
   { id: 'passport', label: 'Carbon Passports', icon: '📜' },
   { id: 'compliance', label: 'ESG & Compliance', icon: '⚖️' },
   { id: 'benchmark', label: 'Industry Benchmark', icon: '📈' },
+  { id: 'actions', label: 'Action Items', icon: '⚡' },
 ];
 
 // ─── Entry Point ────────────────────────────────────────────
@@ -60,7 +65,7 @@ window._carbonOfficerTab = function (tab) {
   _activeTab = tab;
   window._activeCarbonTab = tab;
   const el = document.getElementById('carbon-content');
-  if (el && ['emissions', 'credits', 'passport', 'compliance', 'benchmark'].includes(tab)) {
+  if (el && ['emissions', 'credits', 'passport', 'compliance', 'benchmark', 'actions'].includes(tab)) {
     el.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
       <div class="spinner"></div>
       <div style="font-size:0.78rem;color:var(--text-muted)">Loading ${CARBON_TABS.find(t => t.id === tab)?.label || tab}…</div>
@@ -72,6 +77,7 @@ window._carbonOfficerTab = function (tab) {
   else if (tab === 'passport') loadPassports(_dateFrom, _dateTo);
   else if (tab === 'compliance') loadCompliance();
   else if (tab === 'benchmark') loadBenchmark();
+  else if (tab === 'actions') loadActions();
   else renderContent();
 };
 
@@ -298,6 +304,21 @@ async function loadBenchmark() {
   } catch (e) { _benchmarkData = {}; _benchmarkLoaded = true; renderContent(); }
 }
 
+async function loadActions() {
+  try {
+    const [data, suggestions, users] = await Promise.all([
+      API.get('/carbon-actions').catch(() => ({ actions: [], stats: {} })),
+      API.get('/carbon-actions/suggestions').catch(() => ({ suggestions: [] })),
+      API.get('/carbon-actions/users').catch(() => ({ users: [] })),
+    ]);
+    _actionsData = data;
+    _actionsSuggestions = suggestions.suggestions || [];
+    _actionsUsers = users.users || [];
+    _actionsLoaded = true;
+    renderContent();
+  } catch (e) { _actionsData = { actions: [], stats: {} }; _actionsLoaded = true; renderContent(); }
+}
+
 function renderContent() {
   const el = document.getElementById('carbon-content');
   if (!el) return;
@@ -308,6 +329,7 @@ function renderContent() {
     passport: renderPassports,
     compliance: renderCompliance,
     benchmark: renderBenchmark,
+    actions: renderActions,
   };
   el.innerHTML = (renderers[_activeTab] || renderOverview)();
 }
@@ -1098,6 +1120,246 @@ function renderBenchmark() {
     }
       `;
 }
+// ═══════════════════════════════════════════════════════════════
+// 7. ACTION ITEMS — Bridge Carbon Officer → Operations
+// ═══════════════════════════════════════════════════════════════
+function renderActions() {
+  if (!_actionsLoaded) return spinner('Loading Action Items…');
+
+  const actions = _actionsData.actions || [];
+  const stats = _actionsData.stats || {};
+  const suggestions = _actionsSuggestions || [];
+
+  const priorityColor = p => p === 'critical' ? '#ef4444' : p === 'high' ? '#f59e0b' : p === 'medium' ? '#3b82f6' : '#6b7280';
+  const statusColor = s => s === 'done' ? '#10b981' : s === 'in_progress' ? '#3b82f6' : s === 'dismissed' ? '#6b7280' : '#f59e0b';
+  const statusIcon = s => s === 'done' ? '✅' : s === 'in_progress' ? '🔄' : s === 'dismissed' ? '⏭️' : '📋';
+  const catLabel = c => ({ scope_reduction: '🏭 Scope Reduction', partner_risk: '🤝 Partner Risk', product_optimization: '📦 Product', offset: '🌱 Offset', compliance: '⚖️ Compliance', other: '📌 Other' })[c] || '📌 ' + c;
+  const roleLabel = r => ({ coo: 'COO', cfo: 'CFO', procurement: 'Procurement', product_manager: 'Product Mgr', carbon_officer: 'Carbon Officer' })[r] || r || '—';
+
+  const userOptions = _actionsUsers.map(u => `<option value="${u.id}">${esc(u.email)} (${u.role || '—'})</option>`).join('');
+
+  // Action rows
+  const actionRows = actions.length > 0
+    ? actions.map(a => `
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-bottom:1px solid var(--border);transition:background 0.2s" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='transparent'">
+          <div style="flex-shrink:0;cursor:pointer" onclick="window._actionCycleStatus('${a.id}','${a.status}')" title="Click to change status">
+            <span style="font-size:1.2rem">${statusIcon(a.status)}</span>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
+              <span style="font-weight:700;font-size:0.78rem;${a.status === 'done' ? 'text-decoration:line-through;opacity:0.6' : ''}">${esc(a.title)}</span>
+              <span style="font-size:0.58rem;padding:2px 8px;border-radius:8px;font-weight:700;background:${priorityColor(a.priority)}20;color:${priorityColor(a.priority)}">${(a.priority || 'medium').toUpperCase()}</span>
+              <span style="font-size:0.58rem;padding:2px 8px;border-radius:8px;background:var(--border);color:var(--text-muted)">${catLabel(a.category)}</span>
+            </div>
+            ${a.description ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:4px;line-height:1.4">${esc(a.description)}</div>` : ''}
+            <div style="display:flex;gap:12px;font-size:0.62rem;color:var(--text-muted);flex-wrap:wrap">
+              <span>👤 ${a.assignee_email ? esc(a.assignee_email) : roleLabel(a.assigned_role)}</span>
+              <span>📝 ${a.creator_email ? esc(a.creator_email) : '—'}</span>
+              ${a.due_date ? `<span>📅 ${a.due_date}</span>` : ''}
+              <span>${timeAgo(a.created_at)}</span>
+            </div>
+          </div>
+          <div style="flex-shrink:0;display:flex;gap:4px">
+            <span style="font-size:0.58rem;padding:3px 8px;border-radius:8px;font-weight:600;background:${statusColor(a.status)}20;color:${statusColor(a.status)}">${(a.status || 'open').replace('_', ' ').toUpperCase()}</span>
+            <button onclick="window._actionDelete('${a.id}')" title="Delete" style="background:none;border:none;cursor:pointer;font-size:0.7rem;opacity:0.4;padding:0 4px">🗑️</button>
+          </div>
+        </div>
+      `).join('')
+    : '<div style="padding:40px;text-align:center;color:var(--text-muted);font-size:0.8rem">No action items yet. Create one or adopt a suggestion below.</div>';
+
+  // Suggestion cards
+  const suggestionCards = suggestions.length > 0
+    ? suggestions.map((s, i) => `
+        <div style="background:var(--bg-card,#fff);border:1px solid ${priorityColor(s.priority)};border-radius:10px;padding:12px;min-width:240px;flex:1">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:0.62rem;padding:2px 8px;border-radius:8px;font-weight:700;background:${priorityColor(s.priority)}20;color:${priorityColor(s.priority)}">${(s.priority || 'medium').toUpperCase()}</span>
+            <span style="font-size:0.62rem;color:var(--text-muted)">→ ${roleLabel(s.assigned_role)}</span>
+          </div>
+          <div style="font-weight:700;font-size:0.75rem;margin-bottom:4px">${esc(s.title)}</div>
+          <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:8px;line-height:1.4">${esc(s.description)}</div>
+          <button onclick="window._actionAdopt(${i})" style="width:100%;padding:6px;border-radius:6px;border:1px solid ${priorityColor(s.priority)};background:${priorityColor(s.priority)}10;color:${priorityColor(s.priority)};font-size:0.68rem;font-weight:700;cursor:pointer">⚡ Create Action</button>
+        </div>
+      `).join('')
+    : '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.72rem">✅ No critical issues detected — all thresholds are healthy.</div>';
+
+  return `
+    <div style="display:flex;gap:12px;margin-bottom:16px">
+      ${kpi('Open', stats.open || 0, '#f59e0b', 'Pending actions')}
+      ${kpi('In Progress', stats.in_progress || 0, '#3b82f6', 'Being worked on')}
+      ${kpi('Done', stats.done || 0, '#10b981', 'Completed')}
+      ${kpi('Total', stats.total || 0, 'var(--text-primary,#1e293b)', 'All actions')}
+    </div>
+
+    ${suggestions.length > 0 ? `
+    <div class="card" style="border-left:4px solid #f59e0b;margin-bottom:16px">
+      <div class="card-header">
+        <div class="card-title">💡 Suggested Actions (Auto-detected)</div>
+        <div style="font-size:0.68rem;color:var(--text-muted)">${suggestions.length} issues detected from risk analysis</div>
+      </div>
+      <div class="card-body" style="overflow-x:auto">
+        <div style="display:flex;gap:12px;padding-bottom:8px">${suggestionCards}</div>
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="card" style="border-left:4px solid #3b82f6;margin-bottom:16px">
+      <div class="card-header">
+        <div class="card-title">📋 Action Items</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="action-filter-status" onchange="window._actionFilter()" style="font-size:0.68rem;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">
+            <option value="all">All Status</option>
+            <option value="open" selected>Open</option>
+            <option value="in_progress">In Progress</option>
+            <option value="done">Done</option>
+          </select>
+          <button onclick="window._actionShowCreate()" style="font-size:0.68rem;padding:5px 14px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-weight:700;cursor:pointer">+ New Action</button>
+        </div>
+      </div>
+      <div class="card-body" style="max-height:500px;overflow-y:auto;padding:0">
+        ${actionRows}
+      </div>
+    </div>
+
+    <div id="action-create-form" style="display:none">
+      <div class="card" style="border-left:4px solid #8b5cf6;margin-bottom:16px">
+        <div class="card-header">
+          <div class="card-title">✏️ Create Action Item</div>
+          <button onclick="document.getElementById('action-create-form').style.display='none'" style="font-size:0.68rem;padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text-muted)">✕ Close</button>
+        </div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:10px">
+            <div>
+              <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Title *</div>
+              <input id="act-title" class="input" placeholder="E.g. Switch carrier from air to sea freight" style="width:100%">
+            </div>
+            <div>
+              <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Priority</div>
+              <select id="act-priority" class="input" style="width:100%">
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-bottom:10px">
+            <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Description</div>
+            <textarea id="act-desc" class="input" rows="2" placeholder="Detailed description of what needs to be done…" style="width:100%;resize:vertical"></textarea>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+            <div>
+              <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Category</div>
+              <select id="act-category" class="input" style="width:100%">
+                <option value="scope_reduction">🏭 Scope Reduction</option>
+                <option value="partner_risk">🤝 Partner Risk</option>
+                <option value="product_optimization">📦 Product</option>
+                <option value="offset">🌱 Offset</option>
+                <option value="compliance">⚖️ Compliance</option>
+                <option value="other">📌 Other</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Assign to</div>
+              <select id="act-assignee" class="input" style="width:100%">
+                <option value="">— Unassigned —</option>
+                ${userOptions}
+              </select>
+            </div>
+            <div>
+              <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Target Role</div>
+              <select id="act-role" class="input" style="width:100%">
+                <option value="">— None —</option>
+                <option value="coo">COO</option>
+                <option value="cfo">CFO</option>
+                <option value="procurement">Procurement</option>
+                <option value="product_manager">Product Manager</option>
+                <option value="carbon_officer">Carbon Officer</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:0.68rem;color:var(--text-muted);margin-bottom:4px">Due Date</div>
+              <input id="act-due" class="input" type="date" style="width:100%">
+            </div>
+          </div>
+          <button onclick="window._actionCreate()" style="padding:10px 24px;border-radius:8px;border:none;background:#8b5cf6;color:#fff;font-size:0.75rem;font-weight:700;cursor:pointer">⚡ Create Action</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Action Item Window Controls ────────────────────────────
+window._actionShowCreate = function () {
+  const form = document.getElementById('action-create-form');
+  if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+};
+
+window._actionCreate = async function () {
+  const title = document.getElementById('act-title')?.value?.trim();
+  if (!title) return;
+  try {
+    await API.post('/carbon-actions', {
+      title,
+      description: document.getElementById('act-desc')?.value || '',
+      category: document.getElementById('act-category')?.value || 'other',
+      priority: document.getElementById('act-priority')?.value || 'medium',
+      assigned_to: document.getElementById('act-assignee')?.value || null,
+      assigned_role: document.getElementById('act-role')?.value || '',
+      due_date: document.getElementById('act-due')?.value || null,
+    });
+    showToast('Action created', 'success');
+    _actionsLoaded = false;
+    loadActions();
+  } catch (e) { showToast(e.message || 'Failed', 'error'); }
+};
+
+window._actionCycleStatus = async function (id, current) {
+  const next = current === 'open' ? 'in_progress' : current === 'in_progress' ? 'done' : current === 'done' ? 'open' : 'open';
+  try {
+    await API.patch(`/carbon-actions/${id}`, { status: next });
+    showToast(`Status → ${next.replace('_', ' ')}`, 'success');
+    _actionsLoaded = false;
+    loadActions();
+  } catch (e) { showToast(e.message || 'Failed', 'error'); }
+};
+
+window._actionDelete = async function (id) {
+  if (!confirm('Delete this action?')) return;
+  try {
+    await API.delete(`/carbon-actions/${id}`);
+    showToast('Action deleted', 'success');
+    _actionsLoaded = false;
+    loadActions();
+  } catch (e) { showToast(e.message || 'Failed', 'error'); }
+};
+
+window._actionAdopt = async function (idx) {
+  const s = _actionsSuggestions[idx];
+  if (!s) return;
+  try {
+    await API.post('/carbon-actions', {
+      title: s.title,
+      description: s.description,
+      category: s.category,
+      priority: s.priority,
+      assigned_role: s.assigned_role,
+      source_type: s.source_type,
+      source_ref: s.source_ref,
+    });
+    showToast('Action created from suggestion', 'success');
+    _actionsLoaded = false;
+    loadActions();
+  } catch (e) { showToast(e.message || 'Failed', 'error'); }
+};
+
+window._actionFilter = async function () {
+  const status = document.getElementById('action-filter-status')?.value || 'all';
+  try {
+    const data = await API.get(`/carbon-actions?status=${status}`);
+    _actionsData = data;
+    renderContent();
+  } catch (e) { console.error('Filter error:', e); }
+};
 
 // ─── Common Helpers ─────────────────────────────────────────
 function buildDatePicker() {
