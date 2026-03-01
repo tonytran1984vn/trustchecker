@@ -134,12 +134,22 @@ async function _initGeoMap() {
     const el = document.getElementById('geo-map');
     if (!el) return;
 
-    // Create or reuse map
+    // Create or reuse map — detect stale container (destroyed by tab switch)
     if (_mapInstance) {
-      // Clear layers
-      _mapLayers.forEach(l => _mapInstance.removeLayer(l));
-      _mapLayers = [];
-    } else {
+      const currentContainer = _mapInstance.getContainer();
+      if (!currentContainer || !document.body.contains(currentContainer) || currentContainer !== el) {
+        // Container was destroyed by tab switch — remove old map
+        try { _mapInstance.remove(); } catch (_) { }
+        _mapInstance = null;
+        _mapLayers = [];
+      } else {
+        // Container still valid — just clear layers
+        _mapLayers.forEach(l => _mapInstance.removeLayer(l));
+        _mapLayers = [];
+      }
+    }
+
+    if (!_mapInstance) {
       el.innerHTML = '';
       _mapInstance = L.map(el).setView([15, 108], 5);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
