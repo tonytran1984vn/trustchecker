@@ -74,9 +74,12 @@ window._ownerTab = function (tab) {
         </div>`;
   }
   if (tab === 'dashboard') { renderOwnerContent(); loadOwnerData(); }
-  else if (tab === 'privilege') loadPrivilegeData();
-  else if (tab === 'risk') { _riskMonLoaded = false; _govLogLoaded = false; loadRiskMonitoring(); loadGovernanceLog(); }
-  else if (tab === 'team') loadTeamData();
+  else if (tab === 'privilege') { if (_privilegeLoaded) renderOwnerContent(); else loadPrivilegeData(); }
+  else if (tab === 'risk') {
+    if (_riskMonLoaded && _govLogLoaded) { renderOwnerContent(); }
+    else { _riskMonLoaded = false; _govLogLoaded = false; loadRiskMonitoring(); loadGovernanceLog(); }
+  }
+  else if (tab === 'team') { if (_teamLoaded) renderOwnerContent(); else loadTeamData(); }
   else renderOwnerContent();
 };
 
@@ -88,9 +91,20 @@ window._riskSubTab = function (sub) {
 // ─── Data Loaders ───────────────────────────────────────────
 async function loadOwnerData() {
   try {
+    // Primary dashboard data
     _ownerData = await API.get('/tenant/owner/dashboard');
     renderOwnerContent();
     setTimeout(() => injectMyActionsWidget('my-actions-widget'), 150);
+
+    // Prefetch ALL other tab data in parallel (background, non-blocking)
+    Promise.allSettled([
+      API.get('/tenant/owner/risk-monitoring').then(d => { _riskData = d; _riskMonLoaded = true; }),
+      API.get('/tenant/owner/governance-log').then(d => { _govLogData = d; _govLogLoaded = true; }),
+      API.get('/tenant/owner/privilege-governance').then(d => { _privilegeData = d; _privilegeLoaded = true; }),
+      API.get('/tenant/owner/access-oversight').then(d => { _teamData = d; _teamLoaded = true; }),
+    ]).then(() => {
+      console.log('[Owner] All tab data prefetched ✓');
+    });
   } catch (e) {
     console.error('[Owner] Dashboard load error:', e);
     _ownerData = {};
