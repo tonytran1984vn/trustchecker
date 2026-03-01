@@ -131,8 +131,8 @@ export function render() {
     </div>
 
 </div>`;
-
-    export function renderPage() {
-        load();
-        return `<div id="carbon-registry-root">${render()}</div>`;
-    }
+}
+export function renderPage() {
+  load();
+  return `<div id="carbon-registry-root">${render()}</div>`;
+}
