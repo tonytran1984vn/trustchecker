@@ -581,6 +581,90 @@ model SupplyChainGraph {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// OPS MANAGEMENT MODELS
+// ═══════════════════════════════════════════════════════════════════
+
+model PurchaseOrder {
+  id            String    @id @default(uuid())
+  poNumber      String    @unique @map("po_number")
+  orgId         String    @map("org_id")
+  supplier      String    @default("")
+  product       String    @default("")
+  quantity      Int       @default(0)
+  unit          String    @default("pcs")
+  unitPrice     Float     @default(0) @map("unit_price")
+  totalAmount   Float     @default(0) @map("total_amount")
+  currency      String    @default("USD")
+  deliveryDate  DateTime? @map("delivery_date")
+  paymentTerms  String    @default("NET-30") @map("payment_terms")
+  contractRef   String    @default("") @map("contract_ref")
+  status        String    @default("draft")
+  approvedBy    String?   @map("approved_by")
+  approvedAt    DateTime? @map("approved_at")
+  createdBy     String?   @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @map("updated_at")
+
+  @@index([orgId])
+  @@index([status])
+  @@map("purchase_orders")
+}
+
+model OpsWarehouse {
+  id           String   @id @default(uuid())
+  orgId        String   @map("org_id")
+  name         String
+  code         String   @default("")
+  region       String   @default("")
+  address      String   @default("")
+  capacity     Int      @default(0)
+  usedCapacity Int      @default(0) @map("used_capacity")
+  skuCount     Int      @default(0) @map("sku_count")
+  temperature  Float?
+  status       String   @default("operational")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([orgId])
+  @@map("ops_warehouses")
+}
+
+model QualityCheck {
+  id            String    @id @default(uuid())
+  orgId         String    @map("org_id")
+  batchId       String?   @map("batch_id")
+  checkType     String    @default("incoming") @map("check_type")
+  checkpoint    String    @default("")
+  product       String    @default("")
+  result        String    @default("pending")
+  score         Float     @default(0)
+  defectsFound  Int       @default(0) @map("defects_found")
+  inspector     String    @default("")
+  notes         String    @default("")
+  inspectedAt   DateTime  @default(now()) @map("inspected_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([orgId])
+  @@index([batchId])
+  @@map("quality_checks")
+}
+
+
+model DemandForecast {
+  id          String   @id @default(uuid())
+  orgId       String   @map("org_id")
+  productName String   @default("") @map("product_name")
+  period      String   @default("")
+  predicted   Int      @default(0)
+  actual      Int?
+  confidence  Float    @default(0)
+  trend       String   @default("stable")
+  signal      String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([orgId])
+  @@map("demand_forecasts")
+}
+// ═══════════════════════════════════════════════════════════════════
 // KYC & COMPLIANCE MODELS
 // ═══════════════════════════════════════════════════════════════════
 

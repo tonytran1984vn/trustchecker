@@ -66,6 +66,7 @@ function setupRoutes(app) {
     const reputationRoutes = require('../routes/reputation');
     const governanceRoutes = require('../routes/governance');
     const opsMonitoringRoutes = require('../routes/ops-monitoring');
+    const opsDataRoutes = require('../routes/ops-data');
     const infraCustodyRoutes = require('../routes/infra-custody');
     const hardeningRoutes = require('../routes/hardening');
     const auditLogRoutes = require('../routes/audit-log');
@@ -141,6 +142,7 @@ function setupRoutes(app) {
         ['/reputation', reputationRoutes],
         ['/governance', governanceRoutes],
         ['/ops', opsMonitoringRoutes],
+        ['/ops/data', opsDataRoutes],
         ['/infra-custody', infraCustodyRoutes],
         ['/hardening', hardeningRoutes],
         ['/audit-log', auditLogRoutes],

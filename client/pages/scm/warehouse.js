@@ -5,30 +5,30 @@
 import { icon } from '../../core/icons.js';
 
 const WAREHOUSES = [
-    { id: 'WH-HCM-01', name: 'Ho Chi Minh DC', region: 'VN-South', capacity: 50000, used: 38500, utilization: '77%', skus: 45, temp: '22°C', status: 'operational', inbound: 3, outbound: 8 },
-    { id: 'WH-HN-02', name: 'Hanoi Warehouse', region: 'VN-North', capacity: 30000, used: 24200, utilization: '80.7%', skus: 38, temp: '20°C', status: 'operational', inbound: 2, outbound: 5 },
-    { id: 'WH-SG-01', name: 'Singapore Hub', region: 'APAC', capacity: 80000, used: 52000, utilization: '65%', skus: 52, temp: '18°C', status: 'operational', inbound: 5, outbound: 12 },
-    { id: 'WH-BKK-01', name: 'Bangkok DC', region: 'Thailand', capacity: 20000, used: 18400, utilization: '92%', skus: 28, temp: '24°C', status: 'near_capacity', inbound: 1, outbound: 3 },
+  { id: 'WH-HCM-01', name: 'Ho Chi Minh DC', region: 'VN-South', capacity: 50000, used: 38500, utilization: '77%', skus: 45, temp: '22°C', status: 'operational', inbound: 3, outbound: 8 },
+  { id: 'WH-HN-02', name: 'Hanoi Warehouse', region: 'VN-North', capacity: 30000, used: 24200, utilization: '80.7%', skus: 38, temp: '20°C', status: 'operational', inbound: 2, outbound: 5 },
+  { id: 'WH-SG-01', name: 'Singapore Hub', region: 'APAC', capacity: 80000, used: 52000, utilization: '65%', skus: 52, temp: '18°C', status: 'operational', inbound: 5, outbound: 12 },
+  { id: 'WH-BKK-01', name: 'Bangkok DC', region: 'Thailand', capacity: 20000, used: 18400, utilization: '92%', skus: 28, temp: '24°C', status: 'near_capacity', inbound: 1, outbound: 3 },
 ];
 
 const TRANSFERS = [
-    { id: 'TRF-2026-089', from: 'WH-SG-01', to: 'WH-BKK-01', product: 'Coffee Blend (Arabica)', qty: '5,000 units', status: 'in_transit', eta: '2026-02-21', carrier: 'DHL Express' },
-    { id: 'TRF-2026-088', from: 'WH-HCM-01', to: 'WH-SG-01', product: 'Organic Tea 200g', qty: '3,000 units', status: 'delivered', eta: '2026-02-18', carrier: 'Kerry Logistics' },
-    { id: 'TRF-2026-087', from: 'WH-SG-01', to: 'WH-HN-02', product: 'Manuka Honey Gift Set', qty: '1,200 units', status: 'pending_pickup', eta: '2026-02-23', carrier: 'Ninja Van' },
+  { id: 'TRF-2026-089', from: 'WH-SG-01', to: 'WH-BKK-01', product: 'Coffee Blend (Arabica)', qty: '5,000 units', status: 'in_transit', eta: '2026-02-21', carrier: 'DHL Express' },
+  { id: 'TRF-2026-088', from: 'WH-HCM-01', to: 'WH-SG-01', product: 'Organic Tea 200g', qty: '3,000 units', status: 'delivered', eta: '2026-02-18', carrier: 'Kerry Logistics' },
+  { id: 'TRF-2026-087', from: 'WH-SG-01', to: 'WH-HN-02', product: 'Manuka Honey Gift Set', qty: '1,200 units', status: 'pending_pickup', eta: '2026-02-23', carrier: 'Ninja Van' },
 ];
 
 const LOW_STOCK_ALERTS = [
-    { sku: 'ACME-CFE-001', product: 'Premium Coffee Blend', warehouse: 'WH-BKK-01', current: 450, reorderPoint: 500, safetyStock: 200, daysOfSupply: 3, status: 'critical' },
-    { sku: 'ACME-TEA-003', product: 'Organic Green Tea', warehouse: 'WH-HN-02', current: 820, reorderPoint: 800, safetyStock: 400, daysOfSupply: 7, status: 'warning' },
-    { sku: 'ACME-HNY-002', product: 'Manuka Honey UMF10+', warehouse: 'WH-SG-01', current: 180, reorderPoint: 300, safetyStock: 100, daysOfSupply: 5, status: 'critical' },
+  { sku: 'ACME-CFE-001', product: 'Premium Coffee Blend', warehouse: 'WH-BKK-01', current: 450, reorderPoint: 500, safetyStock: 200, daysOfSupply: 3, status: 'critical' },
+  { sku: 'ACME-TEA-003', product: 'Organic Green Tea', warehouse: 'WH-HN-02', current: 820, reorderPoint: 800, safetyStock: 400, daysOfSupply: 7, status: 'warning' },
+  { sku: 'ACME-HNY-002', product: 'Manuka Honey UMF10+', warehouse: 'WH-SG-01', current: 180, reorderPoint: 300, safetyStock: 100, daysOfSupply: 5, status: 'critical' },
 ];
 
 export function renderPage() {
-    const totalCap = WAREHOUSES.reduce((s, w) => s + w.capacity, 0);
-    const totalUsed = WAREHOUSES.reduce((s, w) => s + w.used, 0);
-    return `
+  const totalCap = WAREHOUSES.reduce((s, w) => s + w.capacity, 0);
+  const totalUsed = WAREHOUSES.reduce((s, w) => s + w.used, 0);
+  return `
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('building', 28)} Warehouse Management</h1><div class="sa-title-actions"><button class="btn btn-primary btn-sm">+ New Transfer</button></div></div>
+      <div class="sa-page-title"><h1>${icon('building', 28)} Warehouse Management</h1><div class="sa-title-actions"><button class="btn btn-primary btn-sm" onclick="showToast('Navigate to Logistics → Transfer Orders to create a new transfer','info');navigate('ops-logistics')">+ New Transfer</button></div></div>
 
       <div class="sa-metrics-row" style="margin-bottom:1.5rem">
         ${m('Warehouses', WAREHOUSES.length.toString(), `${WAREHOUSES.filter(w => w.status === 'operational').length} operational`, 'blue', 'building')}
@@ -41,9 +41,9 @@ export function renderPage() {
         <h3>🏭 Warehouse Network</h3>
         <table class="sa-table"><thead><tr><th>ID</th><th>Warehouse</th><th>Region</th><th>Capacity</th><th>Used</th><th>Utilization</th><th>SKUs</th><th>Temp</th><th>Inbound</th><th>Outbound</th><th>Status</th></tr></thead><tbody>
           ${WAREHOUSES.map(w => {
-        const pct = parseInt(w.utilization);
-        const color = pct > 90 ? 'red' : pct > 75 ? 'orange' : 'green';
-        return `<tr class="${w.status === 'near_capacity' ? 'ops-alert-row' : ''}">
+    const pct = parseInt(w.utilization);
+    const color = pct > 90 ? 'red' : pct > 75 ? 'orange' : 'green';
+    return `<tr class="${w.status === 'near_capacity' ? 'ops-alert-row' : ''}">
               <td class="sa-code">${w.id}</td><td><strong>${w.name}</strong></td><td>${w.region}</td>
               <td style="text-align:right">${w.capacity.toLocaleString()}</td>
               <td style="text-align:right">${w.used.toLocaleString()}</td>
@@ -58,7 +58,7 @@ export function renderPage() {
               <td style="text-align:center;color:#f59e0b">${w.outbound}</td>
               <td><span class="sa-status-pill sa-pill-${w.status === 'operational' ? 'green' : 'orange'}">${w.status.replace('_', ' ')}</span></td>
             </tr>`;
-    }).join('')}
+  }).join('')}
         </tbody></table>
       </div>
 

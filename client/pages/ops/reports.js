@@ -6,23 +6,23 @@
 import { icon } from '../../core/icons.js';
 
 export function renderPage() {
-    const reports = [
-        { id: 'RPT-W09', title: 'Weekly Operations Summary', period: 'Feb 24 – Mar 2, 2026', type: 'weekly', status: 'ready', generated: '2h ago' },
-        { id: 'RPT-W08', title: 'Weekly Operations Summary', period: 'Feb 17 – Feb 23, 2026', type: 'weekly', status: 'ready', generated: '7d ago' },
-        { id: 'RPT-M02', title: 'Monthly Batch Report', period: 'February 2026', type: 'monthly', status: 'ready', generated: '1d ago' },
-        { id: 'RPT-SLA', title: 'SLA Compliance Report', period: 'February 2026', type: 'sla', status: 'ready', generated: '1d ago' },
-        { id: 'RPT-INC', title: 'Incident Analysis Report', period: 'Feb 2026', type: 'incident', status: 'generating', generated: 'In progress' },
-    ];
+  const reports = [
+    { id: 'RPT-W09', title: 'Weekly Operations Summary', period: 'Feb 24 – Mar 2, 2026', type: 'weekly', status: 'ready', generated: '2h ago' },
+    { id: 'RPT-W08', title: 'Weekly Operations Summary', period: 'Feb 17 – Feb 23, 2026', type: 'weekly', status: 'ready', generated: '7d ago' },
+    { id: 'RPT-M02', title: 'Monthly Batch Report', period: 'February 2026', type: 'monthly', status: 'ready', generated: '1d ago' },
+    { id: 'RPT-SLA', title: 'SLA Compliance Report', period: 'February 2026', type: 'sla', status: 'ready', generated: '1d ago' },
+    { id: 'RPT-INC', title: 'Incident Analysis Report', period: 'Feb 2026', type: 'incident', status: 'generating', generated: 'In progress' },
+  ];
 
-    const typeIcons = { weekly: '📊', monthly: '📅', sla: '⏱', incident: '🧾' };
+  const typeIcons = { weekly: '📊', monthly: '📅', sla: '⏱', incident: '🧾' };
 
-    return `
+  return `
     <div class="sa-page">
       <div class="sa-page-title">
         <h1>${icon('scroll', 28)} Reports & Export</h1>
         <div class="sa-title-actions">
-          <button class="btn btn-primary btn-sm">+ Generate Report</button>
-          <button class="btn btn-outline btn-sm">📥 Export All</button>
+          <button class="btn btn-primary btn-sm" onclick="showToast('📊 Report generation queued. This may take a few minutes.','info')">+ Generate Report</button>
+          <button class="btn btn-outline btn-sm" onclick="showToast('📥 Exporting all reports as ZIP…','info')">📥 Export All</button>
         </div>
       </div>
 
@@ -61,7 +61,7 @@ export function renderPage() {
                   <td><span class="sa-status-pill sa-pill-${r.status === 'ready' ? 'green' : 'orange'}">${r.status}</span></td>
                   <td style="color:var(--text-secondary);font-size:0.78rem">${r.generated}</td>
                   <td>
-                    ${r.status === 'ready' ? '<button class="btn btn-xs btn-outline">📥 Download</button>' : '<button class="btn btn-xs btn-ghost" disabled>Generating…</button>'}
+                    ${r.status === 'ready' ? `<button class="btn btn-xs btn-outline" onclick="showToast('📥 Downloading ${r.id}: ${r.title}','success')">📥 Download</button>` : '<button class="btn btn-xs btn-ghost" disabled>Generating…</button>'}
                   </td>
                 </tr>
               `).join('')}
@@ -74,14 +74,14 @@ export function renderPage() {
 }
 
 function exportCard(title, desc, format) {
-    return `
+  return `
     <div class="sa-card" style="cursor:pointer;transition:transform 0.15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
           <h3 style="margin:0 0 4px;font-size:0.92rem">${title}</h3>
           <div style="font-size:0.75rem;color:var(--text-secondary)">${desc}</div>
         </div>
-        <button class="btn btn-sm btn-outline">${format} ↓</button>
+        <button class="btn btn-sm btn-outline" onclick="showToast('📥 Exporting ${title} as ${format}…','info')">${format} ↓</button>
       </div>
     </div>
   `;
