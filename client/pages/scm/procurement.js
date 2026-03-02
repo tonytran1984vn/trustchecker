@@ -88,25 +88,59 @@ export function renderPage() {
     </div>
     
     <!-- New PO Modal -->
-    <div id="po-modal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">
-      <div style="background:var(--card-bg,#1e293b);border-radius:12px;padding:24px;width:480px;max-width:90vw">
-        <h3 style="margin:0 0 16px;color:var(--text-primary,#f1f5f9)">+ New Purchase Order</h3>
-        <div style="display:grid;gap:10px">
-          <input id="po-supplier" class="input" placeholder="Supplier name" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
-          <input id="po-product" class="input" placeholder="Product" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-            <input id="po-qty" class="input" type="number" placeholder="Qty" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
-            <input id="po-unit" class="input" placeholder="Unit (kg, pcs)" value="kg" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
-            <input id="po-price" class="input" type="number" step="0.01" placeholder="Unit price ($)" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
-          </div>
-          <input id="po-delivery" class="input" type="date" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
-          <select id="po-payment" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
-            <option value="NET-30">NET-30</option><option value="NET-45">NET-45</option><option value="NET-60">NET-60</option><option value="LC">Letter of Credit</option><option value="TT">Telegraphic Transfer</option>
-          </select>
+    <div id="po-modal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.45);align-items:center;justify-content:center">
+      <div style="background:var(--card-bg, #fff);border-radius:14px;padding:28px 24px;width:500px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,0.25);border:1px solid var(--border, #e2e8f0)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <h3 style="margin:0;color:var(--text-primary, #1e293b);font-size:1.1rem">📋 New Purchase Order</h3>
+          <button onclick="window._closePOModal()" style="background:none;border:none;cursor:pointer;font-size:1.2rem;color:var(--text-muted, #94a3b8);padding:4px 8px;border-radius:6px" title="Close">✕</button>
         </div>
-        <div style="display:flex;gap:8px;margin-top:16px">
-          <button onclick="window._submitNewPO()" style="flex:1;padding:10px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600">Create PO</button>
-          <button onclick="document.getElementById('po-modal').style.display='none'" style="padding:10px 16px;background:var(--border);color:var(--text-primary,#f1f5f9);border:none;border-radius:8px;cursor:pointer">Cancel</button>
+        <div style="display:grid;gap:12px">
+          <div>
+            <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Supplier *</label>
+            <select id="po-supplier" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem">
+              <option value="">— Select supplier —</option>
+              ${(State._supplierList || []).map(s => `<option value="${s}">${s}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Product *</label>
+            <select id="po-product" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem">
+              <option value="">— Select product —</option>
+              ${(State._productList || []).map(p => `<option value="${p}">${p}</option>`).join('')}
+            </select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+            <div>
+              <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Quantity</label>
+              <input id="po-qty" type="number" placeholder="0" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Unit</label>
+              <select id="po-unit" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem">
+                <option value="kg">kg</option><option value="pcs">pcs</option><option value="liters">liters</option><option value="tons">tons</option><option value="boxes">boxes</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Unit Price ($)</label>
+              <input id="po-price" type="number" step="0.01" placeholder="0.00" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem;box-sizing:border-box">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+              <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Delivery Date</label>
+              <input id="po-delivery" type="date" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Payment Terms</label>
+              <select id="po-payment" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem">
+                <option value="NET-30">NET-30</option><option value="NET-45">NET-45</option><option value="NET-60">NET-60</option><option value="LC">Letter of Credit</option><option value="TT">Telegraphic Transfer</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <button onclick="window._submitNewPO()" style="flex:1;padding:11px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.9rem;transition:background 0.2s" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">Create PO</button>
+          <button onclick="window._closePOModal()" style="flex:0.6;padding:11px;background:var(--bg-secondary, #f1f5f9);color:var(--text-primary, #1e293b);border:1px solid var(--border, #e2e8f0);border-radius:8px;cursor:pointer;font-weight:500;font-size:0.9rem;transition:background 0.2s" onmouseover="this.style.background='var(--border, #e2e8f0)'" onmouseout="this.style.background='var(--bg-secondary, #f1f5f9)'">Cancel</button>
         </div>
       </div>
     </div>`;
@@ -123,8 +157,37 @@ async function loadPOData() {
   } catch (e) { console.warn('[procurement] API fallback', e); }
 }
 
+// Load supplier & product lists for dropdown
+async function loadDropdownData() {
+  try {
+    // Suppliers from partner/scoring API
+    if (!State._supplierList) {
+      const sr = await API.get('/ops/data/supplier-scoring');
+      const suppliers = (sr.suppliers || []).map(s => s.name || s.company_name || s.supplier).filter(Boolean);
+      // Also include suppliers from contracts
+      const contractSuppliers = ['Golden Beans Co.', 'Ceylon Leaf Ltd', 'NZ Manuka Inc'];
+      const all = [...new Set([...suppliers, ...contractSuppliers])].sort();
+      State._supplierList = all;
+    }
+    // Products from existing POs + common product list
+    if (!State._productList) {
+      const orders = State._poOrders || [];
+      const fromPO = orders.map(o => o.product).filter(Boolean);
+      const common = ['Arabica Coffee Beans', 'Robusta Coffee Beans', 'Ceylon Black Tea', 'Green Tea Leaves', 'Manuka Honey', 'Packaging Materials', 'Labels & Stickers', 'Organic Fertilizer'];
+      const all = [...new Set([...fromPO, ...common])].sort();
+      State._productList = all;
+    }
+  } catch (e) { console.warn('[procurement] dropdown load', e); }
+}
+
 // Modal handlers
-window._showNewPOModal = () => { document.getElementById('po-modal').style.display = 'flex'; };
+window._showNewPOModal = async () => {
+  await loadDropdownData();
+  render(); // re-render to populate dropdowns
+  setTimeout(() => { document.getElementById('po-modal').style.display = 'flex'; }, 50);
+};
+
+window._closePOModal = () => { document.getElementById('po-modal').style.display = 'none'; };
 
 window._submitNewPO = async () => {
   try {
@@ -137,9 +200,11 @@ window._submitNewPO = async () => {
       deliveryDate: document.getElementById('po-delivery').value || null,
       paymentTerms: document.getElementById('po-payment').value,
     };
-    if (!data.supplier || !data.product) { showToast('Supplier and Product are required', 'warning'); return; }
+    if (!data.supplier || !data.product) { showToast('Please select both Supplier and Product', 'warning'); return; }
+    if (!data.quantity || data.quantity <= 0) { showToast('Quantity must be greater than 0', 'warning'); return; }
+    if (!data.unitPrice || data.unitPrice <= 0) { showToast('Unit price must be greater than 0', 'warning'); return; }
     await API.post('/ops/data/purchase-orders', data);
-    document.getElementById('po-modal').style.display = 'none';
+    window._closePOModal();
     showToast('✅ Purchase Order created successfully', 'success');
     loadPOData();
   } catch (e) { showToast('❌ ' + e.message, 'error'); }
