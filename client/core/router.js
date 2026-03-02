@@ -208,6 +208,7 @@ const PAGE_LOADERS = {
 
     // ─── Ops Workspace Routes (matching CA/SA pattern) ──
     'ops-production': () => import('../pages/ops/ops-production-workspace.js'),
+    'ops-erp': () => import('../pages/ops/ops-erp-workspace.js'),
     'ops-logistics': () => import('../pages/ops/ops-logistics-workspace.js'),
     'ops-monitoring': () => import('../pages/ops/ops-monitoring-workspace.js'),
     'ops-incidents': () => import('../pages/ops/ops-incidents-workspace.js'),

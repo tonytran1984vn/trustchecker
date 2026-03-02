@@ -697,6 +697,7 @@ function renderExecutiveSidebar() {
 
 const OPS_NAV = [
   { id: 'ops-production', icon: icon('factory'), label: 'Production' },
+  { id: 'ops-erp', icon: icon('network'), label: 'ERP & Supply' },
   { id: 'ops-logistics', icon: icon('truck'), label: 'Logistics' },
   { id: 'ops-monitoring', icon: icon('search'), label: 'Monitoring' },
   { id: 'ops-incidents', icon: icon('alertTriangle'), label: 'Incidents' },
