@@ -10,6 +10,7 @@ import { API } from '../../core/api.js';
 import { renderPage as renderScanMonitor } from './scan-monitor.js';
 import { renderPage as renderDuplicateAlerts } from './duplicate-alerts.js';
 import { renderPage as renderGeoAlerts } from './geo-alerts.js';
+import { renderPage as renderReports } from './reports.js';
 
 // Prefetch Monitoring APIs in parallel
 if (!window._opsMonCache) window._opsMonCache = {};
@@ -44,6 +45,7 @@ export function renderPage() {
             { id: 'scans', label: 'Scan Monitor', icon: icon('search', 14), render: renderScanMonitor },
             { id: 'duplicates', label: 'Duplicate Alerts', icon: icon('shield', 14), render: renderDuplicateAlerts },
             { id: 'geo', label: 'Geo Alerts', icon: icon('globe', 14), render: renderGeoAlerts },
+            { id: 'reports', label: 'Reports', icon: icon('scroll', 14), render: renderReports },
         ],
     });
 }

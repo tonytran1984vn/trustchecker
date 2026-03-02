@@ -9,6 +9,8 @@ import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
 import { renderPage as renderOpenCases } from './incidents-open.js';
 import { renderPage as renderHistory } from './incidents-history.js';
+import { renderPage as renderNotifications } from './notifications.js';
+import { renderPage as renderActivityLog } from './activity-log.js';
 
 // Prefetch Incidents APIs in parallel
 if (!window._opsIncCache) window._opsIncCache = {};
@@ -40,6 +42,8 @@ export function renderPage() {
         tabs: [
             { id: 'open', label: 'Open Cases', icon: icon('alertTriangle', 14), render: renderOpenCases },
             { id: 'history', label: 'History', icon: icon('scroll', 14), render: renderHistory },
+            { id: 'notifications', label: 'Notifications', icon: icon('bell', 14), render: renderNotifications },
+            { id: 'activity', label: 'Activity Log', icon: icon('clock', 14), render: renderActivityLog },
         ],
     });
 }
