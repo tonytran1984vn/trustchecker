@@ -75,7 +75,7 @@ export function renderPage() {
         <div style="display:grid;gap:12px">
           <div>
             <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Company Name *</label>
-            <input id="ob-name" placeholder="e.g. Acme Supplies Ltd" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem;box-sizing:border-box">
+            <input id="ob-name" placeholder="e.g. Acme Supplies Ltd" oninput="window._obNameChanged&&window._obNameChanged()" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem;box-sizing:border-box">
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <div>
@@ -118,17 +118,102 @@ export function renderPage() {
 
 window._showOnboardSupplier = () => { document.getElementById('onboard-modal').style.display = 'flex'; };
 window._closeOnboardSupplier = () => { document.getElementById('onboard-modal').style.display = 'none'; };
+
+// ─── Duplicate Detection v2 ────────────────────────────────────
+const LEGAL_SUFFIXES = /\b(co\.?|company|ltd\.?|limited|inc\.?|incorporated|llc\.?|corp\.?|corporation|plc\.?|gmbh|sa\.?|srl|pte\.?|pty\.?|group|holdings?)\b/gi;
+
+function normalizeName(raw) {
+  return (raw || '')
+    .toLowerCase()
+    .trim()
+    .replace(LEGAL_SUFFIXES, '')   // remove legal suffixes
+    .replace(/[.\-_,&]/g, ' ')     // special chars → space
+    .replace(/\s+/g, ' ')          // collapse whitespace
+    .trim();
+}
+
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const d = Array.from({ length: m + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      d[i][j] = Math.min(
+        d[i - 1][j] + 1,
+        d[i][j - 1] + 1,
+        d[i - 1][j - 1] + (a[i - 1] !== b[j - 1] ? 1 : 0)
+      );
+  return d[m][n];
+}
+
+function similarity(a, b) {
+  const maxLen = Math.max(a.length, b.length);
+  if (!maxLen) return 1;
+  return 1 - levenshtein(a, b) / maxLen;
+}
+
+function checkDuplicate(inputName) {
+  const rawLower = inputName.toLowerCase().trim();
+  const normalized = normalizeName(inputName);
+
+  // 1. Exact raw match → hard block
+  const exact = SUPPLIERS.find(s => s.name.toLowerCase().trim() === rawLower);
+  if (exact) return { type: 'exact', supplier: exact };
+
+  // 2. Normalized match → soft warning
+  const normMatch = SUPPLIERS.find(s => normalizeName(s.name) === normalized);
+  if (normMatch) return { type: 'normalized', supplier: normMatch };
+
+  // 3. Fuzzy match (Levenshtein ≥ 0.8) → suggestion
+  let bestScore = 0, bestSupplier = null;
+  for (const s of SUPPLIERS) {
+    const score = similarity(normalized, normalizeName(s.name));
+    if (score > bestScore) { bestScore = score; bestSupplier = s; }
+  }
+  if (bestScore >= 0.8 && bestSupplier) return { type: 'fuzzy', supplier: bestSupplier, score: bestScore };
+
+  return null;
+}
+
+// Track if user has confirmed a soft/fuzzy duplicate
+let _dupConfirmed = false;
+
 window._submitOnboardSupplier = () => {
   const name = document.getElementById('ob-name')?.value?.trim();
   const country = document.getElementById('ob-country')?.value;
   const type = document.getElementById('ob-type')?.value;
+
   if (!name) { showToast('Company name is required', 'warning'); return; }
-  const dup = SUPPLIERS.find(s => s.name.toLowerCase() === name.toLowerCase());
-  if (dup) { showToast(`⚠️ "${dup.name}" already exists (${dup.id}, ${dup.tier} tier)`, 'warning'); return; }
+
+  // Duplicate detection
+  if (!_dupConfirmed) {
+    const dup = checkDuplicate(name);
+    if (dup) {
+      if (dup.type === 'exact') {
+        showToast(`⛔ "${dup.supplier.name}" already exists (${dup.supplier.id}, ${dup.supplier.tier} tier). Cannot create duplicate.`, 'error');
+        return;
+      }
+      if (dup.type === 'normalized') {
+        showToast(`⚠️ Possible duplicate: "${dup.supplier.name}" (${dup.supplier.id}, ${dup.supplier.tier} tier). Click Create again to confirm.`, 'warning');
+        _dupConfirmed = true;
+        return;
+      }
+      if (dup.type === 'fuzzy') {
+        showToast(`💡 Similar supplier found: "${dup.supplier.name}" (${Math.round(dup.score * 100)}% match). Click Create again to confirm.`, 'info');
+        _dupConfirmed = true;
+        return;
+      }
+    }
+  }
+
   if (!country) { showToast('Please select a country', 'warning'); return; }
   if (!type) { showToast('Please select supplier type', 'warning'); return; }
+  _dupConfirmed = false;
   window._closeOnboardSupplier();
   showToast(`✅ "${name}" submitted for KYC review`, 'success');
 };
+
+// Reset confirm flag when name changes
+window._obNameChanged = () => { _dupConfirmed = false; };
 
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
