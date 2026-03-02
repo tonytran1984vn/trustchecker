@@ -123,6 +123,8 @@ window._submitOnboardSupplier = () => {
   const country = document.getElementById('ob-country')?.value;
   const type = document.getElementById('ob-type')?.value;
   if (!name) { showToast('Company name is required', 'warning'); return; }
+  const dup = SUPPLIERS.find(s => s.name.toLowerCase() === name.toLowerCase());
+  if (dup) { showToast(`⚠️ "${dup.name}" already exists (${dup.id}, ${dup.tier} tier)`, 'warning'); return; }
   if (!country) { showToast('Please select a country', 'warning'); return; }
   if (!type) { showToast('Please select supplier type', 'warning'); return; }
   window._closeOnboardSupplier();
