@@ -207,11 +207,15 @@ const PAGE_LOADERS = {
     'ops-incidents-history': () => import('../pages/ops/incidents-history.js'),
 
     // ─── Ops Workspace Routes (matching CA/SA pattern) ──
+    'ops-planning': () => import('../pages/ops/ops-planning-workspace.js'),
     'ops-production': () => import('../pages/ops/ops-production-workspace.js'),
-    'ops-erp': () => import('../pages/ops/ops-erp-workspace.js'),
+    'ops-warehouse': () => import('../pages/ops/ops-warehouse-workspace.js'),
     'ops-logistics': () => import('../pages/ops/ops-logistics-workspace.js'),
-    'ops-monitoring': () => import('../pages/ops/ops-monitoring-workspace.js'),
-    'ops-incidents': () => import('../pages/ops/ops-incidents-workspace.js'),
+    'ops-monitor': () => import('../pages/ops/ops-monitor-workspace.js'),
+    // backwards compatibility
+    'ops-erp': () => import('../pages/ops/ops-planning-workspace.js'),
+    'ops-monitoring': () => import('../pages/ops/ops-monitor-workspace.js'),
+    'ops-incidents': () => import('../pages/ops/ops-monitor-workspace.js'),
 
     // ─── Risk (Risk Governance Layer) pages ─────────────
     'risk-dashboard': () => import('../pages/risk/dashboard.js'),
@@ -308,7 +312,7 @@ export function navigate(page, opts = {}) {
         org_owner: { dashboard: 'owner-governance' },
         super_admin: { dashboard: 'control-tower' },
         executive: { dashboard: 'exec-overview' },
-        ops_manager: { dashboard: 'ops-production' },
+        ops_manager: { dashboard: 'ops-planning' },
     };
     const userRole = State.user?.active_role || State.user?.role;
     const redirect = _roleRedirects[userRole]?.[page];
@@ -352,7 +356,7 @@ export function renderPage() {
     let page = State.page;
 
     // v10.1: Auto-correct default 'dashboard' page for roles with dedicated landing pages
-    const _roleLanding = { org_owner: 'owner-governance', super_admin: 'control-tower', executive: 'exec-overview', carbon_officer: 'carbon-workspace', ops_manager: 'ops-production' };
+    const _roleLanding = { org_owner: 'owner-governance', super_admin: 'control-tower', executive: 'exec-overview', carbon_officer: 'carbon-workspace', ops_manager: 'ops-planning' };
     const correctPage = _roleLanding[State.user?.active_role || State.user?.role];
     if (correctPage && page === 'dashboard') {
         State.page = correctPage;
@@ -720,7 +724,7 @@ function _defaultPageForRole() {
         super_admin: 'control-tower', platform_security: 'control-tower',
         org_owner: 'owner-governance', security_officer: 'ca-governance',
         data_gov_officer: 'compliance-dashboard', executive: 'exec-overview',
-        ops_manager: 'ops-production', risk_officer: 'risk-dashboard',
+        ops_manager: 'ops-planning', risk_officer: 'risk-dashboard',
         compliance_officer: 'compliance-dashboard', developer: 'it-authentication',
         ggc_member: 'trustgraph', risk_committee: 'risk-dashboard',
         ivu_validator: 'risk-dashboard', scm_analyst: 'ops-dashboard',

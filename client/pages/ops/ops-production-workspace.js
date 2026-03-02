@@ -1,8 +1,7 @@
 /**
- * Production Workspace — Ops Domain
- * Tabs: Dashboard · Create Batch · Batch List · Split/Merge · Recall
- *
- * PERF: Prefetches key APIs in parallel on workspace entry.
+ * Production & QC Workspace — Ops Domain
+ * SCOR: Make + Quality
+ * Tabs: Dashboard · Create Batch · Batch List · Split/Merge · Quality Control · Recall
  */
 import { renderWorkspace } from '../../components/workspace.js';
 import { icon } from '../../core/icons.js';
@@ -11,6 +10,7 @@ import { renderPage as renderDashboard } from './dashboard.js';
 import { renderPage as renderBatchCreate } from './batch-create.js';
 import { renderPage as renderBatchList } from './batch-list.js';
 import { renderPage as renderBatchSplit } from './batch-split.js';
+import { renderPage as renderQualityControl } from '../scm/quality-control.js';
 import { renderPage as renderBatchRecall } from './batch-recall.js';
 
 // Prefetch Production APIs in parallel
@@ -39,14 +39,15 @@ if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 30000
 export function renderPage() {
     return renderWorkspace({
         domain: 'ops-production',
-        title: 'Production',
-        subtitle: 'Dashboard · Batch lifecycle · QR generation',
+        title: 'Production & QC',
+        subtitle: 'Dashboard · Batch lifecycle · Quality Control · Recall',
         icon: icon('factory', 24),
         tabs: [
             { id: 'dashboard', label: 'Dashboard', icon: icon('dashboard', 14), render: renderDashboard },
             { id: 'create', label: 'Create Batch', icon: icon('plus', 14), render: renderBatchCreate },
             { id: 'batches', label: 'Batch List', icon: icon('products', 14), render: renderBatchList },
             { id: 'split', label: 'Split / Merge', icon: icon('workflow', 14), render: renderBatchSplit },
+            { id: 'quality', label: 'Quality Control', icon: icon('check', 14), render: renderQualityControl },
             { id: 'recall', label: 'Recall', icon: icon('alertTriangle', 14), render: renderBatchRecall },
         ],
     });
