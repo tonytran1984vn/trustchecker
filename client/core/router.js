@@ -310,7 +310,7 @@ export function navigate(page, opts = {}) {
         executive: { dashboard: 'exec-overview' },
         ops_manager: { dashboard: 'ops-production' },
     };
-    const userRole = State.user?.role;
+    const userRole = State.user?.active_role || State.user?.role;
     const redirect = _roleRedirects[userRole]?.[page];
     if (redirect) page = redirect;
 
@@ -353,7 +353,7 @@ export function renderPage() {
 
     // v10.1: Auto-correct default 'dashboard' page for roles with dedicated landing pages
     const _roleLanding = { org_owner: 'owner-governance', super_admin: 'control-tower', executive: 'exec-overview', carbon_officer: 'carbon-workspace', ops_manager: 'ops-production' };
-    const correctPage = _roleLanding[State.user?.role];
+    const correctPage = _roleLanding[State.user?.active_role || State.user?.role];
     if (correctPage && page === 'dashboard') {
         State.page = correctPage;
         page = correctPage;
@@ -715,7 +715,7 @@ export function getPageFromURL() {
 }
 
 function _defaultPageForRole() {
-    const role = State.user?.role;
+    const role = State.user?.active_role || State.user?.role;
     const map = {
         super_admin: 'control-tower', platform_security: 'control-tower',
         org_owner: 'owner-governance', security_officer: 'ca-governance',
