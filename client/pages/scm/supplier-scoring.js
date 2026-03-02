@@ -5,25 +5,27 @@
 import { icon } from '../../core/icons.js';
 
 const SUPPLIERS = [
-    { id: 'SUP-001', name: 'Golden Beans Co.', country: 'Vietnam', type: 'Manufacturer', kyc: 'Verified', trust: 92, delivery: 96, quality: 94, compliance: 88, financial: 85, composite: 91, tier: 'Gold', contracts: 2, risk: 'Low', since: '2022' },
-    { id: 'SUP-002', name: 'Ceylon Leaf Ltd', country: 'Sri Lanka', type: 'Manufacturer', kyc: 'Verified', trust: 88, delivery: 91, quality: 93, compliance: 90, financial: 82, composite: 89, tier: 'Gold', contracts: 1, risk: 'Low', since: '2023' },
-    { id: 'SUP-003', name: 'NZ Manuka Inc', country: 'New Zealand', type: 'Producer', kyc: 'Verified', trust: 95, delivery: 89, quality: 98, compliance: 95, financial: 92, composite: 94, tier: 'Platinum', contracts: 1, risk: 'Low', since: '2024' },
-    { id: 'SUP-004', name: 'Pacific Pack', country: 'Thailand', type: 'Packaging', kyc: 'Verified', trust: 78, delivery: 85, quality: 82, compliance: 75, financial: 80, composite: 80, tier: 'Silver', contracts: 1, risk: 'Medium', since: '2024' },
-    { id: 'SUP-005', name: 'Mekong Logistics', country: 'Vietnam', type: '3PL', kyc: 'Pending', trust: 65, delivery: 72, quality: 70, compliance: 60, financial: 68, composite: 67, tier: 'Bronze', contracts: 0, risk: 'High', since: '2025' },
+  { id: 'SUP-001', name: 'Golden Beans Co.', country: 'Vietnam', type: 'Manufacturer', kyc: 'Verified', trust: 92, delivery: 96, quality: 94, compliance: 88, financial: 85, composite: 91, tier: 'Gold', contracts: 2, risk: 'Low', since: '2022' },
+  { id: 'SUP-002', name: 'Ceylon Leaf Ltd', country: 'Sri Lanka', type: 'Manufacturer', kyc: 'Verified', trust: 88, delivery: 91, quality: 93, compliance: 90, financial: 82, composite: 89, tier: 'Gold', contracts: 1, risk: 'Low', since: '2023' },
+  { id: 'SUP-003', name: 'NZ Manuka Inc', country: 'New Zealand', type: 'Producer', kyc: 'Verified', trust: 95, delivery: 89, quality: 98, compliance: 95, financial: 92, composite: 94, tier: 'Platinum', contracts: 1, risk: 'Low', since: '2024' },
+  { id: 'SUP-004', name: 'Pacific Pack', country: 'Thailand', type: 'Packaging', kyc: 'Verified', trust: 78, delivery: 85, quality: 82, compliance: 75, financial: 80, composite: 80, tier: 'Silver', contracts: 1, risk: 'Medium', since: '2024' },
+  { id: 'SUP-005', name: 'Mekong Logistics', country: 'Vietnam', type: '3PL', kyc: 'Pending', trust: 65, delivery: 72, quality: 70, compliance: 60, financial: 68, composite: 67, tier: 'Bronze', contracts: 0, risk: 'High', since: '2025' },
 ];
 
 const SCORING_DIMENSIONS = [
-    { dim: 'Trust Score', weight: '25%', factors: 'Transaction history, dispute rate, reference checks, years in partnership', source: 'TrustChecker platform data' },
-    { dim: 'Delivery Performance', weight: '20%', factors: 'On-time rate, lead time variance, order accuracy, damage rate', source: 'PO + shipment records' },
-    { dim: 'Quality Score', weight: '25%', factors: 'QC pass rate, defect rate, certification status, audit findings', source: 'QC inspections + audits' },
-    { dim: 'Compliance Score', weight: '15%', factors: 'KYC status, regulatory compliance, ESG rating, sanction screening', source: 'Compliance module' },
-    { dim: 'Financial Health', weight: '15%', factors: 'Credit rating, payment history, insurance coverage, D&B score', source: 'External + financial data' },
+  { dim: 'Trust Score', weight: '25%', factors: 'Transaction history, dispute rate, reference checks, years in partnership', source: 'TrustChecker platform data' },
+  { dim: 'Delivery Performance', weight: '20%', factors: 'On-time rate, lead time variance, order accuracy, damage rate', source: 'PO + shipment records' },
+  { dim: 'Quality Score', weight: '25%', factors: 'QC pass rate, defect rate, certification status, audit findings', source: 'QC inspections + audits' },
+  { dim: 'Compliance Score', weight: '15%', factors: 'KYC status, regulatory compliance, ESG rating, sanction screening', source: 'Compliance module' },
+  { dim: 'Financial Health', weight: '15%', factors: 'Credit rating, payment history, insurance coverage, D&B score', source: 'External + financial data' },
 ];
 
 export function renderPage() {
-    return `
+  const types = ['Manufacturer', 'Producer', 'Packaging', '3PL', 'Distributor', 'Raw Material', 'Service Provider'];
+  const countries = ['Vietnam', 'Sri Lanka', 'New Zealand', 'Thailand', 'China', 'India', 'Indonesia', 'Japan', 'South Korea', 'USA', 'Germany', 'Australia'];
+  return `
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('users', 28)} Supplier Scoring</h1><div class="sa-title-actions"><button class="btn btn-primary btn-sm">+ Onboard Supplier</button></div></div>
+      <div class="sa-page-title"><h1>${icon('users', 28)} Supplier Scoring</h1><div class="sa-title-actions"><button class="btn btn-primary btn-sm" onclick="window._showOnboardSupplier()">+ Onboard Supplier</button></div></div>
 
       <div class="sa-metrics-row" style="margin-bottom:1.5rem">
         ${m('Active Suppliers', SUPPLIERS.length.toString(), `${SUPPLIERS.filter(s => s.tier === 'Gold' || s.tier === 'Platinum').length} Gold/Platinum`, 'green', 'users')}
@@ -36,8 +38,8 @@ export function renderPage() {
         <h3>📊 Supplier Performance Matrix</h3>
         <table class="sa-table"><thead><tr><th>Supplier</th><th>Country</th><th>Type</th><th>KYC</th><th>Trust</th><th>Delivery</th><th>Quality</th><th>Compliance</th><th>Financial</th><th>Composite</th><th>Tier</th><th>Risk</th></tr></thead><tbody>
           ${SUPPLIERS.map(s => {
-        const tierColor = s.tier === 'Platinum' ? '#8b5cf6' : s.tier === 'Gold' ? '#f59e0b' : s.tier === 'Silver' ? '#94a3b8' : '#cd7f32';
-        return `<tr class="${s.risk === 'High' ? 'ops-alert-row' : ''}">
+    const tierColor = s.tier === 'Platinum' ? '#8b5cf6' : s.tier === 'Gold' ? '#f59e0b' : s.tier === 'Silver' ? '#94a3b8' : '#cd7f32';
+    return `<tr class="${s.risk === 'High' ? 'ops-alert-row' : ''}">
               <td><strong>${s.name}</strong><div style="font-size:0.65rem;color:var(--text-secondary)">${s.id} · Since ${s.since}</div></td>
               <td>${s.country}</td><td style="font-size:0.78rem">${s.type}</td>
               <td><span class="sa-status-pill sa-pill-${s.kyc === 'Verified' ? 'green' : 'orange'}">${s.kyc}</span></td>
@@ -46,7 +48,7 @@ export function renderPage() {
               <td><span style="font-weight:700;color:${tierColor}">⬤ ${s.tier}</span></td>
               <td><span class="sa-status-pill sa-pill-${s.risk === 'Low' ? 'green' : s.risk === 'Medium' ? 'orange' : 'red'}">${s.risk}</span></td>
             </tr>`;
-    }).join('')}
+  }).join('')}
         </tbody></table>
       </div>
 
@@ -61,6 +63,70 @@ export function renderPage() {
           </tr>`).join('')}
         </tbody></table>
       </div>
+    </div>
+
+    <!-- Onboard Supplier Modal -->
+    <div id="onboard-modal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.45);align-items:center;justify-content:center">
+      <div style="background:var(--card-bg, #fff);border-radius:14px;padding:28px 24px;width:520px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,0.25);border:1px solid var(--border, #e2e8f0)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <h3 style="margin:0;color:var(--text-primary, #1e293b);font-size:1.1rem">🏢 Onboard New Supplier</h3>
+          <button onclick="window._closeOnboardSupplier()" style="background:none;border:none;cursor:pointer;font-size:1.2rem;color:var(--text-muted, #94a3b8);padding:4px 8px;border-radius:6px" title="Close">✕</button>
+        </div>
+        <div style="display:grid;gap:12px">
+          <div>
+            <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Company Name *</label>
+            <input id="ob-name" placeholder="e.g. Acme Supplies Ltd" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem;box-sizing:border-box">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+              <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Country *</label>
+              <select id="ob-country" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem">
+                <option value="">— Select —</option>
+                ${countries.map(c => `<option value="${c}">${c}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Supplier Type *</label>
+              <select id="ob-type" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem">
+                <option value="">— Select —</option>
+                ${types.map(t => `<option value="${t}">${t}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+              <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Contact Email</label>
+              <input id="ob-email" type="email" placeholder="contact@supplier.com" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Contact Phone</label>
+              <input id="ob-phone" placeholder="+84 xxx xxx xxx" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem;box-sizing:border-box">
+            </div>
+          </div>
+          <div>
+            <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary, #64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Notes</label>
+            <textarea id="ob-notes" rows="2" placeholder="Additional details..." style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem;box-sizing:border-box;resize:vertical"></textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <button onclick="window._submitOnboardSupplier()" style="flex:1;padding:11px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.9rem;transition:background 0.2s" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">Submit for KYC Review</button>
+          <button onclick="window._closeOnboardSupplier()" style="flex:0.5;padding:11px;background:var(--bg-secondary, #f1f5f9);color:var(--text-primary, #1e293b);border:1px solid var(--border, #e2e8f0);border-radius:8px;cursor:pointer;font-weight:500;font-size:0.9rem">Cancel</button>
+        </div>
+      </div>
     </div>`;
 }
+
+window._showOnboardSupplier = () => { document.getElementById('onboard-modal').style.display = 'flex'; };
+window._closeOnboardSupplier = () => { document.getElementById('onboard-modal').style.display = 'none'; };
+window._submitOnboardSupplier = () => {
+  const name = document.getElementById('ob-name')?.value?.trim();
+  const country = document.getElementById('ob-country')?.value;
+  const type = document.getElementById('ob-type')?.value;
+  if (!name) { showToast('Company name is required', 'warning'); return; }
+  if (!country) { showToast('Please select a country', 'warning'); return; }
+  if (!type) { showToast('Please select supplier type', 'warning'); return; }
+  window._closeOnboardSupplier();
+  showToast(`✅ "${name}" submitted for KYC review`, 'success');
+};
+
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
