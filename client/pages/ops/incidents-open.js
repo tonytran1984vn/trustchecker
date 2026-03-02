@@ -34,8 +34,8 @@ export function renderPage() {
                 <td><span class="sa-score sa-score-${c.severity === 'critical' ? 'danger' : c.severity === 'high' ? 'warning' : 'info'}">${c.severity}</span></td>
                 <td><span class="sa-status-pill sa-pill-${c.status === 'open' ? 'red' : 'orange'}">${c.status}</span></td>
                 <td>
-                  <button class="btn btn-xs btn-outline" onclick="showToast('Viewing incident: ${inc.id}','info')">View</button>
-                  <button class="btn btn-xs btn-ghost" onclick="showToast('Assign: ${inc.id} — coming soon','info')">Assign</button>
+                  <button class="btn btn-xs btn-outline" onclick="showToast('Viewing incident: ${c.id}','info')">View</button>
+                  <button class="btn btn-xs btn-ghost" onclick="showToast('Assign: ${c.id} — coming soon','info')">Assign</button>
                 </td>
               </tr>
             `).join('')}
