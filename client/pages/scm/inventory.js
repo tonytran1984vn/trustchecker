@@ -3,10 +3,31 @@
  */
 import { State, render } from '../../core/state.js';
 
+// Fallback demo data when State is not pre-populated (e.g. inside workspace tabs)
+const DEMO_INVENTORY = {
+  inventory: [
+    { product_name: 'Weasel Coffee Limited', sku: 'COFFEE-WL-250', location: 'WH-HCM-01', quantity: 1200, min_stock: 500, max_stock: 5000 },
+    { product_name: 'Dragon Fruit Premium', sku: 'FRUIT-DF-500', location: 'WH-HCM-01', quantity: 180, min_stock: 200, max_stock: 2000 },
+    { product_name: 'Robusta Grade A 1kg', sku: 'COFFEE-RB-1K', location: 'WH-HN-02', quantity: 3400, min_stock: 1000, max_stock: 5000 },
+    { product_name: 'CardioPlus 100mg', sku: 'PHARMA-CP-100', location: 'WH-SG-01', quantity: 5200, min_stock: 2000, max_stock: 8000 },
+    { product_name: 'VitaKing Multi-Vitamin', sku: 'PHARMA-VK-60', location: 'WH-HCM-01', quantity: 890, min_stock: 500, max_stock: 3000 },
+    { product_name: 'GPS Tracker Mini', sku: 'ELEC-GT-01', location: 'WH-SG-01', quantity: 420, min_stock: 100, max_stock: 1000 },
+    { product_name: 'Organic Tea 100g', sku: 'TEA-ORG-100', location: 'WH-HN-02', quantity: 2800, min_stock: 800, max_stock: 4000 },
+    { product_name: 'Noodle RC 400g', sku: 'NOODLE-RC-400', location: 'WH-HCM-01', quantity: 150, min_stock: 300, max_stock: 2000 },
+  ]
+};
+const DEMO_FORECAST = {
+  trend: 'increasing', confidence: 0.87, alert: null, forecast: [
+    { period: 1, predicted: 420 }, { period: 2, predicted: 450 }, { period: 3, predicted: 480 },
+    { period: 4, predicted: 510 }, { period: 5, predicted: 490 },
+  ]
+};
+
 export function renderPage() {
-  const inv = State.scmInventory;
-  const fc = State.scmForecast;
-  if (!inv) return '<div class="loading"><div class="spinner"></div></div>';
+  // Use State data if available, otherwise fall back to prefetch cache or demo data
+  const cache = window._opsErpCache || {};
+  const inv = State.scmInventory || cache.inventory || DEMO_INVENTORY;
+  const fc = State.scmForecast || cache.forecast || DEMO_FORECAST;
   const items = inv.inventory || [];
 
   return `
