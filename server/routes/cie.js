@@ -243,7 +243,7 @@ router.get('/config', async (req, res) => {
 });
 
 // PUT /api/cie/config — Update tenant CIE config
-router.put('/config', requireRole('admin'), async (req, res) => {
+router.put('/config', requirePermission('tenant:settings_update'), async (req, res) => {
     try {
         const d = getDb();
         const tenantId = req.user?.org_id || 'default';

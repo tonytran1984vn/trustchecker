@@ -341,7 +341,7 @@ router.get('/limits', async (req, res) => {
 });
 
 // ─── GET /webhook/events — View webhook event log (admin) ───
-router.get('/webhook/events', requireRole('admin'), async (req, res) => {
+router.get('/webhook/events', requirePermission('tenant:settings_update'), async (req, res) => {
     try {
         const events = await db.all('SELECT * FROM webhook_events ORDER BY created_at DESC LIMIT 50');
         res.json({ events });
@@ -351,7 +351,7 @@ router.get('/webhook/events', requireRole('admin'), async (req, res) => {
 });
 
 // ─── POST /downgrade ────────────────────────────────────────
-router.post('/downgrade', requireRole('admin'), async (req, res) => {
+router.post('/downgrade', requirePermission('tenant:settings_update'), async (req, res) => {
     try {
         const { plan_name } = req.body;
         if (!plan_name || !PLANS[plan_name]) return res.status(400).json({ error: 'Invalid plan' });
@@ -432,7 +432,7 @@ router.get('/usage/alerts', async (req, res) => {
 });
 
 // ─── POST /sdk/api-key — Generate API key ───────────────────
-router.post('/sdk/api-key', requireRole('admin'), async (req, res) => {
+router.post('/sdk/api-key', requirePermission('tenant:settings_update'), async (req, res) => {
     try {
         const { name, permissions } = req.body;
         const crypto = require('crypto');
@@ -457,7 +457,7 @@ router.post('/sdk/api-key', requireRole('admin'), async (req, res) => {
 });
 
 // ─── GET /sdk/api-keys — List API keys ──────────────────────
-router.get('/sdk/api-keys', requireRole('admin'), async (req, res) => {
+router.get('/sdk/api-keys', requirePermission('tenant:settings_update'), async (req, res) => {
     try {
         const keys = await db.all("SELECT id, details, created_at FROM audit_log WHERE actor_id = ? AND action = 'API_KEY_CREATED' ORDER BY created_at DESC", [req.user.id]);
         const parsed = keys.map(k => {
@@ -471,7 +471,7 @@ router.get('/sdk/api-keys', requireRole('admin'), async (req, res) => {
 });
 
 // ─── DELETE /sdk/api-key/:id — Revoke API key ───────────────
-router.delete('/sdk/api-key/:id', requireRole('admin'), async (req, res) => {
+router.delete('/sdk/api-key/:id', requirePermission('tenant:settings_update'), async (req, res) => {
     try {
         const key = await db.get("SELECT * FROM audit_log WHERE id = ? AND action = 'API_KEY_CREATED'", [req.params.id]);
         if (!key) return res.status(404).json({ error: 'API key not found' });

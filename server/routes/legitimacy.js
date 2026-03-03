@@ -11,7 +11,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requireTenantAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
 
 router.use(authMiddleware);
@@ -24,11 +24,11 @@ const jurisLogic = require('../engines/jurisdiction-logic-engine');
 // ECONOMIC LOGIC — /economic-logic [L3+ admin]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/economic-logic/framework', requireRole('admin'), (req, res) => { res.json(econ.getFullFramework()); });
-router.get('/economic-logic/mechanism-design', requireRole('admin'), (req, res) => { res.json(econ.getMechanismDesign()); });
-router.get('/economic-logic/game-theory', requireRole('admin'), (req, res) => { res.json(econ.getGameTheory()); });
-router.get('/economic-logic/sustainability', requireRole('admin'), (req, res) => { res.json(econ.getSustainability()); });
-router.get('/economic-logic/value-fairness', requireRole('admin'), (req, res) => { res.json(econ.getValueFairness()); });
+router.get('/economic-logic/framework', requireTenantAdmin(), (req, res) => { res.json(econ.getFullFramework()); });
+router.get('/economic-logic/mechanism-design', requireTenantAdmin(), (req, res) => { res.json(econ.getMechanismDesign()); });
+router.get('/economic-logic/game-theory', requireTenantAdmin(), (req, res) => { res.json(econ.getGameTheory()); });
+router.get('/economic-logic/sustainability', requireTenantAdmin(), (req, res) => { res.json(econ.getSustainability()); });
+router.get('/economic-logic/value-fairness', requireTenantAdmin(), (req, res) => { res.json(econ.getValueFairness()); });
 
 router.post('/economic-logic/analyze-incentive', requireRole('risk_committee'), (req, res) => {
     const { participant_type, stake_usd, detection_pct, cheat_gain_usd } = req.body;
@@ -54,14 +54,14 @@ router.post('/forensic/verify-chain', requireRole('super_admin'), (req, res) => 
 // JURISDICTION LOGIC — /jurisdiction-logic [L3+ admin]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/jurisdiction-logic/framework', requireRole('admin'), (req, res) => { res.json(jurisLogic.getFullFramework()); });
-router.get('/jurisdiction-logic/conflicts', requireRole('admin'), (req, res) => { res.json(jurisLogic.getConflictResolution()); });
-router.get('/jurisdiction-logic/arbitrage-prevention', requireRole('admin'), (req, res) => { res.json(jurisLogic.getArbitragePrevention()); });
-router.get('/jurisdiction-logic/liability', requireRole('admin'), (req, res) => { res.json(jurisLogic.getLiabilityMap()); });
-router.get('/jurisdiction-logic/governing-law', requireRole('admin'), (req, res) => { res.json(jurisLogic.getGoverningLaw()); });
-router.get('/jurisdiction-logic/enforcement', requireRole('admin'), (req, res) => { res.json(jurisLogic.getCrossBorderEnforcement()); });
+router.get('/jurisdiction-logic/framework', requireTenantAdmin(), (req, res) => { res.json(jurisLogic.getFullFramework()); });
+router.get('/jurisdiction-logic/conflicts', requireTenantAdmin(), (req, res) => { res.json(jurisLogic.getConflictResolution()); });
+router.get('/jurisdiction-logic/arbitrage-prevention', requireTenantAdmin(), (req, res) => { res.json(jurisLogic.getArbitragePrevention()); });
+router.get('/jurisdiction-logic/liability', requireTenantAdmin(), (req, res) => { res.json(jurisLogic.getLiabilityMap()); });
+router.get('/jurisdiction-logic/governing-law', requireTenantAdmin(), (req, res) => { res.json(jurisLogic.getGoverningLaw()); });
+router.get('/jurisdiction-logic/enforcement', requireTenantAdmin(), (req, res) => { res.json(jurisLogic.getCrossBorderEnforcement()); });
 
-router.get('/jurisdiction-logic/conflict/:id', requireRole('admin'), (req, res) => {
+router.get('/jurisdiction-logic/conflict/:id', requireTenantAdmin(), (req, res) => {
     const conflict = jurisLogic.resolveConflict(req.params.id);
     if (conflict.error) return res.status(404).json(conflict);
     res.json(conflict);

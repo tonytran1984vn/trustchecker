@@ -39,7 +39,7 @@ router.get('/templates/:name/preview', requirePermission('notification:manage'),
 });
 
 // ─── POST /send — Send an email (simulated) ────────────────
-router.post('/send', requireRole('admin'), async (req, res) => {
+router.post('/send', requirePermission('notification:manage'), async (req, res) => {
     const { to, template, params } = req.body;
     if (!to || !template) return res.status(400).json({ error: 'to and template required' });
 
@@ -73,7 +73,7 @@ router.post('/send', requireRole('admin'), async (req, res) => {
 });
 
 // ─── GET /config — Get email configuration status ───────────
-router.get('/config', requireRole('admin'), async (req, res) => {
+router.get('/config', requirePermission('notification:manage'), async (req, res) => {
     try {
         res.json({
             provider: 'simulated',

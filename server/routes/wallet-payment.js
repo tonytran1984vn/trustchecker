@@ -323,7 +323,7 @@ router.get('/ipfs/stats', requirePermission('wallet:manage'), async (req, res) =
 });
 
 // ─── GET /ipfs/pins — List pinned content ───────────────────
-router.get('/ipfs/pins', requireRole('admin'), async (req, res) => {
+router.get('/ipfs/pins', requirePermission('nft:manage'), async (req, res) => {
     try {
         const recentSeals = await db.all('SELECT id, event_type, data_hash, sealed_at as created_at FROM blockchain_seals ORDER BY sealed_at DESC LIMIT 20');
         const recentEvidence = await db.all('SELECT id, title, sha256_hash, created_at FROM evidence_items ORDER BY created_at DESC LIMIT 20');

@@ -10,7 +10,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { authMiddleware, requireRole, requireConstitutional } = require('../auth');
+const { authMiddleware, requireRole, requireConstitutional, requireTenantAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
 
 router.use(authMiddleware);
@@ -25,23 +25,23 @@ const modelRisk = require('../engines/model-risk-tiering-engine');
 // REVENUE GOVERNANCE — /revenue-gov [L3+ admin]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/revenue-gov/map', requireRole('admin'), (req, res) => { res.json(revGov.getFullMap()); });
-router.get('/revenue-gov/pricing', requireRole('admin'), (req, res) => { res.json(revGov.getPricingAuthority()); });
-router.get('/revenue-gov/ai-impact', requireRole('admin'), (req, res) => { res.json(revGov.getAIRevenueMap()); });
-router.get('/revenue-gov/settlement', requireRole('admin'), (req, res) => { res.json(revGov.getSettlementControl()); });
-router.get('/revenue-gov/fees', requireRole('admin'), (req, res) => { res.json(revGov.getFeeGovernance()); });
+router.get('/revenue-gov/map', requireTenantAdmin(), (req, res) => { res.json(revGov.getFullMap()); });
+router.get('/revenue-gov/pricing', requireTenantAdmin(), (req, res) => { res.json(revGov.getPricingAuthority()); });
+router.get('/revenue-gov/ai-impact', requireTenantAdmin(), (req, res) => { res.json(revGov.getAIRevenueMap()); });
+router.get('/revenue-gov/settlement', requireTenantAdmin(), (req, res) => { res.json(revGov.getSettlementControl()); });
+router.get('/revenue-gov/fees', requireTenantAdmin(), (req, res) => { res.json(revGov.getFeeGovernance()); });
 
 // ═══════════════════════════════════════════════════════════════════
 // JURISDICTIONAL RISK — /jurisdiction [L3+ admin]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/jurisdiction/map', requireRole('admin'), (req, res) => { res.json(jurisdiction.getFullMap()); });
-router.get('/jurisdiction/deployment', requireRole('admin'), (req, res) => { res.json(jurisdiction.getDeploymentMap()); });
-router.get('/jurisdiction/data-isolation', requireRole('admin'), (req, res) => { res.json(jurisdiction.getDataIsolation()); });
-router.get('/jurisdiction/geo-routing', requireRole('admin'), (req, res) => { res.json(jurisdiction.getGeoRouting()); });
-router.get('/jurisdiction/carbon-registries', requireRole('admin'), (req, res) => { res.json(jurisdiction.getCarbonRegistryMap()); });
+router.get('/jurisdiction/map', requireTenantAdmin(), (req, res) => { res.json(jurisdiction.getFullMap()); });
+router.get('/jurisdiction/deployment', requireTenantAdmin(), (req, res) => { res.json(jurisdiction.getDeploymentMap()); });
+router.get('/jurisdiction/data-isolation', requireTenantAdmin(), (req, res) => { res.json(jurisdiction.getDataIsolation()); });
+router.get('/jurisdiction/geo-routing', requireTenantAdmin(), (req, res) => { res.json(jurisdiction.getGeoRouting()); });
+router.get('/jurisdiction/carbon-registries', requireTenantAdmin(), (req, res) => { res.json(jurisdiction.getCarbonRegistryMap()); });
 
-router.get('/jurisdiction/assess/:region_id', requireRole('admin'), (req, res) => {
+router.get('/jurisdiction/assess/:region_id', requireTenantAdmin(), (req, res) => {
     res.json(jurisdiction.assessJurisdiction(req.params.region_id));
 });
 
@@ -129,12 +129,12 @@ router.post('/stress/run', requireRole('super_admin'), (req, res) => {
 
 const econRisk = require('../engines/economic-risk-engine');
 
-router.get('/econrisk/framework', requireRole('admin'), (req, res) => { res.json(econRisk.getFullFramework()); });
-router.get('/econrisk/revenue-risk', requireRole('admin'), (req, res) => { res.json(econRisk.getRevenueRisk()); });
-router.get('/econrisk/tenant-credit', requireRole('admin'), (req, res) => { res.json(econRisk.getTenantCredit()); });
-router.get('/econrisk/cost-allocation', requireRole('admin'), (req, res) => { res.json(econRisk.getCostAllocation()); });
-router.get('/econrisk/token-economics', requireRole('admin'), (req, res) => { res.json(econRisk.getTokenEconomics()); });
-router.get('/econrisk/trust-feedback', requireRole('admin'), (req, res) => { res.json(econRisk.getFinancialTrustFeedback()); });
+router.get('/econrisk/framework', requireTenantAdmin(), (req, res) => { res.json(econRisk.getFullFramework()); });
+router.get('/econrisk/revenue-risk', requireTenantAdmin(), (req, res) => { res.json(econRisk.getRevenueRisk()); });
+router.get('/econrisk/tenant-credit', requireTenantAdmin(), (req, res) => { res.json(econRisk.getTenantCredit()); });
+router.get('/econrisk/cost-allocation', requireTenantAdmin(), (req, res) => { res.json(econRisk.getCostAllocation()); });
+router.get('/econrisk/token-economics', requireTenantAdmin(), (req, res) => { res.json(econRisk.getTokenEconomics()); });
+router.get('/econrisk/trust-feedback', requireTenantAdmin(), (req, res) => { res.json(econRisk.getFinancialTrustFeedback()); });
 
 router.post('/econrisk/score-tenant', requireRole('risk_committee'), (req, res) => {
     const { trust_score, payment_pct, settlement_pct, years, external_credit, engagement } = req.body;

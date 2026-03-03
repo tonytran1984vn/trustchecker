@@ -179,7 +179,7 @@ router.post('/:id/transfer', requireRole('operator'), async (req, res) => {
 });
 
 // ─── POST /:id/revoke — Revoke NFT certificate ─────────────
-router.post('/:id/revoke', requireRole('admin'), async (req, res) => {
+router.post('/:id/revoke', requirePermission('nft:manage'), async (req, res) => {
     try {
         const { reason } = req.body;
         const cert = await db.get('SELECT * FROM nft_certificates WHERE id = ?', [req.params.id]);

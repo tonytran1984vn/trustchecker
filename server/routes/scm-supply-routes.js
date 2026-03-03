@@ -83,7 +83,7 @@ router.get('/routes/:id', authMiddleware, async (req, res) => {
 });
 
 // ─── PUT /api/scm/routes/:id – Update supply route ──────────────────────────
-router.put('/routes/:id', authMiddleware, requireRole('admin'), async (req, res) => {
+router.put('/routes/:id', authMiddleware, requirePermission('supply_chain:create'), async (req, res) => {
     try {
         const { name, chain, products, geo_fence, status } = req.body;
         await db.prepare(`
@@ -116,7 +116,7 @@ router.get('/channel-rules', authMiddleware, async (req, res) => {
 });
 
 // ─── POST /api/scm/channel-rules – Create channel rule (Admin) ──────────────
-router.post('/channel-rules', authMiddleware, requireRole('admin'), async (req, res) => {
+router.post('/channel-rules', authMiddleware, requirePermission('supply_chain:create'), async (req, res) => {
     try {
         const { name, logic, severity, auto_action } = req.body;
         const id = uuidv4();

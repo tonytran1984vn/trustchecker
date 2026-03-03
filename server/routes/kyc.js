@@ -264,7 +264,7 @@ router.get('/gdpr/export/:userId', requireRole('operator'), async (req, res) => 
 });
 
 // ─── GDPR: Delete User Data ────────────────────────────────
-router.delete('/gdpr/delete/:userId', requireRole('admin'), async (req, res) => {
+router.delete('/gdpr/delete/:userId', requirePermission('gdpr_masking:execute'), async (req, res) => {
     try {
         const userId = req.params.userId;
         if (userId === req.user.id) return res.status(400).json({ error: 'Cannot delete own data' });

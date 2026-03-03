@@ -65,7 +65,7 @@ router.post('/', requirePermission('notification:manage'), async (req, res) => {
 });
 
 // ─── POST /broadcast — Send notification to all users ───────
-router.post('/broadcast', requireRole('admin'), async (req, res) => {
+router.post('/broadcast', requirePermission('notification:manage'), async (req, res) => {
     try {
         const { title, message, type } = req.body;
         if (!message) return res.status(400).json({ error: 'message required' });

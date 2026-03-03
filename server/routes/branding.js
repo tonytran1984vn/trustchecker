@@ -103,7 +103,7 @@ router.put('/', requirePermission('settings:update'), async (req, res) => {
 });
 
 // ─── POST /reset — Reset to default branding ────────────────
-router.post('/reset', requireRole('admin'), async (req, res) => {
+router.post('/reset', requirePermission('tenant:settings_update'), async (req, res) => {
     try {
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
             .run(uuidv4(), req.user.company || req.user.id, 'BRAND_CONFIG', 'branding', req.user.id, JSON.stringify(DEFAULT_THEME));

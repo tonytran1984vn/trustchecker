@@ -233,7 +233,7 @@ router.delete('/users/:id', async (req, res) => {
 });
 
 // SEC-3: Admin-only endpoint must require authentication
-router.post('/users/:id/reset-password', authMiddleware, requireRole('admin'), async (req, res) => {
+router.post('/users/:id/reset-password', authMiddleware, requirePermission('tenant:user_create'), async (req, res) => {
     try {
         const { new_password } = req.body;
         if (!new_password || new_password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });

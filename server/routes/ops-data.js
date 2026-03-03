@@ -45,8 +45,19 @@ router.post('/purchase-orders', async (req, res) => {
 router.post('/purchase-orders/:id/approve', async (req, res) => {
     try {
         const orgId = getOrgId(req);
+        const po = await db.get('SELECT id, created_by FROM purchase_orders WHERE id = ? AND org_id = ?', [req.params.id, orgId]);
+        if (!po) return res.status(404).json({ error: 'Purchase order not found' });
+
+        // Identity-level SoD: person who created PO cannot approve it
+        if (po.created_by && po.created_by === req.user?.id) {
+            return res.status(403).json({
+                error: 'SoD violation: you cannot approve a PO you created. A different authorized person must approve.',
+                sod_rule: 'created_by ≠ approved_by'
+            });
+        }
+
         await db.prepare('UPDATE purchase_orders SET status = ?, approved_by = ?, approved_at = NOW(), updated_at = NOW() WHERE id = ? AND org_id = ?')
-            .run('approved', req.user?.email || req.user?.id, req.params.id, orgId);
+            .run('approved', req.user?.id, req.params.id, orgId);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
