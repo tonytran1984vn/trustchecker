@@ -4,7 +4,7 @@
 import { icon } from '../../core/icons.js';
 
 export function renderPage() {
-    return `
+  return `
     <div class="sa-page">
       <div class="sa-page-title"><h1>${icon('workflow', 28)} Split / Merge</h1></div>
 
@@ -20,7 +20,7 @@ export function renderPage() {
             ${field('Sub-batch 2 Qty', 'Remaining')}
             ${field('Sub-batch 2 Dest', 'Select node')}
           </div>
-          <button class="btn btn-primary btn-sm" style="margin-top:1rem">Execute Split</button>
+          <button class="btn btn-primary btn-sm" style="margin-top:1rem" onclick="showToast('✂️ Split operation submitted — processing batch division','info')">Execute Split</button>
         </div>
 
         <div class="sa-card">
@@ -32,7 +32,7 @@ export function renderPage() {
             ${field('Merged Batch ID', 'Auto-generated')}
             ${field('Target Node', 'Select destination')}
           </div>
-          <button class="btn btn-primary btn-sm" style="margin-top:1rem">Execute Merge</button>
+          <button class="btn btn-primary btn-sm" style="margin-top:1rem" onclick="showToast('🔗 Merge operation submitted — combining batches','info')">Execute Merge</button>
         </div>
       </div>
 
@@ -55,5 +55,5 @@ export function renderPage() {
 }
 
 function field(label, placeholder) {
-    return `<div class="ops-field"><label class="ops-label">${label}</label><input class="ops-input" placeholder="${placeholder}" /></div>`;
+  return `<div class="ops-field"><label class="ops-label">${label}</label><input class="ops-input" placeholder="${placeholder}" /></div>`;
 }

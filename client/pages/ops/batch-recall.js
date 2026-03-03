@@ -4,7 +4,7 @@
 import { icon } from '../../core/icons.js';
 
 export function renderPage() {
-    return `
+  return `
     <div class="sa-page">
       <div class="sa-page-title"><h1>${icon('alertTriangle', 28)} Recall / Destroy</h1></div>
 
@@ -18,7 +18,7 @@ export function renderPage() {
             ${field('Scope', 'Full batch / Partial')}
             ${field('Notes', 'Describe the issue')}
           </div>
-          <button class="btn btn-sm" style="background:#ef4444;color:#fff;margin-top:1rem"><span class="status-icon status-warn" aria-label="Warning">!</span> Initiate Recall</button>
+          <button class="btn btn-sm" style="background:#ef4444;color:#fff;margin-top:1rem" onclick="showToast('🚨 Recall initiated — affected nodes notified','warning')"><span class="status-icon status-warn" aria-label="Warning">!</span> Initiate Recall</button>
         </div>
 
         <div class="sa-card" style="border:1px solid rgba(239,68,68,0.3)">
@@ -30,7 +30,7 @@ export function renderPage() {
             ${field('Evidence', 'Upload photo/document')}
             ${field('Witness', 'Name & role')}
           </div>
-          <button class="btn btn-sm" style="background:#7f1d1d;color:#fff;margin-top:1rem">Confirm Destruction</button>
+          <button class="btn btn-sm" style="background:#7f1d1d;color:#fff;margin-top:1rem" onclick="showToast('🗑️ Destruction confirmed — evidence sealed','warning')">Confirm Destruction</button>
         </div>
       </div>
 
@@ -52,5 +52,5 @@ export function renderPage() {
 }
 
 function field(label, placeholder) {
-    return `<div class="ops-field"><label class="ops-label">${label}</label><input class="ops-input" placeholder="${placeholder}" /></div>`;
+  return `<div class="ops-field"><label class="ops-label">${label}</label><input class="ops-input" placeholder="${placeholder}" /></div>`;
 }

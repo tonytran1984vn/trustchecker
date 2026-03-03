@@ -4,14 +4,14 @@
 import { icon } from '../../core/icons.js';
 
 export function renderPage() {
-    const mismatches = [
-        { id: 'MM-0034', transfer: 'T-4520', type: 'Quantity', expected: '300', actual: '280', severity: 'high', status: 'open', time: '35 min ago' },
-        { id: 'MM-0033', transfer: 'T-4515', type: 'Location', expected: 'SGN-01', actual: 'SGN-03', severity: 'medium', status: 'investigating', time: '4h ago' },
-        { id: 'MM-0032', transfer: 'T-4510', type: 'Early Activation', expected: 'After receiving', actual: 'Scanned in transit', severity: 'high', status: 'resolved', time: '1d ago' },
-        { id: 'MM-0031', transfer: 'T-4505', type: 'Quantity', expected: '500', actual: '498', severity: 'low', status: 'closed', time: '3d ago' },
-    ];
+  const mismatches = [
+    { id: 'MM-0034', transfer: 'T-4520', type: 'Quantity', expected: '300', actual: '280', severity: 'high', status: 'open', time: '35 min ago' },
+    { id: 'MM-0033', transfer: 'T-4515', type: 'Location', expected: 'SGN-01', actual: 'SGN-03', severity: 'medium', status: 'investigating', time: '4h ago' },
+    { id: 'MM-0032', transfer: 'T-4510', type: 'Early Activation', expected: 'After receiving', actual: 'Scanned in transit', severity: 'high', status: 'resolved', time: '1d ago' },
+    { id: 'MM-0031', transfer: 'T-4505', type: 'Quantity', expected: '500', actual: '498', severity: 'low', status: 'closed', time: '3d ago' },
+  ];
 
-    return `
+  return `
     <div class="sa-page">
       <div class="sa-page-title"><h1>${icon('alert', 28)} Mismatch Detection</h1></div>
 
@@ -36,7 +36,7 @@ export function renderPage() {
                 <td><span class="sa-score sa-score-${m.severity === 'high' ? 'danger' : m.severity === 'medium' ? 'warning' : 'low'}">${m.severity}</span></td>
                 <td><span class="sa-status-pill sa-pill-${m.status === 'open' ? 'red' : m.status === 'investigating' ? 'orange' : m.status === 'resolved' ? 'green' : 'blue'}">${m.status}</span></td>
                 <td style="color:var(--text-secondary)">${m.time}</td>
-                <td><button class="btn btn-xs btn-outline">View</button></td>
+                <td><button class="btn btn-xs btn-outline" onclick="showToast('🔍 Viewing mismatch: ${m.id}','info')">View</button></td>
               </tr>
             `).join('')}
           </tbody>

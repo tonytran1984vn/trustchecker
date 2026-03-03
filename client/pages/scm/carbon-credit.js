@@ -366,7 +366,7 @@ function renderPassportModule() {
                 <h3 style="margin:0;color:#f1f5f9;font-size:0.88rem">${icon('scroll')} Carbon Integrity Passports</h3>
                 <div style="display:flex;gap:6px">
                     <button onclick="window.cieIssueCIP()" style="padding:6px 14px;background:#10b981;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:0.72rem">${icon('plus', 12)} Issue CIP</button>
-                    <button style="padding:6px 14px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer;font-size:0.72rem">📤 Export to Registry</button>
+                    <button onclick="showToast('📤 Exporting sealed passports to carbon registry…','info')" style="padding:6px 14px;background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:6px;cursor:pointer;font-size:0.72rem">📤 Export to Registry</button>
                 </div>
             </div>
             <table style="width:100%;border-collapse:collapse;font-size:0.78rem">

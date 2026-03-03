@@ -6,7 +6,7 @@
 import { icon } from '../../core/icons.js';
 
 export function renderPage() {
-    return `
+  return `
     <div class="sa-page">
       <div class="sa-page-title">
         <h1>${icon('plus', 28)} Create Batch</h1>
@@ -56,15 +56,15 @@ export function renderPage() {
       </div>
 
       <div style="display:flex;gap:1rem;justify-content:flex-end;margin-top:1.5rem">
-        <button class="btn btn-outline">Save Draft</button>
-        <button class="btn btn-primary">Create Batch & Generate QR</button>
+        <button class="btn btn-outline" onclick="showToast('💾 Batch draft saved','success')">Save Draft</button>
+        <button class="btn btn-primary" onclick="showToast('✅ Batch created & 500 QR codes generated','success')">Create Batch & Generate QR</button>
       </div>
     </div>
   `;
 }
 
 function formField(label, placeholder, value, disabled) {
-    return `
+  return `
     <div class="ops-field">
       <label class="ops-label">${label}</label>
       <input class="ops-input" placeholder="${placeholder}" value="${value || ''}" ${disabled ? 'disabled' : ''} />
