@@ -87,6 +87,7 @@ function setupRoutes(app) {
     const carbonOfficerRoutes = require('../routes/carbon-officer');
     const carbonActionsRoutes = require('../routes/carbon-actions');
     const tenantIntegrationsFactory = require('../routes/tenant-integrations');
+    const auditChainRoutes = require('../routes/audit');
 
     // Declarative route table — each route is mounted on both /api and /api/v1
     const API_ROUTES = [
@@ -162,6 +163,7 @@ function setupRoutes(app) {
         ['/cie', cieRoutes],                     // CIE v2.0 — Carbon Integrity Engine API
         ['/carbon-officer', carbonOfficerRoutes], // Carbon Officer workspace dashboard
         ['/carbon-actions', carbonActionsRoutes],   // Carbon Action Items bridge
+        ['/audit', auditChainRoutes],                // Audit hash chain verification
     ];
 
     // Mount on /api and /api/v1 (versioned alias)

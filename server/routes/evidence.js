@@ -183,11 +183,16 @@ router.post('/upload', requirePermission('evidence:upload'), async (req, res) =>
     `).run(id, title, description || '', file_name || '', file_type || '', fileSize,
             file_data || null, sha256, sealId, entity_type || '', entity_id || '', req.user.id);
 
-        // Audit log
-        await db.prepare(`
-      INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details)
-      VALUES (?, ?, 'evidence_upload', 'evidence', ?, ?)
-    `).run(uuidv4(), req.user.id, id, JSON.stringify({ title, sha256, seal_id: sealId }));
+        // Tamper-evident audit log
+        const { appendAuditEntry } = require('../utils/audit-chain');
+        await appendAuditEntry({
+            actor_id: req.user.id,
+            action: 'evidence_upload',
+            entity_type: 'evidence',
+            entity_id: id,
+            details: { title, sha256, seal_id: sealId },
+            ip: req.ip || ''
+        });
 
         res.json({ id, sha256, seal_id: sealId, block_index: blockIndex });
     } catch (e) {

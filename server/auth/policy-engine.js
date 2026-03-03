@@ -24,6 +24,14 @@ const IDENTITY_SOD_RULES = {
     'supplier:reject_kyc': { table: 'partners', id_col: 'id', creator_col: 'created_by' },
 };
 
+// ─── Org-scoped tables ──────────────────────────────────────────────────────
+// Map: resource prefix → table with org_id column
+const ORG_SCOPED_TABLES = {
+    'po': 'purchase_orders',
+    'product': 'products',
+    'evidence': 'evidence_items',
+};
+
 /**
  * Evaluate authorization for a user performing an action on a resource.
  * 
@@ -71,7 +79,30 @@ async function evaluate(user, action, resourceId, opts = {}) {
     }
 
     // ─── Step 4: Org-scoping (tenant isolation) ──────────────────
-    // TODO Phase 2: Verify user.orgId matches resource.org_id
+    // Verify user's org matches resource's org to prevent cross-tenant access
+    if (resourceId && user.user_type !== 'platform') {
+        const orgId = user.org_id || user.orgId;
+        if (orgId) {
+            const orgScopedTable = ORG_SCOPED_TABLES[action.split(':')[0]];
+            if (orgScopedTable) {
+                try {
+                    const resource = await db.get(
+                        `SELECT org_id FROM ${orgScopedTable} WHERE id = ?`,
+                        [resourceId]
+                    );
+                    if (resource && resource.org_id && resource.org_id !== orgId) {
+                        return deny(
+                            'Access denied: resource belongs to a different organization',
+                            'ORG_SCOPE_VIOLATION',
+                            { user_org: orgId, resource_id: resourceId }
+                        );
+                    }
+                } catch (e) {
+                    // Table might not have org_id — skip silently
+                }
+            }
+        }
+    }
 
     return { allowed: true };
 }

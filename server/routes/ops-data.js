@@ -8,6 +8,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const { appendAuditEntry } = require('../utils/audit-chain');
 
 router.use(authMiddleware);
 
@@ -307,13 +308,15 @@ router.patch('/suppliers/:id/approve', requireKYCApprover, async (req, res) => {
             ['verified', 'Bronze', req.user.id, id]
         );
 
-        // Audit log
-        await db.run(
-            'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address, timestamp) VALUES (?,?,?,?,?,?,?,NOW())',
-            [uuidv4(), req.user.id, 'SUPPLIER_KYC_APPROVED', 'partner', id,
-            JSON.stringify({ supplier_name: supplier.name, approved_by: req.user.email, role: req.user.role }),
-            req.ip || '']
-        );
+        // Tamper-evident audit log
+        await appendAuditEntry({
+            actor_id: req.user.id,
+            action: 'SUPPLIER_KYC_APPROVED',
+            entity_type: 'partner',
+            entity_id: id,
+            details: { supplier_name: supplier.name, approved_by: req.user.email, role: req.user.role },
+            ip: req.ip || ''
+        });
 
         res.json({ success: true, message: `${supplier.name} KYC approved` });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -336,13 +339,15 @@ router.patch('/suppliers/:id/reject', requireKYCApprover, async (req, res) => {
 
         await db.run('UPDATE partners SET kyc_status = ?, rejected_by = ? WHERE id = ?', ['rejected', req.user.id, id]);
 
-        // Audit log
-        await db.run(
-            'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address, timestamp) VALUES (?,?,?,?,?,?,?,NOW())',
-            [uuidv4(), req.user.id, 'SUPPLIER_KYC_REJECTED', 'partner', id,
-            JSON.stringify({ supplier_name: supplier.name, rejected_by: req.user.email, role: req.user.role, reason: req.body?.reason || '' }),
-            req.ip || '']
-        );
+        // Tamper-evident audit log
+        await appendAuditEntry({
+            actor_id: req.user.id,
+            action: 'SUPPLIER_KYC_REJECTED',
+            entity_type: 'partner',
+            entity_id: id,
+            details: { supplier_name: supplier.name, rejected_by: req.user.email, role: req.user.role, reason: req.body?.reason || '' },
+            ip: req.ip || ''
+        });
 
         res.json({ success: true, message: `${supplier.name} KYC rejected` });
     } catch (e) { res.status(500).json({ error: e.message }); }
