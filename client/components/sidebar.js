@@ -455,7 +455,8 @@ function switchRole(role) {
   };
   const dest = defaultPages[role] || 'dashboard';
   if (typeof navigate === 'function') navigate(dest);
-  refreshSidebar();
+  const sidebarEl = document.querySelector('.sidebar');
+  if (sidebarEl) sidebarEl.outerHTML = renderSidebar();
 }
 
 function renderRoleSwitcher() {
