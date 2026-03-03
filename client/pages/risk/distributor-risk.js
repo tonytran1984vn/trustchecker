@@ -1,40 +1,32 @@
 /**
- * Risk – Distributor Risk Ranking
+ * Risk – Distributor Risk
+ * Distributor/partner risk from /api/risk-graph/behavior
  */
 import { icon } from '../../core/icons.js';
-
+import { State } from '../../core/state.js';
+let D = null;
+async function load() {
+  if (D) return;
+  try {
+    const h = { 'Authorization': 'Bearer ' + State.token };
+    D = await fetch('/api/risk-graph/behavior', { headers: h }).then(r => r.json());
+  } catch { D = {}; }
+}
+load();
 export function renderPage() {
-    const distributors = [
-        { id: 'D-204', name: 'Pacific Trade Co.', region: 'Cambodia', score: 82, events: 18, trend: '↑ rising', status: 'watchlist' },
-        { id: 'D-118', name: 'Metro Supply BKK', region: 'Thailand', score: 67, events: 9, trend: '→ stable', status: 'monitored' },
-        { id: 'D-302', name: 'Saigon Distribution', region: 'Vietnam', score: 34, events: 3, trend: '↓ declining', status: 'normal' },
-        { id: 'D-155', name: 'Singapore Retail Hub', region: 'Singapore', score: 12, events: 0, trend: '→ stable', status: 'normal' },
-        { id: 'D-180', name: 'Delta Logistics', region: 'Vietnam', score: 0, events: 72, trend: 'N/A', status: 'terminated' },
-    ];
-
-    return `
+  const entities = D?.entities || D?.behaviors || [];
+  return `
     <div class="sa-page">
       <div class="sa-page-title"><h1>${icon('network', 28)} Distributor Risk</h1></div>
-
       <div class="sa-card">
-        <table class="sa-table">
-          <thead><tr><th>ID</th><th>Distributor</th><th>Region</th><th>Risk Score</th><th>Events (90d)</th><th>Trend</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>
-            ${distributors.map(d => `
-              <tr class="sa-row-clickable">
-                <td class="sa-code">${d.id}</td>
-                <td><strong>${d.name}</strong></td>
-                <td>${d.region}</td>
-                <td><span class="sa-score sa-score-${d.score >= 70 ? 'danger' : d.score >= 40 ? 'warning' : d.score > 0 ? 'low' : 'info'}">${d.score}</span></td>
-                <td>${d.events}</td>
-                <td style="color:${d.trend.includes('↑') ? '#ef4444' : d.trend.includes('↓') ? '#22c55e' : 'var(--text-secondary)'}">${d.trend}</td>
-                <td><span class="sa-status-pill sa-pill-${d.status === 'watchlist' ? 'red' : d.status === 'monitored' ? 'orange' : d.status === 'terminated' ? 'red' : 'green'}">${d.status}</span></td>
-                <td><button class="btn btn-xs btn-outline">Profile</button></td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
+        ${entities.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:2rem">No distributor risk data — run behavioral analysis first</p>' : `
+        <table class="sa-table"><thead><tr><th>Entity</th><th>Type</th><th>Risk Score</th><th>Anomalies</th><th>Status</th></tr></thead>
+        <tbody>${entities.map(e => `<tr>
+          <td style="font-weight:600">${e.name || e.entity_id || '—'}</td>
+          <td class="sa-code">${e.type || e.entity_type || '—'}</td>
+          <td style="font-weight:700;color:${(e.risk_score || 0) > 70 ? '#ef4444' : (e.risk_score || 0) > 40 ? '#f59e0b' : '#22c55e'}">${e.risk_score || '—'}</td>
+          <td>${e.anomaly_count || e.anomalies || '—'}</td>
+          <td><span class="sa-status-pill sa-pill-${e.risk_level === 'high' ? 'red' : e.risk_level === 'medium' ? 'orange' : 'green'}">${e.risk_level || '—'}</span></td>
+        </tr>`).join('')}</tbody></table>`}
+      </div></div>`;
 }

@@ -1,45 +1,53 @@
 /**
- * Risk – Event Feed (Full fraud log with device/IP)
+ * Risk – Event Feed
+ * Live feed of all risk alerts from fraud_alerts, leak_alerts, sla_violations, anomaly_detections
  */
 import { icon } from '../../core/icons.js';
+import { State } from '../../core/state.js';
+
+let _data = null;
+async function load() {
+  if (_data) return;
+  try {
+    const h = { 'Authorization': 'Bearer ' + State.token };
+    _data = await fetch('/api/scm/risk/alerts?limit=100', { headers: h }).then(r => r.json());
+  } catch { _data = {}; }
+}
+load();
 
 export function renderPage() {
-    const events = [
-        { id: 'FE-9847', type: 'duplicate', qr: 'QR-9847231', product: 'COFFEE-PRE-250', region: 'BKK→PNH', device: 'iPhone 15 / iOS 18', ip: '103.5.xx.xx', score: 82, time: '2 min ago' },
-        { id: 'FE-9846', type: 'geo_anomaly', qr: 'QR-9847150', product: 'COFFEE-PRE-250', region: 'VN→Laos', device: 'Android 14', ip: '115.84.xx.xx', score: 71, time: '8 min ago' },
-        { id: 'FE-9845', type: 'velocity', qr: 'QR-9845102', product: 'TEA-ORG-100', region: 'Bangkok', device: 'Android 13', ip: '103.5.xx.xx', score: 65, time: '1h ago' },
-        { id: 'FE-9844', type: 'duplicate', qr: 'QR-9841050', product: 'OIL-COC-500', region: 'SGN-01→SGN-02', device: 'iPhone 14', ip: '171.252.xx.xx', score: 88, time: '3h ago' },
-        { id: 'FE-9843', type: 'behavioral', qr: 'QR-9840500', product: 'SAUCE-FS-350', region: 'HCM', device: 'Android 12 (rooted)', ip: '14.161.xx.xx', score: 91, time: '5h ago' },
-        { id: 'FE-9842', type: 'geo_anomaly', qr: 'QR-9840100', product: 'SAUCE-FS-350', region: 'VN→Cambodia', device: 'Android 13', ip: '27.109.xx.xx', score: 76, time: '1d ago' },
-    ];
+  const alerts = (_data?.alerts || []);
+  const bySev = _data?.by_severity || {};
+  const bySrc = _data?.by_source || {};
 
-    const typeLabels = { duplicate: '🔄 Duplicate', geo_anomaly: '🌍 Geo Anomaly', velocity: '⚡ Velocity', behavioral: '🧠 Behavioral' };
-    const typeColors = { duplicate: 'orange', geo_anomaly: 'red', velocity: 'blue', behavioral: 'red' };
-
-    return `
+  return `
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('scroll', 28)} Event Feed</h1></div>
+      <div class="sa-page-title"><h1>${icon('scroll', 28)} Risk Event Feed</h1>
+        <div class="sa-title-actions"><span style="font-size:0.75rem;color:var(--text-secondary)">${alerts.length} active alerts</span></div>
+      </div>
+
+      <div class="sa-metrics-row" style="margin-bottom:1.5rem">
+        ${m('Critical', bySev.critical || 0, '', 'red', 'alert')}
+        ${m('High', bySev.high || 0, '', 'orange', 'alertTriangle')}
+        ${m('Medium', bySev.medium || 0, '', 'blue', 'shield')}
+        ${m('Low', bySev.low || 0, '', 'green', 'check')}
+      </div>
 
       <div class="sa-card">
-        <table class="sa-table">
-          <thead><tr><th>ID</th><th>Type</th><th>QR Code</th><th>Product</th><th>Region</th><th>Device</th><th>IP</th><th>Risk Score</th><th>Time</th></tr></thead>
-          <tbody>
-            ${events.map(e => `
-              <tr class="sa-row-clickable">
-                <td class="sa-code">${e.id}</td>
-                <td><span class="sa-status-pill sa-pill-${typeColors[e.type]}">${typeLabels[e.type]}</span></td>
-                <td class="sa-code">${e.qr}</td>
-                <td>${e.product}</td>
-                <td>${e.region}</td>
-                <td style="font-size:0.72rem">${e.device}</td>
-                <td class="sa-code" style="font-size:0.72rem">${e.ip}</td>
-                <td><span class="sa-score sa-score-${e.score >= 80 ? 'danger' : e.score >= 50 ? 'warning' : 'low'}">${e.score}</span></td>
-                <td style="color:var(--text-secondary)">${e.time}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+        <h3>All Active Alerts</h3>
+        ${alerts.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:2rem">No active alerts</p>' : `
+        <table class="sa-table"><thead><tr><th>Severity</th><th>Source</th><th>Type</th><th>Description</th><th>Status</th><th>Time</th></tr></thead>
+        <tbody>${alerts.map(a => `<tr class="${a.severity === 'critical' ? 'ops-alert-row' : ''}">
+          <td><span class="sa-status-pill sa-pill-${a.severity === 'critical' || a.severity === 'high' ? 'red' : a.severity === 'medium' ? 'orange' : 'blue'}">${a.severity}</span></td>
+          <td class="sa-code">${a.source}</td>
+          <td style="font-size:0.8rem">${a.alert_type || '—'}</td>
+          <td style="font-size:0.8rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.description || '—'}</td>
+          <td><span class="sa-status-pill sa-pill-${a.status === 'open' ? 'red' : 'green'}">${a.status}</span></td>
+          <td style="font-size:0.7rem;color:var(--text-secondary)">${a.created_at ? new Date(a.created_at).toLocaleString() : '—'}</td>
+        </tr>`).join('')}
+        </tbody></table>`}
       </div>
-    </div>
-  `;
+    </div>`;
 }
+
+function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }

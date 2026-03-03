@@ -1,38 +1,26 @@
-/**
- * Compliance – Regulatory Export (Compliance pack / audit-ready bundle)
- */
+/** Compliance – Regulatory Export — reads from /api/compliance-regtech/report */
 import { icon } from '../../core/icons.js';
-
+import { State } from '../../core/state.js';
+let D = {};
+async function load() {
+  const h = { 'Authorization': 'Bearer ' + State.token };
+  const [report, frameworks] = await Promise.all([
+    fetch('/api/compliance-regtech/report', { headers: h }).then(r => r.json()).catch(() => ({})),
+    fetch('/api/compliance-regtech/frameworks', { headers: h }).then(r => r.json()).catch(() => ({})),
+  ]);
+  D = { report, frameworks: frameworks.frameworks || [] };
+}
 export function renderPage() {
-    const packs = [
-        { name: 'Compliance Pack — Q4 2025', contents: 'Audit log, policy docs, violation log, investigation summaries', size: '24.5 MB', format: 'ZIP', generated: 'Jan 20, 2026' },
-        { name: 'Traceability Proof — COFFEE-PRE-250', contents: 'Full product journey, scan history, QR lifecycle', size: '8.2 MB', format: 'PDF + CSV', generated: 'Feb 10, 2026' },
-        { name: 'Incident Report Bundle — 2025', contents: 'All closed cases, evidence, decision logs', size: '42.1 MB', format: 'ZIP', generated: 'Jan 15, 2026' },
-    ];
-
-    return `
-    <div class="sa-page">
-      <div class="sa-page-title">
-        <h1>${icon('globe', 28)} Regulatory Export</h1>
-        <div class="sa-title-actions"><button class="btn btn-primary btn-sm">+ Generate Pack</button></div>
+  load();
+  return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('globe', 28)} Regulatory Export</h1></div>
+    <div class="sa-grid-2col">
+      <div class="sa-card"><h3>Compliance Report</h3>
+        <p style="color:var(--text-secondary);font-size:0.85rem">${D.report?.summary || 'Run regulatory compliance export to generate report.'}</p>
+        ${D.report?.score !== undefined ? `<div style="margin-top:1rem"><span style="font-size:2rem;font-weight:800;color:#10b981">${D.report.score}%</span><span style="color:var(--text-secondary);margin-left:0.5rem">Compliance Score</span></div>` : ''}
       </div>
-      <div class="sa-card">
-        <table class="sa-table">
-          <thead><tr><th>Pack Name</th><th>Contents</th><th>Size</th><th>Format</th><th>Generated</th><th>Actions</th></tr></thead>
-          <tbody>
-            ${packs.map(p => `
-              <tr>
-                <td><strong>${p.name}</strong></td>
-                <td style="font-size:0.78rem;color:var(--text-secondary)">${p.contents}</td>
-                <td class="sa-code">${p.size}</td>
-                <td><span class="sa-status-pill sa-pill-blue">${p.format}</span></td>
-                <td>${p.generated}</td>
-                <td><button class="btn btn-xs btn-primary">Download</button> <button class="btn btn-xs btn-ghost">Share</button></td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+      <div class="sa-card"><h3>Frameworks (${D.frameworks.length})</h3>
+        ${D.frameworks.length === 0 ? '<p style="color:var(--text-secondary)">No frameworks configured</p>' :
+      D.frameworks.map(f => `<div style="display:flex;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid rgba(255,255,255,0.04)"><span style="font-weight:600">${f.name || f}</span><span class="sa-code">${f.version || ''}</span></div>`).join('')}
       </div>
-    </div>
-  `;
+    </div></div>`;
 }

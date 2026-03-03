@@ -1,45 +1,54 @@
 /**
  * Risk – Reports
+ * Risk trend summary from /api/scm/risk/trends
  */
 import { icon } from '../../core/icons.js';
+import { State } from '../../core/state.js';
+
+let D = null;
+async function load() {
+  if (D) return;
+  try {
+    const h = { 'Authorization': 'Bearer ' + State.token };
+    D = await fetch('/api/scm/risk/trends?period=30d', { headers: h }).then(r => r.json());
+  } catch { D = {}; }
+}
+load();
 
 export function renderPage() {
-    const reports = [
-        { title: 'Weekly Risk Report — Feb 10–16, 2026', type: 'Weekly', generated: 'Feb 17, 2026', pages: 12, status: 'ready' },
-        { title: 'Weekly Risk Report — Feb 3–9, 2026', type: 'Weekly', generated: 'Feb 10, 2026', pages: 10, status: 'ready' },
-        { title: 'Monthly Risk Report — January 2026', type: 'Monthly', generated: 'Feb 1, 2026', pages: 28, status: 'ready' },
-        { title: 'Investigation Summary — RC-0006', type: 'Investigation', generated: 'Jan 28, 2026', pages: 8, status: 'ready' },
-        { title: 'Compliance Export — Q4 2025', type: 'Compliance', generated: 'Jan 15, 2026', pages: 42, status: 'ready' },
-    ];
+  const s = D?.summary || {};
+  const fraud = D?.trends?.fraud_alerts || [];
+  const leaks = D?.trends?.leak_alerts || [];
+  const violations = D?.trends?.sla_violations || [];
 
-    return `
+  return `
     <div class="sa-page">
-      <div class="sa-page-title">
-        <h1>${icon('scroll', 28)} Risk Reports</h1>
-        <div class="sa-title-actions"><button class="btn btn-primary btn-sm">+ Generate Report</button></div>
+      <div class="sa-page-title"><h1>${icon('scroll', 28)} Risk Reports</h1></div>
+
+      <div class="sa-metrics-row" style="margin-bottom:1.5rem">
+        ${m('Fraud (30d)', s.total_fraud || 0, '', 'red', 'alertTriangle')}
+        ${m('Leaks (30d)', s.total_leaks || 0, '', 'orange', 'shield')}
+        ${m('SLA Violations', s.total_violations || 0, '', 'blue', 'clock')}
+      </div>
+
+      <div class="sa-grid-2col" style="margin-bottom:1.5rem">
+        <div class="sa-card">
+          <h3>Fraud Alert Timeline</h3>
+          ${fraud.length === 0 ? '<p style="color:var(--text-secondary)">No data</p>' :
+      fraud.map(d => `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04)"><span style="font-size:0.8rem">${d.day}</span><span style="font-weight:700;color:#ef4444">${d.count}</span></div>`).join('')}
+        </div>
+        <div class="sa-card">
+          <h3>Leak Alert Timeline</h3>
+          ${leaks.length === 0 ? '<p style="color:var(--text-secondary)">No data</p>' :
+      leaks.map(d => `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04)"><span style="font-size:0.8rem">${d.day}</span><span style="font-weight:700;color:#f59e0b">${d.count}</span></div>`).join('')}
+        </div>
       </div>
 
       <div class="sa-card">
-        <table class="sa-table">
-          <thead><tr><th>Report</th><th>Type</th><th>Generated</th><th>Pages</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>
-            ${reports.map(r => `
-              <tr>
-                <td><strong>${r.title}</strong></td>
-                <td><span class="sa-status-pill sa-pill-${r.type === 'Weekly' ? 'blue' : r.type === 'Monthly' ? 'green' : r.type === 'Investigation' ? 'orange' : 'teal'}">${r.type}</span></td>
-                <td>${r.generated}</td>
-                <td>${r.pages}</td>
-                <td><span class="sa-status-pill sa-pill-green">${r.status}</span></td>
-                <td>
-                  <button class="btn btn-xs btn-primary">View</button>
-                  <button class="btn btn-xs btn-outline">PDF</button>
-                  <button class="btn btn-xs btn-ghost">Share</button>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+        <h3>SLA Violation Timeline</h3>
+        ${violations.length === 0 ? '<p style="color:var(--text-secondary)">No SLA violation data</p>' :
+      violations.map(d => `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04)"><span style="font-size:0.8rem">${d.day}</span><span style="font-weight:700;color:#3b82f6">${d.count}</span></div>`).join('')}
       </div>
-    </div>
-  `;
+    </div>`;
 }
+function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }

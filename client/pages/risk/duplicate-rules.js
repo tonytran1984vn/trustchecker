@@ -1,43 +1,42 @@
 /**
- * Risk – Duplicate Rules Configuration
+ * Risk – Duplicate Rules
+ * Duplicate QR/scan detection — reads from /api/ops/data/duplicate-alerts
  */
 import { icon } from '../../core/icons.js';
+import { State } from '../../core/state.js';
+
+let _data = null;
+async function load() {
+  if (_data) return;
+  try {
+    const h = { 'Authorization': 'Bearer ' + State.token };
+    _data = await fetch('/api/ops/data/duplicate-alerts', { headers: h }).then(r => r.json());
+  } catch { _data = {}; }
+}
+load();
 
 export function renderPage() {
-    return `
+  const alerts = _data?.alerts || [];
+  return `
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('shield', 28)} Duplicate Rules</h1></div>
+      <div class="sa-page-title"><h1>${icon('shield', 28)} Duplicate Detection Rules</h1></div>
 
-      <div class="sa-card" style="margin-bottom:1rem">
-        <h3>Global Duplicate Detection</h3>
-        <div class="sa-threshold-list">
-          ${threshold('Time Window', 'Flag if same QR scanned within', '5 minutes', 'Min time between scans to NOT flag')}
-          ${threshold('Distance Threshold', 'Flag if scan locations differ by more than', '50 km', 'Minimum geo distance for duplicate flag')}
-          ${threshold('Max Scans per QR', 'Flag if total scans exceed', '10 scans/day', 'Daily scan limit per unique QR')}
-          ${threshold('Cross-Border Alert', 'Flag if scanned in different countries within', '2 hours', 'Time window for cross-border duplicate')}
-        </div>
+      <div class="sa-metrics-row" style="margin-bottom:1.5rem">
+        ${m('Duplicates Found', alerts.length, '', 'red', 'shield')}
       </div>
 
-      <div class="sa-card" style="margin-bottom:1rem">
-        <h3>Per-Product Overrides</h3>
-        <table class="sa-table">
-          <thead><tr><th>Product / SKU</th><th>Time Window</th><th>Distance</th><th>Max Scans</th><th>Actions</th></tr></thead>
-          <tbody>
-            <tr><td>COFFEE-PRE-250</td><td>3 min (stricter)</td><td>30 km</td><td>5/day</td><td><button class="btn btn-xs btn-outline">Edit</button></td></tr>
-            <tr><td>OIL-COC-500</td><td>10 min (relaxed)</td><td>100 km</td><td>15/day</td><td><button class="btn btn-xs btn-outline">Edit</button></td></tr>
-          </tbody>
-        </table>
-        <button class="btn btn-sm btn-ghost" style="margin-top:0.75rem">+ Add Override</button>
+      <div class="sa-card">
+        ${alerts.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:2rem">No duplicate anomalies detected</p>' : `
+        <table class="sa-table"><thead><tr><th>Type</th><th>Severity</th><th>Description</th><th>Status</th><th>Detected</th></tr></thead>
+        <tbody>${alerts.map(a => `<tr>
+          <td class="sa-code">${a.anomaly_type || a.alert_type || '—'}</td>
+          <td><span class="sa-status-pill sa-pill-${a.severity === 'high' || a.severity === 'critical' ? 'red' : a.severity === 'medium' ? 'orange' : 'blue'}">${a.severity || '—'}</span></td>
+          <td style="font-size:0.8rem;max-width:300px">${a.description || '—'}</td>
+          <td><span class="sa-status-pill sa-pill-${a.status === 'open' ? 'red' : 'green'}">${a.status}</span></td>
+          <td style="font-size:0.7rem;color:var(--text-secondary)">${a.detected_at ? new Date(a.detected_at).toLocaleString() : '—'}</td>
+        </tr>`).join('')}
+        </tbody></table>`}
       </div>
-
-      <div style="display:flex;gap:1rem;justify-content:flex-end;margin-top:1.5rem">
-        <button class="btn btn-outline">Reset to Default</button>
-        <button class="btn btn-primary">Save Rules</button>
-      </div>
-    </div>
-  `;
+    </div>`;
 }
-
-function threshold(name, desc, value, help) {
-    return `<div class="sa-threshold-item"><div class="sa-threshold-header"><strong>${name}</strong><input class="ops-input" value="${value}" style="width:180px;text-align:center" /></div><div class="sa-threshold-desc">${desc}<br><em style="font-size:0.7rem;opacity:0.6">${help}</em></div></div>`;
-}
+function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }

@@ -1,50 +1,44 @@
 /**
- * Risk – Geo Rules Configuration
+ * Risk – Geo Rules
+ * Geo-based fraud detection rules — reads geo alerts from /api/ops/data/geo-alerts
  */
 import { icon } from '../../core/icons.js';
+import { State } from '../../core/state.js';
+
+let _data = null;
+async function load() {
+  if (_data) return;
+  try {
+    const h = { 'Authorization': 'Bearer ' + State.token };
+    _data = await fetch('/api/ops/data/geo-alerts', { headers: h }).then(r => r.json());
+  } catch { _data = {}; }
+}
+load();
 
 export function renderPage() {
-    const regions = [
-        { name: 'Cambodia (blocked)', status: 'blocked', reason: 'Unauthorized distribution channel' },
-        { name: 'Myanmar (restricted)', status: 'restricted', reason: 'Limited distributor network' },
-        { name: 'Thailand (monitored)', status: 'monitored', reason: 'High fraud activity zone' },
-        { name: 'Laos (restricted)', status: 'restricted', reason: 'No authorized distributor' },
-    ];
-
-    return `
+  const alerts = _data?.alerts || [];
+  return `
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('globe', 28)} Geo Rules</h1></div>
+      <div class="sa-page-title"><h1>${icon('globe', 28)} Geo Rules & Alerts</h1></div>
 
-      <div class="sa-card" style="margin-bottom:1rem">
-        <h3>Region Restrictions</h3>
-        <table class="sa-table">
-          <thead><tr><th>Region</th><th>Status</th><th>Reason</th><th>Actions</th></tr></thead>
-          <tbody>
-            ${regions.map(r => `
-              <tr>
-                <td><strong>${r.name}</strong></td>
-                <td><span class="sa-status-pill sa-pill-${r.status === 'blocked' ? 'red' : r.status === 'restricted' ? 'orange' : 'blue'}">${r.status}</span></td>
-                <td style="font-size:0.78rem;color:var(--text-secondary)">${r.reason}</td>
-                <td><button class="btn btn-xs btn-outline">Edit</button> <button class="btn btn-xs btn-ghost">Remove</button></td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <button class="btn btn-sm btn-ghost" style="margin-top:0.75rem">+ Add Region Rule</button>
+      <div class="sa-metrics-row" style="margin-bottom:1.5rem">
+        ${m('Geo Alerts', alerts.length, '', 'red', 'globe')}
+        ${m('High Risk', alerts.filter(a => a.risk_score > 70 || a.severity === 'high').length, '', 'orange', 'alertTriangle')}
       </div>
 
       <div class="sa-card">
-        <h3>Geo-fence Settings</h3>
-        <div class="sa-threshold-list">
-          ${threshold('Auto-block threshold', 'Block region after', '50 anomalies/month')}
-          ${threshold('Alert on first scan', 'Alert when product scanned first time in', 'New country')}
-          ${threshold('Velocity + Geo combo', 'Flag if velocity spike AND geo anomaly within', '30 minutes')}
-        </div>
+        ${alerts.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:2rem">No geo alerts detected</p>' : `
+        <table class="sa-table"><thead><tr><th>Type</th><th>Description</th><th>Location</th><th>Severity</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody>${alerts.map(a => `<tr>
+          <td class="sa-code">${a.alert_type || '—'}</td>
+          <td style="font-size:0.8rem;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.description || '—'}</td>
+          <td style="font-size:0.8rem">${a.location || a.country || '—'}</td>
+          <td><span class="sa-status-pill sa-pill-${a.severity === 'high' || a.severity === 'critical' ? 'red' : a.severity === 'medium' ? 'orange' : 'blue'}">${a.severity || '—'}</span></td>
+          <td><span class="sa-status-pill sa-pill-${a.status === 'open' ? 'red' : 'green'}">${a.status || '—'}</span></td>
+          <td style="font-size:0.7rem;color:var(--text-secondary)">${a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}</td>
+        </tr>`).join('')}
+        </tbody></table>`}
       </div>
-    </div>
-  `;
+    </div>`;
 }
-
-function threshold(name, desc, value) {
-    return `<div class="sa-threshold-item"><div class="sa-threshold-header"><strong>${name}</strong><input class="ops-input" value="${value}" style="width:180px;text-align:center" /></div><div class="sa-threshold-desc">${desc}</div></div>`;
-}
+function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }

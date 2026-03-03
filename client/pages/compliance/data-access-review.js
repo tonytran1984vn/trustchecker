@@ -1,37 +1,13 @@
-/**
- * Compliance – Data Access Review
- */
+/** Compliance – Data Access Review — reads from /api/audit-log/ */
 import { icon } from '../../core/icons.js';
-
+import { State } from '../../core/state.js';
+let _d = null;
+async function load() { if (_d) return; try { _d = await fetch('/api/audit-log/?limit=50', { headers: { 'Authorization': 'Bearer ' + State.token } }).then(r => r.json()); } catch { _d = {}; } }
+load();
 export function renderPage() {
-    const reviews = [
-        { who: 'admin@trustchecker.io', data: 'User PII (email, phone)', access: 'Read + Export', frequency: '18 times/week', risk: 'medium', lastAccess: 'Today' },
-        { who: 'risk@company.com', data: 'Fraud Event Details', access: 'Read only', frequency: '42 times/week', risk: 'low', lastAccess: 'Today' },
-        { who: 'ops@company.com', data: 'Batch Data + QR Codes', access: 'Read + Write', frequency: '65 times/week', risk: 'low', lastAccess: 'Today' },
-        { who: 'admin@trustchecker.io', data: 'Billing Information', access: 'Read + Export', frequency: '3 times/week', risk: 'high', lastAccess: '2d ago' },
-        { who: 'dev@company.com', data: 'API Keys + Secrets', access: 'Read', frequency: '2 times/week', risk: 'high', lastAccess: '3d ago' },
-    ];
-
-    return `
-    <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('search', 28)} Data Access Review</h1></div>
-      <div class="sa-card">
-        <table class="sa-table">
-          <thead><tr><th>User</th><th>Sensitive Data</th><th>Access Level</th><th>Frequency</th><th>Risk</th><th>Last Access</th></tr></thead>
-          <tbody>
-            ${reviews.map(r => `
-              <tr>
-                <td style="font-size:0.78rem">${r.who}</td>
-                <td><strong>${r.data}</strong></td>
-                <td>${r.access}</td>
-                <td>${r.frequency}</td>
-                <td><span class="sa-score sa-score-${r.risk === 'high' ? 'danger' : r.risk === 'medium' ? 'warning' : 'low'}">${r.risk}</span></td>
-                <td style="color:var(--text-secondary)">${r.lastAccess}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
+  const logs = (_d?.logs || _d?.entries || []).filter(l => l.action?.includes('read') || l.action?.includes('view') || l.action?.includes('export') || l.action?.includes('access'));
+  return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('search', 28)} Data Access Review</h1></div>
+    <div class="sa-card">${logs.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:2rem">No data access events to review</p>' : `
+      <table class="sa-table"><thead><tr><th>User</th><th>Action</th><th>Resource</th><th>Time</th></tr></thead>
+      <tbody>${logs.map(l => `<tr><td style="font-weight:600">${l.user_email || l.actor || '—'}</td><td class="sa-code">${l.action || '—'}</td><td>${l.resource || l.entity_type || '—'}</td><td style="font-size:0.7rem;color:var(--text-secondary)">${l.created_at ? new Date(l.created_at).toLocaleString() : '—'}</td></tr>`).join('')}</tbody></table>`}</div></div>`;
 }

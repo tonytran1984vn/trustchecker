@@ -1,47 +1,44 @@
 /**
- * Risk – Open Cases (Strategic investigation)
+ * Risk – Open Cases
+ * Reads fraud/anomaly alerts where status = 'open' from /api/scm/risk/alerts
  */
 import { icon } from '../../core/icons.js';
+import { State } from '../../core/state.js';
+
+let _data = null;
+async function load() {
+  if (_data) return;
+  try {
+    const h = { 'Authorization': 'Bearer ' + State.token };
+    const res = await fetch('/api/scm/risk/alerts?limit=100', { headers: h }).then(r => r.json());
+    _data = (res.alerts || []).filter(a => a.status === 'open');
+  } catch { _data = []; }
+}
+load();
 
 export function renderPage() {
-    const cases = [
-        { id: 'RC-0012', title: 'Cross-border counterfeit ring — BKK/PNH corridor', batches: 'B-0892, B-0891, B-0887', events: 14, score: 91, assigned: 'risk-lead@company.com', age: '2d', status: 'active' },
-        { id: 'RC-0011', title: 'Systematic duplicate scan pattern — HCM retail', batches: 'B-0850, B-0841', events: 8, score: 78, assigned: 'analyst@company.com', age: '5d', status: 'active' },
-        { id: 'RC-0010', title: 'Distributor D-204 anomalous volume spike', batches: 'Multiple', events: 6, score: 65, assigned: 'risk-lead@company.com', age: '1w', status: 'investigation' },
-    ];
+  const cases = _data || [];
+  const critical = cases.filter(c => c.severity === 'critical').length;
+  const high = cases.filter(c => c.severity === 'high').length;
 
-    return `
+  return `
     <div class="sa-page">
-      <div class="sa-page-title">
-        <h1>${icon('alertTriangle', 28)} Open Cases</h1>
-        <div class="sa-title-actions"><button class="btn btn-primary btn-sm">+ Create Case</button></div>
+      <div class="sa-page-title"><h1>${icon('alertTriangle', 28)} Open Cases</h1>
+        <div class="sa-title-actions"><span style="font-size:0.75rem;color:var(--text-secondary)">${cases.length} open · ${critical} critical · ${high} high</span></div>
       </div>
 
       <div class="sa-card">
-        ${cases.map(c => `
-          <div style="padding:1.25rem;margin-bottom:0.75rem;border-radius:10px;border-left:4px solid ${c.score >= 80 ? '#ef4444' : '#f59e0b'};background:${c.score >= 80 ? 'rgba(239,68,68,0.05)' : 'rgba(245,158,11,0.03)'}">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
-              <div style="display:flex;align-items:center;gap:0.75rem">
-                <span class="sa-code" style="font-weight:700">${c.id}</span>
-                <span class="sa-score sa-score-${c.score >= 80 ? 'danger' : 'warning'}">${c.score}</span>
-                <span class="sa-status-pill sa-pill-${c.status === 'active' ? 'red' : 'orange'}">${c.status}</span>
-              </div>
-              <span style="font-size:0.72rem;color:var(--text-secondary)">Age: ${c.age}</span>
-            </div>
-            <div style="font-size:0.92rem;font-weight:600;margin-bottom:0.35rem">${c.title}</div>
-            <div style="font-size:0.78rem;color:var(--text-secondary);display:flex;gap:2rem">
-              <span>Batches: ${c.batches}</span>
-              <span>Events: ${c.events}</span>
-              <span>Assigned: ${c.assigned}</span>
-            </div>
-            <div style="display:flex;gap:0.5rem;margin-top:0.75rem">
-              <button class="btn btn-xs btn-primary">View Timeline</button>
-              <button class="btn btn-xs btn-outline">Add Evidence</button>
-              <button class="btn btn-xs btn-ghost">Escalate</button>
-            </div>
-          </div>
-        `).join('')}
+        ${cases.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:2rem">No open cases — all clear ✅</p>' : `
+        <table class="sa-table"><thead><tr><th>Severity</th><th>Source</th><th>Type</th><th>Description</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody>${cases.map(c => `<tr class="${c.severity === 'critical' ? 'ops-alert-row' : ''}">
+          <td><span class="sa-status-pill sa-pill-${c.severity === 'critical' || c.severity === 'high' ? 'red' : c.severity === 'medium' ? 'orange' : 'blue'}">${c.severity}</span></td>
+          <td class="sa-code">${c.source}</td>
+          <td style="font-size:0.8rem">${c.alert_type || '—'}</td>
+          <td style="font-size:0.8rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.description || '—'}</td>
+          <td style="font-size:0.7rem;color:var(--text-secondary)">${c.created_at ? new Date(c.created_at).toLocaleString() : '—'}</td>
+          <td><button class="btn btn-sm btn-primary" onclick="showToast('Case investigation started','info')">Investigate</button></td>
+        </tr>`).join('')}
+        </tbody></table>`}
       </div>
-    </div>
-  `;
+    </div>`;
 }

@@ -1,37 +1,13 @@
-/**
- * Compliance – Violation Log
- */
+/** Compliance – Violation Log — reads from /api/compliance/records */
 import { icon } from '../../core/icons.js';
-
+import { State } from '../../core/state.js';
+let _d = null;
+async function load() { if (_d) return; try { _d = await fetch('/api/compliance/records', { headers: { 'Authorization': 'Bearer ' + State.token } }).then(r => r.json()); } catch { _d = {}; } }
+load();
 export function renderPage() {
-    const violations = [
-        { id: 'VL-028', type: 'Access', desc: 'User accessed data outside role scope', who: 'ops@company.com', severity: 'high', status: 'open', time: 'Today' },
-        { id: 'VL-027', type: 'SoD', desc: 'Same user created and approved batch recall', who: 'admin@trustchecker.io', severity: 'critical', status: 'investigating', time: '2d ago' },
-        { id: 'VL-026', type: 'Policy', desc: 'Risk rule modified without review approval', who: 'risk@company.com', severity: 'medium', status: 'resolved', time: '1w ago' },
-        { id: 'VL-025', type: 'Data', desc: 'Bulk export without compliance approval', who: 'admin@trustchecker.io', severity: 'high', status: 'resolved', time: '2w ago' },
-    ];
-
-    return `
-    <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('alert', 28)} Violation Log</h1></div>
-      <div class="sa-card">
-        <table class="sa-table">
-          <thead><tr><th>ID</th><th>Type</th><th>Description</th><th>User</th><th>Severity</th><th>Status</th><th>Time</th></tr></thead>
-          <tbody>
-            ${violations.map(v => `
-              <tr class="${v.severity === 'critical' ? 'ops-alert-row' : ''}">
-                <td class="sa-code">${v.id}</td>
-                <td><span class="sa-status-pill sa-pill-${v.type === 'SoD' ? 'red' : v.type === 'Access' ? 'orange' : v.type === 'Data' ? 'blue' : 'orange'}">${v.type}</span></td>
-                <td>${v.desc}</td>
-                <td style="font-size:0.78rem">${v.who}</td>
-                <td><span class="sa-score sa-score-${v.severity === 'critical' ? 'danger' : v.severity === 'high' ? 'warning' : 'info'}">${v.severity}</span></td>
-                <td><span class="sa-status-pill sa-pill-${v.status === 'open' ? 'red' : v.status === 'investigating' ? 'orange' : 'green'}">${v.status}</span></td>
-                <td style="color:var(--text-secondary)">${v.time}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
+  const records = _d?.records || _d?.violations || [];
+  return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('alert', 28)} Violation Log</h1><div class="sa-title-actions"><span style="font-size:0.75rem;color:var(--text-secondary)">${records.length} records</span></div></div>
+    <div class="sa-card">${records.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:2rem">No compliance violations recorded</p>' : `
+      <table class="sa-table"><thead><tr><th>Type</th><th>Description</th><th>Severity</th><th>Status</th><th>Date</th></tr></thead>
+      <tbody>${records.map(r => `<tr><td class="sa-code">${r.type || r.violation_type || '—'}</td><td style="font-size:0.8rem">${r.description || '—'}</td><td><span class="sa-status-pill sa-pill-${r.severity === 'high' ? 'red' : r.severity === 'medium' ? 'orange' : 'blue'}">${r.severity || '—'}</span></td><td>${r.status || '—'}</td><td style="font-size:0.7rem;color:var(--text-secondary)">${r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td></tr>`).join('')}</tbody></table>`}</div></div>`;
 }

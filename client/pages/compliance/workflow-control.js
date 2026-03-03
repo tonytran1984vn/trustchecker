@@ -1,37 +1,15 @@
-/**
- * Compliance – Workflow Control (Approval workflows)
- */
+/** Compliance – Workflow Control — reads from /api/compliance/policies */
 import { icon } from '../../core/icons.js';
-
+import { State } from '../../core/state.js';
+let _d = null;
+async function load() { if (_d) return; try { _d = await fetch('/api/compliance/policies', { headers: { 'Authorization': 'Bearer ' + State.token } }).then(r => r.json()); } catch { _d = {}; } }
+load();
 export function renderPage() {
-    const workflows = [
-        { name: 'Batch Recall Approval', steps: 'Ops → Risk → Admin', sod: '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Enforced', status: 'active', lastUsed: '1d ago' },
-        { name: 'Role Escalation Approval', steps: 'Requester → Admin → Super Admin', sod: '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Enforced', status: 'active', lastUsed: '3d ago' },
-        { name: 'Data Export Approval', steps: 'Requester → Compliance', sod: '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Enforced', status: 'active', lastUsed: 'Today' },
-        { name: 'Risk Rule Modification', steps: 'Risk → Admin Review', sod: '<span class="status-icon status-warn" aria-label="Warning">!</span> Partial', status: 'active', lastUsed: 'Today' },
-        { name: 'User Offboarding', steps: 'HR Req → Admin → Compliance Verify', sod: '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Enforced', status: 'active', lastUsed: '2w ago' },
-        { name: 'Emergency QR Lockdown', steps: 'Any → Auto-execute → Post-review', sod: '<span class="status-icon status-fail" aria-label="Fail">✗</span> Bypassed', status: 'active', lastUsed: '1w ago' },
-    ];
-
-    return `
-    <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('workflow', 28)} Workflow Control</h1></div>
-      <div class="sa-card">
-        <table class="sa-table">
-          <thead><tr><th>Workflow</th><th>Approval Steps</th><th>Separation of Duties</th><th>Status</th><th>Last Used</th></tr></thead>
-          <tbody>
-            ${workflows.map(w => `
-              <tr>
-                <td><strong>${w.name}</strong></td>
-                <td style="font-size:0.78rem">${w.steps}</td>
-                <td>${w.sod}</td>
-                <td><span class="sa-status-pill sa-pill-green">${w.status}</span></td>
-                <td style="color:var(--text-secondary)">${w.lastUsed}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
+  const policies = _d?.policies || [];
+  const wf = policies.filter(p => p.type?.includes('workflow') || p.category === 'workflow');
+  const all = wf.length > 0 ? wf : policies;
+  return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('workflow', 28)} Workflow Control</h1></div>
+    <div class="sa-card">${all.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:2rem">No workflow policies</p>' : `
+      <table class="sa-table"><thead><tr><th>Workflow</th><th>Type</th><th>Status</th><th>Enforced</th></tr></thead>
+      <tbody>${all.map(p => `<tr><td style="font-weight:600">${p.name || '—'}</td><td class="sa-code">${p.type || '—'}</td><td><span class="sa-status-pill sa-pill-${p.status === 'active' ? 'green' : 'orange'}">${p.status || '—'}</span></td><td>${p.enforced !== false ? '✅' : '❌'}</td></tr>`).join('')}</tbody></table>`}</div></div>`;
 }
