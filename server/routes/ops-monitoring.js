@@ -28,7 +28,7 @@ router.post('/incidents', requirePermission('risk:view'), async (req, res) => {
         // Persist to DB
         const orgId = req.user?.org_id || req.user?.orgId || null;
         try {
-            await db.prepare('INSERT INTO ops_incidents (id,incident_id,title,description,severity,status,runbook_key,triggered_by,org_id,hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,NOW())')
+            await db.prepare('INSERT INTO ops_incidents_v2 (id,incident_id,title,description,severity,status,runbook_key,triggered_by,org_id,hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,NOW())')
                 .run(uuidv4(), result.incident_id, result.title, result.description, req.body.severity || 'SEV3', 'open', req.body.runbook_key, req.user?.id, orgId, result.hash);
         } catch (dbErr) { console.warn('[ops] DB persist failed:', dbErr.message); }
         res.status(201).json(result);
@@ -44,7 +44,7 @@ router.get('/incidents', async (req, res) => {
         // Try DB first
         try {
             const params = [];
-            let sql = 'SELECT * FROM ops_incidents';
+            let sql = 'SELECT * FROM ops_incidents_v2';
             const conditions = [];
             if (orgId && req.user?.role !== 'super_admin') {
                 conditions.push('org_id = ?');
@@ -98,7 +98,7 @@ router.put('/incidents/:id', requirePermission('risk:view'), async (req, res) =>
 
         if (updates.length === 1) return res.status(400).json({ error: 'No fields to update' });
 
-        let sql = `UPDATE ops_incidents SET ${updates.join(', ')} WHERE id = ?`;
+        let sql = `UPDATE ops_incidents_v2 SET ${updates.join(', ')} WHERE id = ?`;
         params.push(req.params.id);
         if (orgId && req.user?.role !== 'super_admin') {
             sql += ' AND org_id = ?';
@@ -117,7 +117,7 @@ router.put('/incidents/:id', requirePermission('risk:view'), async (req, res) =>
 router.delete('/incidents/:id', requirePermission('risk:view'), async (req, res) => {
     try {
         const orgId = req.user?.org_id || req.user?.orgId;
-        let sql = 'DELETE FROM ops_incidents WHERE id = ?';
+        let sql = 'DELETE FROM ops_incidents_v2 WHERE id = ?';
         const params = [req.params.id];
         if (orgId && req.user?.role !== 'super_admin') {
             sql += ' AND org_id = ?';
