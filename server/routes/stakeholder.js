@@ -153,7 +153,7 @@ router.get('/certifications', async (req, res) => {
 });
 
 // ─── COMPLIANCE ─────────────────────────────────────────────
-router.post('/compliance', requireRole('manager'), async (req, res) => {
+router.post('/compliance', requirePermission('compliance:manage'), async (req, res) => {
     try {
         const { entity_type, entity_id, framework, requirement, status, evidence, next_review } = req.body;
         if (!entity_id || !framework) return res.status(400).json({ error: 'entity_id and framework required' });
@@ -228,7 +228,7 @@ router.get('/disputes', async (req, res) => {
     }
 });
 
-router.put('/disputes/:id/resolve', requireRole('manager'), async (req, res) => {
+router.put('/disputes/:id/resolve', requirePermission('stakeholder:manage'), async (req, res) => {
     try {
         const { resolution, outcome } = req.body;
         const dispute = await db.get(`SELECT * FROM audit_log WHERE id = ? AND action = 'DISPUTE_OPENED'`, [req.params.id]);

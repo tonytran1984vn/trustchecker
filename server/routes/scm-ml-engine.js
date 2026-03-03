@@ -6,7 +6,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { safeParse } = require('../utils/safe-json');
 
 const router = express.Router();
@@ -35,7 +35,7 @@ router.get('/features', authMiddleware, async (req, res) => {
 });
 
 // ─── POST /api/scm/ml/features – Define a new feature ──────────────────────
-router.post('/features', authMiddleware, requireRole('manager'), async (req, res) => {
+router.post('/features', authMiddleware, requirePermission('risk_model:manage'), async (req, res) => {
     try {
         const { name, category, data_type, source, extraction_logic, config } = req.body;
         const id = uuidv4();
@@ -103,7 +103,7 @@ router.get('/performance/history', authMiddleware, async (req, res) => {
 });
 
 // ─── POST /api/scm/ml/performance – Record evaluation result ────────────────
-router.post('/performance', authMiddleware, requireRole('manager'), async (req, res) => {
+router.post('/performance', authMiddleware, requirePermission('risk_model:manage'), async (req, res) => {
     try {
         const { model_version, auc_roc, precision_score, recall, f1_score, fp_rate, tp_rate,
             dataset_size, dataset_date_range, confusion_matrix, roc_curve, per_factor, thresholds, notes } = req.body;
@@ -152,7 +152,7 @@ router.get('/training', authMiddleware, async (req, res) => {
 });
 
 // ─── POST /api/scm/ml/training – Trigger training run ───────────────────────
-router.post('/training', authMiddleware, requireRole('manager'), async (req, res) => {
+router.post('/training', authMiddleware, requirePermission('risk_model:manage'), async (req, res) => {
     try {
         const { model_version, dataset_size, train_split, val_split, test_split, hyperparams, notes } = req.body;
         const id = uuidv4();

@@ -99,6 +99,8 @@ const SOD_CONFLICTS = [
     // v2.0: Data Governance SoD
     ['data_classification:define', 'data_classification:approve'],
     ['lineage_export:approve', 'lineage_export:execute'],
+    // v3.0: Supplier KYC SoD
+    ['supplier:onboard', 'supplier:approve_kyc'],
 ];
 
 // ─── Permission Cache (per-request) ──────────────────────────────────────────

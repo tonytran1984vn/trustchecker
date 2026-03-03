@@ -217,9 +217,9 @@ router.post('/suppliers/onboard', async (req, res) => {
 
         const id = uuidv4();
         await db.run(
-            `INSERT INTO partners (id, name, normalized_name, type, country, contact_email, contact_phone, notes, kyc_status, trust_score, delivery_score, quality_score, compliance_score, financial_score, composite_score, tier, risk_level, contracts, status, created_at)
-             VALUES (?,?,?,?,?,?,?,?,?,50,50,50,50,50,50,'Pending','medium',0,'active',NOW())`,
-            [id, name.trim(), normalized, type, country, contactEmail || '', contactPhone || '', notes || '', 'pending_kyc']
+            `INSERT INTO partners (id, name, normalized_name, type, country, contact_email, contact_phone, notes, kyc_status, trust_score, delivery_score, quality_score, compliance_score, financial_score, composite_score, tier, risk_level, contracts, status, created_by, created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,50,50,50,50,50,50,'Pending','medium',0,'active',?,NOW())`,
+            [id, name.trim(), normalized, type, country, contactEmail || '', contactPhone || '', notes || '', 'pending_kyc', req.user?.id || null]
         );
 
         // Add initial location (HQ)
@@ -280,12 +280,20 @@ function requireKYCApprover(req, res, next) {
 router.patch('/suppliers/:id/approve', requireKYCApprover, async (req, res) => {
     try {
         const { id } = req.params;
-        const supplier = await db.get('SELECT name FROM partners WHERE id = ?', [id]);
+        const supplier = await db.get('SELECT name, created_by FROM partners WHERE id = ?', [id]);
         if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
 
+        // Identity-level SoD: person who submitted cannot approve
+        if (supplier.created_by && supplier.created_by === req.user.id) {
+            return res.status(403).json({
+                error: 'SoD violation: you cannot approve a supplier you submitted. A different authorized person must approve.',
+                sod_rule: 'created_by ≠ approved_by'
+            });
+        }
+
         await db.run(
-            'UPDATE partners SET kyc_status = ?, kyc_verified_at = NOW(), tier = ? WHERE id = ?',
-            ['verified', 'Bronze', id]
+            'UPDATE partners SET kyc_status = ?, kyc_verified_at = NOW(), tier = ?, approved_by = ? WHERE id = ?',
+            ['verified', 'Bronze', req.user.id, id]
         );
 
         // Audit log
@@ -304,10 +312,18 @@ router.patch('/suppliers/:id/approve', requireKYCApprover, async (req, res) => {
 router.patch('/suppliers/:id/reject', requireKYCApprover, async (req, res) => {
     try {
         const { id } = req.params;
-        const supplier = await db.get('SELECT name FROM partners WHERE id = ?', [id]);
+        const supplier = await db.get('SELECT name, created_by FROM partners WHERE id = ?', [id]);
         if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
 
-        await db.run('UPDATE partners SET kyc_status = ? WHERE id = ?', ['rejected', id]);
+        // Identity-level SoD: person who submitted cannot reject either
+        if (supplier.created_by && supplier.created_by === req.user.id) {
+            return res.status(403).json({
+                error: 'SoD violation: you cannot reject a supplier you submitted. A different authorized person must review.',
+                sod_rule: 'created_by ≠ rejected_by'
+            });
+        }
+
+        await db.run('UPDATE partners SET kyc_status = ?, rejected_by = ? WHERE id = ?', ['rejected', req.user.id, id]);
 
         // Audit log
         await db.run(

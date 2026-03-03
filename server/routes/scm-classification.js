@@ -6,7 +6,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const { authMiddleware, requireRole, requirePermission, requirePlatformAdmin } = require('../auth');
 
 const router = express.Router();
 
@@ -161,7 +161,7 @@ router.post('/duplicates/classify', authMiddleware, async (req, res) => {
 });
 
 // ─── PATCH /api/scm/duplicates/:id – Manual reclassify by analyst ───────────
-router.patch('/duplicates/:id', authMiddleware, requireRole('manager'), async (req, res) => {
+router.patch('/duplicates/:id', authMiddleware, requirePermission('product:update'), async (req, res) => {
     try {
         const { classification, signals } = req.body;
         if (!['curiosity', 'leakage', 'counterfeit', 'unclassified'].includes(classification)) {
@@ -185,7 +185,7 @@ router.patch('/duplicates/:id', authMiddleware, requireRole('manager'), async (r
 });
 
 // ─── GET /api/scm/benchmark – Industry benchmark (Super Admin only) ────────
-router.get('/benchmark', authMiddleware, requireRole('superadmin'), async (req, res) => {
+router.get('/benchmark', authMiddleware, requirePlatformAdmin(), async (req, res) => {
     try {
         // Cross-tenant aggregated metrics (anonymized)
         const totalOrgs = (await db.prepare('SELECT COUNT(*) as c FROM organizations').get())?.c || 0;

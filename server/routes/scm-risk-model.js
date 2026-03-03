@@ -73,7 +73,7 @@ router.post('/models', authMiddleware, async (req, res) => {
 });
 
 // ─── POST /api/scm/models/:id/sandbox – Move to sandbox for testing ────────
-router.post('/models/:id/sandbox', authMiddleware, requireRole('manager'), async (req, res) => {
+router.post('/models/:id/sandbox', authMiddleware, requirePermission('risk_model:manage'), async (req, res) => {
     try {
         await db.prepare(`UPDATE risk_models SET status = 'sandbox' WHERE id = ? AND status = 'draft'`).run(req.params.id);
         await db.prepare(`
@@ -271,7 +271,7 @@ router.post('/model-changes', authMiddleware, async (req, res) => {
 });
 
 // ─── PATCH /api/scm/model-changes/:id – Approve/reject (Compliance) ────────
-router.patch('/model-changes/:id', authMiddleware, requireRole('manager'), async (req, res) => {
+router.patch('/model-changes/:id', authMiddleware, requirePermission('risk_model:manage'), async (req, res) => {
     try {
         const { status } = req.body; // 'approved' or 'rejected'
         if (!['approved', 'rejected'].includes(status)) {

@@ -117,7 +117,7 @@ router.get('/cases/:id', authMiddleware, async (req, res) => {
 });
 
 // ─── POST /api/scm/forensic/cases/:id/freeze – Freeze case (Compliance) ────
-router.post('/cases/:id/freeze', authMiddleware, requireRole('manager'), async (req, res) => {
+router.post('/cases/:id/freeze', authMiddleware, requirePermission('fraud_case:approve'), async (req, res) => {
     try {
         const fc = await db.prepare('SELECT * FROM forensic_cases WHERE id = ?').get(req.params.id);
         if (!fc) return res.status(404).json({ error: 'Case not found' });
@@ -185,7 +185,7 @@ router.get('/cases/:id/evidence', authMiddleware, async (req, res) => {
 });
 
 // ─── PATCH /api/scm/forensic/cases/:id – Update verdict ─────────────────────
-router.patch('/cases/:id', authMiddleware, requireRole('manager'), async (req, res) => {
+router.patch('/cases/:id', authMiddleware, requirePermission('fraud_case:approve'), async (req, res) => {
     try {
         const { verdict, status } = req.body;
         const fc = await db.prepare('SELECT * FROM forensic_cases WHERE id = ?').get(req.params.id);

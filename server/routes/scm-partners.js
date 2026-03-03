@@ -122,7 +122,7 @@ router.post('/:id/verify', authMiddleware, requirePermission('partner:verify'), 
 });
 
 // ─── POST /api/scm/connectors/sync – SAP/Oracle sync (simulated) ────────────
-router.post('/connectors/sync', authMiddleware, requireRole('manager'), async (req, res) => {
+router.post('/connectors/sync', authMiddleware, requirePermission('tenant:settings_update'), async (req, res) => {
     try {
         const { connector_type, sync_scope } = req.body;
         const type = connector_type || 'SAP';

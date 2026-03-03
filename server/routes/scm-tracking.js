@@ -228,7 +228,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
 });
 
 // ─── POST /batches/:id/recall — Initiate batch recall ────────────────────────
-router.post('/batches/:id/recall', authMiddleware, requireRole('manager'), async (req, res) => {
+router.post('/batches/:id/recall', authMiddleware, requirePermission('batch:manage'), async (req, res) => {
     try {
         const { reason, severity } = req.body;
         const batch = await db.get('SELECT b.*, p.name as product_name FROM batches b LEFT JOIN products p ON b.product_id = p.id WHERE b.id = ?', [req.params.id]);

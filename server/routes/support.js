@@ -76,7 +76,7 @@ router.get('/', async (req, res) => {
 
 // ─── GET /stats/summary — Ticket statistics ─────────────────
 // NOTE: Must be BEFORE /:id to avoid route shadowing
-router.get('/stats/summary', requireRole('manager'), async (req, res) => {
+router.get('/stats/summary', requirePermission('tenant:user_create'), async (req, res) => {
     try {
         const total = (await db.get('SELECT COUNT(*) as c FROM support_tickets'))?.c || 0;
         const byStatus = await db.all('SELECT status, COUNT(*) as count FROM support_tickets GROUP BY status');
@@ -145,7 +145,7 @@ router.post('/:id/message', async (req, res) => {
 });
 
 // ─── PUT /:id/assign — Assign ticket (admin/manager) ───────
-router.put('/:id/assign', requireRole('manager'), async (req, res) => {
+router.put('/:id/assign', requirePermission('tenant:user_create'), async (req, res) => {
     try {
         const { assigned_to } = req.body;
         if (!assigned_to) return res.status(400).json({ error: 'assigned_to user ID required' });

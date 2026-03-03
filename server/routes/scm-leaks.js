@@ -166,7 +166,7 @@ function _simulateMarketplaceScan(product, platform, authorizedRegions) {
 }
 
 // ─── PUT /alerts/:id/resolve — Resolve or dismiss a leak alert ──────────────
-router.put('/alerts/:id/resolve', authMiddleware, requireRole('manager'), async (req, res) => {
+router.put('/alerts/:id/resolve', authMiddleware, requirePermission('fraud_case:approve'), async (req, res) => {
     try {
         const { resolution, action_taken } = req.body;
         const alert = await db.get('SELECT * FROM leak_alerts WHERE id = ?', [req.params.id]);
@@ -186,7 +186,7 @@ router.put('/alerts/:id/resolve', authMiddleware, requireRole('manager'), async 
 });
 
 // ─── POST /alerts/:id/takedown — Generate C&D takedown notice ───────────────
-router.post('/alerts/:id/takedown', authMiddleware, requireRole('manager'), async (req, res) => {
+router.post('/alerts/:id/takedown', authMiddleware, requirePermission('fraud_case:approve'), async (req, res) => {
     try {
         const alert = await db.get(`
       SELECT la.*, p.name as product_name, p.sku, p.manufacturer
