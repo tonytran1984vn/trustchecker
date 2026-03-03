@@ -45,8 +45,22 @@ async function evaluate(user, action, resourceId, opts = {}) {
     if (!user) return deny('Authentication required', 'AUTH_REQUIRED');
 
     // ─── Step 1: Platform vs Tenant boundary ─────────────────────
-    // Platform admins bypass standard RBAC but NOT constitutional or identity SoD
+    // Platform admins bypass standard RBAC but NOT constitutional, identity SoD, or tenant data mutation
     const isPlatformAdmin = user.user_type === 'platform' && (user.role === 'super_admin' || user.role === 'platform_security');
+
+    // Phase 5: Platform admin cannot MUTATE tenant business data
+    const HTTP_MUTATING = ['POST', 'PUT', 'PATCH', 'DELETE'];
+    const isMutating = opts.req && HTTP_MUTATING.includes(opts.req.method);
+    const TENANT_DATA_ACTIONS = ['po:', 'supplier:', 'product:', 'evidence:'];
+    const isTenantDataAction = TENANT_DATA_ACTIONS.some(prefix => action.startsWith(prefix));
+
+    if (isPlatformAdmin && isMutating && isTenantDataAction) {
+        return deny(
+            'Platform admin cannot mutate tenant business data. View only.',
+            'PLATFORM_MUTATE_DENIED',
+            { action, method: opts.req?.method }
+        );
+    }
 
     // ─── Step 2: Permission check (unless explicitly skipped) ────
     if (!opts.skipPermissionCheck && !isPlatformAdmin) {
@@ -100,6 +114,13 @@ async function evaluate(user, action, resourceId, opts = {}) {
                 } catch (e) {
                     // Table might not have org_id — skip silently
                 }
+            } else if (isTenantDataAction) {
+                // Phase 5: Unmapped tenant data action → DENY by default (fail-closed)
+                return deny(
+                    'Org-scope check required but no mapping found for this action',
+                    'ORG_SCOPE_UNMAPPED',
+                    { action, resource_id: resourceId }
+                );
             }
         }
     }

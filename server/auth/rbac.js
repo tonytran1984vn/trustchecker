@@ -397,6 +397,49 @@ function requireTenantAdmin() {
         next();
     };
 }
+/**
+     * Safe Role Assignment — Enforces SoD at assignment time.
+     * Checks all permissions of the new role against user's existing permissions.
+     * If any SoD conflict exists, the assignment is BLOCKED.
+     *
+     * Usage:
+     *   const result = await safeAssignRole(userId, roleId, assignedBy, tenantId);
+     *   if (!result.success) return res.status(409).json(result);
+     */
+async function safeAssignRole(userId, roleId, assignedBy, tenantId) {
+    // Get all permissions for the new role
+    const newRolePerms = await getPermissionsForRole(roleId);
+    if (newRolePerms.length === 0) {
+        return { success: false, error: 'Role has no permissions or does not exist', code: 'ROLE_EMPTY' };
+    }
+
+    // Check each permission of the new role against existing user permissions
+    for (const perm of newRolePerms) {
+        const sodCheck = tenantId
+            ? await checkSoDWithWaiver(userId, perm, tenantId)
+            : await checkSoD(userId, perm);
+
+        if (sodCheck.conflict && !sodCheck.waived) {
+            return {
+                success: false,
+                error: `Cannot assign role: ${sodCheck.details}`,
+                code: 'SOD_ASSIGNMENT_BLOCKED',
+                conflicting_permission: perm,
+                existing_conflict: sodCheck.details
+            };
+        }
+    }
+
+    // No conflict — perform the assignment
+    const { v4: uuidv4 } = require('uuid');
+    const id = uuidv4();
+    await db.run(
+        'INSERT INTO rbac_user_roles (user_id, role_id, assigned_by) VALUES (?, ?, ?) ON CONFLICT(user_id, role_id) DO NOTHING',
+        [userId, roleId, assignedBy]
+    );
+
+    return { success: true, role_id: roleId, user_id: userId };
+}
 
 module.exports = {
     getUserPermissions,
@@ -418,4 +461,6 @@ module.exports = {
     HIGH_RISK_ROLES,
     isCAForbidden,
     isHighRiskRole,
+    // Phase 5: Safe assignment
+    safeAssignRole,
 };

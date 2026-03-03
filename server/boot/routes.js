@@ -164,6 +164,7 @@ function setupRoutes(app) {
         ['/carbon-officer', carbonOfficerRoutes], // Carbon Officer workspace dashboard
         ['/carbon-actions', carbonActionsRoutes],   // Carbon Action Items bridge
         ['/audit', auditChainRoutes],                // Audit hash chain verification
+        ['/dual-approval', require('../routes/dual-approval')], // Dual-approval for GDPR/constitutional
     ];
 
     // Mount on /api and /api/v1 (versioned alias)
