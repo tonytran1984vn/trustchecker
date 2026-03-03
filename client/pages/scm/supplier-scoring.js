@@ -5,6 +5,11 @@
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
+import { State, render as globalRender } from '../../core/state.js';
+
+// L3+ roles that can approve/reject KYC
+const KYC_APPROVER_ROLES = ['super_admin', 'platform_security', 'org_owner', 'admin', 'company_admin', 'executive', 'compliance_officer', 'ggc_member'];
+function canApproveKYC() { return KYC_APPROVER_ROLES.includes(State.user?.active_role || State.user?.role); }
 
 // ═══════════════════════════════════════════════════════════════
 // STATE — loaded from DB
@@ -46,24 +51,22 @@ async function loadSuppliers() {
       locations: s.locations || [],
     }));
     _loading = false;
-    render();
+    globalRender();
   } catch (e) {
     console.warn('[supplier-scoring] API error:', e);
     _loading = false;
-    render();
+    globalRender();
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// RENDER
+// RENDER — uses global SPA render() to re-render the entire page
 // ═══════════════════════════════════════════════════════════════
-function render() {
-  const el = document.getElementById('ws-tab-content') || document.querySelector('.ws-tab-content');
-  if (!el) return;
-  el.innerHTML = renderPage();
-}
+let _initialized = false;
 
 export function renderPage() {
+  // Lazy init: load data on first render, not at import time
+  if (!_initialized) { _initialized = true; loadSuppliers(); }
   if (_loading) return `<div class="sa-page"><div class="sa-loading-indicator"><div class="sa-spinner"></div><p>Loading suppliers from database...</p></div></div>`;
 
   const verified = SUPPLIERS.filter(s => s.kyc === 'verified');
@@ -84,16 +87,17 @@ export function renderPage() {
       ${pending.length > 0 ? `
       <div class="sa-card" style="margin-bottom:1.5rem;border:1px solid #f59e0b40">
         <h3 style="color:#f59e0b">⏳ Pending KYC Review (${pending.length})</h3>
-        <table class="sa-table"><thead><tr><th>Supplier</th><th>Type</th><th>Country</th><th>Contact</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>
+        <table class="sa-table"><thead><tr><th>Supplier</th><th>Type</th><th>Country</th><th>Contact</th><th>Submitted</th><th>${canApproveKYC() ? 'Actions' : 'Status'}</th></tr></thead><tbody>
           ${pending.map(s => `<tr>
             <td><strong>${s.name}</strong><div style="font-size:0.65rem;color:var(--text-secondary)">${s.id}</div></td>
             <td style="font-size:0.78rem">${s.type}</td>
             <td>${s.hqCountry}</td>
             <td style="font-size:0.75rem">${s.contact_email || s.contactEmail || '—'}</td>
             <td style="font-size:0.75rem">${s.since}</td>
-            <td>
-              <button class="btn btn-xs btn-primary" onclick="window._approveSupplier('${s.id}','${s.name.replace(/'/g, "\\'")}')">✓ Approve</button>
-              <button class="btn btn-xs btn-ghost" onclick="window._rejectSupplier('${s.id}','${s.name.replace(/'/g, "\\'")}')">✗ Reject</button>
+            <td>${canApproveKYC()
+      ? `<button class="btn btn-xs btn-primary" onclick="window._approveSupplier('${s.id}','${s.name.replace(/'/g, "\\'")}')">✓ Approve</button>
+                 <button class="btn btn-xs btn-ghost" onclick="window._rejectSupplier('${s.id}','${s.name.replace(/'/g, "\\'")}')">✗ Reject</button>`
+      : `<span class="sa-status-pill sa-pill-orange">Awaiting review</span>`}
             </td>
           </tr>`).join('')}
         </tbody></table>
@@ -103,9 +107,9 @@ export function renderPage() {
         <h3>📊 Supplier Performance Matrix</h3>
         <table class="sa-table"><thead><tr><th>Supplier</th><th>HQ</th><th>Locations</th><th>Type</th><th>KYC</th><th>Trust</th><th>Delivery</th><th>Quality</th><th>Compliance</th><th>Financial</th><th>Composite</th><th>Tier</th><th>Risk</th></tr></thead><tbody>
           ${verified.map(s => {
-    const tierColor = s.tier === 'Platinum' ? '#8b5cf6' : s.tier === 'Gold' ? '#f59e0b' : s.tier === 'Silver' ? '#94a3b8' : '#cd7f32';
-    const locList = (s.locations || []).map(l => l.country).join(', ') || s.hqCountry;
-    return `<tr class="${s.risk === 'High' ? 'ops-alert-row' : ''}">
+        const tierColor = s.tier === 'Platinum' ? '#8b5cf6' : s.tier === 'Gold' ? '#f59e0b' : s.tier === 'Silver' ? '#94a3b8' : '#cd7f32';
+        const locList = (s.locations || []).map(l => l.country).join(', ') || s.hqCountry;
+        return `<tr class="${s.risk === 'High' ? 'ops-alert-row' : ''}">
               <td><strong>${s.name}</strong><div style="font-size:0.65rem;color:var(--text-secondary)">${s.id} · Since ${s.since}</div></td>
               <td>${s.hqCountry}</td>
               <td style="font-size:0.72rem" title="${locList}">${(s.locations || []).length} <span style="color:var(--text-muted)">(${locList})</span></td>
@@ -116,7 +120,7 @@ export function renderPage() {
               <td><span style="font-weight:700;color:${tierColor}">⬤ ${s.tier}</span></td>
               <td><span class="sa-status-pill sa-pill-${s.risk === 'Low' ? 'green' : s.risk === 'Medium' ? 'orange' : 'red'}">${s.risk}</span></td>
             </tr>`;
-  }).join('')}
+      }).join('')}
         </tbody></table>
       </div>
 
@@ -377,5 +381,4 @@ window._rejectSupplier = async (id, name) => {
 
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
 
-// Auto-load on page render
-loadSuppliers();
+// No auto-load at import — lazy init via renderPage()

@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware } = require('../auth');
+const { authMiddleware, requireRole } = require('../auth');
 
 router.use(authMiddleware);
 
@@ -267,24 +267,48 @@ router.post('/suppliers/:id/locations', async (req, res) => {
     }
 });
 
-// PATCH /suppliers/:id/approve — KYC approval
-router.patch('/suppliers/:id/approve', async (req, res) => {
+// PATCH /suppliers/:id/approve — KYC approval (L3+: org_owner, executive, compliance_officer, super_admin)
+router.patch('/suppliers/:id/approve', requireRole('org_owner'), async (req, res) => {
     try {
         const { id } = req.params;
+        const supplier = await db.get('SELECT name FROM partners WHERE id = ?', [id]);
+        if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
+
         await db.run(
             'UPDATE partners SET kyc_status = ?, kyc_verified_at = NOW(), tier = ? WHERE id = ?',
             ['verified', 'Bronze', id]
         );
-        res.json({ success: true, message: 'Supplier KYC approved' });
+
+        // Audit log
+        await db.run(
+            'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address, timestamp) VALUES (?,?,?,?,?,?,?,NOW())',
+            [uuidv4(), req.user.id, 'SUPPLIER_KYC_APPROVED', 'partner', id,
+            JSON.stringify({ supplier_name: supplier.name, approved_by: req.user.email, role: req.user.role }),
+            req.ip || '']
+        );
+
+        res.json({ success: true, message: `${supplier.name} KYC approved` });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// PATCH /suppliers/:id/reject — KYC rejection
-router.patch('/suppliers/:id/reject', async (req, res) => {
+// PATCH /suppliers/:id/reject — KYC rejection (L3+: org_owner, executive, compliance_officer, super_admin)
+router.patch('/suppliers/:id/reject', requireRole('org_owner'), async (req, res) => {
     try {
         const { id } = req.params;
+        const supplier = await db.get('SELECT name FROM partners WHERE id = ?', [id]);
+        if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
+
         await db.run('UPDATE partners SET kyc_status = ? WHERE id = ?', ['rejected', id]);
-        res.json({ success: true, message: 'Supplier KYC rejected' });
+
+        // Audit log
+        await db.run(
+            'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address, timestamp) VALUES (?,?,?,?,?,?,?,NOW())',
+            [uuidv4(), req.user.id, 'SUPPLIER_KYC_REJECTED', 'partner', id,
+            JSON.stringify({ supplier_name: supplier.name, rejected_by: req.user.email, role: req.user.role, reason: req.body?.reason || '' }),
+            req.ip || '']
+        );
+
+        res.json({ success: true, message: `${supplier.name} KYC rejected` });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
