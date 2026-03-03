@@ -267,8 +267,17 @@ router.post('/suppliers/:id/locations', async (req, res) => {
     }
 });
 
-// PATCH /suppliers/:id/approve — KYC approval (L3+: org_owner, executive, compliance_officer, super_admin)
-router.patch('/suppliers/:id/approve', requireRole('org_owner'), async (req, res) => {
+// PATCH /suppliers/:id/approve — KYC approval (tenant-level L3+ only: org_owner, company_admin, executive, compliance_officer)
+const KYC_APPROVER_ROLES = ['org_owner', 'company_admin', 'executive', 'compliance_officer'];
+function requireKYCApprover(req, res, next) {
+    const role = req.user?.role;
+    if (!KYC_APPROVER_ROLES.includes(role)) {
+        return res.status(403).json({ error: 'Only tenant governance roles (org_owner, executive, compliance_officer) can approve/reject KYC. Platform admins cannot approve tenant operations.' });
+    }
+    next();
+}
+
+router.patch('/suppliers/:id/approve', requireKYCApprover, async (req, res) => {
     try {
         const { id } = req.params;
         const supplier = await db.get('SELECT name FROM partners WHERE id = ?', [id]);
@@ -292,7 +301,7 @@ router.patch('/suppliers/:id/approve', requireRole('org_owner'), async (req, res
 });
 
 // PATCH /suppliers/:id/reject — KYC rejection (L3+: org_owner, executive, compliance_officer, super_admin)
-router.patch('/suppliers/:id/reject', requireRole('org_owner'), async (req, res) => {
+router.patch('/suppliers/:id/reject', requireKYCApprover, async (req, res) => {
     try {
         const { id } = req.params;
         const supplier = await db.get('SELECT name FROM partners WHERE id = ?', [id]);
