@@ -10,7 +10,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requireTenantAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
 
 router.use(authMiddleware);
@@ -23,11 +23,11 @@ const crypto = require('../engines/cryptographic-governance-engine');
 // INCENTIVE ARCHITECTURE — /incentive-arch [L3+ admin]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/incentive-arch/framework', requireRole('admin'), (req, res) => { res.json(incentive.getFullArchitecture()); });
-router.get('/incentive-arch/participants', requireRole('admin'), (req, res) => { res.json(incentive.getParticipantIncentives()); });
-router.get('/incentive-arch/fee-topology', requireRole('admin'), (req, res) => { res.json(incentive.getFeeTopology()); });
-router.get('/incentive-arch/moat', requireRole('admin'), (req, res) => { res.json(incentive.getSwitchingMoat()); });
-router.get('/incentive-arch/carbon-market', requireRole('admin'), (req, res) => { res.json(incentive.getCarbonMarket()); });
+router.get('/incentive-arch/framework', requireTenantAdmin(), (req, res) => { res.json(incentive.getFullArchitecture()); });
+router.get('/incentive-arch/participants', requireTenantAdmin(), (req, res) => { res.json(incentive.getParticipantIncentives()); });
+router.get('/incentive-arch/fee-topology', requireTenantAdmin(), (req, res) => { res.json(incentive.getFeeTopology()); });
+router.get('/incentive-arch/moat', requireTenantAdmin(), (req, res) => { res.json(incentive.getSwitchingMoat()); });
+router.get('/incentive-arch/carbon-market', requireTenantAdmin(), (req, res) => { res.json(incentive.getCarbonMarket()); });
 
 router.post('/incentive-arch/network-value', requireRole('risk_committee'), (req, res) => {
     res.json(incentive.calculateNetworkValue(req.body.tenant_count));

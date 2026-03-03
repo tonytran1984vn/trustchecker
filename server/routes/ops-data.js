@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { authMiddleware, requireRole } = require('../auth');
+const { authMiddleware, requireRole, requirePermission } = require('../auth');
 
 router.use(authMiddleware);
 
@@ -28,7 +28,7 @@ router.get('/purchase-orders', async (req, res) => {
     } catch (e) { res.json({ orders: [] }); }
 });
 
-router.post('/purchase-orders', async (req, res) => {
+router.post('/purchase-orders', requirePermission('po:create'), async (req, res) => {
     try {
         const orgId = getOrgId(req);
         const { supplier, product, quantity, unit, unitPrice, deliveryDate, paymentTerms, contractRef } = req.body;
@@ -42,7 +42,7 @@ router.post('/purchase-orders', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/purchase-orders/:id/approve', async (req, res) => {
+router.post('/purchase-orders/:id/approve', requirePermission('po:approve'), async (req, res) => {
     try {
         const orgId = getOrgId(req);
         const po = await db.get('SELECT id, created_by FROM purchase_orders WHERE id = ? AND org_id = ?', [req.params.id, orgId]);
@@ -207,7 +207,7 @@ router.get('/supplier-scoring', async (req, res) => {
 });
 
 // POST /suppliers/onboard — create new supplier + initial location
-router.post('/suppliers/onboard', async (req, res) => {
+router.post('/suppliers/onboard', requirePermission('supplier:onboard'), async (req, res) => {
     try {
         const { name, type, country, contactEmail, contactPhone, notes } = req.body;
         if (!name || !country || !type) {
@@ -248,7 +248,7 @@ router.post('/suppliers/onboard', async (req, res) => {
 });
 
 // POST /suppliers/:id/locations — add location to existing supplier
-router.post('/suppliers/:id/locations', async (req, res) => {
+router.post('/suppliers/:id/locations', requirePermission('supplier:onboard'), async (req, res) => {
     try {
         const { id } = req.params;
         const { country, address } = req.body;
