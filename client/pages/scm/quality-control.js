@@ -3,6 +3,7 @@
  * Enterprise: QC checkpoints, inspection results, batch certification, defect tracking
  */
 import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';
 
 /* ── State ─────────────────────────────────────────────────── */
 let showInspModal = false;
@@ -15,13 +16,29 @@ const QC_CHECKPOINTS = [
   { id: 'QC-SHIP', name: 'Pre-Shipment', type: 'Optional', tests: ['Pallet count', 'Cold chain verify', 'Documentation check'], passRate: '99.5%', avgTime: '20min' },
 ];
 
-const RECENT_INSPECTIONS = [
-  { id: 'INS-2026-0892', batch: 'B-2026-0895', product: 'Premium Coffee Blend', checkpoint: 'QC-PROD', inspector: 'QC-Team-HCM', result: 'PASS', score: 98, defects: 0, ts: '2026-02-19 15:30', cert: 'GMP-certified' },
-  { id: 'INS-2026-0891', batch: 'B-2026-0895', product: 'Premium Coffee Blend', checkpoint: 'QC-PKG', inspector: 'QC-Team-HCM', result: 'PASS', score: 96, defects: 2, ts: '2026-02-19 14:00', cert: 'ISO 22000' },
-  { id: 'INS-2026-0890', batch: 'B-2026-0891', product: 'Organic Tea Collection', checkpoint: 'QC-INC', inspector: 'QC-Team-HN', result: 'CONDITIONAL', score: 82, defects: 5, ts: '2026-02-18 10:00', cert: 'Pending re-test' },
-  { id: 'INS-2026-0889', batch: 'B-2026-0887', product: 'Manuka Honey UMF15+', checkpoint: 'QC-INC', inspector: 'QC-Team-SG', result: 'FAIL', score: 45, defects: 12, ts: '2026-02-17 09:00', cert: 'REJECTED' },
-  { id: 'INS-2026-0888', batch: 'B-2026-0882', product: 'Dark Roast 500g', checkpoint: 'QC-SHIP', inspector: 'QC-Team-HCM', result: 'PASS', score: 100, defects: 0, ts: '2026-02-16 16:00', cert: 'Export cleared' },
-];
+// Fetch inspections from PostgreSQL instead of hardcoding
+let RECENT_INSPECTIONS = [];
+const checkTypeMap = { incoming: 'QC-INC', in_process: 'QC-PROD', final: 'QC-PKG', pre_shipment: 'QC-SHIP' };
+const resultMap = { pass: 'PASS', fail: 'FAIL', hold: 'CONDITIONAL', pending: 'PENDING' };
+
+(async function loadInspections() {
+  try {
+    const res = await API.get('/ops/data/quality-checks');
+    RECENT_INSPECTIONS = (res.checks || []).map((c, i) => ({
+      id: `INS-2026-${String(890 + i).padStart(4, '0')}`,
+      batch: c.batch_id ? c.batch_id.slice(0, 12) : '—',
+      product: c.product || '—',
+      checkpoint: checkTypeMap[c.check_type] || c.checkpoint || '—',
+      inspector: c.inspector || '—',
+      result: resultMap[c.result] || c.result?.toUpperCase() || 'PENDING',
+      score: c.score || 0,
+      defects: c.defects_found || 0,
+      ts: c.inspected_at ? new Date(c.inspected_at).toISOString().slice(0, 16).replace('T', ' ') : '—',
+      cert: c.notes || '—',
+    }));
+    if (typeof window.render === 'function') window.render();
+  } catch (e) { /* keep empty array */ }
+})();
 
 const DEFECT_CATEGORIES = [
   { category: 'Moisture out of spec', count: 8, severity: 'High', trend: '↓ -3', impact: 'Raw material rejection' },

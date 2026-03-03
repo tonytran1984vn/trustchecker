@@ -1,63 +1,54 @@
 /**
- * Ops – Batch List (Lifecycle State Machine)
- * ════════════════════════════════════════════
+ * Ops – Batch List
+ * Reads from workspace cache (_opsProdCache.batches) — prefetched from /scm/batches
  */
 import { icon } from '../../core/icons.js';
 
 export function renderPage() {
-  const batches = [
-    { id: 'B-2026-0892', sku: 'COFFEE-PRE-250', qty: 500, origin: 'HCM-01', dest: '—', status: 'active', created: '2 min ago' },
-    { id: 'B-2026-0891', sku: 'TEA-ORG-100', qty: 1000, origin: 'HCM-01', dest: 'BKK-02', status: 'in_transit', created: '22 min ago' },
-    { id: 'B-2026-0890', sku: 'OIL-COC-500', qty: 750, origin: 'DN-01', dest: 'SGN-01', status: 'completed', created: '1h ago' },
-    { id: 'B-2026-0889', sku: 'SAUCE-FS-350', qty: 200, origin: 'HCM-02', dest: 'PNH-01', status: 'received', created: '3h ago' },
-    { id: 'B-2026-0888', sku: 'NOODLE-RC-400', qty: 100, origin: 'HCM-01', dest: '—', status: 'recalled', created: '1d ago' },
-    { id: 'B-2026-0887', sku: 'COFFEE-PRE-250', qty: 300, origin: 'DN-01', dest: 'SGN-02', status: 'in_transit', created: '1d ago' },
-  ];
+  const cache = window._opsProdCache || {};
+  const raw = cache.batches?.batches || [];
 
-  const statusColors = { active: 'green', in_transit: 'blue', received: 'teal', completed: 'green', recalled: 'red', destroyed: 'red' };
+  const statusColors = { created: 'blue', active: 'green', in_transit: 'orange', delivered: 'teal', quarantined: 'red', expired: 'gray' };
+  const batches = raw.slice(0, 20).map(b => ({
+    id: b.batch_number || b.id?.slice(0, 12) || '—',
+    product: b.product_name || b.product_id?.slice(0, 12) || '—',
+    qty: (b.quantity || 0).toLocaleString(),
+    origin: b.origin_facility || '—',
+    status: b.status || 'created',
+    created: b.created_at ? new Date(b.created_at).toLocaleDateString() : '—',
+  }));
 
   return `
     <div class="sa-page">
       <div class="sa-page-title">
-        <h1>${icon('products', 28)} Batch List</h1>
+        <h1>${icon('products', 28)} Batch Registry${batches.length ? ` <span style="font-size:0.7rem;color:var(--text-secondary);font-weight:400">(${batches.length})</span>` : ''}</h1>
         <div class="sa-title-actions">
-          <button class="btn btn-primary btn-sm" onclick="navigate('ops-batch-create')">+ Create Batch</button>
+          <button class="btn btn-primary btn-sm" onclick="showToast('📦 Batch creation — use Create Batch tab','info')">+ Create Batch</button>
         </div>
       </div>
 
-      <!-- Status Summary -->
-      <div class="sa-metrics-row" style="margin-bottom:1.5rem">
-        <div class="sa-metric-card sa-metric-green"><div class="sa-metric-body"><div class="sa-metric-value">12</div><div class="sa-metric-label">Active</div></div></div>
-        <div class="sa-metric-card sa-metric-blue"><div class="sa-metric-body"><div class="sa-metric-value">8</div><div class="sa-metric-label">In Transit</div></div></div>
-        <div class="sa-metric-card sa-metric-teal"><div class="sa-metric-body"><div class="sa-metric-value">5</div><div class="sa-metric-label">Received</div></div></div>
-        <div class="sa-metric-card sa-metric-green"><div class="sa-metric-body"><div class="sa-metric-value">142</div><div class="sa-metric-label">Completed</div></div></div>
-        <div class="sa-metric-card sa-metric-red"><div class="sa-metric-body"><div class="sa-metric-value">1</div><div class="sa-metric-label">Recalled</div></div></div>
-      </div>
-
+      ${batches.length === 0 ? '<div class="sa-card" style="padding:2rem;text-align:center;color:var(--text-secondary)">No batches found. Create your first batch.</div>' : `
       <div class="sa-card">
         <table class="sa-table">
-          <thead>
-            <tr><th>Batch ID</th><th>SKU</th><th>Qty</th><th>Origin</th><th>Destination</th><th>Status</th><th>Created</th><th>Actions</th></tr>
-          </thead>
+          <thead><tr><th>Batch ID</th><th>Product</th><th>Quantity</th><th>Origin</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
           <tbody>
             ${batches.map(b => `
-              <tr class="sa-row-clickable">
+              <tr>
                 <td><strong class="sa-code">${b.id}</strong></td>
-                <td class="sa-code">${b.sku}</td>
-                <td>${b.qty.toLocaleString()}</td>
-                <td>${b.origin}</td>
-                <td>${b.dest}</td>
+                <td>${b.product}</td>
+                <td style="text-align:right">${b.qty}</td>
+                <td style="font-size:0.78rem">${b.origin}</td>
                 <td><span class="sa-status-pill sa-pill-${statusColors[b.status] || 'blue'}">${b.status.replace('_', ' ')}</span></td>
                 <td style="color:var(--text-secondary)">${b.created}</td>
                 <td>
                   <button class="btn btn-xs btn-outline" onclick="showToast('📦 Viewing batch ${b.id}','info')">View</button>
-                  ${b.status === 'active' ? '<button class="btn btn-xs btn-ghost" onclick="showToast(\'🚚 Transfer ${b.id} — select destination\',\'info\')">Transfer</button>' : ''}
+                  ${b.status === 'active' ? '<button class="btn btn-xs btn-ghost" onclick="showToast(\'🚚 Transfer — coming soon\',\'info\')">Transfer</button>' : ''}
                 </td>
               </tr>
             `).join('')}
           </tbody>
         </table>
-      </div>
+      </div>`}
     </div>
   `;
 }

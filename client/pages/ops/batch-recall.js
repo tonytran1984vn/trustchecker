@@ -1,56 +1,69 @@
 /**
- * Ops – Recall / Destroy Batch
+ * Ops – Batch Recall Management
+ * Reads recall history from API /ops/data/recall-history (ops_incidents_v2 WHERE module='recall')
  */
 import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';
+
+let _recalls = null;
+async function load() {
+  if (_recalls) return;
+  try {
+    const res = await API.get('/ops/data/recall-history');
+    _recalls = (res.recalls || []).map(r => ({
+      id: r.incident_id || r.id?.slice(0, 12) || '—',
+      title: r.title || '—',
+      entity: r.affected_entity || '—',
+      severity: r.severity || 'SEV3',
+      status: r.status || 'open',
+      resolution: r.resolution || '—',
+      date: r.created_at ? new Date(r.created_at).toLocaleDateString() : '—',
+    }));
+  } catch (e) { _recalls = []; }
+}
+load();
 
 export function renderPage() {
+  const recalls = _recalls || [];
+  const sevColors = { SEV1: 'danger', SEV2: 'warning', SEV3: 'info', SEV4: 'low' };
+
   return `
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('alertTriangle', 28)} Recall / Destroy</h1></div>
-
-      <div class="sa-grid-2col">
-        <div class="sa-card" style="border:1px solid rgba(239,68,68,0.2)">
-          <h3 style="color:#ef4444">${icon('alert', 16)} Initiate Recall</h3>
-          <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem">Recall a batch from the supply chain. Affected nodes will be notified.</p>
-          <div class="ops-form">
-            ${field('Batch ID', 'Select batch to recall')}
-            ${field('Reason', 'Select reason')}
-            ${field('Scope', 'Full batch / Partial')}
-            ${field('Notes', 'Describe the issue')}
-          </div>
-          <button class="btn btn-sm" style="background:#ef4444;color:#fff;margin-top:1rem" onclick="showToast('🚨 Recall initiated — affected nodes notified','warning')"><span class="status-icon status-warn" aria-label="Warning">!</span> Initiate Recall</button>
+        <div class="sa-page-title">
+            <h1>${icon('alertTriangle', 28)} Batch Recall Management</h1>
         </div>
 
-        <div class="sa-card" style="border:1px solid rgba(239,68,68,0.3)">
-          <h3 style="color:#ef4444">${icon('alertTriangle', 16)} Confirm Destruction</h3>
-          <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem">Mark a recalled batch as destroyed. Requires evidence upload.</p>
-          <div class="ops-form">
-            ${field('Recalled Batch', 'Select recalled batch')}
-            ${field('Method', 'Incineration / Disposal / Return')}
-            ${field('Evidence', 'Upload photo/document')}
-            ${field('Witness', 'Name & role')}
-          </div>
-          <button class="btn btn-sm" style="background:#7f1d1d;color:#fff;margin-top:1rem" onclick="showToast('🗑️ Destruction confirmed — evidence sealed','warning')">Confirm Destruction</button>
+        <!-- Initiate Recall Form -->
+        <div class="sa-card" style="margin-bottom:1.5rem">
+            <h3 style="margin:0 0 1rem">${icon('alertTriangle', 18)} Initiate Recall</h3>
+            <div class="ops-form-row">
+                <div class="ops-field"><label class="ops-label">Batch ID</label><input class="ops-input" placeholder="e.g. B-2026-0888" /></div>
+                <div class="ops-field"><label class="ops-label">Reason</label><input class="ops-input" placeholder="Contamination risk / Underweight / etc." /></div>
+                <div class="ops-field"><label class="ops-label">Severity</label>
+                    <select class="ops-input"><option>SEV1 — Critical</option><option>SEV2 — High</option><option selected>SEV3 — Medium</option><option>SEV4 — Low</option></select>
+                </div>
+            </div>
+            <div style="margin-top:1rem;display:flex;gap:0.75rem">
+                <button class="btn btn-primary btn-sm" style="background:#ef4444;border-color:#ef4444" onclick="showToast('🚨 Recall initiated — incident ticket created','warning')">Initiate Recall</button>
+            </div>
         </div>
-      </div>
 
-      <section class="sa-section" style="margin-top:1.5rem">
-        <h2 class="sa-section-title">Recall History</h2>
+        <!-- Recall History -->
         <div class="sa-card">
-          <table class="sa-table">
-            <thead><tr><th>Batch</th><th>Reason</th><th>Scope</th><th>Status</th><th>Initiated</th><th>Resolved</th></tr></thead>
-            <tbody>
-              <tr><td class="sa-code">B-2026-0888</td><td>Quality defect — contamination risk</td><td>Full</td><td><span class="sa-status-pill sa-pill-orange">in progress</span></td><td>1d ago</td><td>—</td></tr>
-              <tr><td class="sa-code">B-2026-0812</td><td>Labeling error</td><td>Partial (200/500)</td><td><span class="sa-status-pill sa-pill-green">destroyed</span></td><td>7d ago</td><td>5d ago</td></tr>
-              <tr><td class="sa-code">B-2025-1290</td><td>Expiry exceeded</td><td>Full</td><td><span class="sa-status-pill sa-pill-green">destroyed</span></td><td>30d ago</td><td>28d ago</td></tr>
-            </tbody>
-          </table>
+            <h3 style="margin:0 0 1rem">Recall History</h3>
+            ${recalls.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:1rem">No recall records</p>' : `
+            <table class="sa-table"><thead><tr><th>Recall ID</th><th>Description</th><th>Entity</th><th>Severity</th><th>Status</th><th>Resolution</th><th>Date</th></tr></thead>
+            <tbody>${recalls.map(r => `<tr>
+                <td class="sa-code">${r.id}</td>
+                <td style="font-size:0.82rem">${r.title}</td>
+                <td class="sa-code">${r.entity}</td>
+                <td><span class="sa-score sa-score-${sevColors[r.severity] || 'info'}">${r.severity}</span></td>
+                <td><span class="sa-status-pill sa-pill-${r.status === 'open' ? 'red' : r.status === 'resolved' ? 'green' : 'orange'}">${r.status}</span></td>
+                <td style="font-size:0.75rem;color:var(--text-secondary)">${r.resolution}</td>
+                <td style="color:var(--text-secondary)">${r.date}</td>
+            </tr>`).join('')}
+            </tbody></table>`}
         </div>
-      </section>
     </div>
   `;
-}
-
-function field(label, placeholder) {
-  return `<div class="ops-field"><label class="ops-label">${label}</label><input class="ops-input" placeholder="${placeholder}" /></div>`;
 }
