@@ -125,10 +125,12 @@ router.get('/demand-forecast', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 router.get('/data/incidents', async (req, res) => {
     try {
+        const orgId = getOrgId(req);
         const status = req.query.status || 'all';
         let sql = 'SELECT * FROM ops_incidents_v2';
         const params = [];
         const conditions = [];
+        if (orgId) { conditions.push('org_id = ?'); params.push(orgId); }
         if (status !== 'all') { conditions.push('status = ?'); params.push(status); }
         if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
         sql += ' ORDER BY created_at DESC LIMIT 50';
@@ -139,18 +141,20 @@ router.get('/data/incidents', async (req, res) => {
 
 router.post('/data/incidents', async (req, res) => {
     try {
+        const orgId = getOrgId(req);
         const { title, description, severity, module, assignedTo } = req.body;
         const id = uuidv4();
         const incidentId = `INC-${Date.now().toString(36).toUpperCase()}`;
         await db.prepare(
-            'INSERT INTO ops_incidents_v2 (id, incident_id, title, description, severity, status, module, assigned_to, triggered_by, hash, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,NOW(),NOW())'
-        ).run(id, incidentId, title || '', description || '', severity || 'SEV3', 'open', module || null, assignedTo || null, req.user?.id, '');
+            'INSERT INTO ops_incidents_v2 (id, incident_id, org_id, title, description, severity, status, module, assigned_to, triggered_by, hash, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW())'
+        ).run(id, incidentId, orgId, title || '', description || '', severity || 'SEV3', 'open', module || null, assignedTo || null, req.user?.id, '');
         res.json({ success: true, id, incidentId });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.put('/data/incidents/:id', async (req, res) => {
     try {
+        const orgId = getOrgId(req);
         const { status, resolution, rootCause } = req.body;
         const updates = ['updated_at = NOW()'];
         const params = [];
@@ -159,7 +163,9 @@ router.put('/data/incidents/:id', async (req, res) => {
         if (rootCause) { updates.push('root_cause = ?'); params.push(rootCause); }
         if (status === 'resolved') { updates.push('resolved_at = NOW()'); }
         params.push(req.params.id);
-        await db.prepare(`UPDATE ops_incidents_v2 SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+        let sql = `UPDATE ops_incidents_v2 SET ${updates.join(', ')} WHERE id = ?`;
+        if (orgId) { sql += ' AND org_id = ?'; params.push(orgId); }
+        await db.prepare(sql).run(...params);
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -169,8 +175,12 @@ router.put('/data/incidents/:id', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 router.get('/activity-log', async (req, res) => {
     try {
-        let sql = 'SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 50';
-        const rows = await db.prepare(sql).all();
+        const orgId = getOrgId(req);
+        let sql = 'SELECT * FROM audit_log';
+        const params = [];
+        if (orgId) { sql += ' WHERE org_id = ?'; params.push(orgId); }
+        sql += ' ORDER BY timestamp DESC LIMIT 50';
+        const rows = await db.prepare(sql).all(...params);
         res.json({ activities: rows || [] });
     } catch (e) { res.json({ activities: [] }); }
 });
@@ -189,7 +199,12 @@ function normalizeName(raw) {
 // GET /supplier-scoring — all suppliers with locations
 router.get('/supplier-scoring', async (req, res) => {
     try {
-        const suppliers = await db.all('SELECT * FROM partners ORDER BY composite_score DESC');
+        const orgId = getOrgId(req);
+        let sql = 'SELECT * FROM partners';
+        const params = [];
+        if (orgId) { sql += ' WHERE org_id = ?'; params.push(orgId); }
+        sql += ' ORDER BY composite_score DESC';
+        const suppliers = await db.prepare(sql).all(...params);
         // Fetch all locations in one query
         const locations = await db.all('SELECT * FROM partner_locations WHERE status = ? ORDER BY created_at', ['active']);
         // Group locations by partner_id
@@ -361,6 +376,92 @@ router.get('/suppliers/:id', async (req, res) => {
         const locations = await db.all('SELECT * FROM partner_locations WHERE partner_id = ? ORDER BY created_at', [req.params.id]);
         res.json({ supplier: { ...supplier, locations } });
     } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// NEW ROUTES — Feed real data to previously-hardcoded pages
+// ═══════════════════════════════════════════════════════════════════
+
+// Geo Alerts — from fraud_alerts where alert_type contains 'geo'
+router.get('/geo-alerts', async (req, res) => {
+    try {
+        const orgId = getOrgId(req);
+        let sql = `SELECT fa.*, se.geo_city, se.geo_country, se.scanned_at,
+                          qc.qr_data as qr_code, p.name as product_name
+                   FROM fraud_alerts fa
+                   LEFT JOIN scan_events se ON fa.scan_event_id = se.id
+                   LEFT JOIN qr_codes qc ON se.qr_code_id = qc.id
+                   LEFT JOIN products p ON fa.product_id = p.id
+                   WHERE fa.alert_type LIKE '%geo%'`;
+        const params = [];
+        sql += ' ORDER BY fa.created_at DESC LIMIT 50';
+        const rows = await db.prepare(sql).all(...params);
+        res.json({ alerts: rows || [] });
+    } catch (e) { res.json({ alerts: [] }); }
+});
+
+// Mismatch Alerts — from anomaly_detections where type = 'mismatch' or 'quantity_mismatch'
+router.get('/mismatch-alerts', async (req, res) => {
+    try {
+        let sql = `SELECT * FROM anomaly_detections
+                   WHERE anomaly_type IN ('mismatch','quantity_mismatch','weight_mismatch')
+                   ORDER BY detected_at DESC LIMIT 50`;
+        const rows = await db.prepare(sql).all();
+        res.json({ mismatches: rows || [] });
+    } catch (e) { res.json({ mismatches: [] }); }
+});
+
+// Duplicate Alerts — from anomaly_detections where type = 'duplicate_qr'
+router.get('/duplicate-alerts', async (req, res) => {
+    try {
+        let sql = `SELECT * FROM anomaly_detections
+                   WHERE anomaly_type IN ('duplicate_qr','duplicate_scan')
+                   ORDER BY detected_at DESC LIMIT 50`;
+        const rows = await db.prepare(sql).all();
+        res.json({ alerts: rows || [] });
+    } catch (e) { res.json({ alerts: [] }); }
+});
+
+// Receiving — pending inbound shipments
+router.get('/receiving', async (req, res) => {
+    try {
+        let sql = `SELECT s.*, b.batch_number,
+                          fp.name as from_name, tp.name as to_name
+                   FROM shipments s
+                   LEFT JOIN batches b ON s.batch_id = b.id
+                   LEFT JOIN partners fp ON s.from_partner_id = fp.id
+                   LEFT JOIN partners tp ON s.to_partner_id = tp.id
+                   WHERE s.status IN ('pending','in_transit','arrived','delivered')
+                   ORDER BY s.created_at DESC LIMIT 50`;
+        const rows = await db.prepare(sql).all();
+        res.json({ pending: rows || [] });
+    } catch (e) { res.json({ pending: [] }); }
+});
+
+// Recall History — incidents with module = 'recall' or 'batch_recall'
+router.get('/recall-history', async (req, res) => {
+    try {
+        const orgId = getOrgId(req);
+        let sql = 'SELECT * FROM ops_incidents_v2 WHERE module IN (?, ?)';
+        const params = ['recall', 'batch_recall'];
+        if (orgId) { sql += ' AND org_id = ?'; params.push(orgId); }
+        sql += ' ORDER BY created_at DESC LIMIT 50';
+        const rows = await db.prepare(sql).all(...params);
+        res.json({ recalls: rows || [] });
+    } catch (e) { res.json({ recalls: [] }); }
+});
+
+// Scan History — real scan events for Scan Monitor page
+router.get('/scan-history', async (req, res) => {
+    try {
+        let sql = `SELECT se.*, qc.qr_data as qr_code, p.name as product_name, p.sku
+                   FROM scan_events se
+                   LEFT JOIN qr_codes qc ON se.qr_code_id = qc.id
+                   LEFT JOIN products p ON se.product_id = p.id
+                   ORDER BY se.scanned_at DESC LIMIT 100`;
+        const rows = await db.prepare(sql).all();
+        res.json({ scans: rows || [] });
+    } catch (e) { res.json({ scans: [] }); }
 });
 
 module.exports = router;
