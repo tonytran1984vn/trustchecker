@@ -435,20 +435,31 @@ model Inventory {
 }
 
 model Partner {
-  id            String    @id @default(uuid())
-  name          String
-  type          String    @default("distributor")
-  country       String    @default("")
-  region        String    @default("")
-  contactEmail  String    @default("") @map("contact_email")
-  kycStatus     String    @default("pending") @map("kyc_status")
-  kycVerifiedAt DateTime? @map("kyc_verified_at")
-  trustScore    Float     @default(50.0) @map("trust_score")
-  riskLevel     String    @default("medium") @map("risk_level")
-  apiKey        String?   @map("api_key")
-  status        String    @default("active")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  id             String    @id @default(uuid())
+  name           String
+  normalizedName String    @default("") @map("normalized_name")
+  type           String    @default("distributor")
+  country        String    @default("")
+  region         String    @default("")
+  contactEmail   String    @default("") @map("contact_email")
+  contactPhone   String    @default("") @map("contact_phone")
+  kycStatus      String    @default("pending") @map("kyc_status")
+  kycVerifiedAt  DateTime? @map("kyc_verified_at")
+  trustScore     Float     @default(50.0) @map("trust_score")
+  deliveryScore  Float     @default(50.0) @map("delivery_score")
+  qualityScore   Float     @default(50.0) @map("quality_score")
+  complianceScore Float    @default(50.0) @map("compliance_score")
+  financialScore Float     @default(50.0) @map("financial_score")
+  compositeScore Float     @default(50.0) @map("composite_score")
+  tier           String    @default("Bronze")
+  riskLevel      String    @default("medium") @map("risk_level")
+  contracts      Int       @default(0)
+  notes          String    @default("")
+  apiKey         String?   @map("api_key")
+  status         String    @default("active")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
+  locations          PartnerLocation[]
   supplyChainEvents  SupplyChainEvent[]
   inventory          Inventory[]
   shipmentsFrom      Shipment[]         @relation("ShipmentFrom")
@@ -457,7 +468,22 @@ model Partner {
   slaViolations      SlaViolation[]
 
   @@index([status])
+  @@index([normalizedName])
   @@map("partners")
+}
+
+model PartnerLocation {
+  id        String   @id @default(uuid())
+  partnerId String   @map("partner_id")
+  country   String   @default("")
+  address   String   @default("")
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId])
+  @@map("partner_locations")
 }
 
 model Shipment {

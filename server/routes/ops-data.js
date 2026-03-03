@@ -164,14 +164,138 @@ router.get('/activity-log', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// SUPPLIER SCORING (reads from partners table)
+// SUPPLIER SCORING & MANAGEMENT (partners + partner_locations)
 // ═══════════════════════════════════════════════════════════════════
+
+// Normalization for duplicate detection
+const LEGAL_SUFFIXES = /\b(co\.?|company|ltd\.?|limited|inc\.?|incorporated|llc\.?|corp\.?|corporation|plc\.?|gmbh|sa\.?|srl|pte\.?|pty\.?|group|holdings?)\b/gi;
+function normalizeName(raw) {
+    return (raw || '').toLowerCase().trim()
+        .replace(LEGAL_SUFFIXES, '').replace(/[.\-_,&]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// GET /supplier-scoring — all suppliers with locations
 router.get('/supplier-scoring', async (req, res) => {
     try {
-        let sql = 'SELECT * FROM partners WHERE status = ? ORDER BY trust_score DESC';
-        const rows = await db.prepare(sql).all('active');
-        res.json({ suppliers: rows || [] });
-    } catch (e) { res.json({ suppliers: [] }); }
+        const suppliers = await db.all('SELECT * FROM partners ORDER BY composite_score DESC');
+        // Fetch all locations in one query
+        const locations = await db.all('SELECT * FROM partner_locations WHERE status = ? ORDER BY created_at', ['active']);
+        // Group locations by partner_id
+        const locMap = {};
+        for (const loc of locations) {
+            if (!locMap[loc.partner_id]) locMap[loc.partner_id] = [];
+            locMap[loc.partner_id].push(loc);
+        }
+        // Attach locations to each supplier
+        const result = (suppliers || []).map(s => ({
+            ...s,
+            locations: locMap[s.id] || []
+        }));
+        res.json({ suppliers: result });
+    } catch (e) { console.error('[supplier-scoring]', e); res.json({ suppliers: [] }); }
+});
+
+// POST /suppliers/onboard — create new supplier + initial location
+router.post('/suppliers/onboard', async (req, res) => {
+    try {
+        const { name, type, country, contactEmail, contactPhone, notes } = req.body;
+        if (!name || !country || !type) {
+            return res.status(400).json({ error: 'Name, country, and type are required' });
+        }
+
+        const normalized = normalizeName(name);
+
+        // Check for existing entity with same normalized name
+        const existing = await db.get('SELECT id, name, normalized_name, tier FROM partners WHERE normalized_name = ?', [normalized]);
+        if (existing) {
+            return res.status(409).json({
+                error: 'duplicate_entity',
+                message: `Supplier "${existing.name}" already exists (${existing.id})`,
+                existingSupplier: existing
+            });
+        }
+
+        const id = uuidv4();
+        await db.run(
+            `INSERT INTO partners (id, name, normalized_name, type, country, contact_email, contact_phone, notes, kyc_status, trust_score, delivery_score, quality_score, compliance_score, financial_score, composite_score, tier, risk_level, contracts, status, created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,50,50,50,50,50,50,'Pending','medium',0,'active',NOW())`,
+            [id, name.trim(), normalized, type, country, contactEmail || '', contactPhone || '', notes || '', 'pending_kyc']
+        );
+
+        // Add initial location (HQ)
+        const locId = uuidv4();
+        await db.run(
+            'INSERT INTO partner_locations (id, partner_id, country, address, status, created_at) VALUES (?,?,?,?,?,NOW())',
+            [locId, id, country, 'HQ', 'active']
+        );
+
+        res.json({ success: true, id, message: `${name} submitted for KYC review` });
+    } catch (e) {
+        console.error('[supplier/onboard]', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// POST /suppliers/:id/locations — add location to existing supplier
+router.post('/suppliers/:id/locations', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { country, address } = req.body;
+        if (!country) return res.status(400).json({ error: 'Country is required' });
+
+        // Verify supplier exists
+        const supplier = await db.get('SELECT id, name FROM partners WHERE id = ?', [id]);
+        if (!supplier) return res.status(404).json({ error: 'Supplier not found' });
+
+        // Check if location already exists
+        const existing = await db.get(
+            'SELECT id FROM partner_locations WHERE partner_id = ? AND country = ? AND address = ?',
+            [id, country, address || '']
+        );
+        if (existing) return res.status(409).json({ error: `${country} location already exists` });
+
+        const locId = uuidv4();
+        await db.run(
+            'INSERT INTO partner_locations (id, partner_id, country, address, status, created_at) VALUES (?,?,?,?,?,NOW())',
+            [locId, id, country, address || '', 'active']
+        );
+
+        res.json({ success: true, locId, message: `${country} location added to ${supplier.name}` });
+    } catch (e) {
+        console.error('[supplier/location]', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// PATCH /suppliers/:id/approve — KYC approval
+router.patch('/suppliers/:id/approve', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.run(
+            'UPDATE partners SET kyc_status = ?, kyc_verified_at = NOW(), tier = ? WHERE id = ?',
+            ['verified', 'Bronze', id]
+        );
+        res.json({ success: true, message: 'Supplier KYC approved' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /suppliers/:id/reject — KYC rejection
+router.patch('/suppliers/:id/reject', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.run('UPDATE partners SET kyc_status = ? WHERE id = ?', ['rejected', id]);
+        res.json({ success: true, message: 'Supplier KYC rejected' });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /suppliers/:id — single supplier with locations
+router.get('/suppliers/:id', async (req, res) => {
+    try {
+        const supplier = await db.get('SELECT * FROM partners WHERE id = ?', [req.params.id]);
+        if (!supplier) return res.status(404).json({ error: 'Not found' });
+        const locations = await db.all('SELECT * FROM partner_locations WHERE partner_id = ? ORDER BY created_at', [req.params.id]);
+        res.json({ supplier: { ...supplier, locations } });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
