@@ -682,6 +682,148 @@ export async function loadPageData(page) {
                 render();
             }
             if (_pageCache['settings']?.loadSettingsData) _pageCache['settings'].loadSettingsData();
+        } else if (page === 'risk-dashboard') {
+            const [alerts, heatmap, trends, radar] = await Promise.all([
+                API.get('/scm/risk/alerts?limit=10').catch(() => ({})),
+                API.get('/scm/risk/heatmap').catch(() => ({})),
+                API.get('/scm/risk/trends').catch(() => ({})),
+                API.get('/scm/risk/radar').catch(() => ({})),
+            ]);
+            State._riskData = { alerts, heatmap, trends, radar };
+            render();
+        } else if (page === 'risk-event-feed' || page === 'risk-advanced-filter') {
+            const res = await API.get('/scm/risk/alerts?limit=200').catch(() => ({}));
+            State._riskAlerts = res;
+            render();
+        } else if (page === 'risk-high-risk' || page === 'risk-cases-open' || page === 'risk-cases-escalated') {
+            const res = await API.get('/scm/risk/alerts?limit=100').catch(() => ({}));
+            State._riskAlerts = res;
+            render();
+        } else if (page === 'risk-heatmap') {
+            State._riskHeatmap = await API.get('/scm/risk/heatmap').catch(() => ({}));
+            render();
+        } else if (page === 'risk-scoring-engine') {
+            const [models, rules] = await Promise.all([
+                API.get('/scm/risk-model/models').catch(() => ({})),
+                API.get('/scm/risk-model/rules-config').catch(() => ({})),
+            ]);
+            State._riskModels = { models: models.models || [], rules: rules.rules || rules.config || [] };
+            render();
+        } else if (page === 'risk-model-governance') {
+            const [models, drift, changes] = await Promise.all([
+                API.get('/scm/risk-model/models').catch(() => ({})),
+                API.get('/scm/risk-model/models/drift').catch(() => ({})),
+                API.get('/scm/risk-model/model-changes').catch(() => ({})),
+            ]);
+            State._riskModelGov = { models: models.models || [], drift: drift.drift_reports || drift.reports || [], changes: changes.changes || [] };
+            render();
+        } else if (page === 'risk-pattern-clusters') {
+            State._riskPatterns = await API.get('/risk-graph/patterns').catch(() => ({}));
+            render();
+        } else if (page === 'risk-distributor-risk') {
+            State._riskBehavior = await API.get('/risk-graph/behavior').catch(() => ({}));
+            render();
+        } else if (page === 'risk-sku-risk') {
+            State._riskAnalytics = await API.get('/risk-graph/risk-analytics').catch(() => ({}));
+            render();
+        } else if (page === 'risk-reports') {
+            State._riskTrends = await API.get('/scm/risk/trends?period=30d').catch(() => ({}));
+            render();
+        } else if (page === 'risk-decision-engine') {
+            State._riskGraph = await API.get('/risk-graph/dashboard').catch(() => ({}));
+            render();
+        } else if (page === 'risk-forensic') {
+            const [hidden, fraud] = await Promise.all([
+                API.get('/risk-graph/hidden-links').catch(() => ({})),
+                API.get('/risk-graph/fraud-feed').catch(() => ({})),
+            ]);
+            State._riskForensic = { links: hidden.links || hidden.hidden_links || [], feed: fraud.events || fraud.feed || [] };
+            render();
+        } else if (page === 'risk-auto-response') {
+            State._riskRules = await API.get('/scm/risk-model/rules-config').catch(() => ({}));
+            render();
+        } else if (page === 'risk-case-workflow' || page === 'risk-cases-closed') {
+            const res = await API.get('/ops/incidents?limit=50').catch(() => ({}));
+            State._riskIncidents = res.incidents || [];
+            render();
+        } else if (page === 'risk-geo-rules') {
+            State._riskGeoAlerts = await API.get('/ops/data/geo-alerts').catch(() => ({}));
+            render();
+        } else if (page === 'risk-velocity-rules') {
+            const res = await API.get('/scm/risk/alerts?limit=50').catch(() => ({}));
+            State._riskAlerts = res;
+            render();
+        } else if (page === 'risk-duplicate-rules') {
+            State._riskDuplicates = await API.get('/ops/data/duplicate-alerts').catch(() => ({}));
+            render();
+        } else if (page === 'compliance-dashboard') {
+            const [stats, report, gaps] = await Promise.all([
+                API.get('/compliance/stats').catch(() => ({})),
+                API.get('/compliance/report').catch(() => ({})),
+                API.get('/compliance-regtech/gaps').catch(() => ({})),
+            ]);
+            State._complianceData = { stats, report, gaps: gaps.gaps || [] };
+            render();
+        } else if (page === 'compliance-user-activity' || page === 'compliance-system-changes' ||
+            page === 'compliance-data-access-review' || page === 'compliance-privileged-access') {
+            State._auditLogs = await API.get('/audit-log/?limit=50').catch(() => ({}));
+            render();
+        } else if (page === 'compliance-data-export') {
+            State._gdprExport = await API.get('/compliance/gdpr/export').catch(() => ({}));
+            render();
+        } else if (page === 'compliance-violation-log') {
+            State._complianceRecords = await API.get('/compliance/records').catch(() => ({}));
+            render();
+        } else if (page === 'compliance-privacy-requests') {
+            State._gdprConsent = await API.get('/compliance/gdpr/consent').catch(() => ({}));
+            render();
+        } else if (page === 'compliance-access-policy' || page === 'compliance-risk-policy' ||
+            page === 'compliance-workflow-control' || page === 'compliance-sod-matrix') {
+            const [policies, gaps] = await Promise.all([
+                API.get('/compliance/policies').catch(() => ({})),
+                API.get('/compliance-regtech/gaps').catch(() => ({})),
+            ]);
+            State._compliancePolicies = policies;
+            State._complianceGaps = gaps;
+            render();
+        } else if (page === 'compliance-retention') {
+            State._complianceRetention = await API.get('/compliance/retention').catch(() => ({}));
+            render();
+        } else if (page === 'compliance-audit-report') {
+            const [report, stats] = await Promise.all([
+                API.get('/compliance/report').catch(() => ({})),
+                API.get('/audit-log/stats').catch(() => ({})),
+            ]);
+            State._complianceReport = { report, stats };
+            render();
+        } else if (page === 'compliance-investigation-summary') {
+            const [incidents, alerts] = await Promise.all([
+                API.get('/ops/incidents?limit=20').catch(() => ({})),
+                API.get('/scm/risk/alerts?limit=20').catch(() => ({})),
+            ]);
+            State._investigationData = { incidents: incidents.incidents || [], alerts: alerts.alerts || [] };
+            render();
+        } else if (page === 'compliance-regulatory-export') {
+            const [report, frameworks] = await Promise.all([
+                API.get('/compliance-regtech/report').catch(() => ({})),
+                API.get('/compliance-regtech/frameworks').catch(() => ({})),
+            ]);
+            State._regtechData = { report, frameworks: frameworks.frameworks || [] };
+            render();
+        } else if (page === 'compliance-legal-hold' || page === 'compliance-immutable-audit') {
+            const [chain, stats] = await Promise.all([
+                API.get('/audit/verify-chain').catch(() => ({})),
+                API.get('/audit/stats').catch(() => ({})),
+            ]);
+            State._auditChain = { chain, stats };
+            render();
+        } else if (page === 'compliance-data-governance') {
+            const [jurisdictions, certs] = await Promise.all([
+                API.get('/compliance-regtech/jurisdictions').catch(() => ({})),
+                API.get('/compliance/certifications').catch(() => ({})),
+            ]);
+            State._dataGov = { jurisdictions: jurisdictions.jurisdictions || [], frameworks: jurisdictions.frameworks || [], certs: certs.certifications || [] };
+            render();
         }
     } catch (e) {
         console.error('Load data error:', e);

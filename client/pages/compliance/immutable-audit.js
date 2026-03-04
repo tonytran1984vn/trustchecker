@@ -1,19 +1,8 @@
-/** Compliance – Immutable Audit — reads from /api/audit/verify-chain + /api/audit/stats */
+/** Compliance – Immutable Audit — reads from State._auditChain */
 import { icon } from '../../core/icons.js';
 import { State } from '../../core/state.js';
-let D = {};
-async function load() {
-  const h = { 'Authorization': 'Bearer ' + State.token };
-  const [chain, stats] = await Promise.all([
-    fetch('/api/audit/verify-chain', { headers: h }).then(r => r.json()).catch(() => ({})),
-    fetch('/api/audit/stats', { headers: h }).then(r => r.json()).catch(() => ({})),
-  ]);
-  D = { chain, stats };
-}
 export function renderPage() {
-  load();
-  const c = D.chain || {};
-  const s = D.stats || {};
+  const D = State._auditChain || {}; const c = D.chain || {}; const s = D.stats || {};
   return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('scroll', 28)} Immutable Audit Trail</h1></div>
     <div class="sa-metrics-row" style="margin-bottom:1.5rem">
       ${m('Chain Valid', c.valid ? '✅' : '❌', '', c.valid ? 'green' : 'red', 'check')}
@@ -22,7 +11,7 @@ export function renderPage() {
       ${m('Last Verified', c.verified_at ? new Date(c.verified_at).toLocaleDateString() : '—', '', 'blue', 'clock')}
     </div>
     <div class="sa-card"><h3>Hash Chain Details</h3>
-      <p style="color:var(--text-secondary);font-size:0.85rem">${c.message || 'Immutable audit chain provides tamper-evident logging for all system operations.'}</p>
+      <p style="color:var(--text-secondary);font-size:0.85rem">${c.message || 'Tamper-evident logging for all system operations.'}</p>
       ${c.latest_hash ? `<div style="margin-top:0.5rem"><span style="color:var(--text-secondary);font-size:0.72rem">Latest Hash:</span> <code style="font-size:0.7rem;color:#22c55e">${c.latest_hash}</code></div>` : ''}
     </div></div>`;
 }

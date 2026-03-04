@@ -1,41 +1,21 @@
-/**
- * Risk – Case Workflow
- * Case management workflow — reads incidents from /api/ops/incidents
- */
+/** Risk – Case Workflow — reads from State._riskIncidents */
 import { icon } from '../../core/icons.js';
 import { State } from '../../core/state.js';
-let _data = null;
-async function load() {
-  if (_data) return;
-  try {
-    const h = { 'Authorization': 'Bearer ' + State.token };
-    const res = await fetch('/api/ops/incidents?limit=50', { headers: h }).then(r => r.json());
-    _data = res.incidents || [];
-  } catch { _data = []; }
-}
-load();
 export function renderPage() {
-  const cases = _data || [];
-  const byStatus = {};
-  cases.forEach(c => { byStatus[c.status] = (byStatus[c.status] || 0) + 1; });
-  return `
-    <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('workflow', 28)} Case Workflow</h1></div>
-      <div class="sa-metrics-row" style="margin-bottom:1.5rem">
-        ${Object.entries(byStatus).map(([s, n]) =>
-    `<div class="sa-metric-card sa-metric-${s === 'open' ? 'red' : s === 'resolved' ? 'green' : s === 'escalated' ? 'orange' : 'blue'}"><div class="sa-metric-body"><div class="sa-metric-value">${n}</div><div class="sa-metric-label">${s}</div></div></div>`
-  ).join('')}
-      </div>
-      <div class="sa-card">
-        ${cases.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:2rem">No cases in workflow</p>' : `
-        <table class="sa-table"><thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Status</th><th>Entity</th><th>Created</th></tr></thead>
-        <tbody>${cases.map(c => `<tr>
-          <td class="sa-code">${c.incident_id || c.id?.slice(0, 12) || '—'}</td>
-          <td style="font-size:0.82rem">${c.title || '—'}</td>
-          <td><span class="sa-status-pill sa-pill-${c.severity === 'SEV1' ? 'red' : c.severity === 'SEV2' ? 'orange' : 'blue'}">${c.severity || '—'}</span></td>
-          <td><span class="sa-status-pill sa-pill-${c.status === 'open' ? 'red' : c.status === 'resolved' ? 'green' : 'orange'}">${c.status}</span></td>
-          <td style="font-size:0.8rem">${c.affected_entity || '—'}</td>
-          <td style="font-size:0.7rem;color:var(--text-secondary)">${c.created_at ? new Date(c.created_at).toLocaleString() : '—'}</td>
-        </tr>`).join('')}</tbody></table>`}
-      </div></div>`;
+  const incidents = State._riskIncidents || [];
+  const byStatus = {}; incidents.forEach(i => { const s = i.status || 'unknown'; if (!byStatus[s]) byStatus[s] = []; byStatus[s].push(i); });
+  return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('workflow', 28)} Case Workflow</h1><div class="sa-title-actions"><span style="font-size:0.75rem;color:var(--text-secondary)">${incidents.length} total</span></div></div>
+    <div class="sa-metrics-row" style="margin-bottom:1.5rem">
+      ${m('Open', (byStatus.open || []).length, '', 'red', 'alert')}
+      ${m('In Progress', (byStatus.in_progress || byStatus.investigating || []).length, '', 'orange', 'clock')}
+      ${m('Resolved', (byStatus.resolved || byStatus.closed || []).length, '', 'green', 'check')}
+    </div>
+    <div class="sa-card"><h3>All Cases</h3>
+      ${incidents.length === 0 ? '<p style="color:var(--text-secondary)">No cases</p>' : `
+        <table class="sa-table"><thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Severity</th></tr></thead>
+        <tbody>${incidents.slice(0, 20).map(i => `<tr><td class="sa-code">${i.incident_id || i.id?.slice(0, 12) || '—'}</td><td>${i.title || '—'}</td>
+          <td><span class="sa-status-pill sa-pill-${i.status === 'open' ? 'red' : i.status === 'resolved' ? 'green' : 'orange'}">${i.status}</span></td>
+          <td><span class="sa-status-pill sa-pill-${i.severity === 'critical' ? 'red' : 'orange'}">${i.severity || '—'}</span></td></tr>`).join('')}</tbody></table>`}
+    </div></div>`;
 }
+function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
