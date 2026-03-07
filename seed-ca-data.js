@@ -127,13 +127,15 @@ async function main() {
     const batchId = uuidv4();
     const productId = products[br.product_idx % products.length].id;
 
-    // Insert batch
-    await client.query(
+    // Insert batch (UPSERT — return existing ID if batch_number exists)
+    const batchResult = await client.query(
       `INSERT INTO batches (id, batch_number, product_id, quantity, manufactured_date, origin_facility, status, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-       ON CONFLICT DO NOTHING`,
+       ON CONFLICT (batch_number) DO UPDATE SET status = EXCLUDED.status
+       RETURNING id`,
       [batchId, br.batch_number, productId, br.quantity, br.mfg_date, br.origin, br.status]
     );
+    const finalBatchId = batchResult.rows[0].id;
     totalBatches++;
     console.log(`  📦 Batch: ${br.batch_number} (${products[br.product_idx % products.length].name})`);
 
@@ -144,7 +146,7 @@ async function main() {
         `INSERT INTO supply_chain_events (id, event_type, product_id, batch_id, location, actor, details, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT DO NOTHING`,
-        [eventId, evt.type, productId, batchId, evt.location, 'system',
+        [eventId, evt.type, productId, finalBatchId, evt.location, 'system',
           JSON.stringify({ notes: evt.notes, batch_number: br.batch_number }), evt.time]
       );
       totalEvents++;
