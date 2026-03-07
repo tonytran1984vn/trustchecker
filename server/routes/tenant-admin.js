@@ -2686,7 +2686,8 @@ router.get('/owner/ccs/market', requireExecutiveAccess(), async (req, res) => {
             db.get(`SELECT COUNT(*) as total,
                     COUNT(DISTINCT device_fingerprint) as unique_devices
                     FROM scan_events WHERE org_id = $1
-                    AND scanned_at >= NOW() - INTERVAL '30 days'`, [tid]),
+                    AND scanned_at >= NOW() - INTERVAL '30 days'`, [tid])
+                .catch(() => ({ total: 0, unique_devices: 0 })),
             // Repeat scans (same device)
             db.get(`SELECT COUNT(*) as repeat_count FROM (
                     SELECT device_fingerprint, COUNT(*) as cnt
@@ -2694,14 +2695,16 @@ router.get('/owner/ccs/market', requireExecutiveAccess(), async (req, res) => {
                     AND scanned_at >= NOW() - INTERVAL '30 days'
                     AND device_fingerprint IS NOT NULL AND device_fingerprint != ''
                     GROUP BY device_fingerprint HAVING COUNT(*) > 1
-                    ) sub`, [tid]),
+                    ) sub`, [tid])
+                .catch(() => ({ repeat_count: 0 })),
             // Channel compliance by partner type
             db.all(`SELECT p.type as channel, COUNT(p.id) as partners,
                     ROUND(AVG(p.trust_score)::numeric, 1) as avg_trust,
                     COUNT(p.id) FILTER (WHERE p.kyc_status = 'verified') as verified,
                     ROUND(100.0 * COUNT(p.id) FILTER (WHERE p.kyc_status = 'verified') / NULLIF(COUNT(p.id), 0), 1) as compliance_pct
                     FROM partners p WHERE p.org_id = $1 AND p.status = 'active'
-                    GROUP BY p.type ORDER BY partners DESC`, [tid]),
+                    GROUP BY p.type ORDER BY partners DESC`, [tid])
+                .catch(() => []),
             // Regional penetration
             db.all(`SELECT geo_country as country, COUNT(*) as scans,
                     COUNT(DISTINCT device_fingerprint) as unique_users,
@@ -2709,19 +2712,22 @@ router.get('/owner/ccs/market', requireExecutiveAccess(), async (req, res) => {
                     FROM scan_events WHERE org_id = $1
                     AND scanned_at >= NOW() - INTERVAL '30 days'
                     AND geo_country IS NOT NULL AND geo_country != ''
-                    GROUP BY geo_country ORDER BY scans DESC LIMIT 10`, [tid]),
+                    GROUP BY geo_country ORDER BY scans DESC LIMIT 10`, [tid])
+                .catch(() => []),
             // Gray market / leak detection
             db.all(`SELECT la.platform, la.listing_title, la.leak_type, la.risk_score,
                     la.region_detected, la.status, la.created_at
                     FROM leak_alerts la
                     WHERE la.product_id IN (SELECT id FROM products WHERE org_id = $1)
                     AND la.status != 'resolved'
-                    ORDER BY la.created_at DESC LIMIT 10`, [tid]),
+                    ORDER BY la.created_at DESC LIMIT 10`, [tid])
+                .catch(() => []),
             // Partner overview
             db.get(`SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE kyc_status = 'verified') as verified,
                     COUNT(*) FILTER (WHERE risk_level = 'high') as high_risk
-                    FROM partners WHERE org_id = $1 AND status = 'active'`, [tid]),
+                    FROM partners WHERE org_id = $1 AND status = 'active'`, [tid])
+                .catch(() => ({ total: 0, verified: 0, high_risk: 0 })),
         ]);
 
         const total = Number(scanTotals?.total || 0);
@@ -3075,7 +3081,8 @@ router.get('/owner/ccs/reports', requireExecutiveAccess(), async (req, res) => {
                     FROM scan_events WHERE org_id = $1
                     AND scanned_at >= NOW() - INTERVAL '6 months'
                     GROUP BY TO_CHAR(scanned_at, 'YYYY-MM')
-                    ORDER BY month DESC`, [tid]),
+                    ORDER BY month DESC`, [tid])
+                .catch(() => []),
             // Scan trend — uses date range
             db.get(`SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
@@ -3083,18 +3090,21 @@ router.get('/owner/ccs/reports', requireExecutiveAccess(), async (req, res) => {
                     COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
                     ROUND(AVG(trust_score)::numeric, 2) as avg_trust
                     FROM scan_events WHERE org_id = $1
-                    ${periodFilter}`, periodParams),
+                    ${periodFilter}`, periodParams)
+                .catch(() => ({ total: 0, authentic: 0, suspicious: 0, counterfeit: 0, avg_trust: 0 })),
             // Alert trend — uses date range
             db.get(`SELECT COUNT(*) as total_alerts,
                     COUNT(*) FILTER (WHERE severity = 'critical') as critical,
                     COUNT(*) FILTER (WHERE status = 'resolved') as resolved
                     FROM fraud_alerts WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)
-                    ${periodFilter.replace(/scanned_at/g, 'created_at')}`, periodParams),
+                    ${periodFilter.replace(/scanned_at/g, 'created_at')}`, periodParams)
+                .catch(() => ({ total_alerts: 0, critical: 0, resolved: 0 })),
             // Recent audit events (report-related)
             db.all(`SELECT action, details, created_at, actor_id
                     FROM audit_log WHERE tenant_id = $1
                     AND (action LIKE '%REPORT%' OR action LIKE '%EXPORT%' OR action LIKE '%FINANCIAL%')
-                    ORDER BY created_at DESC LIMIT 10`, [tid]),
+                    ORDER BY created_at DESC LIMIT 10`, [tid])
+                .catch(() => []),
         ]);
 
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -3257,7 +3267,8 @@ router.get('/owner/ccs/scm-summary', requireExecutiveAccess(), async (req, res) 
                     COUNT(DISTINCT partner_id) as partners_involved,
                     COUNT(DISTINCT batch_id) as batches_tracked
                     FROM supply_chain_events
-                    WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                    WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                .catch(() => ({ total_events: 0, sealed_events: 0, products_tracked: 0, partners_involved: 0, batches_tracked: 0 })),
             // Partner trust composition
             db.all(`SELECT p.type as channel,
                     COUNT(*) as total,
@@ -3265,7 +3276,8 @@ router.get('/owner/ccs/scm-summary', requireExecutiveAccess(), async (req, res) 
                     COUNT(*) FILTER (WHERE p.risk_level = 'high') as high_risk,
                     ROUND(AVG(p.trust_score)::numeric, 1) as avg_trust
                     FROM partners p WHERE p.org_id = $1 AND p.status = 'active'
-                    GROUP BY p.type ORDER BY total DESC`, [tid]),
+                    GROUP BY p.type ORDER BY total DESC`, [tid])
+                .catch(() => []),
             // Geographic exposure (supply chain events by location)
             db.all(`SELECT sce.location as region,
                     COUNT(*) as events,
@@ -3274,21 +3286,24 @@ router.get('/owner/ccs/scm-summary', requireExecutiveAccess(), async (req, res) 
                     FROM supply_chain_events sce
                     WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)
                     AND sce.location IS NOT NULL AND sce.location != ''
-                    GROUP BY sce.location ORDER BY events DESC LIMIT 10`, [tid]),
+                    GROUP BY sce.location ORDER BY events DESC LIMIT 10`, [tid])
+                .catch(() => []),
             // Integrity breaches (anomalies tied to supply chain)
             db.get(`SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE severity = 'critical') as critical,
                     COUNT(*) FILTER (WHERE severity = 'high') as high,
                     COUNT(*) FILTER (WHERE status = 'resolved') as resolved
                     FROM anomaly_detections
-                    WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                    WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                .catch(() => ({ total: 0, critical: 0, high: 0, resolved: 0 })),
             // Inventory traceability
             db.get(`SELECT COUNT(*) as total_products,
                     COUNT(*) FILTER (WHERE id IN (
                         SELECT DISTINCT product_id FROM supply_chain_events
                         WHERE product_id IS NOT NULL AND blockchain_seal_id IS NOT NULL
                     )) as traceable_products
-                    FROM products WHERE org_id = $1 AND status = 'active'`, [tid]),
+                    FROM products WHERE org_id = $1 AND status = 'active'`, [tid])
+                .catch(() => ({ total_products: 0, traceable_products: 0 })),
             // Recent supply chain events (last 5)
             db.all(`SELECT sce.event_type, sce.location, sce.created_at,
                     p.name as product_name,
@@ -3296,7 +3311,8 @@ router.get('/owner/ccs/scm-summary', requireExecutiveAccess(), async (req, res) 
                     FROM supply_chain_events sce
                     LEFT JOIN products p ON sce.product_id = p.id
                     WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)
-                    ORDER BY sce.created_at DESC LIMIT 5`, [tid]),
+                    ORDER BY sce.created_at DESC LIMIT 5`, [tid])
+                .catch(() => []),
         ]);
 
         const totalEvents = Number(chainStats?.total_events || 0);
@@ -3379,12 +3395,16 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
 
         // Fetch org data
         const [products, shipments, events, partners, violations, offsets, finConfig] = await Promise.all([
-            db.all(`SELECT * FROM products WHERE org_id = $1 AND status = 'active'`, [tid]),
+            db.all(`SELECT * FROM products WHERE org_id = $1 AND status = 'active'`, [tid])
+                .catch(() => []),
             db.all(`SELECT s.* FROM shipments s JOIN batches b ON s.batch_id = b.id JOIN products p ON b.product_id = p.id WHERE p.org_id = $1`, [tid])
                 .catch(() => []),
-            db.all(`SELECT sce.* FROM supply_chain_events sce WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
-            db.all(`SELECT * FROM partners WHERE org_id = $1 AND status = 'active'`, [tid]),
-            db.all(`SELECT * FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+            db.all(`SELECT sce.* FROM supply_chain_events sce WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                .catch(() => []),
+            db.all(`SELECT * FROM partners WHERE org_id = $1 AND status = 'active'`, [tid])
+                .catch(() => []),
+            db.all(`SELECT * FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                .catch(() => []),
             db.get(`SELECT COUNT(*) as c FROM evidence_items WHERE entity_type = 'carbon_offset' AND entity_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
                 .catch(() => ({ c: 0 })),
             db.get(`SELECT * FROM financial_configs WHERE org_id = $1`, [tid])
@@ -3508,15 +3528,22 @@ router.get('/owner/ccs/allocation-baseline', requireExecutiveAccess(), async (re
         const [finConfig, products, shipments, events, partners, violations, offsets,
             scmStats, breaches, scanStats] = await Promise.all([
                 db.get(`SELECT * FROM financial_configs WHERE org_id = $1`, [tid]).catch(() => null),
-                db.all(`SELECT * FROM products WHERE org_id = $1 AND status = 'active'`, [tid]),
+                db.all(`SELECT * FROM products WHERE org_id = $1 AND status = 'active'`, [tid])
+                    .catch(() => []),
                 db.all(`SELECT s.* FROM shipments s JOIN batches b ON s.batch_id = b.id JOIN products p ON b.product_id = p.id WHERE p.org_id = $1`, [tid]).catch(() => []),
-                db.all(`SELECT sce.* FROM supply_chain_events sce WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
-                db.all(`SELECT * FROM partners WHERE org_id = $1 AND status = 'active'`, [tid]),
-                db.all(`SELECT * FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                db.all(`SELECT sce.* FROM supply_chain_events sce WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                    .catch(() => []),
+                db.all(`SELECT * FROM partners WHERE org_id = $1 AND status = 'active'`, [tid])
+                    .catch(() => []),
+                db.all(`SELECT * FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                    .catch(() => []),
                 db.get(`SELECT COUNT(*) as c FROM evidence_items WHERE entity_type = 'carbon_offset' AND entity_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]).catch(() => ({ c: 0 })),
-                db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE blockchain_seal_id IS NOT NULL) as sealed FROM supply_chain_events WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
-                db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE severity = 'critical') as critical FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
-                db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE result = 'authentic') as authentic FROM scan_events WHERE org_id = $1`, [tid]),
+                db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE blockchain_seal_id IS NOT NULL) as sealed FROM supply_chain_events WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                    .catch(() => ({ total: 0, sealed: 0 })),
+                db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE severity = 'critical') as critical FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                    .catch(() => ({ total: 0, critical: 0 })),
+                db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE result = 'authentic') as authentic FROM scan_events WHERE org_id = $1`, [tid])
+                    .catch(() => ({ total: 0, authentic: 0 })),
             ]);
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
