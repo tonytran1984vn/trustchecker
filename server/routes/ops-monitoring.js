@@ -81,12 +81,11 @@ router.post('/incidents/:id/escalate', requirePermission('risk:view'), (req, res
 router.put('/incidents/:id', requirePermission('risk:view'), async (req, res) => {
     try {
         const { status, assignee, severity } = req.body;
-        const orgId = req.user?.org_id || req.user?.orgId;
         const updates = [];
         const params = [];
 
         if (status) { updates.push('status = ?'); params.push(status); }
-        if (assignee) { updates.push('assignee = ?'); params.push(assignee); }
+        if (assignee) { updates.push('assigned_to = ?'); params.push(assignee); }
         if (severity) { updates.push('severity = ?'); params.push(severity); }
         if (status === 'resolved') { updates.push('resolved_at = NOW()'); }
         updates.push('updated_at = NOW()');
@@ -95,10 +94,6 @@ router.put('/incidents/:id', requirePermission('risk:view'), async (req, res) =>
 
         let sql = `UPDATE ops_incidents_v2 SET ${updates.join(', ')} WHERE id = ?`;
         params.push(req.params.id);
-        if (orgId && req.user?.role !== 'super_admin') {
-            sql += ' AND org_id = ?';
-            params.push(orgId);
-        }
 
         await db.run(sql, params);
         res.json({ ok: true, id: req.params.id, status: status || 'unchanged' });
@@ -111,13 +106,8 @@ router.put('/incidents/:id', requirePermission('risk:view'), async (req, res) =>
 // ─── DELETE /incidents/:id — Remove incident ───────────────────
 router.delete('/incidents/:id', requirePermission('risk:view'), async (req, res) => {
     try {
-        const orgId = req.user?.org_id || req.user?.orgId;
         let sql = 'DELETE FROM ops_incidents_v2 WHERE id = ?';
         const params = [req.params.id];
-        if (orgId && req.user?.role !== 'super_admin') {
-            sql += ' AND org_id = ?';
-            params.push(orgId);
-        }
         await db.run(sql, params);
         res.json({ ok: true, deleted: req.params.id });
     } catch (err) {
