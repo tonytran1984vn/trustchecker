@@ -7,14 +7,16 @@
 import { API as api } from '../../core/api.js';
 
 let _data = null;
+let _err = null;
 let _range = '30d';
 
 export function renderPage() {
-    if (!_data) { loadData(); return loading(); }
-    const d = _data;
-    const s = d.scan_summary;
+  if (_err) return `<div class="loading"><span style="color:#ef4444">⚠ ${_err}</span></div>`;
+  if (!_data) { loadData(); return loading(); }
+  const d = _data;
+  const s = d.scan_summary;
 
-    return `
+  return `
     <div class="page-content stagger-in">
       <div class="page-header"><h1>📋 Reports & Export</h1><p class="desc">Operations reports with data export</p></div>
 
@@ -100,7 +102,7 @@ export function renderPage() {
 }
 
 function sumCard(label, value, color) {
-    return `
+  return `
     <div style="text-align:center">
       <div style="font-size:1.4rem;font-weight:800;color:${color}">${value}</div>
       <div style="font-size:0.72rem;color:var(--text-muted)">${label}</div>
@@ -108,15 +110,15 @@ function sumCard(label, value, color) {
 }
 
 function renderDailyBars(series) {
-    const mx = Math.max(...series.map(d => d.scans), 1);
-    const labelEvery = Math.max(1, Math.ceil(series.length / 10));
-    return `
+  const mx = Math.max(...series.map(d => d.scans), 1);
+  const labelEvery = Math.max(1, Math.ceil(series.length / 10));
+  return `
     <div style="display:flex;align-items:end;gap:3px;height:100px">
       ${series.map((d, i) => {
-        const h = Math.max(2, (d.scans / mx) * 85);
-        const fh = d.scans > 0 ? Math.max(1, (d.flagged / mx) * 85) : 0;
-        const dt = new Date(d.day);
-        return `
+    const h = Math.max(2, (d.scans / mx) * 85);
+    const fh = d.scans > 0 ? Math.max(1, (d.flagged / mx) * 85) : 0;
+    const dt = new Date(d.day);
+    return `
         <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px">
           <div style="width:100%;position:relative;height:${h}px">
             <div style="position:absolute;bottom:0;width:100%;height:${h}px;background:#3b82f6;border-radius:2px 2px 0 0;opacity:0.3"></div>
@@ -124,44 +126,49 @@ function renderDailyBars(series) {
           </div>
           ${i % labelEvery === 0 ? `<div style="font-size:0.5rem;color:var(--text-muted)">${dt.getDate()}/${dt.getMonth() + 1}</div>` : ''}
         </div>`;
-    }).join('')}
+  }).join('')}
     </div>`;
 }
 
 function toCSV(headers, rows) {
-    const lines = [headers.join(',')];
-    rows.forEach(r => lines.push(r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')));
-    return lines.join('\n');
+  const lines = [headers.join(',')];
+  rows.forEach(r => lines.push(r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')));
+  return lines.join('\n');
 }
 
 function downloadCSV(filename, content) {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    a.click();
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
 }
 
 async function loadData() {
-    try {
-        _data = await api.get('/tenant/governance/reports-data?range=' + _range);
-        window.__setRange = (r) => { _range = r; _data = null; const el = document.getElementById('main-content'); if (el) el.innerHTML = renderPage(); };
-        window.__exportCSV = (type) => {
-            if (!_data) return;
-            if (type === 'scans') {
-                const s = _data.scan_summary;
-                downloadCSV(`scans_${_range}.csv`, toCSV(['Metric', 'Value'], [['Total', s.total], ['Authentic', s.authentic], ['Suspicious', s.suspicious], ['Counterfeit', s.counterfeit], ['Avg Trust', s.avg_trust]]));
-            } else if (type === 'products') {
-                downloadCSV(`products_${_range}.csv`, toCSV(['Product', 'Category', 'Status', 'Scans', 'Flagged'], _data.product_summary.map(p => [p.name, p.category, p.status, p.scans, p.flagged])));
-            } else if (type === 'alerts') {
-                downloadCSV(`alerts_${_range}.csv`, toCSV(['Severity', 'Status', 'Count'], _data.alert_summary.map(a => [a.severity, a.status, a.count])));
-            }
-        };
-        const el = document.getElementById('main-content');
-        if (el) el.innerHTML = renderPage();
-    } catch (e) { console.error('[Reports]', e); }
+  try {
+    _data = await api.get('/tenant/governance/reports-data?range=' + _range);
+    window.__setRange = (r) => { _range = r; _data = null; const el = document.getElementById('main-content'); if (el) el.innerHTML = renderPage(); };
+    window.__exportCSV = (type) => {
+      if (!_data) return;
+      if (type === 'scans') {
+        const s = _data.scan_summary;
+        downloadCSV(`scans_${_range}.csv`, toCSV(['Metric', 'Value'], [['Total', s.total], ['Authentic', s.authentic], ['Suspicious', s.suspicious], ['Counterfeit', s.counterfeit], ['Avg Trust', s.avg_trust]]));
+      } else if (type === 'products') {
+        downloadCSV(`products_${_range}.csv`, toCSV(['Product', 'Category', 'Status', 'Scans', 'Flagged'], _data.product_summary.map(p => [p.name, p.category, p.status, p.scans, p.flagged])));
+      } else if (type === 'alerts') {
+        downloadCSV(`alerts_${_range}.csv`, toCSV(['Severity', 'Status', 'Count'], _data.alert_summary.map(a => [a.severity, a.status, a.count])));
+      }
+    };
+    const el = document.getElementById('main-content');
+    if (el) el.innerHTML = renderPage();
+  } catch (e) {
+    console.error('[Reports]', e);
+    _err = 'Failed to load report data. Please try again later.';
+    const el = document.getElementById('main-content');
+    if (el) el.innerHTML = renderPage();
+  }
 }
 
 function loading() {
-    return '<div class="loading"><div class="spinner"></div><span style="color:var(--text-muted)">Loading reports...</span></div>';
+  return '<div class="loading"><div class="spinner"></div><span style="color:var(--text-muted)">Loading reports...</span></div>';
 }

@@ -43,10 +43,10 @@ router.get('/cross-tenant', requirePermission('admin:manage'), cacheMiddleware(1
         const orgs = await db.prepare('SELECT * FROM organizations WHERE status = ?').all('active').catch(() => []);
         const tenants = [];
         for (const o of orgs) {
-            const scanCount = await db.prepare('SELECT COUNT(*) as c FROM scan_events WHERE product_id IN (SELECT id FROM products WHERE org_id = ?)').get(o.id).catch(() => ({ c: 0 }));
-            const fraudCount = await db.prepare('SELECT COUNT(*) as c FROM fraud_alerts WHERE product_id IN (SELECT id FROM products WHERE org_id = ?)').get(o.id).catch(() => ({ c: 0 }));
-            const productCount = await db.prepare('SELECT COUNT(*) as c FROM products WHERE org_id = ?').get(o.id).catch(() => ({ c: 0 }));
-            const recentScans = await db.prepare('SELECT geo_country, result, fraud_score FROM scan_events WHERE product_id IN (SELECT id FROM products WHERE org_id = ?) ORDER BY scanned_at DESC LIMIT 50').all(o.id).catch(() => []);
+            const scanCount = await db.prepare('SELECT COUNT(*) as c FROM scan_events WHERE product_id IN (SELECT id FROM products WHERE registered_by IN (SELECT id FROM users WHERE org_id = ?))').get(o.id).catch(() => ({ c: 0 }));
+            const fraudCount = await db.prepare('SELECT COUNT(*) as c FROM fraud_alerts WHERE product_id IN (SELECT id FROM products WHERE registered_by IN (SELECT id FROM users WHERE org_id = ?))').get(o.id).catch(() => ({ c: 0 }));
+            const productCount = await db.prepare('SELECT COUNT(*) as c FROM products WHERE registered_by IN (SELECT id FROM users WHERE org_id = ?)').get(o.id).catch(() => ({ c: 0 }));
+            const recentScans = await db.prepare('SELECT geo_country, result, fraud_score FROM scan_events WHERE product_id IN (SELECT id FROM products WHERE registered_by IN (SELECT id FROM users WHERE org_id = ?)) ORDER BY scanned_at DESC LIMIT 50').all(o.id).catch(() => []);
             tenants.push({
                 id: o.id, name: o.name, slug: o.slug, plan: o.plan,
                 scan_count: scanCount.c, fraud_count: fraudCount.c, product_count: productCount.c,
@@ -70,15 +70,16 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'Dashboard failed' }); }
 });
 // GET /fraud-feed — Global fraud alerts feed (SA only)
-router.get('/fraud-feed', requirePermission('admin:manage'), async (req, res) => {
+router.get('/fraud-feed', requirePermission('fraud:view'), async (req, res) => {
     try {
         const alerts = await db.prepare(`
             SELECT fa.id, fa.alert_type, fa.severity, fa.description, fa.status, fa.created_at, fa.details,
-                   p.name as product_name, p.sku, p.category, p.org_id,
+                   p.name as product_name, p.sku, p.category,
                    o.name as tenant_name, o.slug as tenant_slug
             FROM fraud_alerts fa
             LEFT JOIN products p ON fa.product_id = p.id
-            LEFT JOIN organizations o ON p.org_id = o.id
+            LEFT JOIN users u ON p.registered_by = u.id
+            LEFT JOIN organizations o ON u.org_id = o.id
             ORDER BY fa.created_at DESC LIMIT 100
         `).all().catch(() => []);
 
@@ -130,7 +131,7 @@ router.get('/fraud-feed', requirePermission('admin:manage'), async (req, res) =>
 });
 
 // GET /risk-analytics — Aggregated analytics for Cases, Analytics, Benchmark tabs
-router.get('/risk-analytics', cacheMiddleware(120), requirePermission('admin:manage'), async (req, res) => {
+router.get('/risk-analytics', cacheMiddleware(120), requirePermission('fraud:view'), async (req, res) => {
     try {
         // ── Run ALL independent queries in parallel ──
         const [suspRows, regionRows, catRows, patternRows, benchRows] = await Promise.all([
@@ -144,7 +145,8 @@ router.get('/risk-analytics', cacheMiddleware(120), requirePermission('admin:man
                        AVG(CASE WHEN se.fraud_score IS NOT NULL THEN se.fraud_score ELSE 0 END) as avg_fraud_score,
                        COUNT(DISTINCT fa.alert_type) as pattern_types
                 FROM organizations o
-                LEFT JOIN products p ON p.org_id = o.id
+                LEFT JOIN users u2 ON u2.org_id = o.id
+                LEFT JOIN products p ON p.registered_by = u2.id
                 LEFT JOIN fraud_alerts fa ON fa.product_id = p.id
                 LEFT JOIN scan_events se ON se.product_id = p.id AND se.result IN ('suspicious','failed')
                 GROUP BY o.id, o.name, o.slug, o.plan, o.status
@@ -187,7 +189,8 @@ router.get('/risk-analytics', cacheMiddleware(120), requirePermission('admin:man
                        COUNT(DISTINCT fa.id) as fraud_count,
                        AVG(ts.score) as avg_trust
                 FROM organizations o
-                LEFT JOIN products p ON p.org_id = o.id
+                LEFT JOIN users u3 ON u3.org_id = o.id
+                LEFT JOIN products p ON p.registered_by = u3.id
                 LEFT JOIN scan_events se ON se.product_id = p.id
                 LEFT JOIN fraud_alerts fa ON fa.product_id = p.id
                 LEFT JOIN trust_scores ts ON ts.product_id = p.id

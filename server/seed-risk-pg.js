@@ -253,9 +253,9 @@ async function seed() {
             const id = uuid();
             try {
                 await client.query(
-                    `INSERT INTO products (id, name, sku, category, manufacturer, origin_country, registered_by, org_id, trust_score, status, batch_number, description)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-                    [id, p.name, p.sku, p.cat, p.mfr, p.country, userId, org.id, p.trust, 'active', 'BATCH-' + p.sku, p.cat + ' by ' + p.mfr]
+                    `INSERT INTO products (id, name, sku, category, manufacturer, origin_country, registered_by, trust_score, status, batch_number, description)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                    [id, p.name, p.sku, p.cat, p.mfr, p.country, userId, p.trust, 'active', 'BATCH-' + p.sku, p.cat + ' by ' + p.mfr]
                 );
                 pids.push({ id, ...p }); tP++;
             } catch (e) {
@@ -321,9 +321,9 @@ async function seed() {
             const to = pick(CITIES.filter(c => c.city !== from.city));
             try {
                 await client.query(
-                    `INSERT INTO shipments (id, batch_id, carrier, tracking_number, status, current_lat, current_lng, gps_trail, created_at, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-                    [uuid(), pids[i % pids.length]?.id || 'b-' + i, pick(carriers),
+                    `INSERT INTO shipments (id, carrier, tracking_number, status, current_lat, current_lng, gps_trail, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+                    [uuid(), pick(carriers),
                     'TRK-' + td.slug.toUpperCase().replace(/-/g, '') + '-' + String(i + 1).padStart(4, '0'),
                     pick(sts), to.lat, to.lng,
                     JSON.stringify([{ lat: from.lat, lng: from.lng, ts: rndDate(30), loc: from.city }, { lat: to.lat, lng: to.lng, ts: rndDate(5), loc: to.city }]),

@@ -195,6 +195,7 @@ model Product {
   batchNumber    String   @default("") @map("batch_number")
   originCountry  String   @default("") @map("origin_country")
   registeredBy   String?  @map("registered_by")
+  orgId          String?  @map("org_id")
   trustScore     Float    @default(100.0) @map("trust_score")
   status         String   @default("active")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -213,6 +214,7 @@ model Product {
   nftCertificates   NftCertificate[]
   sustainabilityScores SustainabilityScore[]
 
+  @@index([orgId])
   @@map("products")
 }
 
@@ -240,6 +242,7 @@ model ScanEvent {
   id               String   @id @default(uuid())
   qrCodeId         String?  @map("qr_code_id")
   productId        String?  @map("product_id")
+  orgId            String?  @map("org_id")
   scanType         String   @default("validation") @map("scan_type")
   deviceFingerprint String  @default("") @map("device_fingerprint")
   ipAddress        String   @default("") @map("ip_address")
@@ -260,6 +263,7 @@ model ScanEvent {
 
   @@index([productId])
   @@index([scannedAt])
+  @@index([orgId])
   @@map("scan_events")
 }
 

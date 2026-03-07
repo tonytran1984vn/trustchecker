@@ -741,99 +741,23 @@ function renderOpsSidebar() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// RISK SIDEBAR (Risk Governance Layer)
+// RISK SIDEBAR (Risk Governance Layer — Workspace Pattern)
 // ═══════════════════════════════════════════════════════════════
 
-const RISK_DOMAINS = {
-  'risk-dashboard': [
-    { id: 'risk-dashboard', icon: icon('dashboard'), label: 'Risk Dashboard' },
-  ],
-  'fraud-intelligence': [
-    { id: 'risk-event-feed', icon: icon('scroll'), label: 'Event Feed' },
-    { id: 'risk-advanced-filter', icon: icon('search'), label: 'Advanced Filter' },
-    { id: 'risk-high-risk', icon: icon('alertTriangle'), label: 'High Risk Events' },
-  ],
-  'risk-rules': [
-    { id: 'risk-duplicate-rules', icon: icon('shield'), label: 'Duplicate Rules' },
-    { id: 'risk-geo-rules', icon: icon('globe'), label: 'Geo Rules' },
-    { id: 'risk-velocity-rules', icon: icon('zap'), label: 'Velocity Rules' },
-    { id: 'risk-auto-response', icon: icon('settings'), label: 'Auto Response' },
-  ],
-  'cases': [
-    { id: 'risk-cases-open', icon: icon('alertTriangle'), label: 'Open Cases' },
-    { id: 'risk-cases-escalated', icon: icon('alert'), label: 'Escalated' },
-    { id: 'risk-cases-closed', icon: icon('check'), label: 'Closed' },
-  ],
-  'analytics': [
-    { id: 'risk-pattern-clusters', icon: icon('workflow'), label: 'Pattern Clusters' },
-    { id: 'risk-distributor-risk', icon: icon('network'), label: 'Distributor Risk' },
-    { id: 'risk-sku-risk', icon: icon('products'), label: 'SKU Risk Ranking' },
-    { id: 'risk-heatmap', icon: icon('globe'), label: 'Risk Heatmap' },
-  ],
-  'risk-reports': [
-    { id: 'risk-reports', icon: icon('scroll'), label: 'Reports' },
-  ],
-  'risk-engine': [
-    { id: 'risk-scoring-engine', icon: icon('target'), label: 'Scoring Engine' },
-    { id: 'risk-decision-engine', icon: icon('zap'), label: 'Decision Engine' },
-    { id: 'risk-case-workflow', icon: icon('workflow'), label: 'Case Workflow' },
-    { id: 'risk-model-governance', icon: icon('settings'), label: 'Model Governance' },
-    { id: 'risk-forensic', icon: icon('search'), label: 'Forensic Investigation' },
-  ],
-};
-
-const RISK_DOMAIN_LABELS = {
-  'risk-dashboard': 'Dashboard',
-  'fraud-intelligence': '🚨 Fraud Intelligence',
-  'risk-rules': '⚙ Risk Rules',
-  'cases': '🗂 Cases',
-  'analytics': '📈 Analytics',
-  'risk-reports': '📜 Reports',
-  'risk-engine': '🧠 Risk Engine',
-};
+const RISK_NAV = [
+  { id: 'risk-dashboard', icon: icon('dashboard'), label: 'Dashboard' },
+  { id: 'risk-fraud', icon: icon('alert'), label: 'Fraud Intelligence' },
+  { id: 'risk-rules-ws', icon: icon('shield'), label: 'Risk Rules' },
+  { id: 'risk-cases-ws', icon: icon('scroll'), label: 'Cases & Reports' },
+  { id: 'risk-analytics-ws', icon: icon('barChart'), label: 'Analytics' },
+  { id: 'risk-engine-ws', icon: icon('brain'), label: 'Risk Engine' },
+];
 
 function renderRiskSidebar() {
   const brandName = State.branding?.app_name || 'TrustChecker';
   const orgName = State.org?.name || '';
 
-  const domainSections = Object.keys(RISK_DOMAINS).map(domain => {
-    const items = RISK_DOMAINS[domain];
-    const label = RISK_DOMAIN_LABELS[domain];
-
-    if (domain === 'risk-dashboard' || domain === 'risk-reports') {
-      return `
-        <div class="nav-section" data-domain="${domain}">
-          <div class="nav-section-items">
-            ${items.map(n => {
-        const activeClass = State.page === n.id ? 'active' : '';
-        return `<div class="nav-item ${activeClass}" onclick="navigate('${n.id}')">
-                <span class="nav-icon">${n.icon}</span><span>${n.label}</span>
-              </div>`;
-      }).join('')}
-          </div>
-        </div>
-      `;
-    }
-
-    const collapsed = isCollapsed(domain);
-    return `
-      <div class="nav-section ${collapsed ? 'collapsed' : ''}" data-domain="${domain}">
-        <div class="nav-section-label" onclick="toggleNavSection('${domain}')">
-          <span class="nav-domain-dot risk-dot"></span>
-          <span class="nav-section-text">${label}</span>
-          <span class="nav-chevron">▸</span>
-        </div>
-        <div class="nav-section-items">
-          ${items.map(n => {
-      const activeClass = State.page === n.id ? 'active' : '';
-      return `<div class="nav-item ${activeClass}" onclick="navigate('${n.id}')">
-              <span class="nav-icon">${n.icon}</span><span>${n.label}</span>
-            </div>`;
-    }).join('')}
-        </div>
-      </div>
-    `;
-  }).join('');
+  const navItems = RISK_NAV.map(n => renderNavItem(n)).join('');
 
   return `
     <nav class="sidebar sidebar-risk" role="navigation" aria-label="Risk navigation">
@@ -850,7 +774,7 @@ function renderRiskSidebar() {
         </div>` : ''}
       </div>
       <div class="sidebar-nav">
-        ${domainSections}
+        ${navItems}
       </div>
       <div class="sidebar-footer">
         <div class="user-avatar role-risk_officer">${(State.user?.email || 'R')[0].toUpperCase()}</div>

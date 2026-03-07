@@ -8,9 +8,11 @@ import { API as api } from '../../core/api.js';
 import { fmtNum, fmtUSD, fmtPct } from '../../core/format.js';
 
 let _d = null;
+let _err = null;
 const $ = fmtUSD;
 
 export function renderPage() {
+  if (_err) return `<div class="loading"><span style="color:#ef4444">⚠ ${_err}</span></div>`;
   if (!_d) { load(); return '<div class="loading"><div class="spinner"></div><span style="color:var(--text-muted)">Computing CRCE...</span></div>'; }
   const d = _d;
   const t = d.tiers;
@@ -259,5 +261,10 @@ async function load() {
     _d = await api.get('/tenant/governance/kpi-overview');
     const el = document.getElementById('main-content');
     if (el) el.innerHTML = renderPage();
-  } catch (e) { console.error('[CRCE]', e); }
+  } catch (e) {
+    console.error('[CRCE]', e);
+    _err = 'Failed to load CRCE data. Please try again later.';
+    const el = document.getElementById('main-content');
+    if (el) el.innerHTML = renderPage();
+  }
 }

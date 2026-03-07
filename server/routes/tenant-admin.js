@@ -518,7 +518,7 @@ router.get('/audit', async (req, res) => {
        FROM audit_log al
        LEFT JOIN users u ON u.id = al.actor_id
        WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = ?)
-       ORDER BY al.created_at DESC
+       ORDER BY al.timestamp DESC
        LIMIT ? OFFSET ?`,
             [req.tenantId, Math.min(parseInt(limit) || 50, 200), Math.max(parseInt(offset) || 0, 0)]
         );
@@ -690,7 +690,7 @@ router.get('/governance/dashboard', async (req, res) => {
              LEFT JOIN users u ON u.id = al.actor_id
              WHERE al.action IN ('SELF_ELEVATION_BLOCKED', 'PERMISSION_CEILING_BLOCKED', 'HIGH_RISK_ROLE_PENDING', 'HIGH_RISK_ROLE_APPROVED', 'HIGH_RISK_ROLE_REJECTED')
              AND al.actor_id IN (SELECT id FROM users WHERE org_id = ?)
-             ORDER BY al.created_at DESC LIMIT 20`,
+             ORDER BY al.timestamp DESC LIMIT 20`,
             [tid]
         );
 
@@ -992,25 +992,25 @@ router.get('/governance/audit-summary', async (req, res) => {
                     WHERE u.org_id = $1
                     GROUP BY u.id, u.username, u.email
                     ORDER BY events DESC LIMIT 10`, [tid]),
-            db.all(`SELECT al.created_at::date as day, COUNT(*) as events
+            db.all(`SELECT al.timestamp::date as day, COUNT(*) as events
                     FROM audit_log al
                     WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
-                    AND al.created_at >= NOW() - INTERVAL '30 days'
-                    GROUP BY al.created_at::date ORDER BY day ASC`, [tid]),
+                    AND al.timestamp >= NOW() - INTERVAL '30 days'
+                    GROUP BY al.timestamp::date ORDER BY day ASC`, [tid]),
             db.all(`SELECT al.*, u.username as actor_name FROM audit_log al
                     LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
                     AND al.action IN ('SELF_ELEVATION_BLOCKED','PERMISSION_CEILING_BLOCKED','HIGH_RISK_ROLE_PENDING','ROLE_ASSIGNED','ROLE_REMOVED')
-                    ORDER BY al.created_at DESC LIMIT 15`, [tid]),
+                    ORDER BY al.timestamp DESC LIMIT 15`, [tid]),
             db.get(`SELECT COUNT(*) as total FROM audit_log
                     WHERE actor_id IN (SELECT id FROM users WHERE org_id = $1)
                     AND action = 'LOGIN_FAILED'
-                    AND created_at >= NOW() - INTERVAL '30 days'`, [tid]),
+                    AND timestamp >= NOW() - INTERVAL '30 days'`, [tid]),
         ]);
 
         const activeUsers = await db.get(`SELECT COUNT(DISTINCT actor_id) as count FROM audit_log
             WHERE actor_id IN (SELECT id FROM users WHERE org_id = $1)
-            AND created_at >= NOW() - INTERVAL '7 days'`, [tid]);
+            AND timestamp >= NOW() - INTERVAL '7 days'`, [tid]);
 
         res.json({
             total_events: parseInt(totalEvents?.total) || 0,
@@ -1022,7 +1022,7 @@ router.get('/governance/audit-summary', async (req, res) => {
             recent_critical: recentCritical.map(e => ({
                 action: e.action, actor: e.actor_name || '—',
                 details: typeof e.details === 'string' ? e.details : JSON.stringify(e.details || {}),
-                timestamp: e.created_at,
+                timestamp: e.timestamp,
             })),
         });
     } catch (err) {
@@ -1154,15 +1154,15 @@ router.get('/owner/dashboard', requireOrgOwner(), async (req, res) => {
                 db.get(`SELECT COUNT(*) as c FROM users WHERE org_id = $1 AND role IN ('compliance_officer','risk_officer','risk_committee','security_officer','org_owner')`, [tid]),
                 db.get(`SELECT COUNT(*) as c FROM pending_role_approvals WHERE tenant_id = $1 AND status = 'pending'`, [tid]).catch(() => ({ c: 0 })),
                 db.all(`SELECT u.email, array_agg(ur.role_id) as roles FROM rbac_user_roles ur JOIN users u ON u.id = ur.user_id WHERE u.org_id = $1 GROUP BY u.email HAVING COUNT(*) > 3 LIMIT 10`, [tid]).catch(() => []),
-                db.all(`SELECT action, details, created_at FROM audit_log WHERE entity_type IN ('session','security') AND actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY created_at DESC LIMIT 10`, [tid]).catch(() => []),
-                db.get(`SELECT COUNT(*) as c FROM audit_log WHERE action = 'CARBON_MINT' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) AND created_at > NOW() - INTERVAL '30 days'`, [tid]).catch(() => ({ c: 0 })),
-                db.get(`SELECT details FROM audit_log WHERE action = 'RISK_MODEL_DEPLOY' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY created_at DESC LIMIT 1`, [tid]).catch(() => null),
+                db.all(`SELECT action, details, timestamp FROM audit_log WHERE entity_type IN ('session','security') AND actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY timestamp DESC LIMIT 10`, [tid]).catch(() => []),
+                db.get(`SELECT COUNT(*) as c FROM audit_log WHERE action = 'CARBON_MINT' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) AND timestamp > NOW() - INTERVAL '30 days'`, [tid]).catch(() => ({ c: 0 })),
+                db.get(`SELECT details FROM audit_log WHERE action = 'RISK_MODEL_DEPLOY' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY timestamp DESC LIMIT 1`, [tid]).catch(() => null),
                 // NEW: Self-elevation attempt count (30d)
-                db.get(`SELECT COUNT(*) as c FROM audit_log WHERE action = 'SELF_ELEVATION_BLOCKED' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) AND created_at > NOW() - INTERVAL '30 days'`, [tid]).catch(() => ({ c: 0 })),
+                db.get(`SELECT COUNT(*) as c FROM audit_log WHERE action = 'SELF_ELEVATION_BLOCKED' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) AND timestamp > NOW() - INTERVAL '30 days'`, [tid]).catch(() => ({ c: 0 })),
                 // NEW: Inactive privileged accounts count
                 db.get(`SELECT COUNT(*) as c FROM users WHERE org_id = $1 AND role IN ('company_admin','admin','org_owner','security_officer','compliance_officer','risk_officer') AND (last_login IS NULL OR last_login < NOW() - INTERVAL '30 days')`, [tid]).catch(() => ({ c: 0 })),
                 // NEW: Last 5 critical actions for quick view
-                db.all(`SELECT al.action, al.created_at, u.email as actor_email FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id WHERE al.action IN ('TENANT_FREEZE','FORCE_REAUTH','REVOKE_ALL_SESSIONS','ROLE_SUSPENDED','CA_APPOINTED','ROLE_APPOINTED','HIGH_RISK_ROLE_APPROVED','SELF_ELEVATION_BLOCKED') AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1)) ORDER BY al.created_at DESC LIMIT 5`, [tid]).catch(() => []),
+                db.all(`SELECT al.action, al.timestamp, u.email as actor_email FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id WHERE al.action IN ('TENANT_FREEZE','FORCE_REAUTH','REVOKE_ALL_SESSIONS','ROLE_SUSPENDED','CA_APPOINTED','ROLE_APPOINTED','HIGH_RISK_ROLE_APPROVED','SELF_ELEVATION_BLOCKED') AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1)) ORDER BY al.timestamp DESC LIMIT 5`, [tid]).catch(() => []),
             ]);
 
         // Compute Privilege Risk Score (0-100)
@@ -1211,12 +1211,12 @@ router.get('/owner/access-oversight', requireOrgOwner(), async (req, res) => {
             db.all(`SELECT u.id, u.email, u.username, u.role, u.last_login, u.created_at
                     FROM users u WHERE u.org_id = $1 ORDER BY u.role, u.email`, [tid]),
             // Privilege escalation history (role changes)
-            db.all(`SELECT al.actor_id, al.action, al.entity_id, al.details, al.created_at,
+            db.all(`SELECT al.actor_id, al.action, al.entity_id, al.details, al.timestamp,
                            u.email as actor_email
                     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action IN ('ROLE_CHANGED','CA_APPOINTED','ROLE_ASSIGNED','SELF_ELEVATION_BLOCKED','PERMISSION_CEILING_BLOCKED')
                     AND al.entity_id IN (SELECT id FROM users WHERE org_id = $1)
-                    ORDER BY al.created_at DESC LIMIT 50`, [tid]),
+                    ORDER BY al.timestamp DESC LIMIT 50`, [tid]),
             // Highest-risk accounts (most permissions + roles)
             db.all(`SELECT u.email, u.role, u.last_login,
                            COUNT(DISTINCT ur.role_id) as role_count
@@ -1241,7 +1241,7 @@ router.get('/owner/critical-actions', requireOrgOwner(), async (req, res) => {
     try {
         const tid = req.tenantId;
         const criticalActions = await db.all(
-            `SELECT al.id, al.actor_id, al.action, al.entity_type, al.entity_id, al.details, al.created_at,
+            `SELECT al.id, al.actor_id, al.action, al.entity_type, al.entity_id, al.details, al.timestamp,
                     u.email as actor_email
              FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
              WHERE al.action IN (
@@ -1251,7 +1251,7 @@ router.get('/owner/critical-actions', requireOrgOwner(), async (req, res) => {
                  'PERMISSION_CEILING_BLOCKED','SELF_ELEVATION_BLOCKED','NEW_IP_LOGIN','ROLE_EXPIRED'
              )
              AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
-             ORDER BY al.created_at DESC LIMIT 100`,
+             ORDER BY al.timestamp DESC LIMIT 100`,
             [tid]
         );
 
@@ -1294,7 +1294,7 @@ router.post('/owner/emergency', requireOrgOwner(), async (req, res) => {
             result = { message: `All ${target_role} users demoted to viewer`, suspended_role: target_role };
         } else if (action === 'EMERGENCY_AUDIT_EXPORT') {
             const logs = await db.all(
-                `SELECT al.* FROM audit_log al WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY al.created_at DESC LIMIT 1000`, [tid]
+                `SELECT al.* FROM audit_log al WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY al.timestamp DESC LIMIT 1000`, [tid]
             );
             result = { message: 'Emergency audit export ready', log_count: logs.length, logs };
         }
@@ -1379,14 +1379,14 @@ router.get('/owner/privilege-governance', requireOrgOwner(), async (req, res) =>
         const [recentRoleAssignments, roleExpirations, selfElevationLog,
             highRiskUsers, sodConflicts] = await Promise.all([
                 // Recent role assignments (who got what, when, by whom)
-                db.all(`SELECT al.action, al.details, al.created_at,
+                db.all(`SELECT al.action, al.details, al.timestamp,
                                u.email as actor_email, target.email as target_email
                         FROM audit_log al
                         LEFT JOIN users u ON u.id = al.actor_id
                         LEFT JOIN users target ON target.id = al.entity_id
                         WHERE al.action IN ('ROLES_ASSIGNED','HIGH_RISK_ROLE_APPROVED','HIGH_RISK_ROLE_REJECTED','HIGH_RISK_ROLE_PENDING','ROLE_APPOINTED','CA_APPOINTED')
                         AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
-                        ORDER BY al.created_at DESC LIMIT 30`, [tid]).catch(() => []),
+                        ORDER BY al.timestamp DESC LIMIT 30`, [tid]).catch(() => []),
                 // Role expiration tracking
                 db.all(`SELECT ur.expires_at, r.name as role_name, r.display_name, u.email
                         FROM rbac_user_roles ur
@@ -1395,12 +1395,12 @@ router.get('/owner/privilege-governance', requireOrgOwner(), async (req, res) =>
                         WHERE r.tenant_id = $1 AND ur.expires_at IS NOT NULL
                         ORDER BY ur.expires_at ASC LIMIT 20`, [tid]).catch(() => []),
                 // Self-assignment attempt log
-                db.all(`SELECT al.created_at, al.details, u.email as actor_email
+                db.all(`SELECT al.timestamp, al.details, u.email as actor_email
                         FROM audit_log al
                         LEFT JOIN users u ON u.id = al.actor_id
                         WHERE al.action IN ('SELF_ELEVATION_BLOCKED','PERMISSION_CEILING_BLOCKED')
                         AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
-                        ORDER BY al.created_at DESC LIMIT 20`, [tid]).catch(() => []),
+                        ORDER BY al.timestamp DESC LIMIT 20`, [tid]).catch(() => []),
                 // High-risk role mapping
                 db.all(`SELECT u.email, u.username, u.role, u.last_login, u.created_at,
                                COUNT(DISTINCT ur.role_id) as role_count
@@ -1439,7 +1439,7 @@ router.get('/owner/risk-monitoring', requireOrgOwner(), async (req, res) => {
 
         const [riskSignals, anomalies, newIpLogins] = await Promise.all([
             // Risk signals: suspicious and security-related events
-            db.all(`SELECT al.id, al.actor_id, al.action, al.entity_type, al.details, al.created_at,
+            db.all(`SELECT al.id, al.actor_id, al.action, al.entity_type, al.details, al.timestamp,
                            u.email as actor_email
                     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action IN (
@@ -1447,19 +1447,19 @@ router.get('/owner/risk-monitoring', requireOrgOwner(), async (req, res) => {
                         'NEW_IP_LOGIN','ROLE_EXPIRED','SOD_CONFLICT_DETECTED'
                     )
                     AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
-                    ORDER BY al.created_at DESC LIMIT 50`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 50`, [tid]).catch(() => []),
             // Anomalous patterns: failed logins, unusual hours
-            db.all(`SELECT al.action, al.details, al.created_at, u.email as actor_email
+            db.all(`SELECT al.action, al.details, al.timestamp, u.email as actor_email
                     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action IN ('LOGIN_FAILED','SUSPICIOUS_ACCESS','RATE_LIMIT_HIT','SESSION_HIJACK_DETECTED')
                     AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
-                    ORDER BY al.created_at DESC LIMIT 30`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 30`, [tid]).catch(() => []),
             // New IP logins
-            db.all(`SELECT al.details, al.created_at, u.email as actor_email
+            db.all(`SELECT al.details, al.timestamp, u.email as actor_email
                     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action = 'NEW_IP_LOGIN'
                     AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
-                    ORDER BY al.created_at DESC LIMIT 20`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 20`, [tid]).catch(() => []),
         ]);
 
         res.json({
@@ -1481,7 +1481,7 @@ router.get('/owner/governance-log', requireOrgOwner(), async (req, res) => {
 
         const [governanceActions, emergencyLog, appointmentHistory] = await Promise.all([
             // All governance-level actions (immutable trail)
-            db.all(`SELECT al.id, al.actor_id, al.action, al.entity_type, al.entity_id, al.details, al.created_at,
+            db.all(`SELECT al.id, al.actor_id, al.action, al.entity_type, al.entity_id, al.details, al.timestamp,
                            u.email as actor_email
                     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action IN (
@@ -1492,21 +1492,21 @@ router.get('/owner/governance-log', requireOrgOwner(), async (req, res) => {
                         'CARBON_MINT','ORG_CREATED'
                     )
                     AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
-                    ORDER BY al.created_at DESC LIMIT 100`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 100`, [tid]).catch(() => []),
             // Emergency / break-glass events
-            db.all(`SELECT al.id, al.action, al.details, al.created_at, u.email as actor_email
+            db.all(`SELECT al.id, al.action, al.details, al.timestamp, u.email as actor_email
                     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.entity_type = 'emergency'
                     AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id = $1)
-                    ORDER BY al.created_at DESC LIMIT 50`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 50`, [tid]).catch(() => []),
             // CA/SO appointment history
-            db.all(`SELECT al.action, al.details, al.created_at, u.email as actor_email, target.email as target_email
+            db.all(`SELECT al.action, al.details, al.timestamp, u.email as actor_email, target.email as target_email
                     FROM audit_log al
                     LEFT JOIN users u ON u.id = al.actor_id
                     LEFT JOIN users target ON target.id = al.entity_id
                     WHERE al.action IN ('CA_APPOINTED','ROLE_APPOINTED')
                     AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
-                    ORDER BY al.created_at DESC LIMIT 30`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 30`, [tid]).catch(() => []),
         ]);
 
         res.json({
@@ -1541,7 +1541,7 @@ router.get('/owner/financial', requireOrgOwner(), async (req, res) => {
             Promise.all([
                 db.get(`SELECT COUNT(*) as c FROM scan_events WHERE scanned_at >= date_trunc('month', NOW())`).catch(() => ({ c: 0 })),
                 db.get(`SELECT COALESCE(SUM(file_size), 0) as s FROM evidence_items`).catch(() => ({ s: 0 })),
-                db.get(`SELECT COUNT(*) as c FROM audit_log WHERE created_at >= date_trunc('month', NOW()) AND actor_id IN (SELECT id FROM users WHERE org_id = $1)`, [tid]).catch(() => ({ c: 0 })),
+                db.get(`SELECT COUNT(*) as c FROM audit_log WHERE timestamp >= date_trunc('month', NOW()) AND actor_id IN (SELECT id FROM users WHERE org_id = $1)`, [tid]).catch(() => ({ c: 0 })),
             ]),
             // Org info
             db.get(`SELECT name, plan, settings FROM organizations WHERE id = $1`, [tid]).catch(() => null),
@@ -1602,12 +1602,12 @@ router.get('/owner/compliance', requireOrgOwner(), async (req, res) => {
                     WHERE cr.entity_id IN (SELECT id FROM products WHERE org_id = $1)
                     ORDER BY cr.created_at DESC LIMIT 50`, [tid]).catch(() => []),
             // GDPR activity for org users
-            db.all(`SELECT al.action, al.created_at, al.details, u.email as actor_email
+            db.all(`SELECT al.action, al.timestamp, al.details, u.email as actor_email
                     FROM audit_log al
                     LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action IN ('GDPR_EXPORT','GDPR_DATA_EXPORT','GDPR_DELETION','CONSENT_GIVEN','RETENTION_EXECUTED')
                     AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
-                    ORDER BY al.created_at DESC LIMIT 30`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 30`, [tid]).catch(() => []),
             // Consent stats for this org
             Promise.all([
                 db.get(`SELECT COUNT(*) as c FROM users WHERE org_id = $1`, [tid]).catch(() => ({ c: 0 })),
@@ -2394,7 +2394,7 @@ router.patch('/owner/ccs/bu-config', requireExecutiveAccess(), async (req, res) 
         await db.run(`UPDATE organizations SET settings = $1, updated_at = NOW() WHERE id = $2`,
             [JSON.stringify(settings), tid]);
 
-        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, created_at)
+        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
                       VALUES ($1, $2, 'BU_CONFIG_UPDATED', 'organization', $3, $4, NOW())`,
             [require('uuid').v4(), req.user.id, tid, JSON.stringify(settings.bu_config)]);
 
@@ -2428,24 +2428,24 @@ router.get('/owner/ccs/decisions', requireExecutiveAccess(), async (req, res) =>
                     AND cr.next_review <= NOW() + INTERVAL '60 days'
                     ORDER BY cr.next_review ASC LIMIT 10`, [tid]),
             // Pending role/governance approvals
-            db.all(`SELECT al.action, al.details, al.created_at, u.email as actor_email
+            db.all(`SELECT al.action, al.details, al.timestamp, u.email as actor_email
                     FROM audit_log al
                     LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action IN ('ROLE_CHANGE_REQUESTED','APPROVAL_PENDING','CA_APPOINTMENT_REQUESTED')
                     AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
-                    ORDER BY al.created_at DESC LIMIT 5`, [tid]),
+                    ORDER BY al.timestamp DESC LIMIT 5`, [tid]),
             // Recent anomalies
             db.all(`SELECT ad.anomaly_type, ad.severity, ad.score, ad.description, ad.detected_at, ad.status
                     FROM anomaly_detections ad
                     WHERE ad.status != 'resolved'
                     ORDER BY ad.detected_at DESC LIMIT 5`).catch(() => []),
             // Recent critical audit actions
-            db.all(`SELECT al.action, al.entity_type, al.details, al.created_at, u.email
+            db.all(`SELECT al.action, al.entity_type, al.details, al.timestamp, u.email
                     FROM audit_log al
                     LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
                     AND al.action IN ('EMERGENCY_ACTION','LOCKOUT','ROLE_CHANGED','SELF_ELEVATION_BLOCKED','MFA_DISABLED')
-                    ORDER BY al.created_at DESC LIMIT 5`, [tid]),
+                    ORDER BY al.timestamp DESC LIMIT 5`, [tid]),
         ]);
 
         // Classify decisions
@@ -2663,7 +2663,7 @@ router.patch('/owner/org-financials', requireExecutiveAccess(), async (req, res)
             [JSON.stringify(settings), tid]);
 
         // Audit log
-        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, created_at)
+        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
                       VALUES ($1, $2, 'FINANCIAL_CONFIG_UPDATED', 'organization', $3, $4, NOW())`,
             [require('uuid').v4(), req.user.id, tid, JSON.stringify(settings.financials)]);
 

@@ -376,7 +376,7 @@ router.post('/users', async (req, res) => {
 
         // Audit
         await db.run(
-            `INSERT INTO audit_log (id, actor_id, action, target_id, details) VALUES (?, ?, 'PLATFORM_USER_CREATED', ?, ?)`,
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'PLATFORM_USER_CREATED', 'user', ?, ?)`,
             [uuidv4(), req.user.id, id, JSON.stringify({ username, email, role })]
         );
 
@@ -428,7 +428,7 @@ router.put('/users/:id', async (req, res) => {
         await db.run(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
 
         await db.run(
-            `INSERT INTO audit_log (id, actor_id, action, target_id, details) VALUES (?, ?, 'PLATFORM_USER_UPDATED', ?, ?)`,
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'PLATFORM_USER_UPDATED', 'user', ?, ?)`,
             [uuidv4(), req.user.id, req.params.id, JSON.stringify({ username: user.username, ...changes })]
         );
 
@@ -452,7 +452,7 @@ router.delete('/users/:id', async (req, res) => {
         await db.run('DELETE FROM users WHERE id = ?', [req.params.id]);
 
         await db.run(
-            `INSERT INTO audit_log (id, actor_id, action, target_id, details) VALUES (?, ?, 'PLATFORM_USER_DELETED', ?, ?)`,
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'PLATFORM_USER_DELETED', 'user', ?, ?)`,
             [uuidv4(), req.user.id, req.params.id, JSON.stringify({ username: user.username, role: user.role })]
         );
 
@@ -526,7 +526,7 @@ router.post('/tenants/:id/users', async (req, res) => {
         );
 
         await db.run(
-            `INSERT INTO audit_log (id, actor_id, action, target_id, details) VALUES (?, ?, 'TENANT_USER_CREATED', ?, ?)`,
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'TENANT_USER_CREATED', 'user', ?, ?)`,
             [uuidv4(), req.user.id, id, JSON.stringify({ username, email, role, tenant_id: req.params.id, tenant_name: tenant.name })]
         );
 
@@ -658,7 +658,7 @@ router.get('/audit', async (req, res) => {
             `SELECT al.*, u.username as actor_name 
        FROM audit_log al
        LEFT JOIN users u ON u.id = al.actor_id
-       ORDER BY al.created_at DESC
+       ORDER BY al.timestamp DESC
        LIMIT ? OFFSET ?`,
             [Math.min(parseInt(limit) || 50, 200), Math.max(parseInt(offset) || 0, 0)]
         );

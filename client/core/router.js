@@ -240,6 +240,13 @@ const PAGE_LOADERS = {
     'risk-model-governance': () => import('../pages/risk/model-governance.js'),
     'risk-forensic': () => import('../pages/risk/forensic-investigation.js'),
 
+    // ─── Risk Workspace Routes (matching SA/Ops pattern) ──
+    'risk-fraud': () => import('../pages/risk/risk-fraud-workspace.js'),
+    'risk-rules-ws': () => import('../pages/risk/risk-rules-workspace.js'),
+    'risk-cases-ws': () => import('../pages/risk/risk-cases-workspace.js'),
+    'risk-analytics-ws': () => import('../pages/risk/risk-analytics-workspace.js'),
+    'risk-engine-ws': () => import('../pages/risk/risk-engine-workspace.js'),
+
     // ─── Compliance (Governance Layer) pages ───────────
     'compliance-dashboard': () => import('../pages/compliance/dashboard.js'),
     'compliance-user-activity': () => import('../pages/compliance/user-activity.js'),
@@ -756,6 +763,70 @@ export async function loadPageData(page) {
         } else if (page === 'risk-duplicate-rules') {
             State._riskDuplicates = await API.get('/ops/data/duplicate-alerts').catch(() => ({}));
             render();
+
+            // ─── Risk Workspace Data Preloads (parallel prefetch per workspace) ──
+        } else if (page === 'risk-fraud') {
+            // Fraud Intelligence workspace: Event Feed, Advanced Filter, High Risk Events
+            const res = await API.get('/scm/risk/alerts?limit=200').catch(() => ({}));
+            State._riskAlerts = res;
+            render();
+        } else if (page === 'risk-rules-ws') {
+            // Risk Rules workspace: Duplicate, Geo, Velocity, Auto Response
+            const [duplicates, geoAlerts, velocityAlerts, rules] = await Promise.all([
+                API.get('/ops/data/duplicate-alerts').catch(() => ({})),
+                API.get('/ops/data/geo-alerts').catch(() => ({})),
+                API.get('/scm/risk/alerts?limit=50').catch(() => ({})),
+                API.get('/scm/risk-model/rules-config').catch(() => ({})),
+            ]);
+            State._riskDuplicates = duplicates;
+            State._riskGeoAlerts = geoAlerts;
+            State._riskAlerts = velocityAlerts;
+            State._riskRules = rules;
+            render();
+        } else if (page === 'risk-cases-ws') {
+            // Cases & Reports workspace: Open, Escalated, Closed, Reports
+            const [alerts, incidents, trends] = await Promise.all([
+                API.get('/scm/risk/alerts?limit=100').catch(() => ({})),
+                API.get('/ops/incidents?limit=50').catch(() => ({})),
+                API.get('/scm/risk/trends?period=30d').catch(() => ({})),
+            ]);
+            State._riskAlerts = alerts;
+            State._riskIncidents = incidents.incidents || [];
+            State._riskTrends = trends;
+            render();
+        } else if (page === 'risk-analytics-ws') {
+            // Analytics workspace: Pattern Clusters, Distributor Risk, SKU Risk, Heatmap
+            const [patterns, behavior, analytics, heatmap] = await Promise.all([
+                API.get('/risk-graph/patterns').catch(() => ({})),
+                API.get('/risk-graph/behavior').catch(() => ({})),
+                API.get('/risk-graph/risk-analytics').catch(() => ({})),
+                API.get('/scm/risk/heatmap').catch(() => ({})),
+            ]);
+            State._riskPatterns = patterns;
+            State._riskBehavior = behavior;
+            State._riskAnalytics = analytics;
+            State._riskHeatmap = heatmap;
+            render();
+        } else if (page === 'risk-engine-ws') {
+            // Risk Engine workspace: Scoring, Decision, Case Workflow, Model Governance, Forensic
+            const [models, rules, graph, modelGov, drift, changes, hidden, fraudFeed, incidents] = await Promise.all([
+                API.get('/scm/risk-model/models').catch(() => ({})),
+                API.get('/scm/risk-model/rules-config').catch(() => ({})),
+                API.get('/risk-graph/dashboard').catch(() => ({})),
+                API.get('/scm/risk-model/models').catch(() => ({})),
+                API.get('/scm/risk-model/models/drift').catch(() => ({})),
+                API.get('/scm/risk-model/model-changes').catch(() => ({})),
+                API.get('/risk-graph/hidden-links').catch(() => ({})),
+                API.get('/risk-graph/fraud-feed').catch(() => ({})),
+                API.get('/ops/incidents?limit=50').catch(() => ({})),
+            ]);
+            State._riskModels = { models: models.models || [], rules: rules.rules || rules.config || [] };
+            State._riskGraph = graph;
+            State._riskModelGov = { models: modelGov.models || [], drift: drift.drift_reports || drift.reports || [], changes: changes.changes || [] };
+            State._riskForensic = { links: hidden.links || hidden.hidden_links || [], feed: fraudFeed.events || fraudFeed.feed || [] };
+            State._riskIncidents = incidents.incidents || [];
+            render();
+
         } else if (page === 'compliance-dashboard') {
             const [stats, report, gaps] = await Promise.all([
                 API.get('/compliance/stats').catch(() => ({})),
