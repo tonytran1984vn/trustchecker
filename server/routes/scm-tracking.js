@@ -93,7 +93,7 @@ router.get('/events', authMiddleware, async (req, res) => {
     `;
         const params = [];
         const conditions = [];
-        if (orgId && req.user?.role !== 'super_admin') { conditions.push('(sce.org_id = ? OR pr.org_id = ?)'); params.push(orgId, orgId); }
+        if (orgId && req.user?.role !== 'super_admin') { conditions.push('pr.org_id = ?'); params.push(orgId); }
         if (event_type) { conditions.push('sce.event_type = ?'); params.push(event_type); }
         if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
         query += ' ORDER BY sce.created_at DESC LIMIT ?';
