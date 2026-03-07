@@ -78,7 +78,7 @@ router.get('/duplicates', authMiddleware, async (req, res) => {
             LEFT JOIN products p ON se.product_id = p.id`;
         const params = [];
         const conditions = [];
-        if (orgId && req.user?.role !== 'super_admin') { conditions.push('(p.org_id = ? OR dc.org_id = ?)'); params.push(orgId, orgId); }
+        if (orgId && req.user?.role !== 'super_admin') { conditions.push('p.org_id = ?'); params.push(orgId); }
         if (classification) { conditions.push('dc.classification = ?'); params.push(classification); }
         if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
         query += ' ORDER BY dc.created_at DESC LIMIT ?';
@@ -100,10 +100,10 @@ router.get('/duplicates', authMiddleware, async (req, res) => {
 router.get('/duplicates/stats', authMiddleware, async (req, res) => {
     try {
         const total = (await db.prepare('SELECT COUNT(*) as c FROM duplicate_classifications').get())?.c || 0;
-        const curiosity = (await db.prepare('SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = "curiosity"').get())?.c || 0;
-        const leakage = (await db.prepare('SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = "leakage"').get())?.c || 0;
-        const counterfeit = (await db.prepare('SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = "counterfeit"').get())?.c || 0;
-        const unclassified = (await db.prepare('SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = "unclassified"').get())?.c || 0;
+        const curiosity = (await db.prepare("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'curiosity'").get())?.c || 0;
+        const leakage = (await db.prepare("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'leakage'").get())?.c || 0;
+        const counterfeit = (await db.prepare("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'counterfeit'").get())?.c || 0;
+        const unclassified = (await db.prepare("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'unclassified'").get())?.c || 0;
 
         const totalScans = (await db.prepare('SELECT COUNT(*) as c FROM scan_events').get())?.c || 1;
         const rawDupRate = total > 0 ? ((total / totalScans) * 100).toFixed(1) : '0';
@@ -195,12 +195,12 @@ router.get('/benchmark', authMiddleware, requirePlatformAdmin(), async (req, res
 
         // Duplicate breakdown
         const totalDups = (await db.prepare('SELECT COUNT(*) as c FROM duplicate_classifications').get())?.c || 0;
-        const curiosity = (await db.prepare('SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = "curiosity"').get())?.c || 0;
-        const leakage = (await db.prepare('SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = "leakage"').get())?.c || 0;
-        const counterfeit = (await db.prepare('SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = "counterfeit"').get())?.c || 0;
+        const curiosity = (await db.prepare("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'curiosity'").get())?.c || 0;
+        const leakage = (await db.prepare("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'leakage'").get())?.c || 0;
+        const counterfeit = (await db.prepare("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'counterfeit'").get())?.c || 0;
 
         // Active model
-        const model = await db.prepare('SELECT version, fp_rate, tp_rate FROM risk_models WHERE status = "production" LIMIT 1').get();
+        const model = await db.prepare("SELECT version, fp_rate, tp_rate FROM risk_models WHERE status = 'production' LIMIT 1").get();
 
         res.json({
             platform_overview: {
