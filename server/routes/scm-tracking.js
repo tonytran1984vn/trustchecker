@@ -145,7 +145,7 @@ router.get('/batches', authMiddleware, async (req, res) => {
     `;
         const params = [];
         const conditions = [];
-        if (orgId) { conditions.push('b.org_id = ?'); params.push(orgId); }
+        if (orgId) { conditions.push('p.org_id = ?'); params.push(orgId); }
         if (product_id) { conditions.push('b.product_id = ?'); params.push(product_id); }
         if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
         query += ' ORDER BY b.created_at DESC LIMIT ?';
