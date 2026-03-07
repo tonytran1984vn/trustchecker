@@ -1683,7 +1683,7 @@ router.get('/owner/compliance', requireOrgOwner(), async (req, res) => {
 
 function requireExecutiveAccess() {
     return (req, res, next) => {
-        if (!['org_owner', 'super_admin', 'executive'].includes(req.user.role)) {
+        if (!['org_owner', 'super_admin', 'executive', 'company_admin'].includes(req.user.role)) {
             return res.status(403).json({ error: 'Executive access required', code: 'EXEC_ONLY' });
         }
         next();
