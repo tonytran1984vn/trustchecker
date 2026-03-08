@@ -23,7 +23,7 @@ export function renderPage() {
       <div class="sa-page-title">
         <h1>${icon('products', 28)} Batch Registry${batches.length ? ` <span style="font-size:0.7rem;color:var(--text-secondary);font-weight:400">(${batches.length})</span>` : ''}</h1>
         <div class="sa-title-actions">
-          <button class="btn btn-primary btn-sm" onclick="showToast('📦 Batch creation — use Create Batch tab','info')">+ Create Batch</button>
+          <button class="btn btn-primary btn-sm" onclick="window._wsSwitch('ops-production','create')">+ Create Batch</button>
         </div>
       </div>
 
@@ -42,7 +42,7 @@ export function renderPage() {
                 <td style="color:var(--text-secondary)">${b.created}</td>
                 <td>
                   <button class="btn btn-xs btn-outline" onclick="showToast('📦 Viewing batch ${b.id}','info')">View</button>
-                  ${b.status === 'active' ? '<button class="btn btn-xs btn-ghost" onclick="showToast(\'🚚 Transfer — coming soon\',\'info\')">Transfer</button>' : ''}
+                  ${b.status === 'active' ? '<button class="btn btn-xs btn-ghost" onclick="navigate(\'ops-logistics\')">🚚 Transfer</button>' : ''}
                 </td>
               </tr>
             `).join('')}
