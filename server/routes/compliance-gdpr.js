@@ -146,14 +146,19 @@ router.post('/policies/execute', requirePermission('compliance:manage'), async (
 router.get('/gdpr/export', async (req, res) => {
     try {
         const userId = req.user.id;
-        const user = await db.get('SELECT id, username, email, role, company, created_at, last_login FROM users WHERE id = ?', [userId]);
+        const orgId = req.user.orgId;
+        const user = await db.get('SELECT id, username, email, role, company, created_at, last_login FROM users WHERE id = $1', [userId]);
 
-        const scans = await db.all('SELECT id, result, fraud_score, trust_score, scanned_at FROM scan_events WHERE id IN (SELECT id FROM audit_log WHERE actor_id = ?) LIMIT 100', [userId]);
-        const tickets = await db.all('SELECT id, subject, status, priority, created_at FROM support_tickets WHERE user_id = ?', [userId]);
-        const auditLog = await db.all('SELECT id, action, entity_type, entity_id, timestamp FROM audit_log WHERE actor_id = ? ORDER BY timestamp DESC LIMIT 200', [userId]);
-        const sessions = await db.all('SELECT id, ip_address, user_agent, created_at FROM sessions WHERE user_id = ? ORDER BY created_at DESC', [userId]);
-        const billing = await db.get("SELECT id, plan_name, status, price, scan_limit, api_limit, created_at FROM billing_plans WHERE user_id = ? AND status = 'active'", [userId]);
-        const invoices = await db.all('SELECT id, plan_name, amount, status, period_start, period_end FROM invoices WHERE user_id = ?', [userId]);
+        let scans = [], tickets = [], auditLog = [], sessions = [], billing = null, invoices = [];
+
+        try { scans = await db.all('SELECT id, result, fraud_score, trust_score, scanned_at FROM scan_events WHERE user_id = $1 ORDER BY scanned_at DESC LIMIT 100', [userId]); } catch (e) {
+            try { scans = await db.all('SELECT id, result, fraud_score, trust_score, scanned_at FROM scan_events WHERE org_id = $1 ORDER BY scanned_at DESC LIMIT 100', [orgId]); } catch (e2) { /* skip */ }
+        }
+        try { tickets = await db.all('SELECT id, subject, status, priority, created_at FROM support_tickets WHERE user_id = $1', [userId]); } catch (e) { /* skip */ }
+        try { auditLog = await db.all('SELECT id, action, entity_type, entity_id, timestamp FROM audit_log WHERE actor_id = $1 ORDER BY timestamp DESC LIMIT 200', [userId]); } catch (e) { /* skip */ }
+        try { sessions = await db.all('SELECT id, ip_address, user_agent, created_at FROM sessions WHERE user_id = $1 ORDER BY created_at DESC', [userId]); } catch (e) { /* skip */ }
+        try { billing = await db.get("SELECT id, plan_name, status, scan_limit, api_limit, created_at FROM billing_plans WHERE user_id = $1 AND status = 'active'", [userId]); } catch (e) { /* skip */ }
+        try { invoices = await db.all('SELECT id, plan_name, amount, status, period_start, period_end FROM invoices WHERE user_id = $1', [userId]); } catch (e) { /* skip */ }
 
         const exportData = {
             export_type: 'GDPR Data Subject Access Request',
@@ -168,8 +173,10 @@ router.get('/gdpr/export', async (req, res) => {
             billing: { plan: billing, invoices }
         };
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), userId, 'GDPR_DATA_EXPORT', 'user', userId, JSON.stringify({ records_exported: auditLog.length + scans.length + tickets.length }));
+        try {
+            await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                .run(uuidv4(), userId, 'GDPR_DATA_EXPORT', 'user', userId, JSON.stringify({ records_exported: auditLog.length + scans.length + tickets.length }), orgId);
+        } catch (e) { console.warn('[gdpr] audit log insert failed:', e.message); }
 
         res.json(exportData);
     } catch (e) {
