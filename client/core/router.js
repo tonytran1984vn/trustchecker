@@ -898,7 +898,10 @@ export async function loadPageData(page) {
                 API.get('/compliance-regtech/jurisdictions').catch(() => ({})),
                 API.get('/compliance/certifications').catch(() => ({})),
             ]);
-            State._dataGov = { jurisdictions: jurisdictions.jurisdictions || [], frameworks: jurisdictions.frameworks || [], certs: certs.certifications || [] };
+            const j = Array.isArray(jurisdictions) ? jurisdictions : (jurisdictions.jurisdictions || jurisdictions.data || []);
+            const f = Array.isArray(jurisdictions?.frameworks) ? jurisdictions.frameworks : [];
+            const c = Array.isArray(certs) ? certs : (certs.certifications || certs.data || []);
+            State._dataGov = { jurisdictions: j, frameworks: f, certs: c };
             render();
         }
     } catch (e) {

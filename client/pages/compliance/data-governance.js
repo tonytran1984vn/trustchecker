@@ -3,7 +3,10 @@ import { icon } from '../../core/icons.js';
 import { State } from '../../core/state.js';
 
 export function renderPage() {
-  const { jurisdictions = [], frameworks = [], certs = [] } = State._dataGov || {};
+  const raw = State._dataGov || {};
+  const jurisdictions = Array.isArray(raw.jurisdictions) ? raw.jurisdictions : [];
+  const frameworks = Array.isArray(raw.frameworks) ? raw.frameworks : [];
+  const certs = Array.isArray(raw.certs) ? raw.certs : [];
 
   return `<div class="sa-page">
     <div class="sa-page-title"><h1>${icon('globe', 28)} Data Governance</h1></div>
