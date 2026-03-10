@@ -793,91 +793,20 @@ function renderRiskSidebar() {
 // COMPLIANCE SIDEBAR (Governance & Audit Layer)
 // ═══════════════════════════════════════════════════════════════
 
-const COMPLIANCE_DOMAINS = {
-  'compliance-dashboard': [
-    { id: 'compliance-dashboard', icon: icon('dashboard'), label: 'Compliance Dashboard' },
-  ],
-  'audit-trail': [
-    { id: 'compliance-user-activity', icon: icon('users'), label: 'User Activity' },
-    { id: 'compliance-system-changes', icon: icon('settings'), label: 'System Changes' },
-    { id: 'compliance-data-export', icon: icon('scroll'), label: 'Data Export' },
-    { id: 'compliance-privileged-access', icon: icon('shield'), label: 'Privileged Access' },
-  ],
-  'policies': [
-    { id: 'compliance-access-policy', icon: icon('lock'), label: 'Access Policy' },
-    { id: 'compliance-risk-policy', icon: icon('alertTriangle'), label: 'Risk Policy' },
-    { id: 'compliance-workflow-control', icon: icon('workflow'), label: 'Workflow Control' },
-    { id: 'compliance-violation-log', icon: icon('alert'), label: 'Violation Log' },
-  ],
-  'data-governance': [
-    { id: 'compliance-retention', icon: icon('clock'), label: 'Retention' },
-    { id: 'compliance-data-access-review', icon: icon('search'), label: 'Data Access Review' },
-    { id: 'compliance-privacy-requests', icon: icon('users'), label: 'Privacy Requests' },
-  ],
-  'reports': [
-    { id: 'compliance-audit-report', icon: icon('scroll'), label: 'Audit Report' },
-    { id: 'compliance-investigation-summary', icon: icon('search'), label: 'Investigation Summary' },
-    { id: 'compliance-regulatory-export', icon: icon('globe'), label: 'Regulatory Export' },
-  ],
-  'legal-hold': [
-    { id: 'compliance-legal-hold', icon: icon('lock'), label: 'Legal Hold' },
-    { id: 'compliance-sod-matrix', icon: icon('shield'), label: 'SoD Matrix' },
-    { id: 'compliance-immutable-audit', icon: icon('scroll'), label: 'Immutable Audit' },
-    { id: 'compliance-data-governance', icon: icon('globe'), label: 'Data Governance' },
-  ],
-};
-
-const COMPLIANCE_DOMAIN_LABELS = {
-  'compliance-dashboard': 'Dashboard',
-  'audit-trail': '📜 Audit Trail',
-  'policies': '📘 Policies',
-  'data-governance': '🗄 Data Governance',
-  'reports': '📑 Reports',
-  'legal-hold': '⚖ Legal Hold',
-};
+const COMPLIANCE_NAV = [
+  { id: 'compliance-dashboard', icon: icon('dashboard'), label: 'Dashboard' },
+  { id: 'compliance-audit', icon: icon('scroll'), label: 'Audit Trail' },
+  { id: 'compliance-policies', icon: icon('shield'), label: 'Policies & Controls' },
+  { id: 'compliance-data', icon: icon('globe'), label: 'Data Governance' },
+  { id: 'compliance-reports', icon: icon('clipboard'), label: 'Reports' },
+  { id: 'compliance-legal', icon: icon('lock'), label: 'Legal & Integrity' },
+];
 
 function renderComplianceSidebar() {
   const brandName = State.branding?.app_name || 'TrustChecker';
   const orgName = State.org?.name || '';
 
-  const domainSections = Object.keys(COMPLIANCE_DOMAINS).map(domain => {
-    const items = COMPLIANCE_DOMAINS[domain];
-    const label = COMPLIANCE_DOMAIN_LABELS[domain];
-
-    if (domain === 'compliance-dashboard' || domain === 'legal-hold') {
-      return `
-        <div class="nav-section" data-domain="${domain}">
-          <div class="nav-section-items">
-            ${items.map(n => {
-        const activeClass = State.page === n.id ? 'active' : '';
-        return `<div class="nav-item ${activeClass}" onclick="navigate('${n.id}')">
-                <span class="nav-icon">${n.icon}</span><span>${n.label}</span>
-              </div>`;
-      }).join('')}
-          </div>
-        </div>
-      `;
-    }
-
-    const collapsed = isCollapsed(domain);
-    return `
-      <div class="nav-section ${collapsed ? 'collapsed' : ''}" data-domain="${domain}">
-        <div class="nav-section-label" onclick="toggleNavSection('${domain}')">
-          <span class="nav-domain-dot compliance-dot"></span>
-          <span class="nav-section-text">${label}</span>
-          <span class="nav-chevron">▸</span>
-        </div>
-        <div class="nav-section-items">
-          ${items.map(n => {
-      const activeClass = State.page === n.id ? 'active' : '';
-      return `<div class="nav-item ${activeClass}" onclick="navigate('${n.id}')">
-              <span class="nav-icon">${n.icon}</span><span>${n.label}</span>
-            </div>`;
-    }).join('')}
-        </div>
-      </div>
-    `;
-  }).join('');
+  const navItems = COMPLIANCE_NAV.map(n => renderNavItem(n)).join('');
 
   return `
     <nav class="sidebar sidebar-compliance" role="navigation" aria-label="Compliance navigation">
@@ -894,7 +823,7 @@ function renderComplianceSidebar() {
         </div>` : ''}
       </div>
       <div class="sidebar-nav">
-        ${domainSections}
+        ${navItems}
       </div>
       <div class="sidebar-footer">
         <div class="user-avatar role-compliance_officer">${(State.user?.email || 'C')[0].toUpperCase()}</div>

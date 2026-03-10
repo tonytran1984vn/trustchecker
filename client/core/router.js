@@ -247,8 +247,14 @@ const PAGE_LOADERS = {
     'risk-analytics-ws': () => import('../pages/risk/risk-analytics-workspace.js'),
     'risk-engine-ws': () => import('../pages/risk/risk-engine-workspace.js'),
 
-    // ─── Compliance (Governance Layer) pages ───────────
+    // ─── Compliance (Governance Layer) — Workspace pages ─
     'compliance-dashboard': () => import('../pages/compliance/dashboard.js'),
+    'compliance-audit': () => import('../pages/compliance/compliance-audit-workspace.js'),
+    'compliance-policies': () => import('../pages/compliance/compliance-policies-workspace.js'),
+    'compliance-data': () => import('../pages/compliance/compliance-data-workspace.js'),
+    'compliance-reports': () => import('../pages/compliance/compliance-reports-workspace.js'),
+    'compliance-legal': () => import('../pages/compliance/compliance-legal-workspace.js'),
+    // Legacy individual compliance pages (kept for deep links)
     'compliance-user-activity': () => import('../pages/compliance/user-activity.js'),
     'compliance-system-changes': () => import('../pages/compliance/system-changes.js'),
     'compliance-data-export': () => import('../pages/compliance/data-export.js'),
@@ -840,6 +846,64 @@ export async function loadPageData(page) {
             ]);
             State._complianceData = { stats, report, gaps: gaps.gaps || [] };
             render();
+
+            // ─── Compliance Workspace Pages (prefetch all tab data) ──
+        } else if (page === 'compliance-audit') {
+            const [auditLogs, gdprExport] = await Promise.all([
+                API.get('/audit-log/?limit=50').catch(() => ({})),
+                API.get('/compliance/gdpr/export').catch(() => ({})),
+            ]);
+            State._auditLogs = auditLogs;
+            State._gdprExport = gdprExport;
+            render();
+        } else if (page === 'compliance-policies') {
+            const [policies, gaps, records] = await Promise.all([
+                API.get('/compliance/policies').catch(() => ({})),
+                API.get('/compliance-regtech/gaps').catch(() => ({})),
+                API.get('/compliance/records').catch(() => ({})),
+            ]);
+            State._compliancePolicies = policies;
+            State._complianceGaps = gaps;
+            State._complianceRecords = records;
+            render();
+        } else if (page === 'compliance-data') {
+            const [retention, auditLogs, consent, jurisdictions, certs] = await Promise.all([
+                API.get('/compliance/retention').catch(() => ({})),
+                API.get('/audit-log/?limit=50').catch(() => ({})),
+                API.get('/compliance/gdpr/consent').catch(() => ({})),
+                API.get('/compliance-regtech/jurisdictions').catch(() => ({})),
+                API.get('/compliance/certifications').catch(() => ({})),
+            ]);
+            State._complianceRetention = retention;
+            State._auditLogs = auditLogs;
+            State._gdprConsent = consent;
+            const j = Array.isArray(jurisdictions) ? jurisdictions : (jurisdictions.jurisdictions || jurisdictions.data || []);
+            const f = Array.isArray(jurisdictions?.frameworks) ? jurisdictions.frameworks : [];
+            const c = Array.isArray(certs) ? certs : (certs.certifications || certs.data || []);
+            State._dataGov = { jurisdictions: j, frameworks: f, certs: c };
+            render();
+        } else if (page === 'compliance-reports') {
+            const [report, stats, incidents, alerts, regtechReport, frameworks] = await Promise.all([
+                API.get('/compliance/report').catch(() => ({})),
+                API.get('/audit-log/stats').catch(() => ({})),
+                API.get('/ops/incidents?limit=20').catch(() => ({})),
+                API.get('/scm/risk/alerts?limit=20').catch(() => ({})),
+                API.get('/compliance-regtech/report').catch(() => ({})),
+                API.get('/compliance-regtech/frameworks').catch(() => ({})),
+            ]);
+            State._complianceReport = { report, stats };
+            State._investigationData = { incidents: incidents.incidents || [], alerts: alerts.alerts || [] };
+            State._regtechData = { report: regtechReport, frameworks: frameworks.frameworks || [] };
+            render();
+        } else if (page === 'compliance-legal') {
+            const [chain, auditStats] = await Promise.all([
+                API.get('/audit/verify-chain').catch(() => ({})),
+                API.get('/audit/stats').catch(() => ({})),
+            ]);
+            State._auditChain = { chain, stats: auditStats };
+            render();
+
+            // ─── Legacy individual compliance pages (deep links) ──
         } else if (page === 'compliance-user-activity' || page === 'compliance-system-changes' ||
             page === 'compliance-data-access-review' || page === 'compliance-privileged-access') {
             State._auditLogs = await API.get('/audit-log/?limit=50').catch(() => ({}));
