@@ -40,7 +40,7 @@ router.get('/conflicts', (req, res) => {
  */
 router.get('/waivers', async (req, res) => {
     try {
-        const tenantId = req.user.tenant_id;
+        const tenantId = req.user.org_id;
         if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
 
         const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [tenantId]);
@@ -74,7 +74,7 @@ router.get('/waivers', async (req, res) => {
  */
 router.post('/waivers', async (req, res) => {
     try {
-        const tenantId = req.user.tenant_id;
+        const tenantId = req.user.org_id;
         if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
 
         const { pair, reason, expires_at } = req.body;
@@ -136,7 +136,7 @@ router.post('/waivers', async (req, res) => {
  */
 router.delete('/waivers', async (req, res) => {
     try {
-        const tenantId = req.user.tenant_id;
+        const tenantId = req.user.org_id;
         if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
 
         const { pair } = req.body;

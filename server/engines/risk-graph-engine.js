@@ -162,7 +162,7 @@ class RiskGraphEngine {
         // Shared device detection
         const deviceEntities = {};
         scans.forEach(s => {
-            const device = s.device_id || s.fingerprint;
+            const device = s.device_fingerprint || s.device_id || s.fingerprint;
             if (!device) return;
             if (!deviceEntities[device]) deviceEntities[device] = new Set();
             deviceEntities[device].add(s.entity_id || s.product_id || s.partner_id);
@@ -216,7 +216,7 @@ class RiskGraphEngine {
         tenants.forEach(t => {
             (t.devices || []).forEach(d => {
                 if (!globalDevices[d]) globalDevices[d] = [];
-                globalDevices[d].push(t.tenant_id);
+                globalDevices[d].push(t.org_id);
             });
         });
         const sharedDevices = Object.entries(globalDevices).filter(([_, tenants]) => new Set(tenants).size > 1);

@@ -3,6 +3,7 @@
  * Reads from workspace prefetch cache (_opsIncCache or _opsMonCache)
  */
 import { icon } from '../../core/icons.js';
+import { API as api } from '../../core/api.js';
 
 export function renderPage() {
   // Try workspace cache (prefetched from /api/ops/incidents?status=open)
@@ -28,7 +29,7 @@ export function renderPage() {
       <div class="sa-page-title">
         <h1>${icon('alertTriangle', 28)} Open Cases${cases.length ? ` <span style="font-size:0.7rem;color:var(--text-secondary);font-weight:400">(${cases.length})</span>` : ''}</h1>
         <div class="sa-title-actions">
-          <button class="btn btn-primary btn-sm" onclick="showToast('🧴 Incident ticket creation coming soon','info')">+ Create Ticket</button>
+          <button class="btn btn-primary btn-sm" onclick="window._opsCreateTicket && window._opsCreateTicket()">+ Create Ticket</button>
         </div>
       </div>
 
@@ -50,7 +51,7 @@ export function renderPage() {
                 <td style="color:var(--text-secondary);font-size:0.75rem">${c.created}</td>
                 <td>
                   <button class="btn btn-xs btn-outline" onclick="showToast('Viewing incident: ${c.id}','info')">View</button>
-                  <button class="btn btn-xs btn-ghost" onclick="showToast('Assign: ${c.id} — coming soon','info')">Assign</button>
+                  <button class="btn btn-xs btn-ghost" onclick="window._opsAssignIncident && window._opsAssignIncident('${c.id}')">Assign</button>
                 </td>
               </tr>
             `).join('')}
@@ -60,6 +61,58 @@ export function renderPage() {
     </div>
   `;
 }
+
+// ─── Create Ticket Form ────────────────────────────────────────
+window._opsCreateTicket = function () {
+  const modal = document.createElement('div');
+  modal.id = 'ops-ticket-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5)';
+  modal.innerHTML = `
+    <div style="background:var(--card-bg, #fff);border-radius:12px;padding:24px;max-width:480px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+      <h3 style="margin:0 0 16px">🎫 Create Incident Ticket</h3>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <input id="_t_title" placeholder="Incident title" style="padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem">
+        <textarea id="_t_desc" placeholder="Description" rows="3" style="padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem;resize:vertical"></textarea>
+        <select id="_t_sev" style="padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem">
+          <option value="SEV3">Medium (SEV3)</option>
+          <option value="SEV1">Critical (SEV1)</option>
+          <option value="SEV2">High (SEV2)</option>
+          <option value="SEV4">Low (SEV4)</option>
+        </select>
+        <input id="_t_module" placeholder="Module (e.g. logistics, warehouse)" style="padding:10px 12px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--bg, #fff);color:var(--text-primary, #1e293b);font-size:0.9rem">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('ops-ticket-modal')?.remove()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="window._opsSubmitTicket()">Create</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+};
+
+window._opsSubmitTicket = async function () {
+  const title = document.getElementById('_t_title')?.value;
+  const description = document.getElementById('_t_desc')?.value;
+  const severity = document.getElementById('_t_sev')?.value;
+  const module = document.getElementById('_t_module')?.value;
+  if (!title) { showToast('Title is required', 'error'); return; }
+  try {
+    await api.post('/ops/data/incidents', { title, description, severity, module });
+    showToast('✅ Incident created', 'success');
+    document.getElementById('ops-ticket-modal')?.remove();
+    // Refresh workspace
+    if (window._opsIncRefresh) window._opsIncRefresh();
+  } catch (e) { showToast('Failed to create incident', 'error'); }
+};
+
+window._opsAssignIncident = async function (id) {
+  const assignee = prompt('Assign to (email or name):');
+  if (!assignee) return;
+  try {
+    await api.put(`/ops/data/incidents/${id}`, { status: 'assigned', resolution: `Assigned to ${assignee}` });
+    showToast(`✅ ${id} assigned to ${assignee}`, 'success');
+  } catch (e) { showToast('Failed to assign', 'error'); }
+};
 
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();

@@ -6,6 +6,16 @@
 import { icon } from '../../core/icons.js';
 
 export function renderPage() {
+  // Pull real data from workspace caches if available
+  const prodCache = window._opsProdCache || {};
+  const whCache = window._opsWhCache || {};
+  const incCache = window._opsIncCache || {};
+  const batchCount = prodCache.batches?.batches?.length || 0;
+  const shipDone = (whCache.shipments?.shipments || []).filter(s => s.status === 'delivered').length;
+  const totalShip = (whCache.shipments?.shipments || []).length;
+  const slaPct = totalShip > 0 ? (100 * shipDone / totalShip).toFixed(1) : '—';
+  const openInc = (incCache.openCases?.incidents || []).length;
+
   const reports = [
     { id: 'RPT-W09', title: 'Weekly Operations Summary', period: 'Feb 24 – Mar 2, 2026', type: 'weekly', status: 'ready', generated: '2h ago' },
     { id: 'RPT-W08', title: 'Weekly Operations Summary', period: 'Feb 17 – Feb 23, 2026', type: 'weekly', status: 'ready', generated: '7d ago' },
@@ -28,10 +38,10 @@ export function renderPage() {
 
       <!-- Quick Stats -->
       <div class="sa-metrics-row" style="margin-bottom:1.5rem">
-        <div class="sa-metric-card sa-metric-blue"><div class="sa-metric-body"><div class="sa-metric-value">24</div><div class="sa-metric-label">Batches This Week</div></div></div>
-        <div class="sa-metric-card sa-metric-green"><div class="sa-metric-body"><div class="sa-metric-value">18</div><div class="sa-metric-label">Transfers Completed</div></div></div>
-        <div class="sa-metric-card sa-metric-orange"><div class="sa-metric-body"><div class="sa-metric-value">97.2%</div><div class="sa-metric-label">SLA Compliance</div></div></div>
-        <div class="sa-metric-card sa-metric-red"><div class="sa-metric-body"><div class="sa-metric-value">3</div><div class="sa-metric-label">Open Incidents</div></div></div>
+        <div class="sa-metric-card sa-metric-blue"><div class="sa-metric-body"><div class="sa-metric-value">${batchCount}</div><div class="sa-metric-label">Batches This Week</div></div></div>
+        <div class="sa-metric-card sa-metric-green"><div class="sa-metric-body"><div class="sa-metric-value">${shipDone}</div><div class="sa-metric-label">Transfers Completed</div></div></div>
+        <div class="sa-metric-card sa-metric-orange"><div class="sa-metric-body"><div class="sa-metric-value">${slaPct}%</div><div class="sa-metric-label">SLA Compliance</div></div></div>
+        <div class="sa-metric-card sa-metric-red"><div class="sa-metric-body"><div class="sa-metric-value">${openInc}</div><div class="sa-metric-label">Open Incidents</div></div></div>
       </div>
 
       <!-- Report Templates -->

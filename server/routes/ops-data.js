@@ -394,6 +394,7 @@ router.get('/geo-alerts', async (req, res) => {
                    LEFT JOIN products p ON fa.product_id = p.id
                    WHERE fa.alert_type LIKE '%geo%'`;
         const params = [];
+        if (orgId) { sql += ' AND p.org_id = ?'; params.push(orgId); }
         sql += ' ORDER BY fa.created_at DESC LIMIT 50';
         const rows = await db.prepare(sql).all(...params);
         res.json({ alerts: rows || [] });
@@ -403,10 +404,14 @@ router.get('/geo-alerts', async (req, res) => {
 // Mismatch Alerts — from anomaly_detections where type = 'mismatch' or 'quantity_mismatch'
 router.get('/mismatch-alerts', async (req, res) => {
     try {
-        let sql = `SELECT * FROM anomaly_detections
-                   WHERE anomaly_type IN ('mismatch','quantity_mismatch','weight_mismatch')
-                   ORDER BY detected_at DESC LIMIT 50`;
-        const rows = await db.prepare(sql).all();
+        const orgId = getOrgId(req);
+        let sql = `SELECT ad.* FROM anomaly_detections ad
+                   LEFT JOIN products p ON ad.product_id = p.id
+                   WHERE ad.anomaly_type IN ('mismatch','quantity_mismatch','weight_mismatch')`;
+        const params = [];
+        if (orgId) { sql += ' AND (p.org_id = ? OR p.org_id IS NULL)'; params.push(orgId); }
+        sql += ' ORDER BY ad.detected_at DESC LIMIT 50';
+        const rows = await db.prepare(sql).all(...params);
         res.json({ mismatches: rows || [] });
     } catch (e) { res.json({ mismatches: [] }); }
 });
@@ -415,8 +420,8 @@ router.get('/mismatch-alerts', async (req, res) => {
 router.get('/duplicate-alerts', async (req, res) => {
     try {
         let sql = `SELECT * FROM anomaly_detections
-                   WHERE anomaly_type IN ('duplicate_qr','duplicate_scan')
-                   ORDER BY detected_at DESC LIMIT 50`;
+                   WHERE anomaly_type IN ('duplicate_qr','duplicate_scan')`;
+        sql += ' ORDER BY detected_at DESC LIMIT 50';
         const rows = await db.prepare(sql).all();
         res.json({ alerts: rows || [] });
     } catch (e) { res.json({ alerts: [] }); }
@@ -425,15 +430,18 @@ router.get('/duplicate-alerts', async (req, res) => {
 // Receiving — pending inbound shipments
 router.get('/receiving', async (req, res) => {
     try {
+        const orgId = getOrgId(req);
         let sql = `SELECT s.*, b.batch_number,
                           fp.name as from_name, tp.name as to_name
                    FROM shipments s
                    LEFT JOIN batches b ON s.batch_id = b.id
                    LEFT JOIN partners fp ON s.from_partner_id = fp.id
                    LEFT JOIN partners tp ON s.to_partner_id = tp.id
-                   WHERE s.status IN ('pending','in_transit','arrived','delivered')
-                   ORDER BY s.created_at DESC LIMIT 50`;
-        const rows = await db.prepare(sql).all();
+                   WHERE s.status IN ('pending','in_transit','arrived','delivered')`;
+        const params = [];
+        if (orgId) { sql += ' AND (fp.org_id = ? OR tp.org_id = ?)'; params.push(orgId, orgId); }
+        sql += ' ORDER BY s.created_at DESC LIMIT 50';
+        const rows = await db.prepare(sql).all(...params);
         res.json({ pending: rows || [] });
     } catch (e) { res.json({ pending: [] }); }
 });
@@ -454,12 +462,16 @@ router.get('/recall-history', async (req, res) => {
 // Scan History — real scan events for Scan Monitor page
 router.get('/scan-history', async (req, res) => {
     try {
+        const orgId = getOrgId(req);
         let sql = `SELECT se.*, qc.qr_data as qr_code, p.name as product_name, p.sku
                    FROM scan_events se
                    LEFT JOIN qr_codes qc ON se.qr_code_id = qc.id
                    LEFT JOIN products p ON se.product_id = p.id
-                   ORDER BY se.scanned_at DESC LIMIT 100`;
-        const rows = await db.prepare(sql).all();
+                   WHERE 1=1`;
+        const params = [];
+        if (orgId) { sql += ' AND (p.org_id = ? OR p.org_id IS NULL)'; params.push(orgId); }
+        sql += ' ORDER BY se.scanned_at DESC LIMIT 100';
+        const rows = await db.prepare(sql).all(...params);
         res.json({ scans: rows || [] });
     } catch (e) { res.json({ scans: [] }); }
 });

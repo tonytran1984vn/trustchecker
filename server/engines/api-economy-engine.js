@@ -24,7 +24,7 @@ const INTEGRATION_TYPES = {
 class APIEconomyEngine {
 
     generateAPIKey(params) {
-        const { tenant_id, tier = 'free', integration_type = 'scm_vendor', app_name = 'Untitled App', owner_id } = params;
+        const { org_id, tier = 'free', integration_type = 'scm_vendor', app_name = 'Untitled App', owner_id } = params;
         const tierConfig = API_TIERS[tier];
         if (!tierConfig) return { error: `Invalid tier. Valid: ${Object.keys(API_TIERS).join(', ')}` };
 
@@ -36,7 +36,7 @@ class APIEconomyEngine {
             api_secret: apiSecret,
             tier: { key: tier, ...tierConfig },
             integration: INTEGRATION_TYPES[integration_type] || INTEGRATION_TYPES.scm_vendor,
-            app_name, tenant_id, owner_id,
+            app_name, org_id, owner_id,
             permissions: tierConfig.endpoints,
             rate_limit: { requests_per_minute: tierConfig.rate_limit, daily_limit: tierConfig.daily_limit },
             status: 'active',

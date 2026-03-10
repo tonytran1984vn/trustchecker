@@ -177,7 +177,7 @@ class DataSovereigntyEngine {
 
         const decision = {
             id: uuidv4(),
-            tenant_id: tenantId,
+            org_id: tenantId,
             country: countryCode,
             zone: zone.zone_id,
             data_center: zone.data_center,
@@ -249,7 +249,7 @@ class DataSovereigntyEngine {
         const rules = zone.pii_rules;
 
         return {
-            tenant_id: tenantId,
+            org_id: tenantId,
             zone: zone.zone_id,
             regulation: zone.regulation,
             data_residency: { data_center: zone.data_center, backup: zone.backup_dc, storage_restriction: rules.storage },

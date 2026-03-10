@@ -69,7 +69,7 @@ function recordEventLineage(eventData) {
             id, event_id, event_hash, source_system,
             event_type, ingest_timestamp, idempotency_key,
             geo_lat, geo_lng, device_fingerprint,
-            tenant_id, created_at
+            org_id, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `).run(
         nodeId,
@@ -82,7 +82,7 @@ function recordEventLineage(eventData) {
         eventData.geo_lat || null,
         eventData.geo_lng || null,
         eventData.device_fingerprint || null,
-        eventData.tenant_id || null
+        eventData.org_id || null
     );
 
     return { lineage_node_id: nodeId, layer: 'event' };
@@ -102,7 +102,7 @@ function recordGraphTransformation(transformData) {
             nodes_created, edges_created,
             weight_changes, propagation_depth,
             risk_contribution_delta, affected_node_ids,
-            affected_edge_ids, tenant_id, created_at
+            affected_edge_ids, org_id, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `).run(
         recordId,
@@ -115,7 +115,7 @@ function recordGraphTransformation(transformData) {
         transformData.risk_contribution_delta || 0,
         JSON.stringify(transformData.affected_node_ids || []),
         JSON.stringify(transformData.affected_edge_ids || []),
-        transformData.tenant_id || null
+        transformData.org_id || null
     );
 
     return { lineage_transform_id: recordId, layer: 'graph_transform' };
@@ -144,7 +144,7 @@ function recordFeatureLineage(featureData) {
             id, feature_id, feature_version,
             source_type, input_event_ids, input_node_ids,
             input_edge_ids, graph_state_version,
-            computation_hash, value_at_time, tenant_id, created_at
+            computation_hash, value_at_time, org_id, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `).run(
         recordId,
@@ -157,7 +157,7 @@ function recordFeatureLineage(featureData) {
         featureData.graph_state_version || null,
         computationHash,
         featureData.value !== undefined ? featureData.value : null,
-        featureData.tenant_id || null
+        featureData.org_id || null
     );
 
     return { lineage_feature_id: recordId, computation_hash: computationHash, layer: 'feature' };
@@ -176,7 +176,7 @@ function recordModelLineage(modelData) {
             id, model_id, model_version, training_run_id,
             feature_set_version, weight_hash,
             drift_status, drift_index,
-            inference_timestamp, tenant_id, created_at
+            inference_timestamp, org_id, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `).run(
         recordId,
@@ -188,7 +188,7 @@ function recordModelLineage(modelData) {
         modelData.drift_status || 'normal',
         modelData.drift_index || 0,
         modelData.inference_timestamp || new Date().toISOString(),
-        modelData.tenant_id || null
+        modelData.org_id || null
     );
 
     return { lineage_model_id: recordId, layer: 'model' };
@@ -217,7 +217,7 @@ function registerDecisionLineage(decisionData) {
             model_version, weight_hash, threshold_version,
             ers_score, decision_action, decision_id,
             case_id, override_flag, override_approvers,
-            snapshot_id, tenant_id, frozen,
+            snapshot_id, org_id, frozen,
             created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
     `).run(
@@ -236,7 +236,7 @@ function registerDecisionLineage(decisionData) {
         decisionData.override_flag ? 1 : 0,
         JSON.stringify(decisionData.override_approvers || []),
         decisionData.snapshot_id || null,
-        decisionData.tenant_id || null
+        decisionData.org_id || null
     );
 
     return { gdli, layer: 'decision' };
@@ -258,7 +258,7 @@ function recordFullLineage(chain) {
         idempotency_key: chain.idempotency_key,
         geo_lat: chain.geo_lat,
         geo_lng: chain.geo_lng,
-        tenant_id: chain.tenant_id,
+        org_id: chain.org_id,
     });
 
     // Layer 2: Graph transformation
@@ -271,7 +271,7 @@ function recordFullLineage(chain) {
         risk_contribution_delta: chain.risk_delta || 0,
         affected_node_ids: chain.affected_nodes || [],
         affected_edge_ids: chain.affected_edges || [],
-        tenant_id: chain.tenant_id,
+        org_id: chain.org_id,
     });
 
     // Layer 3: Features (batch)
@@ -284,7 +284,7 @@ function recordFullLineage(chain) {
             input_event_ids: [chain.event_id],
             graph_state_version: chain.graph_state_version,
             value,
-            tenant_id: chain.tenant_id,
+            org_id: chain.org_id,
         });
         featureRecords.push(fr);
     }
@@ -296,7 +296,7 @@ function recordFullLineage(chain) {
         drift_status: chain.drift_index > 0.3 ? 'elevated' : 'normal',
         drift_index: chain.drift_index || 0,
         feature_set_version: chain.feature_set_version || 'default',
-        tenant_id: chain.tenant_id,
+        org_id: chain.org_id,
     });
 
     // Layer 5: Decision (GDLI)
@@ -313,7 +313,7 @@ function recordFullLineage(chain) {
         decision_id: chain.decision_id,
         case_id: chain.case_id,
         override_flag: chain.override_flag || false,
-        tenant_id: chain.tenant_id,
+        org_id: chain.org_id,
         timestamp: chain.timestamp,
     });
 
@@ -348,8 +348,8 @@ function replayDecision(gdli) {
 
     // 4. Load features
     const features = db.prepare(
-        'SELECT * FROM lineage_feature_map WHERE graph_state_version = ? AND tenant_id = ?'
-    ).all(record.graph_state_version || '', record.tenant_id || '');
+        'SELECT * FROM lineage_feature_map WHERE graph_state_version = ? AND org_id = ?'
+    ).all(record.graph_state_version || '', record.org_id || '');
 
     // 5. Load model record
     const modelRecord = db.prepare(
@@ -447,7 +447,7 @@ function analyzeContamination(contaminationType, contaminatedId, tenantId) {
         case 'graph_version':
             // All decisions after compromised GSV
             affectedDecisions = db.prepare(
-                'SELECT gdli, ers_score, decision_action, case_id, override_flag FROM decision_lineage_registry WHERE graph_state_version >= ? AND tenant_id = ?'
+                'SELECT gdli, ers_score, decision_action, case_id, override_flag FROM decision_lineage_registry WHERE graph_state_version >= ? AND org_id = ?'
             ).all(contaminatedId, tenantId || '');
             break;
 
@@ -641,7 +641,7 @@ function initSchema() {
             geo_lat REAL,
             geo_lng REAL,
             device_fingerprint TEXT,
-            tenant_id TEXT,
+            org_id TEXT,
             created_at TEXT
         );
 
@@ -656,7 +656,7 @@ function initSchema() {
             risk_contribution_delta REAL DEFAULT 0,
             affected_node_ids TEXT,
             affected_edge_ids TEXT,
-            tenant_id TEXT,
+            org_id TEXT,
             created_at TEXT
         );
 
@@ -671,7 +671,7 @@ function initSchema() {
             graph_state_version TEXT,
             computation_hash TEXT,
             value_at_time REAL,
-            tenant_id TEXT,
+            org_id TEXT,
             created_at TEXT
         );
 
@@ -685,7 +685,7 @@ function initSchema() {
             drift_status TEXT DEFAULT 'normal',
             drift_index REAL DEFAULT 0,
             inference_timestamp TEXT,
-            tenant_id TEXT,
+            org_id TEXT,
             created_at TEXT
         );
 
@@ -705,18 +705,18 @@ function initSchema() {
             override_flag INTEGER DEFAULT 0,
             override_approvers TEXT,
             snapshot_id TEXT,
-            tenant_id TEXT,
+            org_id TEXT,
             frozen INTEGER DEFAULT 0,
             created_at TEXT
         );
 
         CREATE INDEX IF NOT EXISTS idx_lineage_events_eid ON lineage_event_nodes(event_id);
-        CREATE INDEX IF NOT EXISTS idx_lineage_events_tenant ON lineage_event_nodes(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_lineage_events_tenant ON lineage_event_nodes(org_id);
         CREATE INDEX IF NOT EXISTS idx_lineage_graph_eid ON lineage_graph_transforms(event_id);
         CREATE INDEX IF NOT EXISTS idx_lineage_feature_gsv ON lineage_feature_map(graph_state_version);
         CREATE INDEX IF NOT EXISTS idx_lineage_model_ver ON lineage_model_records(model_version);
         CREATE INDEX IF NOT EXISTS idx_dlr_event ON decision_lineage_registry(event_id);
-        CREATE INDEX IF NOT EXISTS idx_dlr_tenant ON decision_lineage_registry(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_dlr_tenant ON decision_lineage_registry(org_id);
         CREATE INDEX IF NOT EXISTS idx_dlr_model ON decision_lineage_registry(model_version);
         CREATE INDEX IF NOT EXISTS idx_dlr_gsv ON decision_lineage_registry(graph_state_version);
     `);

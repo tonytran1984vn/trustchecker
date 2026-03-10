@@ -92,7 +92,7 @@ const SLO_METRICS = {
 
 class EnterpriseSLAEngine {
     constructor() {
-        this.contracts = new Map();      // tenant_id → SLA contract
+        this.contracts = new Map();      // org_id → SLA contract
         this.measurements = [];
         this.breaches = [];
         this.credits = [];
@@ -106,7 +106,7 @@ class EnterpriseSLAEngine {
 
         const contract = {
             id: uuidv4(),
-            tenant_id: tenantId,
+            org_id: tenantId,
             plan,
             tier_name: tier.name,
             terms: customTerms || tier,
@@ -151,7 +151,7 @@ class EnterpriseSLAEngine {
 
         const measurement = {
             id: uuidv4(),
-            tenant_id: tenantId,
+            org_id: tenantId,
             plan: contract.plan,
             metrics,
             violations,
@@ -165,7 +165,7 @@ class EnterpriseSLAEngine {
         if (violations.length > 0) {
             const breach = {
                 id: uuidv4(),
-                tenant_id: tenantId,
+                org_id: tenantId,
                 measurement_id: measurement.id,
                 violations,
                 severity: violations.some(v => v.metric === 'uptime') ? 'critical' : 'warning',
@@ -188,7 +188,7 @@ class EnterpriseSLAEngine {
 
         // Find worst uptime in period
         const periodMeasurements = this.measurements.filter(m =>
-            m.tenant_id === tenantId && m.timestamp.startsWith(period)
+            m.org_id === tenantId && m.timestamp.startsWith(period)
         );
 
         if (periodMeasurements.length === 0) return { credit: 0, reason: 'No measurements in period' };
@@ -214,7 +214,7 @@ class EnterpriseSLAEngine {
 
         const credit = {
             id: uuidv4(),
-            tenant_id: tenantId,
+            org_id: tenantId,
             period,
             avg_uptime: Math.round(avgUptime * 100) / 100,
             target_uptime: contract.terms.uptime_target_pct,
@@ -236,15 +236,15 @@ class EnterpriseSLAEngine {
         const contract = this.contracts.get(tenantId);
         if (!contract) return { error: 'No SLA contract' };
 
-        const measurements = this.measurements.filter(m => m.tenant_id === tenantId);
-        const breaches = this.breaches.filter(b => b.tenant_id === tenantId);
-        const credits = this.credits.filter(c => c.tenant_id === tenantId);
+        const measurements = this.measurements.filter(m => m.org_id === tenantId);
+        const breaches = this.breaches.filter(b => b.org_id === tenantId);
+        const credits = this.credits.filter(c => c.org_id === tenantId);
 
         const compliant = measurements.filter(m => m.compliant).length;
         const total = measurements.length;
 
         return {
-            tenant_id: tenantId,
+            org_id: tenantId,
             plan: contract.plan,
             tier: contract.tier_name,
             contract_status: contract.status,

@@ -14,7 +14,7 @@ async function main() {
         await db.prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS carbon_credits (
         id TEXT PRIMARY KEY,
-        tenant_id TEXT,
+        org_id TEXT,
         project_name TEXT NOT NULL,
         methodology TEXT DEFAULT 'VCS',
         vintage_year INTEGER DEFAULT 2024,

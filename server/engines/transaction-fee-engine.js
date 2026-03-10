@@ -90,7 +90,7 @@ class TransactionFeeEngine {
     constructor() {
         // In-memory ledger (production: persisted to PostgreSQL)
         this.transactions = [];     // all metered transactions
-        this.monthlyAggregates = new Map(); // tenant_id → { type → count }
+        this.monthlyAggregates = new Map(); // org_id → { type → count }
     }
 
     // ─── Fee Schedule ─────────────────────────────────────────────
@@ -166,7 +166,7 @@ class TransactionFeeEngine {
 
         const tx = {
             id: uuidv4(),
-            tenant_id: tenantId,
+            org_id: tenantId,
             type,
             period,
             volume_this_month: agg[type],
@@ -259,7 +259,7 @@ class TransactionFeeEngine {
 
         return {
             invoice_id: uuidv4(),
-            tenant_id: tenantId,
+            org_id: tenantId,
             period: targetPeriod,
             line_items: lineItems,
             subtotal: Math.round(total * 100) / 100,

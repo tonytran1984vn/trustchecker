@@ -18,6 +18,7 @@ router.use(authMiddleware);
 router.get('/', async (req, res) => {
     try {
         const { location, partner_id, product_id } = req.query;
+        const orgId = req.user?.org_id || req.user?.orgId || null;
         let query = `
       SELECT i.*, p.name as product_name, p.sku, pt.name as partner_name
       FROM inventory i
@@ -26,6 +27,7 @@ router.get('/', async (req, res) => {
       WHERE 1=1
     `;
         const params = [];
+        if (orgId) { query += ' AND (p.org_id = ? OR pt.org_id = ?)'; params.push(orgId, orgId); }
         if (location) { query += ' AND i.location LIKE ?'; params.push(`%${location}%`); }
         if (partner_id) { query += ' AND i.partner_id = ?'; params.push(partner_id); }
         if (product_id) { query += ' AND i.product_id = ?'; params.push(product_id); }
@@ -71,21 +73,25 @@ router.post('/adjust', authMiddleware, requirePermission('inventory:create'), as
 // ─── GET /api/scm/inventory/alerts – Overstock/understock ────────────────────
 router.get('/alerts', async (req, res) => {
     try {
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const orgFilter = orgId ? ' AND (p.org_id = ? OR pt.org_id = ?)' : '';
+        const orgParams = orgId ? [orgId, orgId] : [];
+
         const understock = await db.prepare(`
       SELECT i.*, p.name as product_name, p.sku, pt.name as partner_name
       FROM inventory i
       LEFT JOIN products p ON i.product_id = p.id
       LEFT JOIN partners pt ON i.partner_id = pt.id
-      WHERE i.quantity <= i.min_stock
-    `).all();
+      WHERE i.quantity <= i.min_stock${orgFilter}
+    `).all(...orgParams);
 
         const overstock = await db.prepare(`
       SELECT i.*, p.name as product_name, p.sku, pt.name as partner_name
       FROM inventory i
       LEFT JOIN products p ON i.product_id = p.id
       LEFT JOIN partners pt ON i.partner_id = pt.id
-      WHERE i.quantity >= i.max_stock
-    `).all();
+      WHERE i.quantity >= i.max_stock${orgFilter}
+    `).all(...orgParams);
 
         res.json({
             understock: understock.map(i => ({ ...i, alert_type: 'understock', severity: i.quantity === 0 ? 'critical' : 'high' })),

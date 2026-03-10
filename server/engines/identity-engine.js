@@ -33,7 +33,7 @@ class IdentityEngine {
 
     /**
      * Generate DID for any entity
-     * Format: did:tc:{entity_type}:{tenant_id}:{unique_id}
+     * Format: did:tc:{entity_type}:{org_id}:{unique_id}
      */
     generateDID(entityType, entityId, tenantId = 'default') {
         if (!ENTITY_TYPES.includes(entityType)) {
@@ -64,7 +64,7 @@ class IdentityEngine {
             metadata: {
                 entity_type: entityType,
                 entity_id: entityId,
-                tenant_id: tenantId,
+                org_id: tenantId,
                 created: new Date().toISOString(),
                 method: DID_METHOD,
                 key_type: 'Ed25519',
@@ -102,7 +102,7 @@ class IdentityEngine {
     issueVC(params) {
         const {
             issuer_did, subject_did, credential_type,
-            claims = {}, evidence = [], tenant_id = 'default'
+            claims = {}, evidence = [], org_id = 'default'
         } = params;
 
         const vcType = VC_TYPES[credential_type];
@@ -147,7 +147,7 @@ class IdentityEngine {
             credential,
             metadata: {
                 credential_type, category: vcType.category,
-                issuer: issuer_did, subject: subject_did, tenant_id,
+                issuer: issuer_did, subject: subject_did, org_id,
                 valid_from: issuanceDate.toISOString(),
                 valid_until: expirationDate.toISOString(),
                 validity_days: vcType.validity_days,

@@ -127,12 +127,17 @@ class ScheduledTasks {
             'usage_metrics', 'webhook_events', 'supply_chain_events',
             'leak_alerts', 'anomaly_detections', 'ticket_messages'
         ]);
+        // Tables that actually have a 'status' column (safe for archive UPDATE)
+        const HAS_STATUS_COLUMN = new Set([
+            'scan_events', 'fraud_alerts', 'support_tickets',
+            'supply_chain_events', 'leak_alerts', 'anomaly_detections'
+        ]);
         const DATE_COLUMNS = {
             scan_events: 'scanned_at', audit_log: 'timestamp',
         };
 
         try {
-            const policies = await this.db.all("SELECT * FROM data_retention_policies WHERE status = 'active'");
+            const policies = await this.db.all("SELECT * FROM data_retention_policies WHERE is_active = true");
             for (const policy of policies) {
                 if (!ALLOWED_TABLES.has(policy.table_name)) continue; // reject unknown tables
 
@@ -141,10 +146,8 @@ class ScheduledTasks {
                 try {
                     if (policy.action === 'delete') {
                         await this.db.run(`DELETE FROM ${policy.table_name} WHERE ${dateCol} < ?`, [cutoff]);
-                    } else if (policy.action === 'archive') {
-                        try {
-                            await this.db.run(`UPDATE ${policy.table_name} SET status = 'archived' WHERE ${dateCol} < ? AND status != 'archived'`, [cutoff]);
-                        } catch (e) { /* table may not have status column */ console.debug('[scheduler] archive skip:', e.message); }
+                    } else if (policy.action === 'archive' && HAS_STATUS_COLUMN.has(policy.table_name)) {
+                        await this.db.run(`UPDATE ${policy.table_name} SET status = 'archived' WHERE ${dateCol} < ? AND status != 'archived'`, [cutoff]);
                     }
                 } catch (e) { console.debug('[scheduler] retention skip:', e.message); }
             }

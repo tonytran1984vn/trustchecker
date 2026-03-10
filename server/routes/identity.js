@@ -13,8 +13,8 @@ router.use(authMiddleware);
 const init = async () => {
     try {
         await db.exec(`
-    CREATE TABLE IF NOT EXISTS did_registry (id TEXT PRIMARY KEY, did TEXT UNIQUE NOT NULL, entity_type TEXT, entity_id TEXT, tenant_id TEXT, did_document TEXT, public_key TEXT, status TEXT DEFAULT 'active', created_at DATETIME DEFAULT (datetime('now')));
-    CREATE TABLE IF NOT EXISTS verifiable_credentials (id TEXT PRIMARY KEY, vc_id TEXT UNIQUE NOT NULL, credential_type TEXT, issuer_did TEXT, subject_did TEXT, credential TEXT, proof_hash TEXT, status TEXT DEFAULT 'active', valid_until DATETIME, tenant_id TEXT, created_at DATETIME DEFAULT (datetime('now')));
+    CREATE TABLE IF NOT EXISTS did_registry (id TEXT PRIMARY KEY, did TEXT UNIQUE NOT NULL, entity_type TEXT, entity_id TEXT, org_id TEXT, did_document TEXT, public_key TEXT, status TEXT DEFAULT 'active', created_at DATETIME DEFAULT (datetime('now')));
+    CREATE TABLE IF NOT EXISTS verifiable_credentials (id TEXT PRIMARY KEY, vc_id TEXT UNIQUE NOT NULL, credential_type TEXT, issuer_did TEXT, subject_did TEXT, credential TEXT, proof_hash TEXT, status TEXT DEFAULT 'active', valid_until DATETIME, org_id TEXT, created_at DATETIME DEFAULT (datetime('now')));
 `);
     } catch (e) { }
 };
@@ -26,7 +26,7 @@ router.post('/did', requirePermission('esg:manage'), async (req, res) => {
         const { entity_type, entity_id } = req.body;
         const result = identityEngine.generateDID(entity_type, entity_id, req.user?.org_id || 'default');
         if (result.error) return res.status(400).json(result);
-        await db.prepare('INSERT INTO did_registry (id,did,entity_type,entity_id,tenant_id,did_document,public_key) VALUES (?,?,?,?,?,?,?)')
+        await db.prepare('INSERT INTO did_registry (id,did,entity_type,entity_id,org_id,did_document,public_key) VALUES (?,?,?,?,?,?,?)')
             .run(uuidv4(), result.did, entity_type, entity_id, req.user?.org_id || 'default', JSON.stringify(result.did_document), result.keys.publicKey);
         res.status(201).json(result);
     } catch (err) { res.status(500).json({ error: 'DID generation failed' }); }
@@ -44,7 +44,7 @@ router.get('/did/resolve/:did', async (req, res) => {
 // GET /did/registry — List all DIDs
 router.get('/did/registry', async (req, res) => {
     try {
-        const rows = await db.prepare('SELECT did,entity_type,entity_id,tenant_id,status,created_at FROM did_registry ORDER BY created_at DESC LIMIT 50').all();
+        const rows = await db.prepare('SELECT did,entity_type,entity_id,org_id,status,created_at FROM did_registry ORDER BY created_at DESC LIMIT 50').all();
         res.json({ title: 'DID Registry', total: rows.length, dids: rows });
     } catch (err) { res.status(500).json({ error: 'Registry query failed' }); }
 });
@@ -53,9 +53,9 @@ router.get('/did/registry', async (req, res) => {
 router.post('/vc/issue', requirePermission('esg:manage'), async (req, res) => {
     try {
         const { issuer_did, subject_did, credential_type, claims } = req.body;
-        const result = identityEngine.issueVC({ issuer_did, subject_did, credential_type, claims, tenant_id: req.user?.org_id });
+        const result = identityEngine.issueVC({ issuer_did, subject_did, credential_type, claims, org_id: req.user?.org_id });
         if (result.error) return res.status(400).json(result);
-        await db.prepare('INSERT INTO verifiable_credentials (id,vc_id,credential_type,issuer_did,subject_did,credential,proof_hash,valid_until,tenant_id) VALUES (?,?,?,?,?,?,?,?,?)')
+        await db.prepare('INSERT INTO verifiable_credentials (id,vc_id,credential_type,issuer_did,subject_did,credential,proof_hash,valid_until,org_id) VALUES (?,?,?,?,?,?,?,?,?)')
             .run(uuidv4(), result.vc_id, credential_type, issuer_did, subject_did, JSON.stringify(result.credential), result.credential.proof.proofValue, result.metadata.valid_until, req.user?.org_id);
         res.status(201).json(result);
     } catch (err) { res.status(500).json({ error: 'VC issuance failed' }); }
@@ -79,7 +79,7 @@ router.get('/trust-chain/:did', async (req, res) => {
     try {
         const did = decodeURIComponent(req.params.did);
         const creds = await db.prepare('SELECT * FROM verifiable_credentials WHERE subject_did = ? AND status = ?').all(did, 'active');
-        const linked = await db.prepare('SELECT * FROM did_registry WHERE tenant_id = (SELECT tenant_id FROM did_registry WHERE did = ?) AND did != ?').all(did, did);
+        const linked = await db.prepare('SELECT * FROM did_registry WHERE org_id = (SELECT org_id FROM did_registry WHERE did = ?) AND did != ?').all(did, did);
         const parsedCreds = creds.map(c => ({ ...c, credential: JSON.parse(c.credential || '{}') }));
         const parsedLinked = linked.map(l => ({ did: l.did, entity_type: l.entity_type, relationship: 'same_tenant' }));
         res.json(identityEngine.buildTrustChain(did, parsedCreds, parsedLinked));

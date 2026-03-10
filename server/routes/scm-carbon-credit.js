@@ -41,7 +41,7 @@ const init = async () => {
                 mrv_hash TEXT,
                 evidence_hash TEXT NOT NULL,
                 issuer_id TEXT NOT NULL,
-                tenant_id TEXT NOT NULL DEFAULT 'default',
+                org_id TEXT NOT NULL DEFAULT 'default',
                 current_owner_id TEXT NOT NULL,
                 beneficiary_id TEXT,
                 provenance TEXT DEFAULT '[]',
@@ -80,7 +80,7 @@ const init = async () => {
                 created_at DATETIME DEFAULT (datetime('now'))
             );
             CREATE TABLE IF NOT EXISTS carbon_fractional (
-                tenant_id TEXT PRIMARY KEY,
+                org_id TEXT PRIMARY KEY,
                 accumulated_kgCO2e REAL DEFAULT 0,
                 updated_at DATETIME DEFAULT (datetime('now'))
             );
@@ -99,7 +99,7 @@ router.post('/pipeline', requirePermission('esg:manage'), async (req, res) => {
         const rawEvent = {
             ...req.body,
             issuer_id: req.user?.id || 'system',
-            tenant_id: req.user?.org_id || 'default'
+            org_id: req.user?.org_id || 'default'
         };
 
         // Fetch historical routes for additionality
@@ -160,7 +160,7 @@ router.post('/pipeline', requirePermission('esg:manage'), async (req, res) => {
                 INSERT INTO carbon_credits (id, credit_id, serial_number, status, quantity_tCO2e, quantity_kgCO2e,
                     vintage_year, project_name, project_type, intervention, route_type, origin_region,
                     simulation_id, reduction_uid, mrv_confidence, mrv_hash, evidence_hash,
-                    issuer_id, tenant_id, current_owner_id, beneficiary_id, provenance, blockchain_status)
+                    issuer_id, org_id, current_owner_id, beneficiary_id, provenance, blockchain_status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(uuidv4(), c.credit_id, c.serial_number, c.status,
                 c.quantity_tCO2e, c.quantity_kgCO2e, c.vintage_year,
@@ -168,7 +168,7 @@ router.post('/pipeline', requirePermission('esg:manage'), async (req, res) => {
                 c.project.route_type, c.project.origin_region,
                 layerData.L1_ingestion?.event_id, c.additionality.reduction_uid,
                 c.mrv.confidence_score, c.mrv.verification_hash, c.blockchain.evidence_hash,
-                c.issuer_id, c.tenant_id, c.current_owner_id, c.beneficiary_id,
+                c.issuer_id, c.org_id, c.current_owner_id, c.beneficiary_id,
                 JSON.stringify(c.provenance), 'anchored');
 
             // Audit log
@@ -192,7 +192,7 @@ router.post('/pipeline', requirePermission('esg:manage'), async (req, res) => {
 // ─── POST /simulate — L1+L2+L3+L4 (simulate without minting) ───────────────
 router.post('/simulate', async (req, res) => {
     try {
-        const rawEvent = { ...req.body, issuer_id: req.user?.id || 'system', tenant_id: req.user?.org_id || 'default' };
+        const rawEvent = { ...req.body, issuer_id: req.user?.id || 'system', org_id: req.user?.org_id || 'default' };
         const ingestion = ccme.ingestEvent(rawEvent);
         if (ingestion.status === 'duplicate') return res.json({ pipeline: 'rejected', reason: 'duplicate', ingestion });
 
@@ -232,7 +232,7 @@ router.get('/registry', cacheMiddleware(30), async (req, res) => {
         const { status, vintage, limit = 50 } = req.query;
         let q = 'SELECT * FROM carbon_credits';
         const conds = []; const params = [];
-        if (tenantId) { conds.push('tenant_id = ?'); params.push(tenantId); }
+        if (tenantId) { conds.push('org_id = ?'); params.push(tenantId); }
         if (status) { conds.push('status = ?'); params.push(status); }
         if (vintage) { conds.push('vintage_year = ?'); params.push(parseInt(vintage)); }
         if (conds.length) q += ' WHERE ' + conds.join(' AND ');
@@ -253,7 +253,7 @@ router.get('/registry/:creditId', async (req, res) => {
     try {
         const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
         const credit = tenantId
-            ? await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ? AND tenant_id = ?').get(req.params.creditId, tenantId)
+            ? await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ? AND org_id = ?').get(req.params.creditId, tenantId)
             : await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ?').get(req.params.creditId);
         if (!credit) return res.status(404).json({ error: 'Credit not found' });
         const sim = credit.simulation_id ? await db.prepare('SELECT * FROM carbon_simulations WHERE event_id = ? OR simulation_id = ?').get(credit.simulation_id, credit.simulation_id) : null;
@@ -268,14 +268,17 @@ router.get('/registry/:creditId', async (req, res) => {
 // ─── POST /transfer — Transfer credit ──────────────────────────────────────
 router.post('/transfer', requirePermission('esg:manage'), async (req, res) => {
     try {
+        const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
         const { credit_id, new_owner_id } = req.body;
         if (!credit_id || !new_owner_id) return res.status(400).json({ error: 'credit_id and new_owner_id required' });
 
-        const row = await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ?').get(credit_id);
+        const row = tenantId
+            ? await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ? AND org_id = ?').get(credit_id, tenantId)
+            : await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ?').get(credit_id);
         if (!row) return res.status(404).json({ error: 'Credit not found' });
 
         const credit = { ...row, provenance: JSON.parse(row.provenance || '[]') };
-        const result = ccme.transferCredit(credit, new_owner_id, { id: req.user?.id, tenant_id: req.user?.org_id }, [req.user?.role || 'company_admin']);
+        const result = ccme.transferCredit(credit, new_owner_id, { id: req.user?.id, org_id: req.user?.org_id }, [req.user?.role || 'company_admin']);
         if (result.error) return res.status(400).json(result);
 
         await db.prepare(`UPDATE carbon_credits SET status = ?, current_owner_id = ?, provenance = ?, updated_at = datetime('now') WHERE credit_id = ?`)
@@ -292,10 +295,13 @@ router.post('/transfer', requirePermission('esg:manage'), async (req, res) => {
 // ─── POST /retire — Retire credit permanently ─────────────────────────────
 router.post('/retire', requirePermission('esg:manage'), async (req, res) => {
     try {
+        const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
         const { credit_id, reason } = req.body;
         if (!credit_id) return res.status(400).json({ error: 'credit_id required' });
 
-        const row = await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ?').get(credit_id);
+        const row = tenantId
+            ? await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ? AND org_id = ?').get(credit_id, tenantId)
+            : await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ?').get(credit_id);
         if (!row) return res.status(404).json({ error: 'Credit not found' });
 
         const credit = { ...row, provenance: JSON.parse(row.provenance || '[]') };
@@ -322,14 +328,14 @@ router.get('/balance', async (req, res) => {
     try {
         const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
         const credits = tenantId
-            ? await db.prepare('SELECT * FROM carbon_credits WHERE tenant_id = ?').all(tenantId)
+            ? await db.prepare('SELECT * FROM carbon_credits WHERE org_id = ?').all(tenantId)
             : await db.prepare('SELECT * FROM carbon_credits').all();
         const active = credits.filter(c => c.status === 'minted' || c.status === 'active');
         const retired = credits.filter(c => c.status === 'retired');
         const transferred = credits.filter(c => c.status === 'transferred');
         const sum = arr => arr.reduce((s, c) => s + (c.quantity_tCO2e || 0), 0);
 
-        const frac = await db.prepare('SELECT * FROM carbon_fractional WHERE tenant_id = ?').get(req.user?.org_id || 'default');
+        const frac = await db.prepare('SELECT * FROM carbon_fractional WHERE org_id = ?').get(req.user?.org_id || 'default');
 
         res.json({
             title: 'Carbon Credit Portfolio (CCME v3.0)',

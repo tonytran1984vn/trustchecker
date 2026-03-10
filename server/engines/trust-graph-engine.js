@@ -46,11 +46,11 @@ function loadGraph(tenantId) {
         SELECT tgn.*, p.trust_score, p.risk_level
         FROM trust_graph_nodes tgn
         LEFT JOIN partners p ON tgn.entity_id = p.id
-        WHERE tgn.tenant_id = ?
+        WHERE tgn.org_id = ?
     `).all(tenantId);
 
     const edges = db.prepare(`
-        SELECT * FROM trust_graph_edges WHERE tenant_id = ?
+        SELECT * FROM trust_graph_edges WHERE org_id = ?
     `).all(tenantId);
 
     // Build adjacency list
@@ -485,7 +485,7 @@ function createSnapshot(tenantId, reason) {
     const integrity = computeIntegrityScore(graph, allAnomalies);
 
     const snapshot = {
-        tenant_id: tenantId,
+        org_id: tenantId,
         timestamp: new Date().toISOString(),
         reason,
         node_count: graph.nodes.length,
@@ -504,7 +504,7 @@ function createSnapshot(tenantId, reason) {
     const snapshotId = uuidv4();
     db.prepare(`
         INSERT INTO trust_graph_snapshots (
-            id, tenant_id, snapshot_hash, reason, node_count, edge_count,
+            id, org_id, snapshot_hash, reason, node_count, edge_count,
             integrity_score, integrity_grade, anomaly_count,
             snapshot_data, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
@@ -530,7 +530,7 @@ function fullAnalysis(tenantId) {
     const graph = loadGraph(tenantId);
     if (graph.nodes.length === 0) {
         return {
-            tenant_id: tenantId,
+            org_id: tenantId,
             status: 'empty',
             message: 'No graph data for this tenant',
         };
@@ -547,7 +547,7 @@ function fullAnalysis(tenantId) {
 
     // CEO KPIs
     return {
-        tenant_id: tenantId,
+        org_id: tenantId,
         network_metrics: {
             total_nodes: graph.nodes.length,
             total_edges: graph.edges.length,
@@ -596,7 +596,7 @@ function addEdge(tenantId, fromId, toId, edgeType, metadata = {}) {
 
     db.prepare(`
         INSERT INTO trust_graph_edges (
-            id, tenant_id, from_id, to_id, edge_type,
+            id, org_id, from_id, to_id, edge_type,
             weight, risk_contribution, confidence,
             evidence_hash, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
@@ -618,7 +618,7 @@ function addNode(tenantId, entityId, nodeType, entityName) {
 
     const nodeId = uuidv4();
     db.prepare(`
-        INSERT INTO trust_graph_nodes (id, tenant_id, entity_id, node_type, entity_name, created_at)
+        INSERT INTO trust_graph_nodes (id, org_id, entity_id, node_type, entity_name, created_at)
         VALUES (?, ?, ?, ?, ?, datetime('now'))
     `).run(nodeId, tenantId, entityId, nodeType, entityName);
 
@@ -633,7 +633,7 @@ function initSchema() {
     db.exec(`
         CREATE TABLE IF NOT EXISTS trust_graph_nodes (
             id TEXT PRIMARY KEY,
-            tenant_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
             entity_id TEXT,
             node_type TEXT NOT NULL,
             entity_name TEXT,
@@ -644,7 +644,7 @@ function initSchema() {
 
         CREATE TABLE IF NOT EXISTS trust_graph_edges (
             id TEXT PRIMARY KEY,
-            tenant_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
             from_id TEXT NOT NULL,
             to_id TEXT NOT NULL,
             edge_type TEXT NOT NULL,
@@ -657,7 +657,7 @@ function initSchema() {
 
         CREATE TABLE IF NOT EXISTS trust_graph_snapshots (
             id TEXT PRIMARY KEY,
-            tenant_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
             snapshot_hash TEXT NOT NULL,
             reason TEXT,
             node_count INTEGER,
@@ -669,11 +669,11 @@ function initSchema() {
             created_at TEXT
         );
 
-        CREATE INDEX IF NOT EXISTS idx_tg_nodes_tenant ON trust_graph_nodes(tenant_id);
-        CREATE INDEX IF NOT EXISTS idx_tg_edges_tenant ON trust_graph_edges(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_tg_nodes_tenant ON trust_graph_nodes(org_id);
+        CREATE INDEX IF NOT EXISTS idx_tg_edges_tenant ON trust_graph_edges(org_id);
         CREATE INDEX IF NOT EXISTS idx_tg_edges_from ON trust_graph_edges(from_id);
         CREATE INDEX IF NOT EXISTS idx_tg_edges_to ON trust_graph_edges(to_id);
-        CREATE INDEX IF NOT EXISTS idx_tg_snapshots_tenant ON trust_graph_snapshots(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_tg_snapshots_tenant ON trust_graph_snapshots(org_id);
     `);
 }
 

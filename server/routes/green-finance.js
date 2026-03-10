@@ -15,7 +15,7 @@ router.get('/credit-score', cacheMiddleware(120), async (req, res) => {
     try {
         const orgId = req.user?.org_id;
         const credits = orgId
-            ? await db.prepare('SELECT * FROM carbon_credits WHERE tenant_id = ?').all(orgId).catch(() => [])
+            ? await db.prepare('SELECT * FROM carbon_credits WHERE org_id = ?').all(orgId).catch(() => [])
             : await db.prepare('SELECT * FROM carbon_credits').all().catch(() => []);
         const activeTCO2 = credits.filter(c => c.status === 'active' || c.status === 'minted').reduce((s, c) => s + (c.quantity_tco2e || c.quantity_tCO2e || 0), 0);
         const retiredTCO2 = credits.filter(c => c.status === 'retired').reduce((s, c) => s + (c.quantity_tco2e || c.quantity_tCO2e || 0), 0);
@@ -28,7 +28,7 @@ router.get('/collateral', cacheMiddleware(120), async (req, res) => {
     try {
         const orgId = req.user?.org_id;
         const credits = orgId
-            ? await db.prepare('SELECT * FROM carbon_credits WHERE tenant_id = ?').all(orgId).catch(() => [])
+            ? await db.prepare('SELECT * FROM carbon_credits WHERE org_id = ?').all(orgId).catch(() => [])
             : await db.prepare('SELECT * FROM carbon_credits').all().catch(() => []);
         res.json(greenFinance.valueCarbonCollateral(credits));
     } catch (err) { res.status(500).json({ error: 'Collateral valuation failed' }); }
@@ -36,7 +36,7 @@ router.get('/collateral', cacheMiddleware(120), async (req, res) => {
 
 // POST /receivable — Structure tokenized receivable
 router.post('/receivable', async (req, res) => {
-    try { res.json(greenFinance.structureTokenizedReceivable({ ...req.body, tenant_id: req.user?.org_id })); }
+    try { res.json(greenFinance.structureTokenizedReceivable({ ...req.body, org_id: req.user?.org_id })); }
     catch (err) { res.status(500).json({ error: 'Receivable structuring failed' }); }
 });
 
@@ -45,7 +45,7 @@ router.get('/dashboard', cacheMiddleware(120), async (req, res) => {
     try {
         const orgId = req.user?.org_id;
         const credits = orgId
-            ? await db.prepare('SELECT * FROM carbon_credits WHERE tenant_id = ?').all(orgId).catch(() => [])
+            ? await db.prepare('SELECT * FROM carbon_credits WHERE org_id = ?').all(orgId).catch(() => [])
             : await db.prepare('SELECT * FROM carbon_credits').all().catch(() => []);
         const score = greenFinance.calculateGreenCreditScore({ esg_score: 68, carbon_grade: 'B', compliance_pct: 72, partner_trust_avg: 65, credit_history_score: 70 });
         const collateral = greenFinance.valueCarbonCollateral(credits);

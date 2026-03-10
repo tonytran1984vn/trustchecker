@@ -222,9 +222,9 @@ router.get('/sovereignty/resolve/:country', (req, res) => {
 });
 
 router.post('/sovereignty/route', (req, res) => {
-    const { tenant_id, country, data_type } = req.body;
+    const { org_id, country, data_type } = req.body;
     if (!country) return res.status(400).json({ error: 'country required' });
-    res.json(sovereignty.routeData(tenant_id || req.user?.org_id || 'default', country, data_type));
+    res.json(sovereignty.routeData(org_id || req.user?.org_id || 'default', country, data_type));
 });
 
 router.post('/sovereignty/transfer-assessment', (req, res) => {
@@ -274,9 +274,9 @@ router.get('/sla/tiers', (req, res) => {
 router.post('/sla/contracts',
     requireConstitutionalWithAudit('monetization.sla_credit.calculate'),
     (req, res) => {
-        const { tenant_id, plan, custom_terms } = req.body;
-        if (!tenant_id || !plan) return res.status(400).json({ error: 'tenant_id and plan required' });
-        const result = sla.createContract(tenant_id, plan, custom_terms);
+        const { org_id, plan, custom_terms } = req.body;
+        if (!org_id || !plan) return res.status(400).json({ error: 'org_id and plan required' });
+        const result = sla.createContract(org_id, plan, custom_terms);
         if (result.error) return res.status(400).json(result);
         res.status(201).json(result);
     }
@@ -287,9 +287,9 @@ router.get('/sla/contracts', requirePermission('admin:manage'), (req, res) => {
 });
 
 router.post('/sla/measure', (req, res) => {
-    const { tenant_id, metrics } = req.body;
-    if (!tenant_id || !metrics) return res.status(400).json({ error: 'tenant_id and metrics required' });
-    const result = sla.recordMeasurement(tenant_id, metrics);
+    const { org_id, metrics } = req.body;
+    if (!org_id || !metrics) return res.status(400).json({ error: 'org_id and metrics required' });
+    const result = sla.recordMeasurement(org_id, metrics);
     if (result.error) return res.status(400).json(result);
     res.json(result);
 });
@@ -298,9 +298,9 @@ router.post('/sla/measure', (req, res) => {
 router.post('/sla/credit',
     requireConstitutionalWithAudit('monetization.sla_credit.calculate'),
     (req, res) => {
-        const { tenant_id, period, monthly_bill } = req.body;
-        if (!tenant_id || !monthly_bill) return res.status(400).json({ error: 'tenant_id and monthly_bill required' });
-        res.json(sla.calculateCredit(tenant_id, period || new Date().toISOString().slice(0, 7), monthly_bill));
+        const { org_id, period, monthly_bill } = req.body;
+        if (!org_id || !monthly_bill) return res.status(400).json({ error: 'org_id and monthly_bill required' });
+        res.json(sla.calculateCredit(org_id, period || new Date().toISOString().slice(0, 7), monthly_bill));
     }
 );
 

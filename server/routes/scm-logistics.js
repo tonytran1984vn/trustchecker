@@ -47,6 +47,7 @@ router.post('/shipments', authMiddleware, requirePermission('logistics:create'),
 router.get('/shipments', async (req, res) => {
     try {
         const { status, limit = 50 } = req.query;
+        const orgId = req.user?.org_id || req.user?.orgId || null;
         let query = `
       SELECT s.*, fp.name as from_name, tp.name as to_name, b.batch_number, p.name as product_name
       FROM shipments s
@@ -56,7 +57,10 @@ router.get('/shipments', async (req, res) => {
       LEFT JOIN products p ON b.product_id = p.id
     `;
         const params = [];
-        if (status) { query += ' WHERE s.status = ?'; params.push(status); }
+        const conditions = [];
+        if (orgId) { conditions.push('(fp.org_id = ? OR tp.org_id = ?)'); params.push(orgId, orgId); }
+        if (status) { conditions.push('s.status = ?'); params.push(status); }
+        if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
         query += ' ORDER BY s.created_at DESC LIMIT ?';
         params.push(Math.min(Number(limit) || 20, 100));
 

@@ -78,7 +78,7 @@ class GreenFinanceEngine {
      * Tokenized receivable structure
      */
     structureTokenizedReceivable(params) {
-        const { future_reductions_tCO2e = 0, projection_months = 12, confidence_pct = 70, tenant_id } = params;
+        const { future_reductions_tCO2e = 0, projection_months = 12, confidence_pct = 70, org_id } = params;
         const spotPrice = 45; const discountRate = 0.12;
         const projectedValue = future_reductions_tCO2e * spotPrice;
         const presentValue = projectedValue / Math.pow(1 + discountRate, projection_months / 12);
@@ -92,7 +92,7 @@ class GreenFinanceEngine {
             present_value_usd: Math.round(presentValue * 100) / 100,
             token_structure: { type: 'Carbon Receivable Token (CRT)', backed_by: 'Future verified reductions', settlement: 'Upon MRV verification', risk: 'Performance risk — reduction must materialize' },
             investor_terms: { min_investment_usd: 10000, expected_yield_pct: 8, maturity_months: projection_months },
-            tenant_id, structured_at: new Date().toISOString()
+            org_id, structured_at: new Date().toISOString()
         };
     }
 }

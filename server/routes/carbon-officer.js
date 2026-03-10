@@ -28,15 +28,20 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
 
         try {
             const sq = orgId
-                ? await db.prepare('SELECT * FROM shipments WHERE org_id = ?').all(orgId)
+                ? await db.prepare(`SELECT s.* FROM shipments s
+                    INNER JOIN batches b ON s.batch_id = b.id
+                    INNER JOIN products p ON b.product_id = p.id
+                    WHERE p.org_id = ?`).all(orgId)
                 : await db.prepare('SELECT * FROM shipments').all();
             shipments = sq || [];
         } catch (_) { }
 
         try {
             const eq = orgId
-                ? await db.prepare("SELECT * FROM scan_events WHERE org_id = ? ORDER BY created_at DESC LIMIT 200").all(orgId)
-                : await db.prepare("SELECT * FROM scan_events ORDER BY created_at DESC LIMIT 200").all();
+                ? await db.prepare(`SELECT e.* FROM supply_chain_events e
+                    INNER JOIN products p ON e.product_id = p.id
+                    WHERE p.org_id = ? ORDER BY e.created_at DESC LIMIT 200`).all(orgId)
+                : await db.prepare("SELECT * FROM supply_chain_events ORDER BY created_at DESC LIMIT 200").all();
             events = eq || [];
         } catch (_) { }
 
@@ -47,7 +52,7 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
         try {
             const creditStats = orgId
                 ? await db.prepare(`SELECT status, COUNT(*) as cnt, COALESCE(SUM(quantity_tCO2e),0) as total
-                    FROM carbon_credits WHERE tenant_id = ? GROUP BY status`).all(orgId)
+                    FROM carbon_credits WHERE org_id = ? GROUP BY status`).all(orgId)
                 : await db.prepare(`SELECT status, COUNT(*) as cnt, COALESCE(SUM(quantity_tCO2e),0) as total
                     FROM carbon_credits GROUP BY status`).all();
             for (const row of (creditStats || [])) {

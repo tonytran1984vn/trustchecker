@@ -132,7 +132,7 @@ function renderContent() {
     const tierLabel = tier === 'crit' || tier === 'high' ? 'High' : tier === 'med' ? 'Medium' : 'Low';
     const tierIcon = tier === 'crit' || tier === 'high' ? '🔥' : tier === 'med' ? '⚡' : '✅';
     const lvClass = tier === 'crit' || tier === 'high' ? 'st-lv-high' : tier === 'med' ? 'st-lv-med' : 'st-lv-low';
-    const tid = t.tenant_id || t.id || '';
+    const tid = t.org_id || t.id || '';
     const tName = (t.name || '').replace(/'/g, "\\'");
     const isSuspended = t.status === 'suspended';
     let action;

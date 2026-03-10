@@ -20,7 +20,7 @@ router.get('/models', authMiddleware, async (req, res) => {
         let query = 'SELECT * FROM risk_models';
         query += ' ORDER BY created_at DESC';
         const models = await db.prepare(query).all();
-        res.json(models.map(m => ({ ...m, weights: typeof m.weights === 'string' ? JSON.parse(m.weights || '{}') : (m.weights || {}) })));
+        res.json({ models: models.map(m => ({ ...m, weights: typeof m.weights === 'string' ? JSON.parse(m.weights || '{}') : (m.weights || {}) })) });
     } catch (err) {
         console.error('List models error:', err);
         res.status(500).json({ error: 'Failed to fetch models' });
@@ -234,7 +234,7 @@ router.get('/model-changes', authMiddleware, async (req, res) => {
         if (status) { query += ' WHERE mcr.status = ?'; params.push(status); }
         query += ' ORDER BY mcr.created_at DESC';
         const changes = await db.prepare(query).all(...params);
-        res.json(changes);
+        res.json({ changes });
     } catch (err) {
         console.error('List model changes error:', err);
         res.status(500).json({ error: 'Failed to fetch model changes' });
@@ -291,20 +291,30 @@ router.patch('/model-changes/:id', authMiddleware, requirePermission('risk_model
 // ─── GET /api/scm/model/rules-config – Org-scoped risk rule configs ─────────
 router.get('/rules-config', authMiddleware, async (req, res) => {
     try {
-        const orgId = req.user?.org_id || req.user?.orgId;
-        if (!orgId) return res.status(400).json({ error: 'No org_id found' });
+        // Try risk_rules_config first, fall back to channel_rules
+        let rules = [];
+        try {
+            const orgId = req.user?.org_id || req.user?.orgId;
+            if (orgId) {
+                rules = await db.prepare(
+                    'SELECT id, category, rule_key, rule_value, description, updated_at FROM risk_rules_config WHERE org_id = ? ORDER BY category, rule_key'
+                ).all(orgId);
+            }
+        } catch (e) {
+            // risk_rules_config doesn't exist — fall back to channel_rules
+            rules = await db.prepare(
+                'SELECT id, name, logic, severity, auto_action, is_active, triggers_30d, created_at FROM channel_rules ORDER BY created_at DESC'
+            ).all();
+        }
 
-        const rules = await db.prepare(
-            'SELECT id, category, rule_key, rule_value, description, updated_at FROM risk_rules_config WHERE org_id = ? ORDER BY category, rule_key'
-        ).all(orgId);
-
-        // Group by category
+        // Group by category or severity
         const grouped = {};
         for (const r of rules) {
-            if (!grouped[r.category]) grouped[r.category] = [];
-            grouped[r.category].push(r);
+            const cat = r.category || r.severity || 'general';
+            if (!grouped[cat]) grouped[cat] = [];
+            grouped[cat].push(r);
         }
-        res.json({ rules, grouped });
+        res.json({ rules, config: rules, grouped });
     } catch (err) {
         console.error('Get rules config error:', err);
         res.status(500).json({ error: 'Failed to fetch rules config' });

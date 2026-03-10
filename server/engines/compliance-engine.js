@@ -93,7 +93,7 @@ class ComplianceEngine {
             region = 'GLOBAL', offsets = [], credits = [],
             has_blockchain = true, has_gri = true, has_sbt = false,
             certifications = [], board_oversight = false,
-            tenant_id = 'default'
+            org_id = 'default'
         } = tenantData;
 
         const jurisdiction = JURISDICTIONS[region] || JURISDICTIONS.GLOBAL;
@@ -154,7 +154,7 @@ class ComplianceEngine {
 
         return {
             title: 'Compliance Report (Auto-generated)',
-            tenant_id, region, jurisdiction: jurisdiction,
+            org_id, region, jurisdiction: jurisdiction,
             overall_readiness_pct: overallReadiness,
             overall_status: overallReadiness === 100 ? 'fully_compliant' : overallReadiness >= 75 ? 'mostly_compliant' : overallReadiness >= 50 ? 'partially_compliant' : 'non_compliant',
             cbam_affected: jurisdiction.cbam_affected,

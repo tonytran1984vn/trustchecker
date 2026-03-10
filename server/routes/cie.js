@@ -59,7 +59,7 @@ router.post('/passport', requirePermission('esg:manage'), async (req, res) => {
 
         // Create passport
         await d.prepare(`INSERT INTO cie_passports 
-            (id, cip_id, tenant_id, product_name, batch_id, scope_1, scope_2, scope_3, total_emission, 
+            (id, cip_id, org_id, product_name, batch_id, scope_1, scope_2, scope_3, total_emission, 
              benchmark_score, risk_score, risk_action, status, methodology, factor_version, sealed_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
             .run(id, cipId, tenantId, product_name, batch_id || null,
@@ -77,7 +77,7 @@ router.post('/passport', requirePermission('esg:manage'), async (req, res) => {
                 benchmark_ref: `IND-${product_name.toUpperCase().replace(/\s+/g, '-')}-${new Date().getFullYear()}-Q${Math.ceil((new Date().getMonth() + 1) / 3)}`,
             });
             await d.prepare(`INSERT INTO cie_snapshots
-                (id, cip_id, tenant_id, capsule_hash, data_hash, method_version, method_hash, 
+                (id, cip_id, org_id, capsule_hash, data_hash, method_version, method_hash, 
                  factor_version, factor_hash, governance_chain, benchmark_ref, scope_snapshot, risk_thresholds)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
                 .run(uuidv4(), cipId, tenantId, snapshot.capsule_hash, snapshot.data_hash,
@@ -106,7 +106,7 @@ router.get('/passports', async (req, res) => {
         const d = getDb();
         const tenantId = req.user?.org_id || 'default';
         const { status, limit = 50 } = req.query;
-        let q = 'SELECT * FROM cie_passports WHERE tenant_id = ?';
+        let q = 'SELECT * FROM cie_passports WHERE org_id = ?';
         const params = [tenantId];
         if (status) { q += ' AND status = ?'; params.push(status); }
         q += ' ORDER BY created_at DESC LIMIT ?';
@@ -154,7 +154,7 @@ router.post('/anchor', requirePermission('esg:manage'), async (req, res) => {
         const id = uuidv4();
 
         await d.prepare(`INSERT INTO cie_anchors 
-            (id, tenant_id, anchor_type, target_id, anchor_hash, payload_hash, chain, status)
+            (id, org_id, anchor_type, target_id, anchor_hash, payload_hash, chain, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed')`)
             .run(id, tenantId, anchor.anchor_type, target_id || null,
                 anchor.anchor_hash, anchor.payload_hash, anchor.chain);
@@ -171,7 +171,7 @@ router.get('/anchors', async (req, res) => {
     try {
         const d = getDb();
         const tenantId = req.user?.org_id || 'default';
-        const rows = await d.prepare('SELECT * FROM cie_anchors WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 50')
+        const rows = await d.prepare('SELECT * FROM cie_anchors WHERE org_id = ? ORDER BY created_at DESC LIMIT 50')
             .all(tenantId);
         res.json({ anchors: rows || [] });
     } catch (err) { res.status(500).json({ error: 'Failed to list anchors' }); }
@@ -229,11 +229,11 @@ router.get('/config', async (req, res) => {
     try {
         const d = getDb();
         const tenantId = req.user?.org_id || 'default';
-        let config = await d.prepare('SELECT * FROM cie_tenant_config WHERE tenant_id = ?').get(tenantId);
+        let config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(tenantId);
         if (!config) {
             // Create default config
-            await d.prepare(`INSERT INTO cie_tenant_config (tenant_id) VALUES (?)`).run(tenantId);
-            config = await d.prepare('SELECT * FROM cie_tenant_config WHERE tenant_id = ?').get(tenantId);
+            await d.prepare(`INSERT INTO cie_tenant_config (org_id) VALUES (?)`).run(tenantId);
+            config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(tenantId);
         }
         config.modules = JSON.parse(config.modules || '{}');
         config.risk_thresholds = JSON.parse(config.risk_thresholds || '{}');
@@ -250,22 +250,22 @@ router.put('/config', requirePermission('tenant:settings_update'), async (req, r
         const { tier, batch_limit, modules, risk_thresholds, rme_countries, mgb_enabled, snapshot_enabled } = req.body;
 
         // Ensure config exists
-        const existing = await d.prepare('SELECT tenant_id FROM cie_tenant_config WHERE tenant_id = ?').get(tenantId);
+        const existing = await d.prepare('SELECT org_id FROM cie_tenant_config WHERE org_id = ?').get(tenantId);
         if (!existing) {
-            await d.prepare('INSERT INTO cie_tenant_config (tenant_id) VALUES (?)').run(tenantId);
+            await d.prepare('INSERT INTO cie_tenant_config (org_id) VALUES (?)').run(tenantId);
         }
 
         // Update fields individually
-        if (tier) await d.prepare('UPDATE cie_tenant_config SET tier = ? WHERE tenant_id = ?').run(tier, tenantId);
-        if (batch_limit) await d.prepare('UPDATE cie_tenant_config SET batch_limit = ? WHERE tenant_id = ?').run(batch_limit, tenantId);
-        if (modules) await d.prepare('UPDATE cie_tenant_config SET modules = ?::jsonb WHERE tenant_id = ?').run(JSON.stringify(modules), tenantId);
-        if (risk_thresholds) await d.prepare('UPDATE cie_tenant_config SET risk_thresholds = ?::jsonb WHERE tenant_id = ?').run(JSON.stringify(risk_thresholds), tenantId);
-        if (rme_countries) await d.prepare('UPDATE cie_tenant_config SET rme_countries = ?::jsonb WHERE tenant_id = ?').run(JSON.stringify(rme_countries), tenantId);
-        if (mgb_enabled != null) await d.prepare('UPDATE cie_tenant_config SET mgb_enabled = ? WHERE tenant_id = ?').run(!!mgb_enabled, tenantId);
-        if (snapshot_enabled != null) await d.prepare('UPDATE cie_tenant_config SET snapshot_enabled = ? WHERE tenant_id = ?').run(!!snapshot_enabled, tenantId);
-        await d.prepare("UPDATE cie_tenant_config SET updated_at = NOW() WHERE tenant_id = ?").run(tenantId);
+        if (tier) await d.prepare('UPDATE cie_tenant_config SET tier = ? WHERE org_id = ?').run(tier, tenantId);
+        if (batch_limit) await d.prepare('UPDATE cie_tenant_config SET batch_limit = ? WHERE org_id = ?').run(batch_limit, tenantId);
+        if (modules) await d.prepare('UPDATE cie_tenant_config SET modules = ?::jsonb WHERE org_id = ?').run(JSON.stringify(modules), tenantId);
+        if (risk_thresholds) await d.prepare('UPDATE cie_tenant_config SET risk_thresholds = ?::jsonb WHERE org_id = ?').run(JSON.stringify(risk_thresholds), tenantId);
+        if (rme_countries) await d.prepare('UPDATE cie_tenant_config SET rme_countries = ?::jsonb WHERE org_id = ?').run(JSON.stringify(rme_countries), tenantId);
+        if (mgb_enabled != null) await d.prepare('UPDATE cie_tenant_config SET mgb_enabled = ? WHERE org_id = ?').run(!!mgb_enabled, tenantId);
+        if (snapshot_enabled != null) await d.prepare('UPDATE cie_tenant_config SET snapshot_enabled = ? WHERE org_id = ?').run(!!snapshot_enabled, tenantId);
+        await d.prepare("UPDATE cie_tenant_config SET updated_at = NOW() WHERE org_id = ?").run(tenantId);
 
-        const config = await d.prepare('SELECT * FROM cie_tenant_config WHERE tenant_id = ?').get(tenantId);
+        const config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(tenantId);
         res.json({ message: 'Config updated', config });
     } catch (err) {
         console.error('Config update error:', err);
@@ -283,15 +283,15 @@ router.get('/overview', async (req, res) => {
         const d = getDb();
         const tenantId = req.user?.org_id || 'default';
 
-        const total = (await d.prepare('SELECT COUNT(*) as c FROM cie_passports WHERE tenant_id = ?').get(tenantId))?.c || 0;
-        const sealed = (await d.prepare("SELECT COUNT(*) as c FROM cie_passports WHERE tenant_id = ? AND status = 'sealed'").get(tenantId))?.c || 0;
-        const blocked = (await d.prepare("SELECT COUNT(*) as c FROM cie_passports WHERE tenant_id = ? AND status = 'block_approval'").get(tenantId))?.c || 0;
-        const anchors = (await d.prepare('SELECT COUNT(*) as c FROM cie_anchors WHERE tenant_id = ?').get(tenantId))?.c || 0;
-        const snapshots = (await d.prepare('SELECT COUNT(*) as c FROM cie_snapshots WHERE tenant_id = ?').get(tenantId))?.c || 0;
+        const total = (await d.prepare('SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ?').get(tenantId))?.c || 0;
+        const sealed = (await d.prepare("SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ? AND status = 'sealed'").get(tenantId))?.c || 0;
+        const blocked = (await d.prepare("SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ? AND status = 'block_approval'").get(tenantId))?.c || 0;
+        const anchors = (await d.prepare('SELECT COUNT(*) as c FROM cie_anchors WHERE org_id = ?').get(tenantId))?.c || 0;
+        const snapshots = (await d.prepare('SELECT COUNT(*) as c FROM cie_snapshots WHERE org_id = ?').get(tenantId))?.c || 0;
 
         res.json({
             version: 'CIE v2.0',
-            tenant_id: tenantId,
+            org_id: tenantId,
             passports: { total, sealed, blocked, pending: total - sealed - blocked },
             anchors,
             snapshots,

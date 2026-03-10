@@ -127,7 +127,7 @@ function setupRoutes(app) {
         ['/scm/carbon-credit', scmCarbonCreditRoutes],
         ['/scm/twin', scmDigitalTwinRoutes],
         ['/scm/supply', scmSupplyRoutes],
-        ['/scm/model', scmRiskModelRoutes],
+        ['/scm/risk-model', scmRiskModelRoutes],
         ['/scm/forensic', scmForensicRoutes],
         ['/scm/classify', scmClassificationRoutes],
         ['/scm/ml', scmMlEngineRoutes],

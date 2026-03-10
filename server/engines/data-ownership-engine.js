@@ -167,7 +167,7 @@ const MERKLE_EXPORT = {
     },
 
     export_api: {
-        endpoint: '/api/data-ownership/merkle-export/:tenant_id',
+        endpoint: '/api/data-ownership/merkle-export/:org_id',
         output_format: 'JSON bundle: { merkle_root, anchor_tx_id, chain, leaves[], proofs[], metadata }',
         size_estimate: '~1KB per 1000 records (hashes only)',
     },
@@ -188,7 +188,7 @@ const DELETION_CERTIFICATE = {
     title: 'Verifiable Deletion Certificate — Proof That Data Is Gone',
 
     certificate_contents: {
-        tenant_id: 'Anonymized tenant reference (hash of tenant ID)',
+        org_id: 'Anonymized tenant reference (hash of tenant ID)',
         deletion_timestamp: 'ISO 8601 timestamp of deletion execution',
         data_categories_deleted: 'List of data types deleted (per classification)',
         record_count: 'Number of records deleted per category',

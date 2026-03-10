@@ -3332,7 +3332,8 @@ router.get('/owner/ccs/scm-summary', requireExecutiveAccess(), async (req, res) 
         // Supply Chain Risk Score (0-100, higher = safer)
         const sealScore = integrityIndex; // 0-100
         const traceScore = traceabilityPct; // 0-100
-        const breachScore = totalBreaches > 0 ? Math.max(0, 100 - (criticalBreaches * 20) - (Number(breaches?.high || 0) * 10)) : 100;
+        // Breach resilience = resolution rate (higher = more breaches resolved)
+        const breachScore = totalBreaches > 0 ? Math.round(100 * resolvedBreaches / totalBreaches) : 100;
         const partnerScore = partnerRisk.length > 0
             ? Math.round(partnerRisk.reduce((s, p) => s + Number(p.avg_trust || 0), 0) / partnerRisk.length)
             : 50;
@@ -3500,13 +3501,15 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
             },
             partner_esg: {
                 total_partners: partners.length,
-                avg_esg_score: leaderboard?.avg_score || 0,
-                top_performers: (leaderboard?.ranking || []).slice(0, 3).map(p => ({
+                avg_esg_score: Array.isArray(leaderboard) && leaderboard.length > 0
+                    ? Math.round(leaderboard.reduce((s, p) => s + (p.esg_score || 0), 0) / leaderboard.length * 10) / 10
+                    : 0,
+                top_performers: (Array.isArray(leaderboard) ? leaderboard : []).slice(0, 3).map(p => ({
                     name: p.name,
-                    score: p.score,
+                    score: p.esg_score,
                     grade: p.grade,
                 })),
-                risk_partners: (leaderboard?.ranking || []).filter(p => (p.score || 0) < 40).length,
+                risk_partners: (Array.isArray(leaderboard) ? leaderboard : []).filter(p => (p.esg_score || 0) < 40).length,
             },
             products_assessed: products.length,
             offsets_recorded: Number(offsets?.c || 0),

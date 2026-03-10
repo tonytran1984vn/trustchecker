@@ -10,13 +10,13 @@ import { API as api } from '../../core/api.js';
 let _data = null;
 
 export function renderPage() {
-    if (!_data) { loadData(); return loadingState(); }
-    const d = _data;
-    const b = d.breaches;
+  if (!_data) { loadData(); return loadingState(); }
+  const d = _data;
+  const b = d.breaches;
 
-    const scoreColor = d.risk_score >= 80 ? '#22c55e' : d.risk_score >= 60 ? '#f59e0b' : '#ef4444';
+  const scoreColor = d.risk_score >= 80 ? '#22c55e' : d.risk_score >= 60 ? '#f59e0b' : '#ef4444';
 
-    return `
+  return `
     <div class="exec-page" style="font-feature-settings:'tnum'">
       <div class="exec-header">
         <h1>${icon('truck', 28)} Supply Chain Capital</h1>
@@ -39,7 +39,7 @@ export function renderPage() {
               <div class="exec-score-breakdown">
                 ${scoreLine('Chain Integrity', d.integrity_index)}
                 ${scoreLine('Inventory Traceability', d.traceability_pct)}
-                ${scoreLine('Breach Resilience', b.total > 0 ? Math.max(0, 100 - b.critical * 20 - b.high * 10) : 100)}
+                ${scoreLine('Breach Resilience', b.total > 0 ? Math.round(100 * b.resolved / b.total) : 100)}
                 ${scoreLine('Partner Trust', d.partner_risk.length > 0 ? Math.round(d.partner_risk.reduce((s, p) => s + p.avg_trust, 0) / d.partner_risk.length) : 50)}
               </div>
               <div style="margin-top:1rem;font-size:0.82rem;color:var(--text-secondary);font-style:italic">
@@ -80,14 +80,14 @@ export function renderPage() {
           <div class="exec-card">
             <h3 style="font-size:1.25rem;font-weight:700;margin-bottom:1.5rem">Partner Risk <span style="font-weight:400;opacity:0.5;font-size:0.85rem">(${d.partner_risk.length} channels)</span></h3>
             ${d.partner_risk.length > 0
-            ? d.partner_risk.map(p => partnerRow(p)).join('')
-            : '<div style="color:var(--text-secondary);font-size:0.82rem;padding:1rem 0">No active partners</div>'}
+      ? d.partner_risk.map(p => partnerRow(p)).join('')
+      : '<div style="color:var(--text-secondary);font-size:0.82rem;padding:1rem 0">No active partners</div>'}
           </div>
           <div class="exec-card">
             <h3 style="font-size:1.25rem;font-weight:700;margin-bottom:1.5rem">Geographic Exposure <span style="font-weight:400;opacity:0.5;font-size:0.85rem">(${d.geographic_exposure.length} regions)</span></h3>
             ${d.geographic_exposure.length > 0
-            ? d.geographic_exposure.map(g => geoRow(g)).join('')
-            : '<div style="color:var(--text-secondary);font-size:0.82rem;padding:1rem 0">No location data available</div>'}
+      ? d.geographic_exposure.map(g => geoRow(g)).join('')
+      : '<div style="color:var(--text-secondary);font-size:0.82rem;padding:1rem 0">No location data available</div>'}
           </div>
         </div>
       </section>
@@ -107,7 +107,7 @@ export function renderPage() {
             <div style="opacity:0.7">${e.location || '—'}</div>
             <div>${e.sealed ? '<span style="color:#22c55e">✓</span>' : '<span style="color:#94a3b8">—</span>'}</div>
           </div>`).join('')}`
-            : '<div style="color:var(--text-secondary);font-size:0.82rem;padding:1rem 0">No recent events</div>'}
+      : '<div style="color:var(--text-secondary);font-size:0.82rem;padding:1rem 0">No recent events</div>'}
         </div>
       </section>
     </div>
@@ -115,21 +115,21 @@ export function renderPage() {
 }
 
 async function loadData() {
-    try {
-        const r = await api.get('/tenant/owner/ccs/scm-summary');
-        _data = r;
-        const el = document.getElementById('main-content');
-        if (el) el.innerHTML = renderPage();
-    } catch (e) { console.error('[SCM Summary]', e); }
+  try {
+    const r = await api.get('/tenant/owner/ccs/scm-summary');
+    _data = r;
+    const el = document.getElementById('main-content');
+    if (el) el.innerHTML = renderPage();
+  } catch (e) { console.error('[SCM Summary]', e); }
 }
 
 function loadingState() {
-    return `<div class="exec-page"><div style="text-align:center;padding:4rem"><div class="loading-spinner"></div><div style="margin-top:1rem;color:var(--text-secondary)">Loading supply chain intelligence...</div></div></div>`;
+  return `<div class="exec-page"><div style="text-align:center;padding:4rem"><div class="loading-spinner"></div><div style="margin-top:1rem;color:var(--text-secondary)">Loading supply chain intelligence...</div></div></div>`;
 }
 
 function scoreLine(label, score) {
-    const color = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444';
-    return `
+  const color = score >= 80 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444';
+  return `
     <div class="exec-score-line">
       <span>${label}</span>
       <div class="exec-score-bar"><div class="exec-score-fill" style="width:${score}%;background:${color}"></div></div>
@@ -138,7 +138,7 @@ function scoreLine(label, score) {
 }
 
 function kpi(label, value, isGood, color, iconName) {
-    return `
+  return `
     <div class="exec-kpi-card">
       <div class="exec-kpi-icon" style="color:${color}">${icon(iconName, 20)}</div>
       <div class="exec-kpi-value" style="font-size:1.1rem">${value}</div>
@@ -148,9 +148,9 @@ function kpi(label, value, isGood, color, iconName) {
 }
 
 function partnerRow(p) {
-    const riskColor = p.high_risk > 0 ? '#ef4444' : p.avg_trust >= 80 ? '#22c55e' : '#f59e0b';
-    const verifiedPct = p.total > 0 ? Math.round(100 * p.verified / p.total) : 0;
-    return `
+  const riskColor = p.high_risk > 0 ? '#ef4444' : p.avg_trust >= 80 ? '#22c55e' : '#f59e0b';
+  const verifiedPct = p.total > 0 ? Math.round(100 * p.verified / p.total) : 0;
+  return `
     <div style="display:flex;align-items:center;gap:1rem;padding:0.75rem 0;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.04))">
       <div style="flex:1;font-size:1rem;font-weight:500;text-transform:capitalize">${p.channel}</div>
       <div style="width:100px">
@@ -165,8 +165,8 @@ function partnerRow(p) {
 }
 
 function geoRow(g) {
-    const color = g.integrity_pct >= 80 ? '#22c55e' : g.integrity_pct >= 50 ? '#f59e0b' : '#ef4444';
-    return `
+  const color = g.integrity_pct >= 80 ? '#22c55e' : g.integrity_pct >= 50 ? '#f59e0b' : '#ef4444';
+  return `
     <div style="display:flex;align-items:center;gap:0.75rem;padding:0.75rem 0;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.04))">
       <div style="flex:1;font-size:1rem;font-weight:500">${g.region}</div>
       <div style="width:100px">
@@ -178,7 +178,7 @@ function geoRow(g) {
 }
 
 window.refreshSCMSummary = function () {
-    _data = null;
-    const el = document.getElementById('main-content');
-    if (el) el.innerHTML = renderPage();
+  _data = null;
+  const el = document.getElementById('main-content');
+  if (el) el.innerHTML = renderPage();
 };

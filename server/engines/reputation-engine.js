@@ -120,7 +120,7 @@ class ReputationEngine {
      */
     buildPlatformIndex(tenants = []) {
         const index = tenants.map(t => ({
-            tenant_id: t.tenant_id, tenant_name: t.tenant_name,
+            org_id: t.org_id, tenant_name: t.tenant_name,
             trust_score: t.trust_score || 0, transparency_index: t.transparency_index || 0,
             carbon_integrity: t.carbon_integrity || 0,
             composite: Math.round(((t.trust_score || 0) * 0.4 + (t.transparency_index || 0) * 0.3 + (t.carbon_integrity || 0) * 0.3)),

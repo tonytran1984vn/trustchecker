@@ -26,7 +26,7 @@ const router = express.Router();
         check_digit_algo TEXT DEFAULT 'HMAC-SHA256',
         description TEXT DEFAULT '',
         example TEXT DEFAULT '',
-        tenant_id TEXT,
+        org_id TEXT,
         status TEXT DEFAULT 'active',
         usage_count INTEGER DEFAULT 0,
         created_by TEXT,
@@ -59,7 +59,7 @@ router.get('/format-rules', async (req, res) => {
         const params = [];
         let whereClause = "fr.status != 'deleted'";
         if (orgId && req.user?.role !== 'super_admin') {
-            whereClause += ' AND fr.tenant_id = ?';
+            whereClause += ' AND fr.org_id = ?';
             params.push(orgId);
         }
         const rules = await db.all(`
@@ -86,7 +86,7 @@ router.post('/format-rules', async (req, res) => {
         const example = generateExample(prefix || '', separator || '-', parseInt(code_length) || 24, charset || 'ALPHANUMERIC_UPPER');
 
         await db.run(`
-            INSERT INTO format_rules (id, name, prefix, pattern, separator, code_length, charset, check_digit_algo, description, example, tenant_id, created_by)
+            INSERT INTO format_rules (id, name, prefix, pattern, separator, code_length, charset, check_digit_algo, description, example, org_id, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [id, name, prefix || '', pattern || '', separator || '-', parseInt(code_length) || 24, charset || 'ALPHANUMERIC_UPPER', check_digit_algo || 'HMAC-SHA256', description || '', example, req.user?.org_id || req.user?.orgId || null, req.user?.id || null]);
 
@@ -419,25 +419,25 @@ router.get('/generation-limits', authMiddleware, async (req, res) => {
 // ─── POST /api/scm/code-gov/generation-limits – Set tenant limit ────────────
 router.post('/generation-limits', authMiddleware, requirePermission('settings:update'), async (req, res) => {
     try {
-        const { tenant_id, max_per_hour, max_per_day, max_per_month, max_batch_size } = req.body;
+        const { org_id, max_per_hour, max_per_day, max_per_month, max_batch_size } = req.body;
         const id = uuidv4();
 
         // Check if limit already exists for tenant
-        const existing = await db.prepare('SELECT id FROM generation_limits WHERE tenant_id = ?').get(tenant_id);
+        const existing = await db.prepare('SELECT id FROM generation_limits WHERE org_id = ?').get(org_id);
         if (existing) {
             await db.prepare(`
                 UPDATE generation_limits SET max_per_hour = ?, max_per_day = ?, max_per_month = ?, max_batch_size = ?, updated_at = NOW()
-                WHERE tenant_id = ?
-            `).run(max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000, tenant_id);
-            return res.json({ id: existing.id, tenant_id, status: 'updated' });
+                WHERE org_id = ?
+            `).run(max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000, org_id);
+            return res.json({ id: existing.id, org_id, status: 'updated' });
         }
 
         await db.prepare(`
-            INSERT INTO generation_limits (id, tenant_id, max_per_hour, max_per_day, max_per_month, max_batch_size, current_hour, current_day, current_month, created_at, updated_at)
+            INSERT INTO generation_limits (id, org_id, max_per_hour, max_per_day, max_per_month, max_batch_size, current_hour, current_day, current_month, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, NOW(), NOW())
-        `).run(id, tenant_id, max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000);
+        `).run(id, org_id, max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000);
 
-        res.status(201).json({ id, tenant_id, status: 'created' });
+        res.status(201).json({ id, org_id, status: 'created' });
     } catch (err) {
         res.status(500).json({ error: 'Failed to set generation limit' });
     }
@@ -446,8 +446,8 @@ router.post('/generation-limits', authMiddleware, requirePermission('settings:up
 // ─── POST /api/scm/code-gov/generation-check – Check if generation allowed ─
 router.post('/generation-check', authMiddleware, async (req, res) => {
     try {
-        const { tenant_id, requested_count } = req.body;
-        const limit = await db.prepare('SELECT * FROM generation_limits WHERE tenant_id = ?').get(tenant_id);
+        const { org_id, requested_count } = req.body;
+        const limit = await db.prepare('SELECT * FROM generation_limits WHERE org_id = ?').get(org_id);
         if (!limit) return res.json({ allowed: true, message: 'No limit configured for this tenant' });
 
         const count = parseInt(requested_count) || 1;
@@ -481,7 +481,7 @@ router.post('/generation-check', authMiddleware, async (req, res) => {
 router.get('/registry/stats', authMiddleware, async (req, res) => {
     try {
         const total = (await db.prepare('SELECT COUNT(*) as c FROM code_registry').get())?.c || 0;
-        const byTenant = await db.prepare('SELECT tenant_id, COUNT(*) as count FROM code_registry GROUP BY tenant_id').all();
+        const byTenant = await db.prepare('SELECT org_id, COUNT(*) as count FROM code_registry GROUP BY org_id').all();
         const collisions = (await db.prepare('SELECT COUNT(*) as c FROM code_registry WHERE collision_detected = 1').get())?.c || 0;
 
         res.json({
@@ -498,21 +498,21 @@ router.get('/registry/stats', authMiddleware, async (req, res) => {
 // ─── POST /api/scm/code-gov/registry/check – Check for collision ────────────
 router.post('/registry/check', authMiddleware, async (req, res) => {
     try {
-        const { code, tenant_id } = req.body;
+        const { code, org_id } = req.body;
         if (!code) return res.status(400).json({ error: 'code required' });
 
         // Generate HMAC hash for cross-tenant comparison
         const hmacHash = crypto.createHmac('sha256', 'trustchecker-registry-salt').update(code).digest('hex');
 
         // Check cross-tenant collision
-        const existing = await db.prepare('SELECT tenant_id, created_at FROM code_registry WHERE hmac_hash = ?').get(hmacHash);
+        const existing = await db.prepare('SELECT org_id, created_at FROM code_registry WHERE hmac_hash = ?').get(hmacHash);
 
         if (existing) {
-            const sameTenant = existing.tenant_id === tenant_id;
+            const sameTenant = existing.org_id === org_id;
             return res.json({
                 collision: true,
                 same_tenant: sameTenant,
-                existing_tenant: sameTenant ? tenant_id : '[REDACTED]',
+                existing_tenant: sameTenant ? org_id : '[REDACTED]',
                 registered_at: existing.created_at,
                 action: sameTenant ? 'Duplicate within tenant — reject' : 'Cross-tenant collision — reject and alert Super Admin'
             });
@@ -527,9 +527,9 @@ router.post('/registry/check', authMiddleware, async (req, res) => {
 // ─── POST /api/scm/code-gov/registry/register – Register codes in bulk ──────
 router.post('/registry/register', authMiddleware, async (req, res) => {
     try {
-        const { codes, tenant_id } = req.body;
+        const { codes, org_id } = req.body;
         if (!codes || !Array.isArray(codes)) return res.status(400).json({ error: 'codes array required' });
-        if (!tenant_id) return res.status(400).json({ error: 'tenant_id required' });
+        if (!org_id) return res.status(400).json({ error: 'org_id required' });
 
         let registered = 0;
         let collisions = 0;
@@ -544,9 +544,9 @@ router.post('/registry/register', authMiddleware, async (req, res) => {
             } else {
                 const id = uuidv4();
                 await db.prepare(`
-                    INSERT INTO code_registry (id, tenant_id, hmac_hash, code_prefix, collision_detected, created_at)
+                    INSERT INTO code_registry (id, org_id, hmac_hash, code_prefix, collision_detected, created_at)
                     VALUES (?, ?, ?, ?, 0, NOW())
-                `).run(id, tenant_id, hmacHash, code.substring(0, 6));
+                `).run(id, org_id, hmacHash, code.substring(0, 6));
                 registered++;
             }
         }
@@ -554,8 +554,8 @@ router.post('/registry/register', authMiddleware, async (req, res) => {
         // Update generation counters
         await db.prepare(`
             UPDATE generation_limits SET current_hour = current_hour + ?, current_day = current_day + ?, current_month = current_month + ?, updated_at = NOW()
-            WHERE tenant_id = ?
-        `).run(registered, registered, registered, tenant_id);
+            WHERE org_id = ?
+        `).run(registered, registered, registered, org_id);
 
         res.status(201).json({
             submitted: codes.length,

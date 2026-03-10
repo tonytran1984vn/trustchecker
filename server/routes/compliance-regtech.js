@@ -21,7 +21,7 @@ router.get('/report', cacheMiddleware(120), async (req, res) => {
             scope_1: 150, scope_2: 80, scope_3: 420, total_emissions: 650,
             products_count: products.cnt, partners_count: partners.cnt,
             region: req.query.region || 'GLOBAL', credits, offsets: [],
-            has_blockchain: true, has_gri: true, tenant_id: req.user?.org_id
+            has_blockchain: true, has_gri: true, org_id: req.user?.org_id
         });
         res.json(report);
     } catch (err) { res.status(500).json({ error: 'Report generation failed' }); }
@@ -38,8 +38,8 @@ router.get('/frameworks', (req, res) => {
 router.get('/diff', async (req, res) => {
     try {
         // Generate current vs baseline (simulated diff)
-        const current = compliance.generateComplianceReport({ scope_1: 150, scope_2: 80, scope_3: 420, total_emissions: 650, products_count: 10, partners_count: 5, region: req.query.region || 'GLOBAL', has_blockchain: true, has_gri: true, tenant_id: req.user?.org_id });
-        const baseline = compliance.generateComplianceReport({ scope_1: 100, scope_2: null, scope_3: null, total_emissions: 100, products_count: 5, partners_count: 2, region: req.query.region || 'GLOBAL', has_blockchain: false, has_gri: false, tenant_id: req.user?.org_id });
+        const current = compliance.generateComplianceReport({ scope_1: 150, scope_2: 80, scope_3: 420, total_emissions: 650, products_count: 10, partners_count: 5, region: req.query.region || 'GLOBAL', has_blockchain: true, has_gri: true, org_id: req.user?.org_id });
+        const baseline = compliance.generateComplianceReport({ scope_1: 100, scope_2: null, scope_3: null, total_emissions: 100, products_count: 5, partners_count: 2, region: req.query.region || 'GLOBAL', has_blockchain: false, has_gri: false, org_id: req.user?.org_id });
         res.json(compliance.trackRegulatoryDiff(baseline, current));
     } catch (err) { res.status(500).json({ error: 'Diff tracking failed' }); }
 });
@@ -47,7 +47,7 @@ router.get('/diff', async (req, res) => {
 // GET /gaps — Compliance gaps
 router.get('/gaps', cacheMiddleware(120), async (req, res) => {
     try {
-        const report = compliance.generateComplianceReport({ scope_1: 150, scope_2: 80, scope_3: 420, total_emissions: 650, products_count: 10, partners_count: 5, region: req.query.region || 'GLOBAL', has_blockchain: true, has_gri: true, tenant_id: req.user?.org_id });
+        const report = compliance.generateComplianceReport({ scope_1: 150, scope_2: 80, scope_3: 420, total_emissions: 650, products_count: 10, partners_count: 5, region: req.query.region || 'GLOBAL', has_blockchain: true, has_gri: true, org_id: req.user?.org_id });
         res.json({ title: 'Compliance Gaps', total_gaps: report.gaps.length, gaps: report.gaps, overall_readiness: report.overall_readiness_pct });
     } catch (err) { res.status(500).json({ error: 'Gap analysis failed' }); }
 });

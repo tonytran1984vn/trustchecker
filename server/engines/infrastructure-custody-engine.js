@@ -87,7 +87,7 @@ class InfrastructureCustodyEngine {
      */
     checkTenantIsolation(tenants = []) {
         const results = tenants.map(t => ({
-            tenant_id: t.tenant_id || t.id,
+            org_id: t.org_id || t.id,
             tenant_name: t.name || t.tenant_name,
             data_encrypted: true,
             separate_key: true,

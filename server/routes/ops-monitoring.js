@@ -39,12 +39,14 @@ router.post('/incidents', requirePermission('risk:view'), async (req, res) => {
 router.get('/incidents', async (req, res) => {
     try {
         const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+        const orgId = req.user?.org_id || req.user?.orgId || null;
 
         // Try DB first
         try {
             const params = [];
             let sql = 'SELECT * FROM ops_incidents_v2';
             const conditions = [];
+            if (orgId) { conditions.push('org_id = ?'); params.push(orgId); }
             if (req.query.status) {
                 conditions.push('status = ?');
                 params.push(req.query.status);

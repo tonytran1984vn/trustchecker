@@ -431,7 +431,7 @@ class CarbonCreditMintingEngine {
     mintCredit(params) {
         const {
             event, counterfactual, mrvResult, additionalityResult,
-            issuer_id, tenant_id = 'default', beneficiary_id = null,
+            issuer_id, org_id = 'default', beneficiary_id = null,
             project_name = 'TrustChecker Supply Chain Reduction',
             fractional_policy = 'accumulate' // 'accumulate' | 'mint_fractional'
         } = params;
@@ -451,15 +451,15 @@ class CarbonCreditMintingEngine {
         let fractionalCarry = 0;
 
         if (fractional_policy === 'accumulate') {
-            const existing = _fractionalBuffer.get(tenant_id) || 0;
+            const existing = _fractionalBuffer.get(org_id) || 0;
             const totalKg = existing + reductionKg;
 
             if (totalKg >= 1000) {
                 creditTonnes = Math.floor(totalKg / 1000);
                 fractionalCarry = Math.round((totalKg - creditTonnes * 1000) * 100) / 100;
-                _fractionalBuffer.set(tenant_id, fractionalCarry);
+                _fractionalBuffer.set(org_id, fractionalCarry);
             } else {
-                _fractionalBuffer.set(tenant_id, Math.round(totalKg * 100) / 100);
+                _fractionalBuffer.set(org_id, Math.round(totalKg * 100) / 100);
                 return {
                     status: 'accumulated',
                     accumulated_kgCO2e: Math.round(totalKg * 100) / 100,
@@ -488,7 +488,7 @@ class CarbonCreditMintingEngine {
             mrv_hash: mrvResult.verification_hash,
             additionality_uid: additionalityResult.reduction_uid,
             confidence: mrvResult.confidence_score,
-            issuer_id, tenant_id, timestamp
+            issuer_id, org_id, timestamp
         };
         const evidenceHash = crypto.createHash('sha256').update(JSON.stringify(evidencePayload)).digest('hex');
 
@@ -509,7 +509,7 @@ class CarbonCreditMintingEngine {
                     origin_region: event.origin_region
                 },
                 issuer_id,
-                tenant_id,
+                org_id,
                 current_owner_id: beneficiary_id || issuer_id,
                 beneficiary_id,
                 status: STATUS.MINTED,
@@ -556,7 +556,7 @@ class CarbonCreditMintingEngine {
         if (credit.status === STATUS.BLOCKED) return { error: 'Credit is blocked — under investigation' };
 
         // SoD: check 4-eyes for standard, 6-eyes for cross-tenant
-        const isCrossTenant = credit.tenant_id && credit.tenant_id !== (transferredBy.tenant_id || credit.tenant_id);
+        const isCrossTenant = credit.org_id && credit.org_id !== (transferredBy.org_id || credit.org_id);
         const sodReq = isCrossTenant ? SOD_REQUIREMENTS.cross_tenant_transfer : SOD_REQUIREMENTS.credit_transfer;
 
         const sodCheck = this._checkSoD(approvals, sodReq);
@@ -799,7 +799,7 @@ class CarbonCreditMintingEngine {
                 ? t.credits.filter(c => c.status === 'retired').length / t.credits.length * 100 : 0;
 
             return {
-                tenant_id: t.tenant_id,
+                org_id: t.org_id,
                 tenant_name: t.tenant_name,
                 total_credits: t.credits?.length || 0,
                 total_reduction_tCO2e: Math.round(totalReduction * 1000) / 1000,
@@ -847,7 +847,7 @@ class CarbonCreditMintingEngine {
         // L5: Mint
         const mintResult = this.mintCredit({
             event: ingestion.event, counterfactual, mrvResult: mrv, additionalityResult: additionality,
-            issuer_id: rawEvent.issuer_id || 'system', tenant_id: rawEvent.tenant_id || 'default',
+            issuer_id: rawEvent.issuer_id || 'system', org_id: rawEvent.org_id || 'default',
             beneficiary_id: rawEvent.beneficiary_id, fractional_policy
         });
 

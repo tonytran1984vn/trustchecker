@@ -15,33 +15,40 @@ router.use(authMiddleware);
 router.get('/', async (req, res) => {
     try {
         const { status, limit = 50, offset = 0 } = req.query;
-        let sql = "SELECT * FROM audit_log WHERE action LIKE 'NOTIFY_%' AND actor_id = ?";
-        const params = [req.user.id];
+        const userId = req.user.id;
+        let sql = "SELECT * FROM audit_log WHERE action LIKE 'NOTIFY_%' AND actor_id = CAST(? AS TEXT)";
+        const params = [userId];
 
-        if (status === 'unread') { sql += " AND details LIKE '%\"read\":false%'"; }
-        if (status === 'read') { sql += " AND details LIKE '%\"read\":true%'"; }
+        if (status === 'unread') { sql += " AND details LIKE '%read%false%'"; }
+        if (status === 'read') { sql += " AND details LIKE '%read%true%'"; }
 
-        sql += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
-        params.push(Number(limit), Math.max(Number(offset) || 0, 0));
+        sql += ' ORDER BY timestamp DESC LIMIT ' + Math.min(Number(limit) || 50, 200) + ' OFFSET ' + Math.max(Number(offset) || 0, 0);
 
-        const rows = await db.all(sql, params);
+        let rows = [];
+        try { rows = await db.all(sql, params); } catch (e) { console.error('[Notifications] query error:', e.message); }
 
-        const notifications = rows.map(r => {
-            const d = JSON.parse(r.details || '{}');
+        const notifications = (rows || []).map(r => {
+            let d = {};
+            try { d = JSON.parse(r.details || '{}'); } catch (e) { }
             return {
                 id: r.id,
                 type: d.type || 'info',
-                title: d.title || 'Notification',
-                message: d.message,
+                title: d.title || r.action?.replace('NOTIFY_', '').replace(/_/g, ' ') || 'Notification',
+                message: d.message || '',
                 read: d.read || false,
                 link: d.link,
-                created_at: r.timestamp
+                created_at: r.timestamp,
+                timestamp: r.timestamp
             };
         });
 
-        const unreadCount = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE action LIKE 'NOTIFY_%' AND actor_id = ? AND details LIKE '%\"read\":false%'", [req.user.id]))?.c || 0;
+        let unreadCount = 0;
+        try {
+            const cnt = await db.get("SELECT COUNT(*) as c FROM audit_log WHERE action LIKE 'NOTIFY_%' AND actor_id = CAST(? AS TEXT) AND details NOT LIKE '%read%true%'", [userId]);
+            unreadCount = cnt?.c || 0;
+        } catch (e) { /* ignore */ }
 
-        res.json({ notifications, unread_count: unreadCount, total: rows.length });
+        res.json({ notifications, unread_count: unreadCount, total: notifications.length });
     } catch (e) {
         safeError(res, 'Operation failed', e);
     }
@@ -89,14 +96,15 @@ router.post('/broadcast', requirePermission('notification:manage'), async (req, 
 // ─── PUT /:id/read — Mark notification as read ──────────────
 router.put('/:id/read', async (req, res) => {
     try {
-        const notif = await db.get("SELECT * FROM audit_log WHERE id = ? AND action LIKE 'NOTIFY_%' AND actor_id = ?", [req.params.id, req.user.id]);
+        const notif = await db.get("SELECT * FROM audit_log WHERE id = CAST(? AS TEXT) AND action LIKE 'NOTIFY_%' AND actor_id = CAST(? AS TEXT)", [req.params.id, req.user.id]);
         if (!notif) return res.status(404).json({ error: 'Notification not found' });
 
-        const details = JSON.parse(notif.details || '{}');
+        let details = {};
+        try { details = JSON.parse(notif.details || '{}'); } catch (e) { }
         details.read = true;
         details.read_at = new Date().toISOString();
 
-        await db.prepare("UPDATE audit_log SET details = ? WHERE id = ?").run(JSON.stringify(details), req.params.id);
+        await db.prepare("UPDATE audit_log SET details = ? WHERE id = CAST(? AS TEXT)").run(JSON.stringify(details), req.params.id);
         res.json({ id: req.params.id, read: true });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -106,15 +114,19 @@ router.put('/:id/read', async (req, res) => {
 // ─── PUT /read-all — Mark all as read ───────────────────────
 router.put('/read-all', async (req, res) => {
     try {
-        const unread = await db.all("SELECT id, details FROM audit_log WHERE action LIKE 'NOTIFY_%' AND actor_id = ? AND details LIKE '%\"read\":false%'", [req.user.id]);
-        for (const n of unread) {
-            const d = JSON.parse(n.details || '{}');
+        let unread = [];
+        try {
+            unread = await db.all("SELECT id, details FROM audit_log WHERE action LIKE 'NOTIFY_%' AND actor_id = CAST(? AS TEXT) AND details NOT LIKE '%read%true%'", [req.user.id]);
+        } catch (e) { /* ignore */ }
+        for (const n of (unread || [])) {
+            let d = {};
+            try { d = JSON.parse(n.details || '{}'); } catch (e) { }
             d.read = true;
             d.read_at = new Date().toISOString();
-            await db.prepare("UPDATE audit_log SET details = ? WHERE id = ?").run(JSON.stringify(d), n.id);
+            await db.prepare("UPDATE audit_log SET details = ? WHERE id = CAST(? AS TEXT)").run(JSON.stringify(d), n.id);
         }
 
-        res.json({ marked_read: unread.length });
+        res.json({ marked_read: (unread || []).length });
     } catch (e) {
         safeError(res, 'Operation failed', e);
     }

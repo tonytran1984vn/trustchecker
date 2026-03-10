@@ -1196,7 +1196,7 @@ model KillSwitchLog {
 
 model TransactionFee {
   id            String   @id @default(uuid())
-  tenantId      String   @map("tenant_id")
+  orgId         String   @map("org_id")
   type          String
   volume        Int      @default(1)
   unitFee       Float    @map("unit_fee")
@@ -1205,7 +1205,7 @@ model TransactionFee {
   metadata      Json     @default("{}")
   createdAt     DateTime @default(now()) @map("created_at")
 
-  @@index([tenantId])
+  @@index([orgId])
   @@index([period])
   @@index([type])
   @@map("transaction_fees")
@@ -1349,7 +1349,7 @@ model PartnerRevenue {
 model CiePassport {
   id              String    @id @default(uuid())
   cipId           String    @unique @map("cip_id")
-  tenantId        String    @map("tenant_id")
+  orgId           String    @map("org_id")
   productName     String    @map("product_name")
   batchId         String?   @map("batch_id")
   scope1          Float     @default(0) @map("scope_1")
@@ -1371,7 +1371,7 @@ model CiePassport {
 
   snapshot        CieSnapshot?
 
-  @@index([tenantId])
+  @@index([orgId])
   @@index([status])
   @@map("cie_passports")
 }
@@ -1379,7 +1379,7 @@ model CiePassport {
 model CieSnapshot {
   id              String   @id @default(uuid())
   cipId           String   @unique @map("cip_id")
-  tenantId        String   @map("tenant_id")
+  orgId           String   @map("org_id")
   capsuleHash     String   @map("capsule_hash")
   dataHash        String   @map("data_hash")
   methodVersion   String?  @map("method_version")
@@ -1397,13 +1397,13 @@ model CieSnapshot {
 
   passport        CiePassport @relation(fields: [cipId], references: [cipId], onDelete: Cascade)
 
-  @@index([tenantId])
+  @@index([orgId])
   @@map("cie_snapshots")
 }
 
 model CieAnchor {
   id              String    @id @default(uuid())
-  tenantId        String    @map("tenant_id")
+  orgId           String    @map("org_id")
   anchorType      String    @map("anchor_type")
   targetId        String?   @map("target_id")
   anchorHash      String    @map("anchor_hash")
@@ -1415,13 +1415,13 @@ model CieAnchor {
   status          String    @default("pending")
   createdAt       DateTime  @default(now()) @map("created_at")
 
-  @@index([tenantId])
+  @@index([orgId])
   @@index([targetId])
   @@map("cie_anchors")
 }
 
 model CieTenantConfig {
-  tenantId        String   @id @map("tenant_id")
+  orgId           String   @id @map("org_id")
   tier            String   @default("sme")
   factorVersion   String   @default("EF-2024.12.01") @map("factor_version")
   methodology     String   @default("GHG-v4.2-r3")

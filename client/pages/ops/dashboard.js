@@ -21,6 +21,23 @@ export function renderPage() {
   const scanCount = monCache.scanHistory?.scans?.length || 0;
   const anomalyCount = (monCache.scanHistory?.scans || []).filter(s => s.fraud_score > 0.3).length;
 
+  // If cache is still loading, schedule re-render after prefetch completes
+  if (batchCount === 0 && window._opsProdReady) {
+    window._opsProdReady.then(() => {
+      const el = document.getElementById('ops-dash-metrics');
+      if (el && window._opsProdCache?.batches?.batches?.length) {
+        const c = window._opsProdCache;
+        const bc = c.batches?.batches?.length || 0;
+        const ac = (c.batches?.batches || []).filter(b => b.status === 'active').length;
+        el.querySelector('[data-metric="batches"]')?.setAttribute('data-value', bc);
+        const vEl = el.querySelector('[data-metric="batches"] .sa-metric-value');
+        const sEl = el.querySelector('[data-metric="batches"] .sa-metric-sub');
+        if (vEl) vEl.textContent = String(bc);
+        if (sEl) sEl.textContent = `${ac} active`;
+      }
+    });
+  }
+
   return `
     <div class="sa-page">
       <div class="sa-page-title">
@@ -34,8 +51,8 @@ export function renderPage() {
       <!-- Live Operational Metrics -->
       <section class="sa-section">
         <h2 class="sa-section-title">Current Metrics</h2>
-        <div class="sa-metrics-row">
-          ${metric('Total Batches', String(batchCount), `${activeBatches} active`, 'green', 'products')}
+        <div class="sa-metrics-row" id="ops-dash-metrics">
+          <div data-metric="batches">${metric('Total Batches', String(batchCount), `${activeBatches} active`, 'green', 'products')}</div>
           ${metric('In Transit', String(transitBatches), `${shipmentCount} total shipments`, 'blue', 'network')}
           ${metric('Pending Transfers', String(pendingShipments), pendingShipments > 3 ? 'Above average' : 'Normal', pendingShipments > 3 ? 'orange' : 'blue', 'clock')}
           ${metric('Open Incidents', String(openIncidents), openIncidents > 0 ? 'Requires attention' : 'All clear ✓', openIncidents > 0 ? 'red' : 'green', 'alertTriangle')}
@@ -80,7 +97,7 @@ function metric(label, value, sub, color, iconName) {
 
 function quickLink(label, workspace, tab) {
   return `
-    <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer" onclick="showToast('Navigate to ${label}','info')">
+    <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer" onclick="navigate('${workspace}')">
       <span style="color:var(--text-secondary);font-size:0.82rem">→</span>
       <span style="font-size:0.82rem">${label}</span>
     </div>

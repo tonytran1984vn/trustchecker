@@ -15,14 +15,23 @@ router.use(authMiddleware);
 // Cache 60s — queries 8 full tables
 router.get('/radar', cacheMiddleware(60), async (req, res) => {
     try {
-        // NODE-BP-1: Parallelize 8 independent table reads
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const orgFilter = orgId ? ' WHERE org_id = ?' : '';
+        const orgParams = orgId ? [orgId] : [];
+        // NODE-BP-1: Parallelize 8 independent table reads with org_id filter
         const [partners, shipments, violations, leaks, alerts, inventory, certifications, sustainability] = await Promise.all([
-            db.prepare('SELECT * FROM partners').all(),
-            db.prepare('SELECT * FROM shipments').all(),
+            db.prepare('SELECT * FROM partners' + orgFilter).all(...orgParams),
+            orgId
+                ? db.prepare('SELECT s.* FROM shipments s LEFT JOIN partners fp ON s.from_partner_id = fp.id LEFT JOIN partners tp ON s.to_partner_id = tp.id WHERE fp.org_id = ? OR tp.org_id = ?').all(orgId, orgId)
+                : db.prepare('SELECT * FROM shipments').all(),
             db.prepare('SELECT * FROM sla_violations').all(),
             db.prepare('SELECT * FROM leak_alerts').all(),
-            db.prepare('SELECT * FROM fraud_alerts').all(),
-            db.prepare('SELECT * FROM inventory').all(),
+            orgId
+                ? db.prepare('SELECT fa.* FROM fraud_alerts fa LEFT JOIN products p ON fa.product_id = p.id WHERE p.org_id = ? OR p.org_id IS NULL').all(orgId)
+                : db.prepare('SELECT * FROM fraud_alerts').all(),
+            orgId
+                ? db.prepare('SELECT i.* FROM inventory i LEFT JOIN products p ON i.product_id = p.id WHERE p.org_id = ? OR p.org_id IS NULL').all(orgId)
+                : db.prepare('SELECT * FROM inventory').all(),
             db.prepare('SELECT * FROM certifications').all(),
             db.prepare('SELECT * FROM sustainability_scores').all(),
         ]);
@@ -42,10 +51,15 @@ router.get('/radar', cacheMiddleware(60), async (req, res) => {
 // Cache 120s — relatively static data
 router.get('/heatmap', cacheMiddleware(120), async (req, res) => {
     try {
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const orgFilter = orgId ? ' WHERE org_id = ?' : '';
+        const orgParams = orgId ? [orgId] : [];
         // NODE-BP-1: Parallelize 3 reads
         const [partners, shipments, leaks] = await Promise.all([
-            db.prepare('SELECT * FROM partners').all(),
-            db.prepare('SELECT * FROM shipments').all(),
+            db.prepare('SELECT * FROM partners' + orgFilter).all(...orgParams),
+            orgId
+                ? db.prepare('SELECT s.* FROM shipments s LEFT JOIN partners fp ON s.from_partner_id = fp.id LEFT JOIN partners tp ON s.to_partner_id = tp.id WHERE fp.org_id = ? OR tp.org_id = ?').all(orgId, orgId)
+                : db.prepare('SELECT * FROM shipments').all(),
             db.prepare('SELECT * FROM leak_alerts').all(),
         ]);
 
@@ -68,15 +82,18 @@ router.get('/heatmap', cacheMiddleware(120), async (req, res) => {
 router.get('/alerts', async (req, res) => {
     try {
         const { severity, limit = 50 } = req.query;
+        const orgId = req.user?.org_id || req.user?.orgId || null;
 
-        // Aggregate alerts from multiple sources
+        // Aggregate alerts from multiple sources with org_id filtering
         const cappedLimit = Math.min(parseInt(limit) || 50, 200);
-        // NODE-BP-1: Parallelize 4 alert queries
+        const orgJoin = orgId ? ' AND p.org_id = ?' : '';
+        const orgP = orgId ? [orgId] : [];
+        // NODE-BP-1: Parallelize 4 alert queries (each with .catch to prevent one failure from killing all)
         const [fraudAlerts, leakAlerts, slaAlerts, anomalyAlerts] = await Promise.all([
-            db.prepare("SELECT id, 'fraud' as source, alert_type, severity, description, status, created_at FROM fraud_alerts WHERE status = 'open' ORDER BY created_at DESC LIMIT ?").all(cappedLimit),
-            db.prepare("SELECT id, 'leak' as source, leak_type as alert_type, CASE WHEN risk_score > 0.7 THEN 'high' WHEN risk_score > 0.4 THEN 'medium' ELSE 'low' END as severity, listing_title as description, status, created_at FROM leak_alerts WHERE status = 'open' ORDER BY created_at DESC LIMIT ?").all(cappedLimit),
-            db.prepare("SELECT id, 'sla' as source, violation_type as alert_type, CASE WHEN penalty_amount > 1000 THEN 'high' WHEN penalty_amount > 100 THEN 'medium' ELSE 'low' END as severity, violation_type as description, status, created_at FROM sla_violations WHERE status = 'open' ORDER BY created_at DESC LIMIT ?").all(cappedLimit),
-            db.prepare("SELECT id, 'anomaly' as source, anomaly_type as alert_type, severity, description, status, detected_at as created_at FROM anomaly_detections WHERE status = 'open' ORDER BY detected_at DESC LIMIT ?").all(cappedLimit),
+            db.prepare(`SELECT fa.id, 'fraud' as source, fa.alert_type, fa.severity, fa.description, fa.status, fa.created_at FROM fraud_alerts fa LEFT JOIN products p ON fa.product_id = p.id WHERE fa.status = 'open'${orgJoin} ORDER BY fa.created_at DESC LIMIT ?`).all(...orgP, cappedLimit).catch(() => []),
+            db.prepare("SELECT id, 'leak' as source, leak_type as alert_type, CASE WHEN risk_score > 0.7 THEN 'high' WHEN risk_score > 0.4 THEN 'medium' ELSE 'low' END as severity, listing_title as description, status, created_at FROM leak_alerts WHERE status = 'open' ORDER BY created_at DESC LIMIT ?").all(cappedLimit).catch(() => []),
+            db.prepare("SELECT id, 'sla' as source, violation_type as alert_type, CASE WHEN penalty_amount > 1000 THEN 'high' WHEN penalty_amount > 100 THEN 'medium' ELSE 'low' END as severity, violation_type as description, status, created_at FROM sla_violations WHERE status = 'open' ORDER BY created_at DESC LIMIT ?").all(cappedLimit).catch(() => []),
+            db.prepare("SELECT id, 'anomaly' as source, anomaly_type as alert_type, severity, description, status, detected_at as created_at FROM anomaly_detections WHERE status = 'open' ORDER BY detected_at DESC LIMIT ?").all(cappedLimit).catch(() => []),
         ]);
 
         let allAlerts = [...fraudAlerts, ...leakAlerts, ...slaAlerts, ...anomalyAlerts]
@@ -112,14 +129,21 @@ router.get('/alerts', async (req, res) => {
 router.get('/trends', async (req, res) => {
     try {
         const { period = '30d' } = req.query;
+        const orgId = req.user?.org_id || req.user?.orgId || null;
         const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
         const since = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
 
-        // NODE-BP-1: Parallelize 3 trend queries
+        const orgJoin = orgId ? ' AND p.org_id = ?' : '';
+        const orgP = orgId ? [orgId] : [];
+        // NODE-BP-1: Parallelize 3 trend queries with org_id
         const [fraudTrend, leakTrend, violationTrend] = await Promise.all([
-            db.prepare('SELECT DATE(created_at) as day, COUNT(*) as count FROM fraud_alerts WHERE created_at >= ? GROUP BY DATE(created_at)').all(since),
-            db.prepare('SELECT DATE(created_at) as day, COUNT(*) as count FROM leak_alerts WHERE created_at >= ? GROUP BY DATE(created_at)').all(since),
-            db.prepare('SELECT DATE(created_at) as day, COUNT(*) as count FROM sla_violations WHERE created_at >= ? GROUP BY DATE(created_at)').all(since),
+            db.prepare(`SELECT DATE(fa.created_at) as day, COUNT(*)::int as count FROM fraud_alerts fa LEFT JOIN products p ON fa.product_id = p.id WHERE fa.created_at >= ?${orgJoin} GROUP BY DATE(fa.created_at) ORDER BY day`).all(since, ...orgP),
+            orgId
+                ? db.prepare('SELECT DATE(la.created_at) as day, COUNT(*)::int as count FROM leak_alerts la LEFT JOIN products p ON la.product_id = p.id WHERE la.created_at >= ? AND p.org_id = ? GROUP BY DATE(la.created_at) ORDER BY day').all(since, orgId)
+                : db.prepare('SELECT DATE(created_at) as day, COUNT(*)::int as count FROM leak_alerts WHERE created_at >= ? GROUP BY DATE(created_at) ORDER BY day').all(since),
+            orgId
+                ? db.prepare('SELECT DATE(sv.created_at) as day, COUNT(*)::int as count FROM sla_violations sv LEFT JOIN partners p ON sv.partner_id = p.id WHERE sv.created_at >= ? AND p.org_id = ? GROUP BY DATE(sv.created_at) ORDER BY day').all(since, orgId)
+                : db.prepare('SELECT DATE(created_at) as day, COUNT(*)::int as count FROM sla_violations WHERE created_at >= ? GROUP BY DATE(created_at) ORDER BY day').all(since),
         ]);
 
         res.json({

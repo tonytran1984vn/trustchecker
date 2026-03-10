@@ -41,7 +41,7 @@ router.post('/events', authMiddleware, requirePermission('supply_chain:create'),
         try {
             const lrgf = require('../engines/lrgf-engine');
             governance = lrgf.processEvent(
-                { event_type, product_id, batch_id, tenant_id: req.user.orgId, idempotency_key: `scm-${id}` },
+                { event_type, product_id, batch_id, org_id: req.user.orgId, idempotency_key: `scm-${id}` },
                 { source: 'scm-tracking', ip: req.ip, user_agent: req.headers['user-agent'], latitude: details?.latitude, longitude: details?.longitude },
                 { velocity_anomaly: 0, geo_risk: 0, device_mismatch: 0, historical_batch: 0, distributor_trust: 0, duplicate_cluster: 0 }
             );

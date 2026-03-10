@@ -14,7 +14,8 @@ router.use(authMiddleware);
 // ─── GET /policies — List data retention policies ───────────
 router.get('/policies', requirePermission('compliance:manage'), async (req, res) => {
     try {
-        const policies = await db.all('SELECT * FROM data_retention_policies ORDER BY created_at DESC');
+        const orgId = req.user.orgId;
+        const policies = await db.all('SELECT * FROM data_retention_policies WHERE org_id = $1 ORDER BY created_at DESC', [orgId]);
 
         // If no policies, return defaults
         if (policies.length === 0) {
@@ -48,7 +49,8 @@ router.post('/policies', requirePermission('compliance:manage'), async (req, res
         if (!validTables.includes(table_name)) return res.status(400).json({ error: `Invalid table. Choose: ${validTables.join(', ')}` });
 
         // Upsert: check if policy exists
-        const existing = await db.get('SELECT * FROM data_retention_policies WHERE table_name = ?', [table_name]);
+        const orgId = req.user.orgId;
+        const existing = await db.get('SELECT * FROM data_retention_policies WHERE table_name = $1 AND org_id = $2', [table_name, orgId]);
         if (existing) {
             await db.prepare('UPDATE data_retention_policies SET retention_days = ?, action = ? WHERE id = ?')
                 .run(retention_days, validActions.includes(action) ? action : 'archive', existing.id);
@@ -56,8 +58,8 @@ router.post('/policies', requirePermission('compliance:manage'), async (req, res
         }
 
         const id = uuidv4();
-        await db.prepare('INSERT INTO data_retention_policies (id, table_name, retention_days, action, created_by) VALUES (?, ?, ?, ?, ?)')
-            .run(id, table_name, retention_days, validActions.includes(action) ? action : 'archive', req.user.id);
+        await db.prepare('INSERT INTO data_retention_policies (id, table_name, retention_days, action, created_by, org_id) VALUES (?, ?, ?, ?, ?, ?)')
+            .run(id, table_name, retention_days, validActions.includes(action) ? action : 'archive', req.user.id, orgId);
 
         res.status(201).json({ id, table_name, retention_days, action: action || 'archive' });
     } catch (e) {
@@ -68,7 +70,8 @@ router.post('/policies', requirePermission('compliance:manage'), async (req, res
 // ─── POST /policies/execute — Run retention cleanup ─────────
 router.post('/policies/execute', requirePermission('compliance:manage'), async (req, res) => {
     try {
-        const policies = await db.all("SELECT * FROM data_retention_policies WHERE is_active = 1");
+        const orgId = req.user.orgId;
+        const policies = await db.all("SELECT * FROM data_retention_policies WHERE is_active = 1 AND org_id = $1", [orgId]);
         const results = [];
 
         for (const policy of policies) {
@@ -228,12 +231,17 @@ router.delete('/gdpr/delete', async (req, res) => {
 // ─── GET /gdpr/consent — Consent status ─────────────────────
 router.get('/gdpr/consent', async (req, res) => {
     try {
-        const consent = await db.get("SELECT details FROM audit_log WHERE actor_id = ? AND action = 'CONSENT_GIVEN' ORDER BY timestamp DESC LIMIT 1", [req.user.id]);
+        const consent = await db.get("SELECT details FROM audit_log WHERE actor_id = $1 AND action = 'CONSENT_GIVEN' ORDER BY timestamp DESC LIMIT 1", [req.user.id]);
+
+        let consentDetails = null;
+        if (consent?.details) {
+            try { consentDetails = JSON.parse(consent.details); } catch (e) { consentDetails = { raw: consent.details }; }
+        }
 
         res.json({
             user_id: req.user.id,
             consent_status: consent ? 'given' : 'pending',
-            consent_details: consent ? JSON.parse(consent.details) : null,
+            consent_details: consentDetails,
             required_consents: [
                 { type: 'data_processing', description: 'Processing of personal data for authentication and service delivery', required: true },
                 { type: 'analytics', description: 'Usage analytics to improve the platform', required: false },
@@ -250,9 +258,9 @@ router.post('/gdpr/consent', async (req, res) => {
     try {
         const { data_processing, analytics, marketing } = req.body;
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
+        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
             .run(uuidv4(), req.user.id, 'CONSENT_GIVEN', 'user', req.user.id,
-                JSON.stringify({ data_processing: !!data_processing, analytics: !!analytics, marketing: !!marketing, timestamp: new Date().toISOString(), ip: req.ip }));
+                JSON.stringify({ data_processing: !!data_processing, analytics: !!analytics, marketing: !!marketing, timestamp: new Date().toISOString(), ip: req.ip }), req.user.orgId);
 
         res.json({
             status: 'recorded',
@@ -267,12 +275,13 @@ router.post('/gdpr/consent', async (req, res) => {
 // ─── GET /report — Compliance report ────────────────────────
 router.get('/report', requirePermission('compliance:manage'), async (req, res) => {
     try {
-        const totalUsers = (await db.get('SELECT COUNT(*) as c FROM users'))?.c || 0;
+        const orgId = req.user.orgId;
+        const totalUsers = (await db.get('SELECT COUNT(*) as c FROM users WHERE org_id = $1', [orgId]))?.c || 0;
         const consented = (await db.get("SELECT COUNT(DISTINCT actor_id) as c FROM audit_log WHERE action = 'CONSENT_GIVEN'"))?.c || 0;
         const exports = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE action = 'GDPR_DATA_EXPORT'"))?.c || 0;
         const deletions = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE action = 'GDPR_DELETION'"))?.c || 0;
-        const retentionPolicies = await db.all('SELECT * FROM data_retention_policies WHERE is_active = 1');
-        const auditEntries = (await db.get('SELECT COUNT(*) as c FROM audit_log'))?.c || 0;
+        const retentionPolicies = await db.all('SELECT * FROM data_retention_policies WHERE is_active = 1 AND org_id = $1', [orgId]);
+        const auditEntries = (await db.get('SELECT COUNT(*) as c FROM audit_log WHERE org_id = $1', [orgId]))?.c || 0;
 
         res.json({
             report_type: 'GDPR Compliance Report',
@@ -299,21 +308,22 @@ router.get('/report', requirePermission('compliance:manage'), async (req, res) =
 // ─── GET /stats — Compliance overview stats ─────────────────
 router.get('/stats', async (req, res) => {
     try {
-        const totalPolicies = (await db.get('SELECT COUNT(*) as c FROM data_retention_policies'))?.c || 0;
-        const activePolicies = (await db.get("SELECT COUNT(*) as c FROM data_retention_policies WHERE is_active = 1"))?.c || 0;
-        const auditEntries = (await db.get('SELECT COUNT(*) as c FROM audit_log'))?.c || 0;
+        const orgId = req.user.orgId;
+        const totalPolicies = (await db.get('SELECT COUNT(*) as c FROM data_retention_policies WHERE org_id = $1', [orgId]))?.c || 0;
+        const activePolicies = (await db.get("SELECT COUNT(*) as c FROM data_retention_policies WHERE is_active = 1 AND org_id = $1", [orgId]))?.c || 0;
+        const auditEntries = (await db.get('SELECT COUNT(*) as c FROM audit_log WHERE org_id = $1', [orgId]))?.c || 0;
 
         let complianceRecords = 0;
         let frameworks = [];
         try {
-            complianceRecords = (await db.get('SELECT COUNT(*) as c FROM compliance_records'))?.c || 0;
-            frameworks = await db.all('SELECT framework, status, COUNT(*) as count FROM compliance_records GROUP BY framework, status');
+            complianceRecords = (await db.get('SELECT COUNT(*) as c FROM compliance_records WHERE org_id = $1', [orgId]))?.c || 0;
+            frameworks = await db.all('SELECT framework, status, COUNT(*) as count FROM compliance_records WHERE org_id = $1 GROUP BY framework, status', [orgId]);
         } catch (e) { /* table may not exist */ }
 
         let gdprExports = 0, gdprDeletions = 0;
         try {
-            gdprExports = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE action = 'GDPR_EXPORT' OR action = 'GDPR_DATA_EXPORT'"))?.c || 0;
-            gdprDeletions = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE action = 'GDPR_DELETION' OR action = 'GDPR_DATA_DELETION'"))?.c || 0;
+            gdprExports = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE (action = 'GDPR_EXPORT' OR action = 'GDPR_DATA_EXPORT') AND org_id = $1", [orgId]))?.c || 0;
+            gdprDeletions = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE (action = 'GDPR_DELETION' OR action = 'GDPR_DATA_DELETION') AND org_id = $1", [orgId]))?.c || 0;
         } catch (e) { console.warn('[compliance] GDPR stats query skipped:', e.message); }
 
         res.json({
@@ -336,7 +346,7 @@ router.get('/records', async (req, res) => {
     try {
         let records = [];
         try {
-            records = await db.all('SELECT * FROM compliance_records ORDER BY created_at DESC LIMIT 100');
+            records = await db.all('SELECT * FROM compliance_records WHERE org_id = $1 ORDER BY created_at DESC LIMIT 100', [req.user.orgId]);
         } catch (e) {
             // Table may not exist — return simulated data
             records = [
@@ -355,7 +365,8 @@ router.get('/records', async (req, res) => {
 // ─── GET /retention — Data retention policies ───────────────
 router.get('/retention', async (req, res) => {
     try {
-        const policies = await db.all('SELECT * FROM data_retention_policies ORDER BY created_at DESC');
+        const orgId = req.user.orgId;
+        const policies = await db.all('SELECT * FROM data_retention_policies WHERE org_id = $1 ORDER BY created_at DESC', [orgId]);
         if (policies.length === 0) {
             return res.json({
                 policies: [

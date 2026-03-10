@@ -303,7 +303,7 @@ function approveWeightChange(proposalId, approverId, approverRole) {
 function createGraphStateVersion(tenantId, changeType, changeDetail, actorId, actorRole) {
     const gsvId = uuidv4();
     const prevGsv = db.prepare(
-        'SELECT version_number FROM tg_graph_state_versions WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 1'
+        'SELECT version_number FROM tg_graph_state_versions WHERE org_id = ? ORDER BY created_at DESC LIMIT 1'
     ).get(tenantId);
 
     const versionNumber = (prevGsv?.version_number || 0) + 1;
@@ -315,7 +315,7 @@ function createGraphStateVersion(tenantId, changeType, changeDetail, actorId, ac
 
     db.prepare(`
         INSERT INTO tg_graph_state_versions (
-            id, tenant_id, version_number, change_type, change_detail,
+            id, org_id, version_number, change_type, change_detail,
             change_hash, actor_id, actor_role, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `).run(gsvId, tenantId, versionNumber, changeType, JSON.stringify(changeDetail), changeHash, actorId, actorRole);
@@ -407,7 +407,7 @@ function governedOverride(tenantId, nodeId, overrideData, approvers) {
     const overrideId = uuidv4();
     db.prepare(`
         INSERT INTO tg_overrides (
-            id, tenant_id, node_id, override_type,
+            id, org_id, node_id, override_type,
             old_value, new_value, justification,
             approver_1_id, approver_1_role,
             approver_2_id, approver_2_role,
@@ -460,7 +460,7 @@ function boardDashboard(tenantId) {
     // Board sees strategic KPIs only, not raw graph
     const overrideCount = db.prepare(`
         SELECT COUNT(*) as c FROM tg_overrides
-        WHERE tenant_id = ? AND created_at > datetime('now', '-30 days')
+        WHERE org_id = ? AND created_at > datetime('now', '-30 days')
     `).get(tenantId)?.c || 0;
 
     const schemaChanges = db.prepare(`
@@ -474,7 +474,7 @@ function boardDashboard(tenantId) {
     `).get()?.c || 0;
 
     return {
-        tenant_id: tenantId,
+        org_id: tenantId,
         period: '30 days',
         network_risk_density: analysis.risk_density,
         high_risk_cluster_count: analysis.anomalies.critical + analysis.anomalies.high,
@@ -602,7 +602,7 @@ function initSchema() {
 
         CREATE TABLE IF NOT EXISTS tg_graph_state_versions (
             id TEXT PRIMARY KEY,
-            tenant_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
             version_number INTEGER NOT NULL,
             change_type TEXT NOT NULL,
             change_detail TEXT,
@@ -614,7 +614,7 @@ function initSchema() {
 
         CREATE TABLE IF NOT EXISTS tg_overrides (
             id TEXT PRIMARY KEY,
-            tenant_id TEXT NOT NULL,
+            org_id TEXT NOT NULL,
             node_id TEXT NOT NULL,
             override_type TEXT DEFAULT 'trust_score',
             old_value TEXT,
@@ -636,8 +636,8 @@ function initSchema() {
 
         CREATE INDEX IF NOT EXISTS idx_tg_schema_status ON tg_schema_changes(status);
         CREATE INDEX IF NOT EXISTS idx_tg_weight_status ON tg_weight_changes(status);
-        CREATE INDEX IF NOT EXISTS idx_tg_gsv_tenant ON tg_graph_state_versions(tenant_id);
-        CREATE INDEX IF NOT EXISTS idx_tg_overrides_tenant ON tg_overrides(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_tg_gsv_tenant ON tg_graph_state_versions(org_id);
+        CREATE INDEX IF NOT EXISTS idx_tg_overrides_tenant ON tg_overrides(org_id);
         CREATE INDEX IF NOT EXISTS idx_tg_audit_type ON tg_audit_log(artifact_type);
     `);
 }

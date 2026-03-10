@@ -358,12 +358,16 @@ export function navigate(page, opts = {}) {
     window.scrollTo(0, 0);
 }
 
+// ─── Global helpers for inline onclick handlers ────────────────
+window.navigateTo = (page, opts) => navigate(page, opts || {});
+window.renderCurrentPage = () => render();
+
 // ─── Render current page (with lazy loading) ────────────────
 export function renderPage() {
     let page = State.page;
 
     // v10.1: Auto-correct default 'dashboard' page for roles with dedicated landing pages
-    const _roleLanding = { org_owner: 'owner-governance', super_admin: 'control-tower', executive: 'exec-overview', carbon_officer: 'carbon-workspace', ops_manager: 'ops-planning' };
+    const _roleLanding = { org_owner: 'owner-governance', super_admin: 'control-tower', executive: 'exec-overview', carbon_officer: 'carbon-workspace', ops_manager: 'ops-planning', risk_officer: 'risk-dashboard' };
     const correctPage = _roleLanding[State.user?.active_role || State.user?.role];
     if (correctPage && page === 'dashboard') {
         State.page = correctPage;
@@ -386,6 +390,8 @@ export function renderPage() {
     // Trigger async load → cache → re-render
     loader().then(mod => {
         _pageCache[page] = mod;
+        // Initialize page event handlers if module exports initPage()
+        if (typeof mod.initPage === 'function') mod.initPage();
         // Only re-render if we're still on that page
         if (State.page === page) render();
     }).catch(err => {
@@ -690,13 +696,12 @@ export async function loadPageData(page) {
             }
             if (_pageCache['settings']?.loadSettingsData) _pageCache['settings'].loadSettingsData();
         } else if (page === 'risk-dashboard') {
-            const [alerts, heatmap, trends, radar] = await Promise.all([
+            const [alerts, heatmap, trends] = await Promise.all([
                 API.get('/scm/risk/alerts?limit=10').catch(() => ({})),
                 API.get('/scm/risk/heatmap').catch(() => ({})),
                 API.get('/scm/risk/trends').catch(() => ({})),
-                API.get('/scm/risk/radar').catch(() => ({})),
             ]);
-            State._riskData = { alerts, heatmap, trends, radar };
+            State._riskData = { alerts, heatmap, trends };
             render();
         } else if (page === 'risk-event-feed' || page === 'risk-advanced-filter') {
             const res = await API.get('/scm/risk/alerts?limit=200').catch(() => ({}));
@@ -744,7 +749,7 @@ export async function loadPageData(page) {
                 API.get('/risk-graph/hidden-links').catch(() => ({})),
                 API.get('/risk-graph/fraud-feed').catch(() => ({})),
             ]);
-            State._riskForensic = { links: hidden.links || hidden.hidden_links || [], feed: fraud.events || fraud.feed || [] };
+            State._riskForensic = { links: hidden.links || hidden.hidden_links || [], feed: fraud };
             render();
         } else if (page === 'risk-auto-response') {
             State._riskRules = await API.get('/scm/risk-model/rules-config').catch(() => ({}));
@@ -823,7 +828,7 @@ export async function loadPageData(page) {
             State._riskModels = { models: models.models || [], rules: rules.rules || rules.config || [] };
             State._riskGraph = graph;
             State._riskModelGov = { models: modelGov.models || [], drift: drift.drift_reports || drift.reports || [], changes: changes.changes || [] };
-            State._riskForensic = { links: hidden.links || hidden.hidden_links || [], feed: fraudFeed.events || fraudFeed.feed || [] };
+            State._riskForensic = { links: hidden.links || hidden.hidden_links || [], feed: fraudFeed };
             State._riskIncidents = incidents.incidents || [];
             render();
 

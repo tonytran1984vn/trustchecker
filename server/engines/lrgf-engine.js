@@ -94,7 +94,7 @@ function ingestEvent(eventData, sourceMetadata = {}) {
         id: eventId,
         event_type: eventData.event_type || 'unknown',
         source: sourceMetadata.source || 'api',
-        tenant_id: eventData.tenant_id || null,
+        org_id: eventData.org_id || null,
         idempotency_key: idempotencyKey,
         event_hash: eventHash,
         device_fingerprint: sourceMetadata.device_fingerprint || null,
@@ -110,12 +110,12 @@ function ingestEvent(eventData, sourceMetadata = {}) {
     // Immutable audit log
     db.prepare(`
         INSERT INTO lrgf_events (
-            id, event_type, source, tenant_id, idempotency_key,
+            id, event_type, source, org_id, idempotency_key,
             event_hash, device_fingerprint, geo_lat, geo_lng,
             ip_address, user_agent, payload, created_at, integrity_status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-        record.id, record.event_type, record.source, record.tenant_id,
+        record.id, record.event_type, record.source, record.org_id,
         record.idempotency_key, record.event_hash, record.device_fingerprint,
         record.geo_lat, record.geo_lng, record.ip_address, record.user_agent,
         record.payload, record.created_at, record.integrity_status
@@ -516,7 +516,7 @@ function freezeEvidence(caseId) {
     let graphSnapshot = null;
     try {
         const trustGraph = require('./trust-graph-engine');
-        const tenantId = eventData?.tenant_id || null;
+        const tenantId = eventData?.org_id || null;
         if (tenantId) {
             graphSnapshot = trustGraph.createSnapshot(tenantId, `case_confirmed:${caseId}`);
         }
@@ -692,7 +692,7 @@ function processEvent(eventData, sourceMetadata = {}, riskFactors = {}) {
             idempotency_key: eventData.idempotency_key,
             geo_lat: sourceMetadata.latitude,
             geo_lng: sourceMetadata.longitude,
-            tenant_id: eventData.tenant_id,
+            org_id: eventData.org_id,
             model_version: score.model_version,
             weight_hash: score.weight_hash,
             drift_index: score.drift_index,
@@ -754,7 +754,7 @@ function initSchema() {
             id TEXT PRIMARY KEY,
             event_type TEXT NOT NULL,
             source TEXT NOT NULL,
-            tenant_id TEXT,
+            org_id TEXT,
             idempotency_key TEXT UNIQUE,
             event_hash TEXT NOT NULL,
             device_fingerprint TEXT,
@@ -847,7 +847,7 @@ function initSchema() {
             anchored_at TEXT
         );
 
-        CREATE INDEX IF NOT EXISTS idx_lrgf_events_tenant ON lrgf_events(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_lrgf_events_tenant ON lrgf_events(org_id);
         CREATE INDEX IF NOT EXISTS idx_lrgf_events_hash ON lrgf_events(event_hash);
         CREATE INDEX IF NOT EXISTS idx_lrgf_events_idempotency ON lrgf_events(idempotency_key);
         CREATE INDEX IF NOT EXISTS idx_lrgf_scores_event ON lrgf_risk_scores(event_id);
