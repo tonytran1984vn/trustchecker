@@ -373,7 +373,7 @@ export function renderPage() {
     let page = State.page;
 
     // v10.1: Auto-correct default 'dashboard' page for roles with dedicated landing pages
-    const _roleLanding = { org_owner: 'owner-governance', super_admin: 'control-tower', executive: 'exec-overview', carbon_officer: 'carbon-workspace', ops_manager: 'ops-planning', risk_officer: 'risk-dashboard' };
+    const _roleLanding = { org_owner: 'owner-governance', super_admin: 'control-tower', executive: 'exec-overview', carbon_officer: 'carbon-workspace', ops_manager: 'ops-planning', risk_officer: 'risk-dashboard', ggc_member: 'green-finance', risk_committee: 'hardening', ivu_validator: 'mrmf' };
     const correctPage = _roleLanding[State.user?.active_role || State.user?.role];
     if (correctPage && page === 'dashboard') {
         State.page = correctPage;
@@ -1011,8 +1011,8 @@ function _defaultPageForRole() {
         data_gov_officer: 'compliance-dashboard', executive: 'exec-overview',
         ops_manager: 'ops-planning', risk_officer: 'risk-dashboard',
         compliance_officer: 'compliance-dashboard', developer: 'it-authentication',
-        ggc_member: 'trustgraph', risk_committee: 'risk-dashboard',
-        ivu_validator: 'risk-dashboard', scm_analyst: 'ops-dashboard',
+        ggc_member: 'green-finance', risk_committee: 'hardening',
+        ivu_validator: 'mrmf', scm_analyst: 'ops-dashboard',
         blockchain_operator: 'dashboard', carbon_officer: 'carbon-workspace',
         auditor: 'compliance-dashboard',
     };
