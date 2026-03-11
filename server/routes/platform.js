@@ -32,6 +32,12 @@ router.post('/tenants', async (req, res) => {
             return res.status(400).json({ error: 'admin_email, admin_username, admin_password are required to create Company Admin' });
         }
 
+        // Check name uniqueness
+        const existingName = await db.get('SELECT id FROM organizations WHERE name = ?', [name]);
+        if (existingName) {
+            return res.status(409).json({ error: `Organization name "${name}" already exists` });
+        }
+
         // Check slug uniqueness
         const existing = await db.get('SELECT id FROM organizations WHERE slug = ?', [slug]);
         if (existing) {
@@ -552,7 +558,14 @@ router.put('/tenants/:id', async (req, res) => {
             const flags = typeof feature_flags === 'string' ? feature_flags : JSON.stringify(feature_flags);
             updates.push('feature_flags = ?'); params.push(flags);
         }
-        if (name) { updates.push('name = ?'); params.push(name); }
+        if (name) {
+            // Check name uniqueness (exclude self)
+            const existingName = await db.get('SELECT id FROM organizations WHERE name = ? AND id != ?', [name, req.params.id]);
+            if (existingName) {
+                return res.status(409).json({ error: `Organization name "${name}" already exists` });
+            }
+            updates.push('name = ?'); params.push(name);
+        }
         updates.push("updated_at = datetime('now')");
 
         if (updates.length > 1) {

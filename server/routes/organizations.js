@@ -86,6 +86,13 @@ router.post('/', requireSuperAdmin(), async (req, res) => {
 
         const id = uuidv4();
 
+        // Check name uniqueness
+        const existingName = await db.prepare('SELECT id FROM organizations WHERE name = ?').get(name);
+        if (existingName) {
+            return res.status(409).json({ error: 'Organization name already exists' });
+        }
+
+        // Check slug uniqueness
         const existing = await db.prepare('SELECT id FROM organizations WHERE slug = ?').get(slug);
         if (existing) {
             return res.status(409).json({ error: 'Organization slug already exists' });
