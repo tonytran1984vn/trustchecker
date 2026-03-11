@@ -82,6 +82,7 @@ export function initPage() {
       const url = URL.createObjectURL(blob); const a = document.createElement('a');
       a.href = url; a.download = `audit-report-${new Date().toISOString().slice(0, 10)}.json`; a.click();
       URL.revokeObjectURL(url);
-    } catch (e) { alert('Download failed: ' + e.message); }
+      window.showToast?.('📥 Audit report downloaded', 'success');
+    } catch (e) { window.showToast?.('❌ Download failed: ' + e.message, 'error'); }
   };
 }

@@ -66,7 +66,8 @@ export function initPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = `gdpr-export-${new Date().toISOString().slice(0, 10)}.json`; a.click();
       URL.revokeObjectURL(url);
+      window.showToast?.('📥 GDPR data exported', 'success');
       window.renderCurrentPage?.();
-    } catch (e) { alert('Data export failed: ' + e.message); }
+    } catch (e) { window.showToast?.('❌ Data export failed: ' + e.message, 'error'); }
   };
 }

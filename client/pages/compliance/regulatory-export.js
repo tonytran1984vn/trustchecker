@@ -62,7 +62,8 @@ export function initPage() {
       const url = URL.createObjectURL(blob); const a = document.createElement('a');
       a.href = url; a.download = `regulatory-report-${new Date().toISOString().slice(0, 10)}.json`; a.click();
       URL.revokeObjectURL(url);
-    } catch (e) { alert('Export failed: ' + e.message); }
+      window.showToast?.('📄 Regulatory JSON exported', 'success');
+    } catch (e) { window.showToast?.('❌ Export failed: ' + e.message, 'error'); }
   };
 
   window._regExportCSV = async () => {
@@ -72,6 +73,7 @@ export function initPage() {
       const blob = await resp.blob(); const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = `regulatory-audit-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
       URL.revokeObjectURL(url);
-    } catch (e) { alert('CSV export failed: ' + e.message); }
+      window.showToast?.('📊 CSV exported', 'success');
+    } catch (e) { window.showToast?.('❌ CSV export failed: ' + e.message, 'error'); }
   };
 }

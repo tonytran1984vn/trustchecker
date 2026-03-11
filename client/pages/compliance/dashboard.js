@@ -93,15 +93,33 @@ export function initPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = `compliance-report-${new Date().toISOString().slice(0, 10)}.json`; a.click();
       URL.revokeObjectURL(url);
-    } catch (e) { alert('Export failed: ' + e.message); }
+      window.showToast?.('📄 Report exported', 'success');
+    } catch (e) { window.showToast?.('❌ Export failed: ' + e.message, 'error'); }
   };
 
-  window._compRunSweep = async () => {
-    if (!confirm('Run data retention sweep now? This will archive/delete old records per active policies.')) return;
+  window._compRunSweep = () => {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = '_comp_sweep_modal';
+    modal.innerHTML = `<div class="modal-card" style="max-width:380px;padding:1.5rem;border-radius:12px;background:var(--bg-primary);box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+      <h3 style="margin:0 0 0.5rem">🧹 Run Retention Sweep</h3>
+      <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem">This will archive/delete old records based on all active retention policies.</p>
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+        <button class="sa-btn sa-btn-sm sa-btn-outline" onclick="document.getElementById('_comp_sweep_modal')?.remove()">Cancel</button>
+        <button class="sa-btn sa-btn-sm" onclick="window._compDoSweep()">Execute</button>
+      </div>
+    </div>`;
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    document.body.appendChild(modal);
+  };
+
+  window._compDoSweep = async () => {
+    document.getElementById('_comp_sweep_modal')?.remove();
     try {
       const result = await API.post('/compliance/policies/execute');
-      alert(`Sweep complete: ${result.executed} policies executed.\n${result.results?.map(r => `${r.table}: ${r.affected} records ${r.action}ed`).join('\n') || ''}`);
-      navigate('compliance-dashboard');
-    } catch (e) { alert('Sweep failed: ' + e.message); }
+      window.showToast?.(`✅ Sweep: ${result.executed} policies executed`, 'success');
+      window.navigateTo?.('compliance-dashboard');
+    } catch (e) { window.showToast?.('❌ Sweep failed: ' + e.message, 'error'); }
   };
 }
+

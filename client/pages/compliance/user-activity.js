@@ -55,7 +55,8 @@ export function initPage() {
       const url = URL.createObjectURL(blob); const a = document.createElement('a');
       a.href = url; a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
       URL.revokeObjectURL(url);
-    } catch (e) { alert('CSV export failed: ' + e.message); }
+      window.showToast?.('📥 CSV exported', 'success');
+    } catch (e) { window.showToast?.('❌ CSV export failed: ' + e.message, 'error'); }
   };
 
   window._auditApplyFilter = async () => {
@@ -69,14 +70,14 @@ export function initPage() {
     try {
       State._auditLogs = await API.get('/audit-log/' + qs);
       window.renderCurrentPage?.();
-    } catch (e) { alert('Filter failed: ' + e.message); }
+    } catch (e) { window.showToast?.('❌ Filter failed: ' + e.message, 'error'); }
   };
 
-  window._auditClearFilter = () => { window.navigateTo('compliance-user-activity'); };
+  window._auditClearFilter = () => { window.navigateTo?.('compliance-audit'); };
   window._auditPage = async (p) => {
     try {
       State._auditLogs = await API.get(`/audit-log/?limit=50&page=${p}`);
       window.renderCurrentPage?.();
-    } catch (e) { alert('Load failed: ' + e.message); }
+    } catch (e) { window.showToast?.('❌ Load failed: ' + e.message, 'error'); }
   };
 }

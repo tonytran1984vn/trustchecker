@@ -74,19 +74,37 @@ export function initPage() {
     const mk = document.getElementById('consent-marketing')?.checked ?? false;
     try {
       await API.post('/compliance/gdpr/consent', { data_processing: dp, analytics: an, marketing: mk });
-      alert('✅ Consent preferences saved successfully');
-      window.navigateTo('compliance-privacy-requests');
-    } catch (e) { alert('Save failed: ' + e.message); }
+      window.showToast?.('✅ Consent preferences saved', 'success');
+    } catch (e) { window.showToast?.('❌ Save failed: ' + e.message, 'error'); }
   };
 
-  window._requestDeletion = async () => {
-    const pw = prompt('⚠️ IRREVERSIBLE ACTION\n\nTo confirm data deletion, enter your password:');
-    if (!pw) return;
-    if (!confirm('Are you absolutely sure? This will:\n• Anonymize your profile\n• Clear all sessions\n• Redact support tickets\n\nThis CANNOT be undone.')) return;
+  window._requestDeletion = () => {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = '_del_modal';
+    modal.innerHTML = `<div class="modal-card" style="max-width:420px;padding:1.5rem;border-radius:12px;background:var(--bg-primary);box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+      <h3 style="margin:0 0 0.5rem;color:var(--accent-red,#ef4444)">⚠️ Delete My Data</h3>
+      <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:0.75rem">This is <strong>irreversible</strong>. Your profile will be anonymized, all sessions cleared, and support tickets redacted.</p>
+      <div style="margin-bottom:1rem"><label style="font-size:0.78rem;font-weight:600;display:block;margin-bottom:4px">Confirm Password</label>
+        <input id="_del_pw" type="password" placeholder="Enter your password" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.82rem;box-sizing:border-box"></div>
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+        <button class="sa-btn sa-btn-sm sa-btn-outline" onclick="document.getElementById('_del_modal')?.remove()">Cancel</button>
+        <button class="sa-btn sa-btn-sm" style="background:var(--accent-red,#ef4444);color:white" onclick="window._doDeleteData()">Delete Forever</button>
+      </div>
+    </div>`;
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    document.body.appendChild(modal);
+  };
+
+  window._doDeleteData = async () => {
+    const pw = document.getElementById('_del_pw')?.value;
+    document.getElementById('_del_modal')?.remove();
+    if (!pw) { window.showToast?.('❌ Password required', 'error'); return; }
     try {
       await API.delete('/compliance/gdpr/delete', { password: pw });
-      alert('Data deletion request processed. You will be logged out.');
-      window.location.href = '/trustchecker/';
-    } catch (e) { alert('Deletion failed: ' + e.message); }
+      window.showToast?.('Data deletion processed. Logging out...', 'info');
+      setTimeout(() => { window.location.href = '/trustchecker/'; }, 2000);
+    } catch (e) { window.showToast?.('❌ Deletion failed: ' + e.message, 'error'); }
   };
 }
+

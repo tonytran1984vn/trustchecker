@@ -50,27 +50,70 @@ export function renderPage() {
 function _m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div>${s ? `<div class="sa-metric-sub">${s}</div>` : ''}</div></div>`; }
 
 export function initPage() {
-  window._retAddPolicy = async () => {
-    const validTables = ['scan_events', 'audit_log', 'fraud_alerts', 'support_tickets', 'usage_metrics', 'webhook_events', 'supply_chain_events', 'leak_alerts', 'anomaly_detections', 'ticket_messages'];
-    const table = prompt(`Table name:\n\n${validTables.join('\n')}`);
-    if (!table || !validTables.includes(table)) { alert('Invalid table name. Choose from: ' + validTables.join(', ')); return; }
-    const days = parseInt(prompt('Retention days (e.g., 365):'));
-    if (!days || days < 1) { alert('Invalid retention days'); return; }
-    const action = (prompt('Action — "archive" or "delete":') || 'archive').toLowerCase();
-    if (!['archive', 'delete'].includes(action)) { alert('Action must be "archive" or "delete"'); return; }
-    try {
-      await API.post('/compliance/policies', { table_name: table, retention_days: days, action });
-      alert('✅ Retention policy created');
-      window.navigateTo('compliance-retention');
-    } catch (e) { alert('Failed to create policy: ' + e.message); }
+  const validTables = ['scan_events', 'audit_log', 'fraud_alerts', 'support_tickets', 'usage_metrics', 'webhook_events', 'supply_chain_events', 'leak_alerts', 'anomaly_detections', 'ticket_messages'];
+
+  window._retAddPolicy = () => {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = '_ret_modal';
+    modal.innerHTML = `<div class="modal-card" style="max-width:420px;padding:1.5rem;border-radius:12px;background:var(--bg-primary);box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+      <h3 style="margin:0 0 1rem">➕ Add Retention Policy</h3>
+      <div style="margin-bottom:0.75rem"><label style="font-size:0.78rem;font-weight:600;display:block;margin-bottom:4px">Table</label>
+        <select id="_ret_table" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.82rem">
+          ${validTables.map(t => `<option value="${t}">${t}</option>`).join('')}
+        </select></div>
+      <div style="margin-bottom:0.75rem"><label style="font-size:0.78rem;font-weight:600;display:block;margin-bottom:4px">Retention Days</label>
+        <input id="_ret_days" type="number" value="365" min="1" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.82rem;box-sizing:border-box"></div>
+      <div style="margin-bottom:1rem"><label style="font-size:0.78rem;font-weight:600;display:block;margin-bottom:4px">Action</label>
+        <select id="_ret_action" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.82rem">
+          <option value="archive">Archive</option><option value="delete">Delete</option>
+        </select></div>
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+        <button class="sa-btn sa-btn-sm sa-btn-outline" onclick="document.getElementById('_ret_modal')?.remove()">Cancel</button>
+        <button class="sa-btn sa-btn-sm" onclick="window._retSubmitPolicy()">Create Policy</button>
+      </div>
+    </div>`;
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    document.body.appendChild(modal);
   };
 
-  window._retExecuteSweep = async () => {
-    if (!confirm('Execute retention sweep now?\nThis will process all active policies.')) return;
+  window._retSubmitPolicy = async () => {
+    const table = document.getElementById('_ret_table')?.value;
+    const days = parseInt(document.getElementById('_ret_days')?.value);
+    const action = document.getElementById('_ret_action')?.value || 'archive';
+    document.getElementById('_ret_modal')?.remove();
+    if (!table || !days || days < 1) { window.showToast?.('❌ Invalid input', 'error'); return; }
+    try {
+      await API.post('/compliance/policies', { table_name: table, retention_days: days, action });
+      window.showToast?.('✅ Retention policy created', 'success');
+      window.navigateTo?.('compliance-data');
+    } catch (e) { window.showToast?.('❌ ' + e.message, 'error'); }
+  };
+
+  window._retExecuteSweep = () => {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = '_sweep_modal';
+    modal.innerHTML = `<div class="modal-card" style="max-width:380px;padding:1.5rem;border-radius:12px;background:var(--bg-primary);box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+      <h3 style="margin:0 0 0.5rem">🧹 Execute Retention Sweep</h3>
+      <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem">This will process all active retention policies. Old records will be archived or deleted based on each policy's action.</p>
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+        <button class="sa-btn sa-btn-sm sa-btn-outline" onclick="document.getElementById('_sweep_modal')?.remove()">Cancel</button>
+        <button class="sa-btn sa-btn-sm" onclick="window._retDoSweep()">Execute</button>
+      </div>
+    </div>`;
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+    document.body.appendChild(modal);
+  };
+
+  window._retDoSweep = async () => {
+    document.getElementById('_sweep_modal')?.remove();
     try {
       const result = await API.post('/compliance/policies/execute');
-      alert(`Sweep complete: ${result.executed} policies executed.\n${result.results?.map(r => `${r.table}: ${r.affected} records ${r.action}ed (${r.status})`).join('\n') || ''}`);
-      window.navigateTo('compliance-retention');
-    } catch (e) { alert('Sweep failed: ' + e.message); }
+      const summary = result.results?.map(r => `${r.table}: ${r.affected} records ${r.action}ed`).join('\n') || '';
+      window.showToast?.(`✅ Sweep complete: ${result.executed} policies executed`, 'success');
+      window.navigateTo?.('compliance-data');
+    } catch (e) { window.showToast?.('❌ Sweep failed: ' + e.message, 'error'); }
   };
 }
+
