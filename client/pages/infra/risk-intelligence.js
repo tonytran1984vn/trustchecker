@@ -1,19 +1,31 @@
 /** Risk Intelligence Infrastructure Dashboard — Core Moat */
 import { State } from '../../core/state.js';
 import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
-    const h = { 'Authorization': 'Bearer ' + State.token };
+    if (_loading || _loaded) return;
+    _loading = true;
     const [mrm, scenarios, sensitivity, resilience] = await Promise.all([
-        fetch('/api/hardening/risk-intelligence/mrm', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/risk-intelligence/stress-scenarios', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/risk-intelligence/sensitivity', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/risk-intelligence/resilience', { headers: h }).then(r => r.json()).catch(() => ({}))
+        API.get('/hardening/risk-intelligence/mrm').catch(() => ({})),
+        API.get('/hardening/risk-intelligence/stress-scenarios').catch(() => ({})),
+        API.get('/hardening/risk-intelligence/sensitivity').catch(() => ({})),
+        API.get('/hardening/risk-intelligence/resilience').catch(() => ({}))
     ]);
     D = { mrm, scenarios, sensitivity, resilience };
+    _loaded = true;
+    _loading = false;
+    setTimeout(() => {
+        const el = document.getElementById('risk-intelligence-root');
+        if (el) el.innerHTML = renderContent();
+    }, 50);
 }
-export function render() {
-    load(); const m = D.mrm; const r = D.resilience; const s = D.sensitivity; return `
+function renderContent() {
+    const m = D.mrm; const r = D.resilience; const s = D.sensitivity;
+    if (!m?.model_id) return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('activity')} Risk Intelligence Infrastructure</h1></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${'<div class="infra-skeleton" style="min-height:120px"></div>'.repeat(4)}</div></div>`;
+    return `
 <div class="sa-page">
     <div class="sa-page-title"><h1>${icon('activity')} Risk Intelligence Infrastructure</h1>
         <p style="color:#94a3b8;margin:4px 0 10px">MRM · Independent Validation · Stress Testing · Explainability · Bias Metrics</p>
@@ -58,5 +70,10 @@ export function render() {
         </div>
     </div>
 </div>`;
+}
+export function render() {
+    _loaded = false; _loading = false;
+    load();
+    return `<div id="risk-intelligence-root">${renderContent()}</div>`;
 }
 export function renderPage() { return render(); }

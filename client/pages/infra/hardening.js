@@ -1,26 +1,38 @@
 /** L3→L4 Hardening Dashboard — Risk Model Gov + SA Constraints + Observability */
 import { State } from '../../core/state.js';
 import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
-    const h = { 'Authorization': 'Bearer ' + State.token };
+    if (_loading || _loaded) return;
+    _loading = true;
     const [model, drift, pending, overrides, sa, saAudit, sys, alerts, sla, errors] = await Promise.all([
-        fetch('/api/hardening/risk-model/active', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/risk-model/drift', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/risk-model/pending', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/risk-model/overrides', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/sa/dashboard', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/sa/audit', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/observability/health', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/observability/alerts', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/observability/sla', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/observability/errors', { headers: h }).then(r => r.json()).catch(() => ({}))
+        API.get('/hardening/risk-model/active').catch(() => ({})),
+        API.get('/hardening/risk-model/drift').catch(() => ({})),
+        API.get('/hardening/risk-model/pending').catch(() => ({})),
+        API.get('/hardening/risk-model/overrides').catch(() => ({})),
+        API.get('/hardening/sa/dashboard').catch(() => ({})),
+        API.get('/hardening/sa/audit').catch(() => ({})),
+        API.get('/hardening/observability/health').catch(() => ({})),
+        API.get('/hardening/observability/alerts').catch(() => ({})),
+        API.get('/hardening/observability/sla').catch(() => ({})),
+        API.get('/hardening/observability/errors').catch(() => ({}))
     ]);
     D = { model, drift, pending, overrides, sa, saAudit, sys, alerts, sla, errors };
+    _loaded = true;
+    _loading = false;
+    setTimeout(() => {
+        const el = document.getElementById('hardening-root');
+        if (el) el.innerHTML = renderContent();
+    }, 50);
 }
 const sc = (v, g, y) => v >= g ? '#10b981' : v >= y ? '#f59e0b' : '#ef4444';
-export function render() {
-    load(); const m = D.model; const d = D.drift; const s = D.sys; const sa = D.sa; return `
+function renderContent() {
+    const m = D.model; const d = D.drift; const s = D.sys; const sa = D.sa;
+    if (!m?.version_id && !sa?.forbidden_actions) return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('shield')} L3→L4 Hardening Dashboard</h1><p style="color:#94a3b8;margin:4px 0 10px">Risk Model Governance · Super Admin Constraints · Real Observability</p></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${'<div class="infra-skeleton" style="min-height:120px"></div>'.repeat(4)}</div></div>`;
+    return `
 <div class="sa-page">
     <div class="sa-page-title"><h1>${icon('shield')} L3→L4 Hardening Dashboard</h1>
         <p style="color:#94a3b8;margin:4px 0 10px">Risk Model Governance · Super Admin Constraints · Real Observability</p></div>
@@ -66,5 +78,10 @@ export function render() {
         </div>
     </div>
 </div>`;
+}
+export function render() {
+    _loaded = false; _loading = false;
+    load();
+    return `<div id="hardening-root">${renderContent()}</div>`;
 }
 export function renderPage() { return render(); }

@@ -1,19 +1,31 @@
 /** Risk Intelligence Layer — Behavioral AI + Fraud Graph Dashboard */
 import { State } from '../../core/state.js';
 import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
-    const h = { 'Authorization': 'Bearer ' + State.token };
+    if (_loading || _loaded) return;
+    _loading = true;
     const [behavior, links, patterns, dashboard] = await Promise.all([
-        fetch('/api/risk-graph/behavior', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/risk-graph/hidden-links', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/risk-graph/patterns', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/risk-graph/dashboard', { headers: h }).then(r => r.json()).catch(() => ({}))
+        API.get('/risk-graph/behavior').catch(() => ({})),
+        API.get('/risk-graph/hidden-links').catch(() => ({})),
+        API.get('/risk-graph/patterns').catch(() => ({})),
+        API.get('/risk-graph/dashboard').catch(() => ({}))
     ]);
     D = { behavior, links, patterns, dashboard };
+    _loaded = true;
+    _loading = false;
+    setTimeout(() => {
+        const el = document.getElementById('risk-graph-root');
+        if (el) el.innerHTML = renderContent();
+    }, 50);
 }
-export function render() {
-    load(); const b = D.behavior; return `
+function renderContent() {
+    const b = D.behavior;
+    if (!b?.risk_score && b?.risk_score !== 0) return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('activity')} Risk Intelligence Layer</h1></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${'<div class="infra-skeleton" style="min-height:120px"></div>'.repeat(4)}</div></div>`;
+    return `
 <div class="sa-page">
     <div class="sa-page-title"><h1>${icon('activity')} Risk Intelligence Layer</h1><p style="color:#94a3b8;margin:4px 0 16px">Behavioral Risk Modeling + Fraud Graph + Link Analysis (AI-native)</p></div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
@@ -34,5 +46,10 @@ export function render() {
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${Object.entries(D.patterns?.patterns || {}).map(([k, v]) => `<div style="padding:10px;background:#0f172a;border-radius:8px"><div style="color:#f1f5f9;font-weight:600;font-size:0.78rem">${(v?.name || k).replace(/_/g, ' ')}</div><div style="color:#64748b;font-size:0.68rem;margin-top:2px">${v?.description || ''}</div><div style="color:#3b82f6;font-size:0.68rem;margin-top:2px">Weight: ${Math.round((v?.weight || 0) * 100)}%</div></div>`).join('')}</div>
     </div>
 </div>`;
+}
+export function render() {
+    _loaded = false; _loading = false;
+    load();
+    return `<div id="risk-graph-root">${renderContent()}</div>`;
 }
 export function renderPage() { return render(); }

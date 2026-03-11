@@ -1,30 +1,39 @@
 /** MRMF v2.0 — Enterprise-Native Model Risk Management Dashboard */
 import { State } from '../../core/state.js';
 import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
-    const h = { 'Authorization': 'Bearer ' + State.token };
+    if (_loading || _loaded) return;
+    _loading = true;
     const [inv, mdlc, stressLib, ivu, mhi, residual, health, maturity, mcp, mrc, auditPkg] = await Promise.all([
-        fetch('/api/hardening/mrmf/inventory', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/mrmf/mdlc', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/mrmf/stress-library', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/mrmf/ivu', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/mrmf/mhi', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/mrmf/residual-risk', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/mrmf/health', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/mrmf/maturity', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/mrmf/material-change-policy', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/mrmf/mrc', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/mrmf/audit-package', { headers: h }).then(r => r.json()).catch(() => ({}))
+        API.get('/hardening/mrmf/inventory').catch(() => ({})),
+        API.get('/hardening/mrmf/mdlc').catch(() => ({})),
+        API.get('/hardening/mrmf/stress-library').catch(() => ({})),
+        API.get('/hardening/mrmf/ivu').catch(() => ({})),
+        API.get('/hardening/mrmf/mhi').catch(() => ({})),
+        API.get('/hardening/mrmf/residual-risk').catch(() => ({})),
+        API.get('/hardening/mrmf/health').catch(() => ({})),
+        API.get('/hardening/mrmf/maturity').catch(() => ({})),
+        API.get('/hardening/mrmf/material-change-policy').catch(() => ({})),
+        API.get('/hardening/mrmf/mrc').catch(() => ({})),
+        API.get('/hardening/mrmf/audit-package').catch(() => ({}))
     ]);
     D = { inv, mdlc, stressLib, ivu, mhi, residual, health, maturity, mcp, mrc, auditPkg };
+    _loaded = true;
+    _loading = false;
+    setTimeout(() => {
+        const el = document.getElementById('mrmf-root');
+        if (el) el.innerHTML = renderContent();
+    }, 50);
 }
 const tc = v => v >= 80 ? '#10b981' : v >= 50 ? '#f59e0b' : '#ef4444';
 const ic = c => c === 'Critical' ? '#ef4444' : c === 'High' ? '#f59e0b' : c === 'Medium' ? '#3b82f6' : '#10b981';
-export function render() {
-    load(); const m = D.mhi; const r = D.residual; const mt = D.maturity;
-    const loading = !mt;
-    if (loading) return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('shield')} MRMF v2.0</h1></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${'<div class="infra-skeleton" style="min-height:120px"></div>'.repeat(4)}</div></div>`;
+function renderContent() {
+    const m = D.mhi; const r = D.residual; const mt = D.maturity;
+    if (!mt) return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('shield')} MRMF v2.0</h1></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${'<div class="infra-skeleton" style="min-height:120px"></div>'.repeat(4)}</div></div>`;
     return `
 <div class="sa-page">
     <div class="sa-page-title"><h1>${icon('shield')} MRMF v2.0 — Enterprise-Native</h1>
@@ -99,5 +108,10 @@ export function render() {
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">${(mt?.gap_map || []).map(g => `<div style="padding:3px;background:#0f172a;border-radius:3px"><div style="color:#f1f5f9;font-size:8px;font-weight:600">${g.component}</div><div style="color:${g.gap === '—' ? '#10b981' : '#3b82f6'};font-size:7px">${g.current} ${g.gap !== '—' ? '→ ' + g.gap : ''}</div></div>`).join('')}</div>
     </div>
 </div>`;
+}
+export function render() {
+    _loaded = false; _loading = false;
+    load();
+    return `<div id="mrmf-root">${renderContent()}</div>`;
 }
 export function renderPage() { return render(); }

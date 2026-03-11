@@ -1,27 +1,37 @@
 /** ERCM v1.0 — Enterprise Risk & Control Map Dashboard */
 import { State } from '../../core/state.js';
 import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
-    const h = { 'Authorization': 'Bearer ' + State.token };
+    if (_loading || _loaded) return;
+    _loading = true;
     const [tl, gov, reg, hm, cm, ra, bd, ct, gap, mat] = await Promise.all([
-        fetch('/api/hardening/ercm/three-lines', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/ercm/governance-bodies', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/ercm/risk-registry', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/ercm/heatmap', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/ercm/control-matrix', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/ercm/risk-appetite', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/ercm/board-dashboard', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/ercm/control-tests', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/ercm/ipo-gap', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/ercm/maturity', { headers: h }).then(r => r.json()).catch(() => ({}))
+        API.get('/hardening/ercm/three-lines').catch(() => ({})),
+        API.get('/hardening/ercm/governance-bodies').catch(() => ({})),
+        API.get('/hardening/ercm/risk-registry').catch(() => ({})),
+        API.get('/hardening/ercm/heatmap').catch(() => ({})),
+        API.get('/hardening/ercm/control-matrix').catch(() => ({})),
+        API.get('/hardening/ercm/risk-appetite').catch(() => ({})),
+        API.get('/hardening/ercm/board-dashboard').catch(() => ({})),
+        API.get('/hardening/ercm/control-tests').catch(() => ({})),
+        API.get('/hardening/ercm/ipo-gap').catch(() => ({})),
+        API.get('/hardening/ercm/maturity').catch(() => ({}))
     ]);
     D = { tl, gov, reg, hm, cm, ra, bd, ct, gap, mat };
+    _loaded = true;
+    _loading = false;
+    setTimeout(() => {
+        const el = document.getElementById('ercm-root');
+        if (el) el.innerHTML = renderContent();
+    }, 50);
 }
 const zc = z => z === 'critical' ? '#ef4444' : z === 'high' ? '#f59e0b' : z === 'medium' ? '#3b82f6' : '#10b981';
 const sc = s => s >= 15 ? '#ef4444' : s >= 8 ? '#f59e0b' : s >= 4 ? '#3b82f6' : '#10b981';
-export function render() {
-    load(); const bd = D.bd; const mat = D.mat;
+function renderContent() {
+    const bd = D.bd; const mat = D.mat;
     if (!mat) return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('activity')} Enterprise Risk & Control Map</h1></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${'<div class="infra-skeleton" style="min-height:120px"></div>'.repeat(4)}</div></div>`;
     return `
 <div class="sa-page">
@@ -93,5 +103,10 @@ export function render() {
         </div>
     </div>
 </div>`;
+}
+export function render() {
+    _loaded = false; _loading = false;
+    load();
+    return `<div id="ercm-root">${renderContent()}</div>`;
 }
 export function renderPage() { return render(); }
