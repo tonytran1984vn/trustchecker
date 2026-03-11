@@ -1046,6 +1046,51 @@ function renderSuperAdminSidebar() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PLATFORM SECURITY SIDEBAR (Security Governance — L5)
+// ═══════════════════════════════════════════════════════════════
+
+const PLATFORM_SECURITY_NAV = [
+  { id: 'control-tower', icon: icon('dashboard'), label: 'Overview' },
+  { id: 'sa-risk', icon: icon('alert'), label: 'Risk' },
+  { id: 'sa-integrity', icon: icon('key'), label: 'Integrity' },
+  { id: 'sa-governance', icon: icon('shield'), label: 'Governance' },
+  { id: 'sa-operations', icon: icon('server'), label: 'Operations' },
+];
+
+function renderPlatformSecuritySidebar() {
+  const brandName = State.branding?.app_name || 'TrustChecker';
+  const role = getUserRole();
+
+  const navItems = PLATFORM_SECURITY_NAV.map(n => renderNavItem(n)).join('');
+
+  return `
+    <nav class="sidebar sidebar-sa" role="navigation" aria-label="Platform Security navigation">
+      <div class="sidebar-header">
+        <div class="sidebar-logo" onclick="goHome()" style="cursor:pointer" title="Go to dashboard">
+          <div class="logo-icon sa-logo-icon" style="background:linear-gradient(135deg,#dc2626,#b91c1c)">${icon('lock', 22)}</div>
+          <div>
+            <div class="logo-text">${brandName}</div>
+            <div class="logo-version sa-badge" style="background:rgba(220,38,38,0.15);color:#dc2626">Platform Security</div>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-nav">
+        ${navItems}
+      </div>
+      <div class="sidebar-footer">
+        <div class="user-avatar role-${role}">${(State.user?.email || 'S')[0].toUpperCase()}</div>
+        <div class="user-info">
+          <div class="user-name">${State.user?.email || 'Security'}</div>
+          <div class="user-role"><span class="role-badge role-${role}">${role}</span></div>
+        </div>
+        <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px;font-size:1.1rem;padding:4px 8px">⚙</button>
+        <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
+      </div>
+    </nav>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // CARBON SIDEBAR (Carbon Officer Workspace)
 // ═══════════════════════════════════════════════════════════════
 
@@ -1295,7 +1340,7 @@ function renderTenantSidebar() {
 export function renderSidebar() {
   let html;
   if (isSuperAdmin()) html = renderSuperAdminSidebar();
-  else if (isPlatformSecurity()) html = renderSuperAdminSidebar();
+  else if (isPlatformSecurity()) html = renderPlatformSecuritySidebar();
   else if (isOrgOwner()) html = renderOrgOwnerSidebar();
   else if (isExecutive()) html = renderExecutiveSidebar();
   else if (isOps()) html = renderOpsSidebar();
