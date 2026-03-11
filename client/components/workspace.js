@@ -31,8 +31,13 @@ export function renderWorkspace({ domain, title, subtitle, icon, tabs, activeTab
     tabContent = `<div class="ws-loading">Loading…</div>`;
   }
 
-  // Inject My Actions widget after DOM renders
-  setTimeout(() => injectMyActionsWidget('my-actions-widget'), 200);
+  // Call tab init function after DOM renders (registers button handlers)
+  setTimeout(() => {
+    if (active && typeof active.init === 'function') {
+      active.init();
+    }
+    injectMyActionsWidget('my-actions-widget');
+  }, 200);
 
   return `
     <div class="sa-page ws-page" data-ws-domain="${domain}">

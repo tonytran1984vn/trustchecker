@@ -4,9 +4,9 @@
  */
 import { renderWorkspace } from '../../components/workspace.js';
 import { icon } from '../../core/icons.js';
-import { renderPage as renderAuditReport } from './audit-report.js';
+import { renderPage as renderAuditReport, initPage as initAuditReport } from './audit-report.js';
 import { renderPage as renderInvestigationSummary } from './investigation-summary.js';
-import { renderPage as renderRegulatoryExport } from './regulatory-export.js';
+import { renderPage as renderRegulatoryExport, initPage as initRegulatoryExport } from './regulatory-export.js';
 
 export function renderPage() {
     return renderWorkspace({
@@ -15,9 +15,9 @@ export function renderPage() {
         subtitle: 'Audit Report · Investigation Summary · Regulatory Export',
         icon: icon('clipboard', 24),
         tabs: [
-            { id: 'audit', label: 'Audit Report', icon: icon('scroll', 14), render: renderAuditReport },
+            { id: 'audit', label: 'Audit Report', icon: icon('scroll', 14), render: renderAuditReport, init: initAuditReport },
             { id: 'investigation', label: 'Investigation', icon: icon('search', 14), render: renderInvestigationSummary },
-            { id: 'regulatory', label: 'Regulatory Export', icon: icon('globe', 14), render: renderRegulatoryExport },
+            { id: 'regulatory', label: 'Regulatory Export', icon: icon('globe', 14), render: renderRegulatoryExport, init: initRegulatoryExport },
         ],
     });
 }

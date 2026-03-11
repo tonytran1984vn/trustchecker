@@ -4,9 +4,9 @@
  */
 import { renderWorkspace } from '../../components/workspace.js';
 import { icon } from '../../core/icons.js';
-import { renderPage as renderRetention } from './retention.js';
+import { renderPage as renderRetention, initPage as initRetention } from './retention.js';
 import { renderPage as renderDataAccessReview } from './data-access-review.js';
-import { renderPage as renderPrivacyRequests } from './privacy-requests.js';
+import { renderPage as renderPrivacyRequests, initPage as initPrivacyRequests } from './privacy-requests.js';
 import { renderPage as renderDataGovernance } from './data-governance.js';
 
 export function renderPage() {
@@ -16,9 +16,9 @@ export function renderPage() {
         subtitle: 'Retention · Data Access Review · Privacy Requests · Governance',
         icon: icon('globe', 24),
         tabs: [
-            { id: 'retention', label: 'Retention', icon: icon('clock', 14), render: renderRetention },
+            { id: 'retention', label: 'Retention', icon: icon('clock', 14), render: renderRetention, init: initRetention },
             { id: 'access-review', label: 'Data Access Review', icon: icon('search', 14), render: renderDataAccessReview },
-            { id: 'privacy', label: 'Privacy Requests', icon: icon('users', 14), render: renderPrivacyRequests },
+            { id: 'privacy', label: 'Privacy Requests', icon: icon('users', 14), render: renderPrivacyRequests, init: initPrivacyRequests },
             { id: 'governance', label: 'Data Governance', icon: icon('globe', 14), render: renderDataGovernance },
         ],
     });
