@@ -515,9 +515,17 @@ function isCarbon() {
   return getUserRole() === 'carbon_officer';
 }
 
+function isPlatformSecurity() {
+  return getUserRole() === 'platform_security';
+}
+
+function isDataGov() {
+  return getUserRole() === 'data_gov_officer';
+}
+
 function getRoleConfig() {
   const role = getUserRole();
-  if (role === 'super_admin' || role === 'executive' || role === 'ops_manager' || role === 'risk_officer' || role === 'compliance_officer' || role === 'developer' || role === 'org_owner' || role === 'security_officer' || role === 'carbon_officer') return null;
+  if (role === 'super_admin' || role === 'platform_security' || role === 'executive' || role === 'ops_manager' || role === 'risk_officer' || role === 'compliance_officer' || role === 'data_gov_officer' || role === 'developer' || role === 'org_owner' || role === 'security_officer' || role === 'carbon_officer') return null;
   const config = ROLE_VISIBILITY[role];
   if (config === undefined) return ROLE_VISIBILITY.operator;
   return config;
@@ -1237,11 +1245,13 @@ function renderTenantSidebar() {
 export function renderSidebar() {
   let html;
   if (isSuperAdmin()) html = renderSuperAdminSidebar();
+  else if (isPlatformSecurity()) html = renderSuperAdminSidebar();
   else if (isOrgOwner()) html = renderOrgOwnerSidebar();
   else if (isExecutive()) html = renderExecutiveSidebar();
   else if (isOps()) html = renderOpsSidebar();
   else if (isRisk()) html = renderRiskSidebar();
   else if (isCompliance()) html = renderComplianceSidebar();
+  else if (isDataGov()) html = renderComplianceSidebar();
   else if (isIT()) html = renderITSidebar();
   else if (isCarbon()) html = renderCarbonSidebar();
   else html = renderTenantSidebar();
