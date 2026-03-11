@@ -848,6 +848,8 @@ async function doLogin() {
     const landingPage = {
       org_owner: 'owner-governance', super_admin: 'control-tower',
       executive: 'exec-overview', ops_manager: 'ops-dashboard',
+      compliance_officer: 'compliance-dashboard', risk_officer: 'risk-dashboard',
+      carbon_officer: 'carbon-workspace',
     }[res.user.role] || 'dashboard';
     navigate(landingPage);
     showToast('✓ Welcome back, ' + escapeHTML(res.user.email), 'success');
@@ -876,7 +878,7 @@ async function doMfaVerify() {
     State.user = res.user;
     localStorage.setItem('tc_user', JSON.stringify(res.user));
     connectWS();
-    const landingPage = { org_owner: 'owner-governance', super_admin: 'control-tower', executive: 'exec-overview' }[res.user.role] || 'dashboard';
+    const landingPage = { org_owner: 'owner-governance', super_admin: 'control-tower', executive: 'exec-overview', ops_manager: 'ops-dashboard', compliance_officer: 'compliance-dashboard', risk_officer: 'risk-dashboard', carbon_officer: 'carbon-workspace' }[res.user.role] || 'dashboard';
     navigate(landingPage);
     showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Welcome back, ' + escapeHTML(res.user.email) + ' (MFA verified)', 'success');
   } catch (e) {
