@@ -79,9 +79,11 @@ async function seed() {
         [id, u.user, u.email, hash, u.role, u.type, COMPANY, orgId, 0]);
       console.log(`  ✓ ${u.email} → ${u.role}`);
     }
-    // RBAC assignment
-    const roleId = `role-${orgId}-${u.rbac}`;
-    await db.run('INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id, assigned_by) VALUES (?,?,?)', [userIds[u.role], roleId, 'seed-tonyisking']);
+    // RBAC assignment (may fail if rbac_roles table doesn't have matching role_id)
+    try {
+      const roleId = `role-${orgId}-${u.rbac}`;
+      await db.run('INSERT INTO rbac_user_roles (user_id, role_id, assigned_by) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [userIds[u.role], roleId, 'seed-tonyisking']);
+    } catch (e) { /* RBAC row optional — role is on user record */ }
   }
   const adminId = userIds['super_admin'];
 
