@@ -523,9 +523,13 @@ function isDataGov() {
   return getUserRole() === 'data_gov_officer';
 }
 
+function isCompanySecurity() {
+  return getUserRole() === 'security_officer';
+}
+
 function getRoleConfig() {
   const role = getUserRole();
-  if (role === 'super_admin' || role === 'platform_security' || role === 'executive' || role === 'ops_manager' || role === 'risk_officer' || role === 'compliance_officer' || role === 'data_gov_officer' || role === 'developer' || role === 'org_owner' || role === 'security_officer' || role === 'carbon_officer') return null;
+  if (role === 'super_admin' || role === 'platform_security' || role === 'executive' || role === 'ops_manager' || role === 'risk_officer' || role === 'compliance_officer' || role === 'data_gov_officer' || role === 'security_officer' || role === 'developer' || role === 'org_owner' || role === 'security_officer' || role === 'carbon_officer') return null;
   const config = ROLE_VISIBILITY[role];
   if (config === undefined) return ROLE_VISIBILITY.operator;
   return config;
@@ -1046,15 +1050,18 @@ function renderSuperAdminSidebar() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PLATFORM SECURITY SIDEBAR (Security Governance — L5)
+// PLATFORM SECURITY SIDEBAR (L5 — Protects entire system)
+// 1. Authorization   2. SoD   3. Tenant Isolation
+// 4. Audit           5. Dual Approval   6. Data Integrity
 // ═══════════════════════════════════════════════════════════════
 
 const PLATFORM_SECURITY_NAV = [
-  { id: 'control-tower', icon: icon('dashboard'), label: 'Overview' },
-  { id: 'sa-risk', icon: icon('alert'), label: 'Risk' },
-  { id: 'sa-integrity', icon: icon('key'), label: 'Integrity' },
-  { id: 'sa-governance', icon: icon('shield'), label: 'Governance' },
-  { id: 'sa-operations', icon: icon('server'), label: 'Operations' },
+  { id: 'control-tower', icon: icon('dashboard'), label: 'Tenant Isolation' },
+  { id: 'sa-governance', icon: icon('shield'), label: 'Authorization Engine' },
+  { id: 'compliance-sod-matrix', icon: icon('users'), label: 'Segregation of Duties' },
+  { id: 'compliance-audit', icon: icon('scroll'), label: 'Audit & Traceability' },
+  { id: 'compliance-workflow-control', icon: icon('check'), label: 'Dual Approval' },
+  { id: 'sa-integrity', icon: icon('key'), label: 'Data Integrity' },
 ];
 
 function renderPlatformSecuritySidebar() {
@@ -1081,6 +1088,58 @@ function renderPlatformSecuritySidebar() {
         <div class="user-avatar role-${role}">${(State.user?.email || 'S')[0].toUpperCase()}</div>
         <div class="user-info">
           <div class="user-name">${State.user?.email || 'Security'}</div>
+          <div class="user-role"><span class="role-badge role-${role}">${role}</span></div>
+        </div>
+        <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px;font-size:1.1rem;padding:4px 8px">⚙</button>
+        <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
+      </div>
+    </nav>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COMPANY SECURITY SIDEBAR (security_officer — Company-level)
+// 1. User Access Control   2. Audit Monitoring   3. Anomaly Detection
+// 4. SoD Governance        5. Sensitive Approvals 6. Incident Investigation
+// ═══════════════════════════════════════════════════════════════
+
+const COMPANY_SECURITY_NAV = [
+  { id: 'ca-identity', icon: icon('users'), label: 'User Access Control' },
+  { id: 'ca-governance', icon: icon('scroll'), label: 'Audit Monitoring' },
+  { id: 'ca-risk', icon: icon('alert'), label: 'Anomaly Detection' },
+  { id: 'compliance-sod-matrix', icon: icon('shield'), label: 'SoD Governance' },
+  { id: 'ca-operations', icon: icon('check'), label: 'Sensitive Approvals' },
+  { id: 'compliance-violation-log', icon: icon('search'), label: 'Incident Investigation' },
+];
+
+function renderCompanySecuritySidebar() {
+  const brandName = State.branding?.app_name || 'TrustChecker';
+  const orgName = State.org?.name || '';
+  const role = getUserRole();
+
+  const navItems = COMPANY_SECURITY_NAV.map(n => renderNavItem(n)).join('');
+
+  return `
+    <nav class="sidebar sidebar-compliance" role="navigation" aria-label="Company Security navigation">
+      <div class="sidebar-header">
+        <div class="sidebar-logo" onclick="goHome()" style="cursor:pointer" title="Go to dashboard">
+          <div class="logo-icon compliance-logo-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706)">${icon('shield', 22)}</div>
+          <div>
+            <div class="logo-text">${brandName}</div>
+            <div class="logo-version compliance-badge" style="background:rgba(245,158,11,0.15);color:#d97706">Company Security</div>
+          </div>
+        </div>
+        ${orgName ? `<div class="sidebar-org" title="${orgName}">
+          <span style="font-size:11px;color:rgba(148,163,184,0.8)">${icon('building', 12)} ${orgName}</span>
+        </div>` : ''}
+      </div>
+      <div class="sidebar-nav">
+        ${navItems}
+      </div>
+      <div class="sidebar-footer">
+        <div class="user-avatar role-${role}">${(State.user?.email || 'S')[0].toUpperCase()}</div>
+        <div class="user-info">
+          <div class="user-name">${State.user?.email || 'Security Officer'}</div>
           <div class="user-role"><span class="role-badge role-${role}">${role}</span></div>
         </div>
         <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px;font-size:1.1rem;padding:4px 8px">⚙</button>
@@ -1347,6 +1406,7 @@ export function renderSidebar() {
   else if (isRisk()) html = renderRiskSidebar();
   else if (isCompliance()) html = renderComplianceSidebar();
   else if (isDataGov()) html = renderDataGovSidebar();
+  else if (isCompanySecurity()) html = renderCompanySecuritySidebar();
   else if (isIT()) html = renderITSidebar();
   else if (isCarbon()) html = renderCarbonSidebar();
   else html = renderTenantSidebar();
