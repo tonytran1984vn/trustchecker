@@ -370,8 +370,24 @@ window._approveSupplier = async (id, name) => {
   } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
 };
 
-window._rejectSupplier = async (id, name) => {
-  if (!confirm(`Reject "${name}"? This cannot be undone.`)) return;
+window._rejectSupplier = (id, name) => {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = '_reject_supplier_modal';
+  modal.innerHTML = `<div class="modal-card" style="max-width:380px;padding:1.5rem;border-radius:12px;background:var(--bg-primary,#fff);box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <h3 style="margin:0 0 0.5rem;color:var(--accent-red,#ef4444)">🚫 Reject Supplier</h3>
+    <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem">Reject "<strong>${name}</strong>"? This action cannot be undone.</p>
+    <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+      <button onclick="document.getElementById('_reject_supplier_modal')?.remove()" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;color:var(--text-primary)">Cancel</button>
+      <button onclick="window._doRejectSupplier('${id}','${name.replace(/'/g, "\\\\'")}')" style="padding:8px 16px;border-radius:8px;border:none;background:#ef4444;color:#fff;cursor:pointer;font-weight:600">Reject</button>
+    </div>
+  </div>`;
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+};
+
+window._doRejectSupplier = async (id, name) => {
+  document.getElementById('_reject_supplier_modal')?.remove();
   try {
     await API.patch(`/ops/data/suppliers/${id}/reject`);
     showToast(`🚫 "${name}" KYC rejected`, 'info');

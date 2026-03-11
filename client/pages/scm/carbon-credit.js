@@ -1431,7 +1431,7 @@ window.cieTab = (tab) => {
         el.innerHTML = inner ? inner.innerHTML : tmp.innerHTML;
     }
 };
-window.cieIssueCIP = () => { if (typeof showToast === 'function') showToast('CIP issuance requires Carbon Officer submission → IVU review → Compliance approval', 'info'); else alert('CIP issuance requires Carbon Officer submission → IVU review → Compliance approval'); };
+window.cieIssueCIP = () => { showToast('CIP issuance requires Carbon Officer submission → IVU review → Compliance approval', 'info'); };
 window.cieRefresh = async () => { await loadCIE(); window.cieTab(activeTab); };
 
 // ─── CIP PDF Export ──────────────────────────────────────────────────
@@ -1441,7 +1441,7 @@ window.cieExportPDF = (cipId) => {
         'CIP-2024-00143': { product: 'Bamboo Textile Roll', batch: 'BATCH-2024-005', emission: 0.23, s1: 0.08, s2: 0.06, s3: 0.09, bench: 91, risk: 8, method: 'GHG Protocol v4.2', anchor: '0x7c2da103f8b1…a103', validator: "James O'Brien (IVU-02)", date: '2024-12-14', unit: 'kgCO₂e/m²' },
         'CIP-2024-00144': { product: 'Fair Trade Tea 500g', batch: 'BATCH-2024-002', emission: 0.37, s1: 0.05, s2: 0.04, s3: 0.28, bench: 71, risk: 18, method: 'GHG Protocol v4.2', anchor: '0xf198b420de56…b420', validator: 'Dr. Sarah Chen (IVU-01)', date: '2024-12-13', unit: 'kgCO₂e/unit' },
     };
-    const p = passports[cipId]; if (!p) { alert('CIP not sealed or not found'); return; }
+    const p = passports[cipId]; if (!p) { showToast('CIP not sealed or not found', 'warning'); return; }
     const sc = (v) => v >= 80 ? '#10b981' : v >= 60 ? '#f59e0b' : '#ef4444';
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>CIP ${cipId}</title>
 <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#f1f5f9;padding:40px}
