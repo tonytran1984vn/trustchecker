@@ -834,10 +834,10 @@ function renderComplianceSidebar() {
         ${navItems}
       </div>
       <div class="sidebar-footer">
-        <div class="user-avatar role-compliance_officer">${(State.user?.email || 'C')[0].toUpperCase()}</div>
+        <div class="user-avatar role-${getUserRole()}">${(State.user?.email || 'C')[0].toUpperCase()}</div>
         <div class="user-info">
-          <div class="user-name">${State.user?.email || 'Compliance Officer'}</div>
-          <div class="user-role"><span class="role-badge role-compliance_officer">compliance_officer</span></div>
+          <div class="user-name">${State.user?.email || 'Compliance'}</div>
+          <div class="user-role"><span class="role-badge role-${getUserRole()}">${getUserRole()}</span></div>
         </div>
         <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px;font-size:1.1rem;padding:4px 8px">⚙</button>
         <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
@@ -985,8 +985,8 @@ function renderSuperAdminSidebar() {
       <div class="sidebar-footer">
         <div class="user-avatar role-${role}">${(State.user?.email || 'S')[0].toUpperCase()}</div>
         <div class="user-info">
-          <div class="user-name">${State.user?.email || 'Super Admin'}</div>
-          <div class="user-role"><span class="role-badge role-super_admin">super_admin</span></div>
+          <div class="user-name">${State.user?.email || 'Admin'}</div>
+          <div class="user-role"><span class="role-badge role-${role}">${role}</span></div>
         </div>
         <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px;font-size:1.1rem;padding:4px 8px">⚙</button>
         <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
