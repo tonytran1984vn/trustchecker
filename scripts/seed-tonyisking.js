@@ -46,10 +46,9 @@ async function seed() {
   // ═══ 2. USERS (18 roles) ═══
   console.log('👤 Users...');
   const users = [
-    { email: 'admin@tonyisking.com', user: 'tik_admin', role: 'super_admin', type: 'platform', rbac: 'company_admin' },
+    { email: 'admin@tonyisking.com', user: 'tik_admin', role: 'company_admin', type: 'tenant', rbac: 'company_admin' },
     { email: 'security@tonyisking.com', user: 'tik_security', role: 'platform_security', type: 'platform', rbac: 'platform_security' },
     { email: 'datagov@tonyisking.com', user: 'tik_datagov', role: 'data_gov_officer', type: 'platform', rbac: 'data_gov_officer' },
-    { email: 'companyadmin@tonyisking.com', user: 'tik_companyadmin', role: 'company_admin', type: 'tenant', rbac: 'company_admin' },
     { email: 'ceo@tonyisking.com', user: 'tik_ceo', role: 'executive', type: 'tenant', rbac: 'executive' },
     { email: 'ops@tonyisking.com', user: 'tik_ops', role: 'ops_manager', type: 'tenant', rbac: 'ops_manager' },
     { email: 'risk@tonyisking.com', user: 'tik_risk', role: 'risk_officer', type: 'tenant', rbac: 'risk_officer' },
@@ -85,7 +84,7 @@ async function seed() {
       await db.run('INSERT INTO rbac_user_roles (user_id, role_id, assigned_by) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [userIds[u.role], roleId, 'seed-tonyisking']);
     } catch (e) { /* RBAC row optional — role is on user record */ }
   }
-  const adminId = userIds['super_admin'];
+  const adminId = userIds['company_admin'];
 
   // ═══ 3. PRODUCTS (15) ═══
   console.log('📦 Products...');
