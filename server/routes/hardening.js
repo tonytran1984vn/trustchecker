@@ -123,7 +123,10 @@ router.get('/risk-intelligence/mrm', (req, res) => {
 router.post('/risk-intelligence/challenger', requirePermission('risk:view'), async (req, res) => {
     try {
         const db = require('../db');
-        const entities = req.body.entities || await db.prepare('SELECT * FROM partners LIMIT 50').all().catch(() => []);
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const entities = req.body.entities || (orgId
+            ? await db.all('SELECT * FROM partners WHERE org_id = ? LIMIT 50', [orgId]).catch(() => [])
+            : await db.all('SELECT * FROM partners LIMIT 50').catch(() => []));
         res.json(riskInfra.runChallengerModel(entities));
     } catch (err) { res.status(500).json({ error: 'Challenger model failed' }); }
 });
@@ -159,7 +162,10 @@ router.post('/risk-intelligence/explain', (req, res) => {
 router.post('/risk-intelligence/bias', requirePermission('risk:view'), async (req, res) => {
     try {
         const db = require('../db');
-        const entities = req.body.entities || await db.prepare('SELECT * FROM partners LIMIT 100').all().catch(() => []);
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const entities = req.body.entities || (orgId
+            ? await db.all('SELECT * FROM partners WHERE org_id = ? LIMIT 100', [orgId]).catch(() => [])
+            : await db.all('SELECT * FROM partners LIMIT 100').catch(() => []));
         res.json(riskInfra.analyzeBiasFairness(entities));
     } catch (err) { res.status(500).json({ error: 'Bias analysis failed' }); }
 });
