@@ -52,8 +52,14 @@ router.get('/gaps', cacheMiddleware(120), async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'Gap analysis failed' }); }
 });
 
-// GET /jurisdictions — Available jurisdictions
-router.get('/jurisdictions', (req, res) => { res.json({ jurisdictions: compliance.getJurisdictions(), frameworks: compliance.getFrameworks() }); });
+// GET /jurisdictions — Available jurisdictions (return as arrays for frontend)
+router.get('/jurisdictions', (req, res) => {
+    const rawJ = compliance.getJurisdictions();
+    const rawF = compliance.getFrameworks();
+    const jurisdictions = Object.entries(rawJ).map(([code, data]) => ({ code, ...data }));
+    const frameworks = Object.entries(rawF).map(([key, data]) => ({ key, ...data }));
+    res.json({ jurisdictions, frameworks });
+});
 
 // GET /cbam-status — CBAM impact assessment
 router.get('/cbam-status', (req, res) => {

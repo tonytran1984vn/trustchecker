@@ -7,6 +7,7 @@ export function renderPage() {
   const jurisdictions = Array.isArray(raw.jurisdictions) ? raw.jurisdictions : [];
   const frameworks = Array.isArray(raw.frameworks) ? raw.frameworks : [];
   const certs = Array.isArray(raw.certs) ? raw.certs : [];
+  const FLAGS = { EU: '🇪🇺', US: '🇺🇸', VN: '🇻🇳', GLOBAL: '🌍', CN: '🇨🇳', JP: '🇯🇵', AU: '🇦🇺', UK: '🇬🇧' };
 
   return `<div class="sa-page">
     <div class="sa-page-title"><h1>${icon('globe', 28)} Data Governance</h1></div>
@@ -23,10 +24,10 @@ export function renderPage() {
         ${jurisdictions.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:1.5rem">No jurisdictions loaded</p>' : `
         <div style="display:grid;gap:0.5rem;max-height:350px;overflow-y:auto">
           ${jurisdictions.map(j => `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem;background:var(--bg-secondary);border-radius:6px">
-            <span style="font-size:1.2rem">${j.flag || '🏳️'}</span>
+            <span style="font-size:1.2rem">${FLAGS[j.code] || '🏳️'}</span>
             <div style="flex:1">
-              <div style="font-weight:600;font-size:0.78rem">${j.name || j.code || '—'}</div>
-              <div style="font-size:0.68rem;color:var(--text-secondary)">${j.region || j.description || '—'}</div>
+              <div style="font-weight:600;font-size:0.78rem">${j.code || '—'}</div>
+              <div style="font-size:0.68rem;color:var(--text-secondary)">${(j.frameworks || []).length} frameworks${j.strict ? ' · Strict' : ''}${j.cbam_affected ? ' · CBAM' : ''}</div>
             </div>
             <span class="sa-code" style="font-size:0.72rem">${j.code || '—'}</span>
           </div>`).join('')}
