@@ -12,7 +12,7 @@
  * Positioning: Environmental Risk & Compliance Layer on TrustChecker governance DNA.
  */
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 
 // ─── Data & State ───────────────────────────────────────────────────
 let CIE = {
@@ -26,10 +26,10 @@ let activeTab = 'overview';
 async function loadCIE() {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [summary, passports, benchmarks, ingestion] = await Promise.all([
-        fetch('/api/scm/carbon-credit/balance', { headers: h }).then(r => r.json()).catch(() => null),
-        fetch('/api/scm/carbon-credit/registry?limit=20', { headers: h }).then(r => r.json()).catch(() => null),
-        fetch('/api/scm/carbon-credit/risk-score', { headers: h }).then(r => r.json()).catch(() => null),
-        fetch('/api/scm/carbon-credit/market-stats', { headers: h }).then(r => r.json()).catch(() => null),
+        API.get('/scm/carbon-credit/balance').catch(() => null),
+        API.get('/scm/carbon-credit/registry?limit=20').catch(() => null),
+        API.get('/scm/carbon-credit/risk-score').catch(() => null),
+        API.get('/scm/carbon-credit/market-stats').catch(() => null),
     ]);
     CIE = { summary, passports, benchmarks, ingestion };
 }

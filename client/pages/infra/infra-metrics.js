@@ -1,11 +1,11 @@
 /** Infrastructure Metrics — Network/Operational/Financial/Governance KPIs, Composite Score */
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 import { escapeHTML as esc, escapeObj } from '../../utils/escape.js';
 let D = {};
 async function load() {
     const h = { 'Authorization': 'Bearer ' + State.token };
-    D = await fetch('/api/infra-metrics/framework', { headers: h }).then(r => r.json()).catch(() => ({}));
+    D = await API.get('/infra-metrics/framework').catch(() => ({}));
 }
 function scoreColor(s) { if (s >= 80) return '#10b981'; if (s >= 60) return '#f59e0b'; return '#ef4444'; }
 export function render() {

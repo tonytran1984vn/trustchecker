@@ -1,11 +1,11 @@
 /** Upgrade Governance — Change Classification, CAB Process, Rollback, Versioning */
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 import { escapeHTML as esc, escapeObj } from '../../utils/escape.js';
 let D = {};
 async function load() {
     const h = { 'Authorization': 'Bearer ' + State.token };
-    D = await fetch('/api/upgrade-gov/framework', { headers: h }).then(r => r.json()).catch(() => ({}));
+    D = await API.get('/upgrade-gov/framework').catch(() => ({}));
 }
 export function render() {
     load(); const cls = D.classification || {}; const cab = D.cab_process || {}; const rb = D.rollback || {}; const ver = D.version_governance || D.versioning || {};

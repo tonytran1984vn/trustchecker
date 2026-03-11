@@ -49,7 +49,7 @@ function _fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleSt
 export function initPage() {
   window._auditExportCSV = async () => {
     try {
-      const resp = await fetch('/api/audit-log/export', { credentials: 'include' });
+      const resp = await fetch(API.base + '/audit-log/export', { credentials: 'include' });
       if (!resp.ok) throw new Error('Export failed');
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob); const a = document.createElement('a');

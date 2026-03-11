@@ -1,15 +1,15 @@
 /** Infrastructure Custody Dashboard — Security, Keys, Governance Matrix */
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 let D = {};
 async function load() {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [sec, keys, dr, sop, boundary] = await Promise.all([
-        fetch('/api/infra-custody/security', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/infra-custody/keys', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/infra-custody/disaster-recovery', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/infra-custody/separation-of-powers', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/infra-custody/boundary', { headers: h }).then(r => r.json()).catch(() => ({}))
+        API.get('/infra-custody/security').catch(() => ({})),
+        API.get('/infra-custody/keys').catch(() => ({})),
+        API.get('/infra-custody/disaster-recovery').catch(() => ({})),
+        API.get('/infra-custody/separation-of-powers').catch(() => ({})),
+        API.get('/infra-custody/boundary').catch(() => ({}))
     ]);
     D = { sec, keys, dr, sop, boundary };
 }

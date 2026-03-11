@@ -1,16 +1,16 @@
 /** Platform Architecture — Simplification & Core Isolation Dashboard */
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 let D = {};
 async function load() {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [reg, dep, api, crit, cx, iso] = await Promise.all([
-        fetch('/api/hardening/platform/module-registry', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/platform/dependency-graph', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/platform/api-surface', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/platform/critical-path', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/platform/complexity', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/platform/isolation', { headers: h }).then(r => r.json()).catch(() => ({}))
+        API.get('/hardening/platform/module-registry').catch(() => ({})),
+        API.get('/hardening/platform/dependency-graph').catch(() => ({})),
+        API.get('/hardening/platform/api-surface').catch(() => ({})),
+        API.get('/hardening/platform/critical-path').catch(() => ({})),
+        API.get('/hardening/platform/complexity').catch(() => ({})),
+        API.get('/hardening/platform/isolation').catch(() => ({}))
     ]);
     D = { reg, dep, api, crit, cx, iso };
 }

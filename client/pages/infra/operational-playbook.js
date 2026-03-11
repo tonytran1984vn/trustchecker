@@ -1,11 +1,11 @@
 /** Operational Playbook — Drill Scenarios, Schedule, Post-Mortem */
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 import { escapeHTML as esc, escapeObj } from '../../utils/escape.js';
 let D = {};
 async function load() {
     const h = { 'Authorization': 'Bearer ' + State.token };
-    D = await fetch('/api/playbook/full', { headers: h }).then(r => r.json()).catch(() => ({}));
+    D = await API.get('/playbook/full').catch(() => ({}));
 }
 export function render() {
     load(); const drills = D.drill_scenarios || D.drills || []; const sched = D.schedule || {}; const pm = D.post_mortem || {};

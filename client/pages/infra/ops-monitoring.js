@@ -1,14 +1,14 @@
 /** Ops Monitoring Dashboard — Pipeline Health, Incidents, Runbooks */
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 let D = {};
 async function load() {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [health, incidents, runbooks, boundary] = await Promise.all([
-        fetch('/api/ops/health', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/ops/incidents', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/ops/runbooks', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/ops/boundary', { headers: h }).then(r => r.json()).catch(() => ({}))
+        API.get('/ops/health').catch(() => ({})),
+        API.get('/ops/incidents').catch(() => ({})),
+        API.get('/ops/runbooks').catch(() => ({})),
+        API.get('/ops/boundary').catch(() => ({}))
     ]);
     D = { health, incidents, runbooks, boundary };
 }

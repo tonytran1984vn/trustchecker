@@ -1,11 +1,11 @@
 /** Economic Logic — Mechanism Design, Game Theory, Sustainability */
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 import { escapeHTML as esc, escapeObj } from '../../utils/escape.js';
 let D = {};
 async function load() {
     const h = { 'Authorization': 'Bearer ' + State.token };
-    D = await fetch('/api/economic-logic/framework', { headers: h }).then(r => r.json()).catch(() => ({}));
+    D = await API.get('/economic-logic/framework').catch(() => ({}));
 }
 export function render() {
     load(); const m = D.mechanism_design || {}; const g = D.game_theory || {}; const s = D.sustainability || {}; const v = D.value_fairness || {};

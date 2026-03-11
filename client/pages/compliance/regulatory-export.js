@@ -68,7 +68,7 @@ export function initPage() {
 
   window._regExportCSV = async () => {
     try {
-      const resp = await fetch('/api/audit-log/export', { credentials: 'include' });
+      const resp = await fetch(API.base + '/audit-log/export', { credentials: 'include' });
       if (!resp.ok) throw new Error('CSV export failed');
       const blob = await resp.blob(); const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = `regulatory-audit-${new Date().toISOString().slice(0, 10)}.csv`; a.click();

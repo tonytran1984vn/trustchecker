@@ -3,9 +3,9 @@
  * No authentication required — anyone with a hash can verify evidence integrity
  */
 import { icon } from '../../core/icons.js';
-
+import { API } from '../../core/api.js';
 export function renderPage() {
-    return `
+  return `
     <div class="sa-page">
       <div class="sa-page-title"><h1>${icon('shield', 28)} Evidence Verification Portal</h1>
         <div class="sa-title-actions"><span class="sa-status-pill sa-pill-green">🔓 Public Access — No Login Required</span></div>
@@ -100,7 +100,7 @@ curl "https://your-domain/api/scm/integrity/public/verify?hash=YOUR_HASH"</code>
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
 
 function step(num, title, desc, color) {
-    return `<div style="text-align:center;padding:1rem;background:var(--surface-elevated);border-radius:12px;border:1px solid var(--border)">
+  return `<div style="text-align:center;padding:1rem;background:var(--surface-elevated);border-radius:12px;border:1px solid var(--border)">
       <div style="width:36px;height:36px;border-radius:50%;background:var(--${color});color:white;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;margin-bottom:0.5rem">${num}</div>
       <div style="font-weight:600;font-size:0.82rem;margin-bottom:0.25rem">${title}</div>
       <div style="font-size:0.7rem;color:var(--text-secondary);line-height:1.4">${desc}</div>
@@ -109,17 +109,17 @@ function step(num, title, desc, color) {
 
 // ─── Window handlers ────────────────────────────────────────
 window.verifyHash = async function () {
-    const hash = document.getElementById('verify-hash-input')?.value?.trim();
-    const resultDiv = document.getElementById('verify-result');
-    if (!hash) { resultDiv.innerHTML = '<div class="sa-alert sa-alert-red">Please enter a SHA-256 hash</div>'; return; }
+  const hash = document.getElementById('verify-hash-input')?.value?.trim();
+  const resultDiv = document.getElementById('verify-result');
+  if (!hash) { resultDiv.innerHTML = '<div class="sa-alert sa-alert-red">Please enter a SHA-256 hash</div>'; return; }
 
-    resultDiv.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-    try {
-        const res = await fetch(`/api/scm/integrity/public/verify?hash=${encodeURIComponent(hash)}`);
-        const data = await res.json();
+  resultDiv.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  try {
+    const res = await fetch(`${API.base}/scm/integrity/public/verify?hash=${encodeURIComponent(hash)}`);
+    const data = await res.json();
 
-        if (data.verified) {
-            resultDiv.innerHTML = `
+    if (data.verified) {
+      resultDiv.innerHTML = `
               <div class="sa-alert sa-alert-green" style="border-left:4px solid var(--green)">
                 <div style="font-size:1rem;font-weight:700;margin-bottom:0.5rem"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> VERIFIED — Hash Found in Chain</div>
                 <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.5rem;font-size:0.78rem">
@@ -132,31 +132,31 @@ window.verifyHash = async function () {
                 </div>
                 <div style="font-size:0.72rem;color:var(--text-secondary);margin-top:0.5rem">${data.verification_note}</div>
               </div>`;
-        } else {
-            resultDiv.innerHTML = `
+    } else {
+      resultDiv.innerHTML = `
               <div class="sa-alert sa-alert-red" style="border-left:4px solid var(--red)">
                 <div style="font-size:1rem;font-weight:700;margin-bottom:0.25rem"><span class="status-icon status-fail" aria-label="Fail">✗</span> NOT FOUND</div>
                 <div style="font-size:0.78rem">${data.message}</div>
               </div>`;
-        }
-    } catch (e) { resultDiv.innerHTML = '<div class="sa-alert sa-alert-red">Verification request failed</div>'; }
+    }
+  } catch (e) { resultDiv.innerHTML = '<div class="sa-alert sa-alert-red">Verification request failed</div>'; }
 };
 
 window.verifyEvidence = async function () {
-    const evidence_hash = document.getElementById('evidence-hash-input')?.value?.trim();
-    const componentStr = document.getElementById('component-hashes-input')?.value?.trim();
-    const tsa = document.getElementById('tsa-token-input')?.value?.trim();
-    const resultDiv = document.getElementById('evidence-result');
-    if (!evidence_hash) { resultDiv.innerHTML = '<div class="sa-alert sa-alert-red">Evidence hash required</div>'; return; }
+  const evidence_hash = document.getElementById('evidence-hash-input')?.value?.trim();
+  const componentStr = document.getElementById('component-hashes-input')?.value?.trim();
+  const tsa = document.getElementById('tsa-token-input')?.value?.trim();
+  const resultDiv = document.getElementById('evidence-result');
+  if (!evidence_hash) { resultDiv.innerHTML = '<div class="sa-alert sa-alert-red">Evidence hash required</div>'; return; }
 
-    resultDiv.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-    try {
-        const body = { evidence_hash, scan_log_hashes: componentStr ? componentStr.split(',').map(h => h.trim()) : [], timestamp_token: tsa || null };
-        const res = await fetch('/api/scm/integrity/public/verify-evidence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        const data = await res.json();
+  resultDiv.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  try {
+    const body = { evidence_hash, scan_log_hashes: componentStr ? componentStr.split(',').map(h => h.trim()) : [], timestamp_token: tsa || null };
+    const res = await fetch(API.base + '/scm/integrity/public/verify-evidence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await res.json();
 
-        const color = data.overall ? 'green' : 'red';
-        resultDiv.innerHTML = `
+    const color = data.overall ? 'green' : 'red';
+    resultDiv.innerHTML = `
           <div class="sa-alert sa-alert-${color}" style="border-left:4px solid var(--${color})">
             <div style="font-size:1rem;font-weight:700;margin-bottom:0.5rem">${data.overall ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span>' : '<span class="status-icon status-fail" aria-label="Fail">✗</span>'} ${data.verdict}</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;font-size:0.78rem">
@@ -166,5 +166,5 @@ window.verifyEvidence = async function () {
               <div><strong>Components Verified:</strong> ${data.component_hashes.filter(c => c.verified).length}/${data.component_hashes.length}</div>
             </div>
           </div>`;
-    } catch (e) { resultDiv.innerHTML = '<div class="sa-alert sa-alert-red">Verification request failed</div>'; }
+  } catch (e) { resultDiv.innerHTML = '<div class="sa-alert sa-alert-red">Verification request failed</div>'; }
 };

@@ -1,14 +1,14 @@
 /** Compliance RegTech Dashboard — Auto-reports, Frameworks, CBAM */
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 let D = {};
 async function load() {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [report, frameworks, gaps, cbam] = await Promise.all([
-        fetch('/api/compliance-regtech/report', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/compliance-regtech/frameworks', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/compliance-regtech/gaps', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/compliance-regtech/cbam-status', { headers: h }).then(r => r.json()).catch(() => ({}))
+        API.get('/compliance-regtech/report').catch(() => ({})),
+        API.get('/compliance-regtech/frameworks').catch(() => ({})),
+        API.get('/compliance-regtech/gaps').catch(() => ({})),
+        API.get('/compliance-regtech/cbam-status').catch(() => ({}))
     ]);
     D = { report, frameworks, gaps, cbam };
 }

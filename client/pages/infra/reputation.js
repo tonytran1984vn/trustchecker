@@ -1,13 +1,13 @@
 /** Reputation & Market Signaling Dashboard */
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 let D = {};
 async function load() {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [trust, transparency, carbon] = await Promise.all([
-        fetch('/api/reputation/trust-score', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/reputation/transparency', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/reputation/carbon-integrity', { headers: h }).then(r => r.json()).catch(() => ({}))
+        API.get('/reputation/trust-score').catch(() => ({})),
+        API.get('/reputation/transparency').catch(() => ({})),
+        API.get('/reputation/carbon-integrity').catch(() => ({}))
     ]);
     D = { trust, transparency, carbon };
 }

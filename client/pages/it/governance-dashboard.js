@@ -1,5 +1,5 @@
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 
 let govData = { checkpoints: null, maturity: null, zones: null, sod: null, layers: null, roleMatrix: null, auditor: null };
 
@@ -7,13 +7,13 @@ async function fetchGovData() {
     try {
         const h = { 'Authorization': 'Bearer ' + State.token };
         const [cp, mat, zones, sod, layers, roleMatrix, auditor] = await Promise.all([
-            fetch('/api/scm/integrity/governance-checkpoints', { headers: h }).then(r => r.json()).catch(() => null),
-            fetch('/api/scm/integrity/maturity-level', { headers: h }).then(r => r.json()).catch(() => null),
-            fetch('/api/scm/integrity/control-zones', { headers: h }).then(r => r.json()).catch(() => null),
-            fetch('/api/scm/integrity/sod-validation', { headers: h }).then(r => r.json()).catch(() => null),
-            fetch('/api/scm/integrity/enforcement-layers', { headers: h }).then(r => r.json()).catch(() => null),
-            fetch('/api/scm/integrity/role-matrix', { headers: h }).then(r => r.json()).catch(() => null),
-            fetch('/api/scm/integrity/auditor-path', { headers: h }).then(r => r.json()).catch(() => null)
+            API.get('/scm/integrity/governance-checkpoints').catch(() => null),
+            API.get('/scm/integrity/maturity-level').catch(() => null),
+            API.get('/scm/integrity/control-zones').catch(() => null),
+            API.get('/scm/integrity/sod-validation').catch(() => null),
+            API.get('/scm/integrity/enforcement-layers').catch(() => null),
+            API.get('/scm/integrity/role-matrix').catch(() => null),
+            API.get('/scm/integrity/auditor-path').catch(() => null)
         ]);
         govData = { checkpoints: cp, maturity: mat, zones, sod, layers, roleMatrix, auditor };
     } catch (e) { console.error('Governance fetch error:', e); }

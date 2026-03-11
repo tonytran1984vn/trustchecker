@@ -1,13 +1,13 @@
 /** Identity & Trust Layer — DID + Verifiable Credentials Dashboard */
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js'; import { icon } from '../../core/icons.js';
 let D = {};
 async function load() {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [dids, vcs, types] = await Promise.all([
-        fetch('/api/identity/did/registry', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/identity/vc/registry', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/identity/types', { headers: h }).then(r => r.json()).catch(() => ({}))
+        API.get('/identity/did/registry').catch(() => ({})),
+        API.get('/identity/vc/registry').catch(() => ({})),
+        API.get('/identity/types').catch(() => ({}))
     ]);
     D = { dids, vcs, types };
 }
@@ -37,5 +37,5 @@ export function render() {
 export function renderPage() { return render(); }
 window.idShowDID = () => { document.getElementById('id-modal').style.display = 'flex'; };
 window.idShowVC = () => { document.getElementById('vc-modal').style.display = 'flex'; };
-window.idCreateDID = async () => { const h = { 'Authorization': 'Bearer ' + State.token, 'Content-Type': 'application/json' }; const r = await fetch('/api/identity/did', { method: 'POST', headers: h, body: JSON.stringify({ entity_type: document.getElementById('id-type').value, entity_id: document.getElementById('id-eid').value || 'E-' + Date.now() }) }).then(r => r.json()); document.getElementById('id-res').style.display = 'block'; document.getElementById('id-res').innerHTML = r.did ? `<div style="color:#10b981;font-weight:700"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> ${r.did}</div>` : `<div style="color:#ef4444">${r.error || 'Failed'}</div>`; };
-window.idIssueVC = async () => { const h = { 'Authorization': 'Bearer ' + State.token, 'Content-Type': 'application/json' }; const r = await fetch('/api/identity/vc/issue', { method: 'POST', headers: h, body: JSON.stringify({ issuer_did: document.getElementById('vc-issuer').value, subject_did: document.getElementById('vc-subject').value, credential_type: document.getElementById('vc-type').value }) }).then(r => r.json()); document.getElementById('vc-res').style.display = 'block'; document.getElementById('vc-res').innerHTML = r.vc_id ? `<div style="color:#10b981;font-weight:700"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> ${r.vc_id}</div>` : `<div style="color:#ef4444">${r.error || 'Failed'}</div>`; };
+window.idCreateDID = async () => { try { const r = await API.post('/identity/did', { entity_type: document.getElementById('id-type').value, entity_id: document.getElementById('id-eid').value || 'E-' + Date.now() }); document.getElementById('id-res').style.display = 'block'; document.getElementById('id-res').innerHTML = r.did ? `<div style="color:#10b981;font-weight:700"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> ${r.did}</div>` : `<div style="color:#ef4444">${r.error || 'Failed'}</div>`; } catch (e) { document.getElementById('id-res').style.display = 'block'; document.getElementById('id-res').innerHTML = `<div style="color:#ef4444">${e.message}</div>`; } };
+window.idIssueVC = async () => { try { const r = await API.post('/identity/vc/issue', { issuer_did: document.getElementById('vc-issuer').value, subject_did: document.getElementById('vc-subject').value, credential_type: document.getElementById('vc-type').value }); document.getElementById('vc-res').style.display = 'block'; document.getElementById('vc-res').innerHTML = r.vc_id ? `<div style="color:#10b981;font-weight:700"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> ${r.vc_id}</div>` : `<div style="color:#ef4444">${r.error || 'Failed'}</div>`; } catch (e) { document.getElementById('vc-res').style.display = 'block'; document.getElementById('vc-res').innerHTML = `<div style="color:#ef4444">${e.message}</div>`; } };

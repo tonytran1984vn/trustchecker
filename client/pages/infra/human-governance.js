@@ -1,11 +1,11 @@
 /** Human Governance Stress — Insider Collusion, GGC Capture, Founder Roadmap */
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 import { escapeHTML as esc, escapeObj } from '../../utils/escape.js';
 let D = {};
 async function load() {
     const h = { 'Authorization': 'Bearer ' + State.token };
-    D = await fetch('/api/human-gov/framework', { headers: h }).then(r => r.json()).catch(() => ({}));
+    D = await API.get('/human-gov/framework').catch(() => ({}));
 }
 export function render() {
     load(); const ins = D.insider_collusion || {}; const ggc = D.ggc_capture || {}; const bd = D.board_management || {}; const fr = D.founder_roadmap || {}; const comp = D.compensation_coi || {};

@@ -1,18 +1,18 @@
 /** Institutional Engine — 4 Pillars Dashboard */
 import { State } from '../../core/state.js';
-import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 let D = {};
 async function load() {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [ra, breach, bd, charter, plan, exposure, capital, mat] = await Promise.all([
-        fetch('/api/hardening/institutional/risk-appetite', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/institutional/appetite-breach', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/institutional/board-dashboard', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/institutional/audit-charter', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/institutional/audit-plan', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/institutional/exposure', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/institutional/economic-capital', { headers: h }).then(r => r.json()).catch(() => ({})),
-        fetch('/api/hardening/institutional/maturity', { headers: h }).then(r => r.json()).catch(() => ({}))
+        API.get('/hardening/institutional/risk-appetite').catch(() => ({})),
+        API.get('/hardening/institutional/appetite-breach').catch(() => ({})),
+        API.get('/hardening/institutional/board-dashboard').catch(() => ({})),
+        API.get('/hardening/institutional/audit-charter').catch(() => ({})),
+        API.get('/hardening/institutional/audit-plan').catch(() => ({})),
+        API.get('/hardening/institutional/exposure').catch(() => ({})),
+        API.get('/hardening/institutional/economic-capital').catch(() => ({})),
+        API.get('/hardening/institutional/maturity').catch(() => ({}))
     ]);
     D = { ra, breach, bd, charter, plan, exposure, capital, mat };
 }
