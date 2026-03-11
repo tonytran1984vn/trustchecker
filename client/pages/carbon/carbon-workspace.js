@@ -1425,8 +1425,24 @@ window._actionCycleStatus = async function (id, current) {
   } catch (e) { showToast(e.message || 'Failed', 'error'); }
 };
 
-window._actionDelete = async function (id) {
-  if (!confirm('Delete this action?')) return;
+window._actionDelete = function (id) {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = '_del_action_modal';
+  modal.innerHTML = `<div class="modal-card" style="max-width:380px;padding:1.5rem;border-radius:12px;background:var(--bg-primary,#fff);box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <h3 style="margin:0 0 0.5rem;color:var(--accent-red,#ef4444)">🗑️ Delete Action</h3>
+    <p style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem">Are you sure you want to delete this action item? This cannot be undone.</p>
+    <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+      <button class="sa-btn sa-btn-sm sa-btn-outline" onclick="document.getElementById('_del_action_modal')?.remove()" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;color:var(--text-primary,#1e293b)">Cancel</button>
+      <button onclick="window._doDeleteAction('${id}')" style="padding:8px 16px;border-radius:8px;border:none;background:#ef4444;color:#fff;cursor:pointer;font-weight:600">Delete</button>
+    </div>
+  </div>`;
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  document.body.appendChild(modal);
+};
+
+window._doDeleteAction = async function (id) {
+  document.getElementById('_del_action_modal')?.remove();
   try {
     await API.delete(`/carbon-actions/${id}`);
     showToast('Action deleted', 'success');
