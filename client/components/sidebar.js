@@ -844,6 +844,56 @@ function renderComplianceSidebar() {
       </div>
     </nav>
   `;
+};
+
+// ═══════════════════════════════════════════════════════════════
+// DATA GOV SIDEBAR (Data Governance Officer — Privacy & Lifecycle)
+// ═══════════════════════════════════════════════════════════════
+
+const DATA_GOV_NAV = [
+  { id: 'compliance-dashboard', icon: icon('dashboard'), label: 'Overview' },
+  { id: 'compliance-data', icon: icon('globe'), label: 'Data Classification' },
+  { id: 'compliance-retention', icon: icon('clock'), label: 'Retention Policies' },
+  { id: 'compliance-privacy-requests', icon: icon('lock'), label: 'GDPR / Privacy' },
+  { id: 'compliance-data-governance', icon: icon('shield'), label: 'Cross-Border & DLP' },
+  { id: 'compliance-reports', icon: icon('clipboard'), label: 'Reports' },
+];
+
+function renderDataGovSidebar() {
+  const brandName = State.branding?.app_name || 'TrustChecker';
+  const orgName = State.org?.name || '';
+  const role = getUserRole();
+
+  const navItems = DATA_GOV_NAV.map(n => renderNavItem(n)).join('');
+
+  return `
+    <nav class="sidebar sidebar-compliance" role="navigation" aria-label="Data Governance navigation">
+      <div class="sidebar-header">
+        <div class="sidebar-logo" onclick="goHome()" style="cursor:pointer" title="Go to dashboard">
+          <div class="logo-icon compliance-logo-icon" style="background:linear-gradient(135deg,#7c3aed,#6d28d9)">${icon('scroll', 22)}</div>
+          <div>
+            <div class="logo-text">${brandName}</div>
+            <div class="logo-version compliance-badge" style="background:rgba(124,58,237,0.15);color:#7c3aed">Data Governance</div>
+          </div>
+        </div>
+        ${orgName ? `<div class="sidebar-org" title="${orgName}">
+          <span style="font-size:11px;color:rgba(148,163,184,0.8)">${icon('building', 12)} ${orgName}</span>
+        </div>` : ''}
+      </div>
+      <div class="sidebar-nav">
+        ${navItems}
+      </div>
+      <div class="sidebar-footer">
+        <div class="user-avatar role-${role}">${(State.user?.email || 'D')[0].toUpperCase()}</div>
+        <div class="user-info">
+          <div class="user-name">${State.user?.email || 'Data Gov Officer'}</div>
+          <div class="user-role"><span class="role-badge role-${role}">${role}</span></div>
+        </div>
+        <button class="btn btn-sm" onclick="window._openAcctSettings && window._openAcctSettings()" title="Account Settings" aria-label="Settings" style="margin-right:2px;font-size:1.1rem;padding:4px 8px">⚙</button>
+        <button class="btn btn-sm" onclick="doLogout()" title="Logout" aria-label="Logout">${icon('logout', 18)}</button>
+      </div>
+    </nav>
+  `;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1251,7 +1301,7 @@ export function renderSidebar() {
   else if (isOps()) html = renderOpsSidebar();
   else if (isRisk()) html = renderRiskSidebar();
   else if (isCompliance()) html = renderComplianceSidebar();
-  else if (isDataGov()) html = renderComplianceSidebar();
+  else if (isDataGov()) html = renderDataGovSidebar();
   else if (isIT()) html = renderITSidebar();
   else if (isCarbon()) html = renderCarbonSidebar();
   else html = renderTenantSidebar();
