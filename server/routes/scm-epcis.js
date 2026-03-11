@@ -21,16 +21,21 @@ router.get('/events', async (req, res) => {
             limit = 50, offset = 0
         } = req.query;
 
+        const orgId = req.user?.org_id || req.user?.orgId || null;
         // Fetch internal events
-        const events = await db.prepare(`
+        let evQuery = `
       SELECT sce.*, p.name as product_name, p.sku, pt.name as partner_name,
              b.batch_number
       FROM supply_chain_events sce
       LEFT JOIN products p ON sce.product_id = p.id
       LEFT JOIN partners pt ON sce.partner_id = pt.id
       LEFT JOIN batches b ON sce.batch_id = b.id
-      ORDER BY sce.created_at DESC LIMIT ? OFFSET ?
-    `).all(parseInt(limit), Math.max(parseInt(offset) || 0, 0));
+    `;
+        const evParams = [];
+        if (orgId) { evQuery += ' WHERE (p.org_id = ? OR pt.org_id = ?)'; evParams.push(orgId, orgId); }
+        evQuery += ' ORDER BY sce.created_at DESC LIMIT ? OFFSET ?';
+        evParams.push(parseInt(limit), Math.max(parseInt(offset) || 0, 0));
+        const events = await db.prepare(evQuery).all(...evParams);
 
         // Convert to EPCIS format
         const epcisEvents = events.map(e => epcisEngine.toEpcisEvent(e, {
@@ -142,13 +147,16 @@ router.post('/capture', requirePermission('epcis:create'), async (req, res) => {
 // Cache 90s — queries 4 tables for full export
 router.get('/document', cacheMiddleware(90), async (req, res) => {
     try {
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const orgFilter = orgId ? ' WHERE org_id = ?' : '';
+        const orgParams = orgId ? [orgId] : [];
         const events = await db.prepare(`
       SELECT sce.* FROM supply_chain_events sce
       ORDER BY sce.created_at DESC LIMIT 200
     `).all();
 
-        const products = await db.prepare('SELECT * FROM products').all();
-        const partners = await db.prepare('SELECT * FROM partners').all();
+        const products = await db.prepare('SELECT * FROM products' + orgFilter).all(...orgParams);
+        const partners = await db.prepare('SELECT * FROM partners' + orgFilter).all(...orgParams);
         const batches = await db.prepare('SELECT * FROM batches').all();
 
         const epcisDocument = epcisEngine.toEpcisDocument(events, products, partners, batches);

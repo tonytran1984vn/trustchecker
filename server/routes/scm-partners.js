@@ -18,9 +18,11 @@ router.use(authMiddleware);
 // ─── GET /api/scm/partners – List partners ───────────────────────────────────
 router.get('/', async (req, res) => {
     try {
+        const orgId = req.user?.org_id || req.user?.orgId || null;
         const { type, status, kyc_status } = req.query;
         let query = 'SELECT * FROM partners WHERE 1=1';
         const params = [];
+        if (orgId) { query += ' AND org_id = ?'; params.push(orgId); }
         if (type) { query += ' AND type = ?'; params.push(type); }
         if (status) { query += ' AND status = ?'; params.push(status); }
         if (kyc_status) { query += ' AND kyc_status = ?'; params.push(kyc_status); }
@@ -41,10 +43,11 @@ router.post('/', authMiddleware, requirePermission('partner:create'), async (req
         const id = uuidv4();
         const apiKey = `tc_${uuidv4().replace(/-/g, '').substring(0, 24)}`;
 
+        const orgId = req.user?.org_id || req.user?.orgId || null;
         await db.prepare(`
-      INSERT INTO partners (id, name, type, country, region, contact_email, api_key)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, name, type || 'distributor', country || '', region || '', contact_email || '', apiKey);
+      INSERT INTO partners (id, name, type, country, region, contact_email, api_key, org_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, type || 'distributor', country || '', region || '', contact_email || '', apiKey, orgId);
 
         eventBus.emitEvent('PartnerOnboarded', { id, name, type: type || 'distributor' });
         res.status(201).json({ id, name, api_key: apiKey, kyc_status: 'pending' });
@@ -57,7 +60,11 @@ router.post('/', authMiddleware, requirePermission('partner:create'), async (req
 // ─── GET /api/scm/partners/:id – Partner detail + trust score ────────────────
 router.get('/:id', async (req, res) => {
     try {
-        const partner = await db.prepare('SELECT * FROM partners WHERE id = ?').get(req.params.id);
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        let pQuery = 'SELECT * FROM partners WHERE id = ?';
+        const pParams = [req.params.id];
+        if (orgId) { pQuery += ' AND org_id = ?'; pParams.push(orgId); }
+        const partner = await db.prepare(pQuery).get(...pParams);
         if (!partner) return res.status(404).json({ error: 'Partner not found' });
 
         const shipments = await db.prepare(`
@@ -91,7 +98,11 @@ router.get('/:id', async (req, res) => {
 // ─── POST /api/scm/partners/:id/verify – KYC-Business verify ────────────────
 router.post('/:id/verify', authMiddleware, requirePermission('partner:verify'), async (req, res) => {
     try {
-        const partner = await db.prepare('SELECT * FROM partners WHERE id = ?').get(req.params.id);
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        let vQuery = 'SELECT * FROM partners WHERE id = ?';
+        const vParams = [req.params.id];
+        if (orgId) { vQuery += ' AND org_id = ?'; vParams.push(orgId); }
+        const partner = await db.prepare(vQuery).get(...vParams);
         if (!partner) return res.status(404).json({ error: 'Partner not found' });
 
         // Simulated KYC verification (in production: Veriff/Onfido API)

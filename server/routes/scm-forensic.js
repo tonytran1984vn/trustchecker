@@ -18,10 +18,12 @@ router.use(authMiddleware);
 // ─── GET /api/scm/forensic/cases – List forensic cases ──────────────────────
 router.get('/cases', authMiddleware, async (req, res) => {
     try {
+        const orgId = req.user?.org_id || req.user?.orgId || null;
         const { status, limit = 50 } = req.query;
-        let query = 'SELECT * FROM forensic_cases';
+        let query = 'SELECT * FROM forensic_cases WHERE 1=1';
         const params = [];
-        if (status) { query += ' WHERE status = ?'; params.push(status); }
+        if (orgId) { query += ' AND org_id = ?'; params.push(orgId); }
+        if (status) { query += ' AND status = ?'; params.push(status); }
         query += ' ORDER BY created_at DESC LIMIT ?';
         params.push(Math.min(parseInt(limit) || 50, 200));
 
@@ -80,11 +82,11 @@ router.post('/cases', authMiddleware, async (req, res) => {
         }
 
         await db.prepare(`
-            INSERT INTO forensic_cases (id, case_number, code_data, product_id, batch_id, scan_chain, device_compare, factor_breakdown, current_ers, status, assigned_to, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, 'open', ?, datetime('now'), datetime('now'))
+            INSERT INTO forensic_cases (id, case_number, code_data, product_id, batch_id, scan_chain, device_compare, factor_breakdown, current_ers, status, assigned_to, org_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, 'open', ?, ?, datetime('now'), datetime('now'))
         `).run(id, caseNumber, code_data || '', product_id || null, batch_id || null,
             JSON.stringify(scanChain), JSON.stringify(deviceCompare), currentErs,
-            req.user?.email || req.user?.username || null);
+            req.user?.email || req.user?.username || null, req.user?.org_id || req.user?.orgId || null);
 
         await db.prepare(`
             INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)

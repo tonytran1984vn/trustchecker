@@ -17,9 +17,11 @@ router.use(authMiddleware);
 // ─── GET /api/scm/graph/nodes – All supply chain nodes ───────────────────────
 router.get('/nodes', async (req, res) => {
     try {
-        const partners = await db.prepare('SELECT id, name, type, country, trust_score, risk_level, kyc_status, status FROM partners').all();
-        // Also add products as nodes
-        const products = await db.prepare("SELECT id, name, 'product' as type, origin_country as country, trust_score, status FROM products LIMIT 50").all();
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const orgFilter = orgId ? ' WHERE org_id = ?' : '';
+        const orgParams = orgId ? [orgId] : [];
+        const partners = await db.prepare('SELECT id, name, type, country, trust_score, risk_level, kyc_status, status FROM partners' + orgFilter).all(...orgParams);
+        const products = await db.prepare("SELECT id, name, 'product' as type, origin_country as country, trust_score, status FROM products" + orgFilter + ' LIMIT 50').all(...orgParams);
 
         const nodes = [
             ...partners.map(p => ({ id: p.id, name: p.name, type: p.type, group: 'partner', country: p.country, trust_score: p.trust_score, risk_level: p.risk_level, kyc_status: p.kyc_status, status: p.status })),
@@ -68,8 +70,11 @@ router.get('/edges', async (req, res) => {
 // ─── GET /api/scm/graph/analysis – PageRank + centrality + risk ──────────────
 router.get('/analysis', async (req, res) => {
     try {
-        const partners = await db.prepare('SELECT * FROM partners').all();
-        const products = await db.prepare('SELECT * FROM products LIMIT 50').all();
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const orgFilter = orgId ? ' WHERE org_id = ?' : '';
+        const orgParams = orgId ? [orgId] : [];
+        const partners = await db.prepare('SELECT * FROM partners' + orgFilter).all(...orgParams);
+        const products = await db.prepare('SELECT * FROM products' + orgFilter + ' LIMIT 50').all(...orgParams);
         const edges = await db.prepare('SELECT * FROM supply_chain_graph').all();
         const alerts = await db.prepare('SELECT * FROM fraud_alerts').all();
         const leaks = await db.prepare('SELECT * FROM leak_alerts').all();
@@ -110,7 +115,10 @@ router.get('/analysis', async (req, res) => {
 // ─── GET /api/scm/graph/toxic – Toxic supplier detection ─────────────────────
 router.get('/toxic', async (req, res) => {
     try {
-        const partners = await db.prepare('SELECT * FROM partners').all();
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const orgFilter = orgId ? ' WHERE org_id = ?' : '';
+        const orgParams = orgId ? [orgId] : [];
+        const partners = await db.prepare('SELECT * FROM partners' + orgFilter).all(...orgParams);
         const edges = await db.prepare('SELECT * FROM supply_chain_graph').all();
         const alerts = await db.prepare('SELECT * FROM fraud_alerts').all();
 
@@ -233,8 +241,11 @@ router.get('/impact/:nodeId', async (req, res) => {
 // ─── GET /clusters — Detect connected component clusters ─────────────────────
 router.get('/clusters', async (req, res) => {
     try {
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const orgFilter = orgId ? ' WHERE org_id = ?' : '';
+        const orgParams = orgId ? [orgId] : [];
         const edges = await db.all('SELECT * FROM supply_chain_graph');
-        const partners = await db.all('SELECT id, name, type, trust_score FROM partners');
+        const partners = await db.all('SELECT id, name, type, trust_score FROM partners' + orgFilter, orgParams);
 
         // Build adjacency list
         const adj = {};

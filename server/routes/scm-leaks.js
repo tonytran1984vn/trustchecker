@@ -21,9 +21,10 @@ router.post('/scan', authMiddleware, requirePermission('leak_monitor:create'), a
     try {
         const { product_id, platforms } = req.body;
         const scanPlatforms = platforms || PLATFORMS;
+        const orgId = req.user?.org_id || req.user?.orgId || null;
 
-        const product = product_id ? await db.prepare('SELECT * FROM products WHERE id = ?').get(product_id) : null;
-        const products = product ? [product] : await db.prepare('SELECT * FROM products WHERE status = \'active\' LIMIT 20').all();
+        const product = product_id ? await db.prepare('SELECT * FROM products WHERE id = ?' + (orgId ? ' AND org_id = ?' : '')).get(...(orgId ? [product_id, orgId] : [product_id])) : null;
+        const products = product ? [product] : await db.prepare('SELECT * FROM products WHERE status = \'active\'' + (orgId ? ' AND org_id = ?' : '') + ' LIMIT 20').all(...(orgId ? [orgId] : []));
 
         // Get authorized regions for products
         const authorizedRegions = ['VN', 'SG', 'US', 'JP'];
@@ -63,6 +64,7 @@ router.post('/scan', authMiddleware, requirePermission('leak_monitor:create'), a
 // ─── GET /api/scm/leaks/alerts – Leak alerts ────────────────────────────────
 router.get('/alerts', async (req, res) => {
     try {
+        const orgId = req.user?.org_id || req.user?.orgId || null;
         const { status = 'open', platform, limit = 50 } = req.query;
         let query = `
       SELECT la.*, p.name as product_name, p.sku
@@ -71,6 +73,7 @@ router.get('/alerts', async (req, res) => {
       WHERE la.status = ?
     `;
         const params = [status];
+        if (orgId) { query += ' AND p.org_id = ?'; params.push(orgId); }
         if (platform) { query += ' AND la.platform = ?'; params.push(platform); }
         query += ' ORDER BY la.risk_score DESC, la.created_at DESC LIMIT ?';
         params.push(Math.min(Number(limit) || 50, 200));
@@ -96,9 +99,12 @@ router.get('/alerts', async (req, res) => {
 // ─── GET /api/scm/leaks/stats – Leak statistics ─────────────────────────────
 router.get('/stats', async (req, res) => {
     try {
-        const total = (await db.prepare('SELECT COUNT(*) as c FROM leak_alerts').get())?.c || 0;
-        const open = (await db.prepare("SELECT COUNT(*) as c FROM leak_alerts WHERE status = 'open'").get())?.c || 0;
-        const resolved = (await db.prepare("SELECT COUNT(*) as c FROM leak_alerts WHERE status = 'resolved'").get())?.c || 0;
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const orgJoin = orgId ? ' LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ?' : '';
+        const orgWhere = orgId ? " LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? AND status = 'open'" : " WHERE status = 'open'";
+        const total = (await db.prepare('SELECT COUNT(*) as c FROM leak_alerts la' + (orgId ? ' LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ?' : '')).get(...(orgId ? [orgId] : [])))?.c || 0;
+        const open = (await db.prepare("SELECT COUNT(*) as c FROM leak_alerts la" + (orgId ? " LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? AND la.status = 'open'" : " WHERE la.status = 'open'")).get(...(orgId ? [orgId] : [])))?.c || 0;
+        const resolved = (await db.prepare("SELECT COUNT(*) as c FROM leak_alerts la" + (orgId ? " LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? AND la.status = 'resolved'" : " WHERE la.status = 'resolved'")).get(...(orgId ? [orgId] : [])))?.c || 0;
 
         const byPlatform = await db.prepare('SELECT platform, COUNT(*) as count, AVG(risk_score) as avg_risk FROM leak_alerts GROUP BY platform ORDER BY count DESC').all();
         const byType = await db.prepare('SELECT leak_type, COUNT(*) as count FROM leak_alerts GROUP BY leak_type').all();
