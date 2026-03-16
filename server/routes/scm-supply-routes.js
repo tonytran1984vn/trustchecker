@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { safeParse } = require('../utils/safe-json');
+const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();
 
@@ -20,13 +21,13 @@ router.get('/routes', authMiddleware, async (req, res) => {
         const orgId = req.user?.org_id;
         let routes;
         if (orgId) {
-            routes = await db.prepare(`
+            routes = await db.all(`
                 SELECT * FROM supply_routes WHERE org_id = ? ORDER BY created_at DESC
-            `).all(orgId);
+             LIMIT 1000`, [orgId]);
         } else {
-            routes = await db.prepare(`
+            routes = await db.all(`
                 SELECT * FROM supply_routes ORDER BY created_at DESC
-            `).all();
+             LIMIT 1000`);
         }
         res.json(routes.map(r => ({
             ...r,
@@ -45,11 +46,11 @@ router.post('/routes', authMiddleware, requireRole('admin', 'company_admin'), as
         const { name, chain, products, geo_fence, status } = req.body;
         const id = uuidv4();
         const orgId = req.user?.org_id || null;
-        await db.prepare(`
+        await db.run(`
             INSERT INTO supply_routes (id, name, chain, products, geo_fence, status, created_by, org_id, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-        `).run(id, name, JSON.stringify(chain || []), JSON.stringify(products || []),
-            geo_fence || '', status || 'active', req.user?.id || null, orgId);
+        `, [id, name, JSON.stringify(chain || []), JSON.stringify(products || []),
+            geo_fence || '', status || 'active', req.user?.id || null, orgId]);
 
         res.status(201).json({ id, name, status: 'created' });
     } catch (err) {
@@ -61,14 +62,14 @@ router.post('/routes', authMiddleware, requireRole('admin', 'company_admin'), as
 // ─── GET /api/scm/routes/:id – Get single route with breaches ────────────────
 router.get('/routes/:id', authMiddleware, async (req, res) => {
     try {
-        const route = await db.prepare('SELECT * FROM supply_routes WHERE id = ?').get(req.params.id);
+        const route = await db.get('SELECT * FROM supply_routes WHERE id = ?', [req.params.id]);
         if (!route) return res.status(404).json({ error: 'Route not found' });
 
-        const breaches = await db.prepare(`
+        const breaches = await db.all(`
             SELECT rb.*, cr.name as rule_name FROM route_breaches rb
             LEFT JOIN channel_rules cr ON rb.rule_id = cr.id
             WHERE rb.route_id = ? ORDER BY rb.created_at DESC LIMIT 50
-        `).all(req.params.id);
+        `, [req.params.id]);
 
         res.json({
             ...route,
@@ -86,11 +87,11 @@ router.get('/routes/:id', authMiddleware, async (req, res) => {
 router.put('/routes/:id', authMiddleware, requirePermission('supply_chain:create'), async (req, res) => {
     try {
         const { name, chain, products, geo_fence, status } = req.body;
-        await db.prepare(`
-            UPDATE supply_routes SET name = ?, chain = ?, products = ?, geo_fence = ?, status = ?, updated_at = datetime('now')
+        await db.run(`
+            UPDATE supply_routes SET name = ?, chain = ?, products = ?, geo_fence = ?, status = ?, updated_at = NOW()
             WHERE id = ?
-        `).run(name, JSON.stringify(chain || []), JSON.stringify(products || []),
-            geo_fence || '', status || 'active', req.params.id);
+        `, [name, JSON.stringify(chain || []), JSON.stringify(products || []),
+            geo_fence || '', status || 'active', req.params.id]);
         res.json({ id: req.params.id, status: 'updated' });
     } catch (err) {
         console.error('Update route error:', err);
@@ -104,9 +105,9 @@ router.get('/channel-rules', authMiddleware, async (req, res) => {
         const orgId = req.user?.org_id;
         let rules;
         if (orgId && req.user?.role !== 'super_admin') {
-            rules = await db.prepare('SELECT * FROM channel_rules WHERE org_id = ? ORDER BY created_at DESC').all(orgId);
+            rules = await db.all('SELECT * FROM channel_rules WHERE org_id = ? ORDER BY created_at DESC LIMIT 1000', [orgId]);
         } else {
-            rules = await db.prepare('SELECT * FROM channel_rules ORDER BY created_at DESC').all();
+            rules = await db.all('SELECT * FROM channel_rules ORDER BY created_at DESC LIMIT 1000');
         }
         res.json(rules);
     } catch (err) {
@@ -120,10 +121,10 @@ router.post('/channel-rules', authMiddleware, requirePermission('supply_chain:cr
     try {
         const { name, logic, severity, auto_action } = req.body;
         const id = uuidv4();
-        await db.prepare(`
+        await db.run(`
             INSERT INTO channel_rules (id, name, logic, severity, auto_action, is_active, triggers_30d, created_at)
-            VALUES (?, ?, ?, ?, ?, 1, 0, datetime('now'))
-        `).run(id, name, logic || '', severity || 'medium', auto_action || '');
+            VALUES (?, ?, ?, ?, ?, 1, 0, NOW())
+        `, [id, name, logic || '', severity || 'medium', auto_action || '']);
         res.status(201).json({ id, name, status: 'created' });
     } catch (err) {
         console.error('Create channel rule error:', err);
@@ -164,19 +165,19 @@ router.post('/route-breaches', authMiddleware, async (req, res) => {
     try {
         const { route_id, rule_id, scan_event_id, code_data, scanned_in, severity, action, details } = req.body;
         const id = uuidv4();
-        await db.prepare(`
+        await db.run(`
             INSERT INTO route_breaches (id, route_id, rule_id, scan_event_id, code_data, scanned_in, severity, action, details, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        `).run(id, route_id, rule_id || null, scan_event_id || null,
-            code_data || '', scanned_in || '', severity || 'medium', action || '', JSON.stringify(details || {}));
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        `, [id, route_id, rule_id || null, scan_event_id || null,
+            code_data || '', scanned_in || '', severity || 'medium', action || '', JSON.stringify(details || {})]);
 
         // Update route integrity status
         if (severity === 'critical' || severity === 'high') {
-            await db.prepare(`UPDATE supply_routes SET integrity = 'breach' WHERE id = ?`).run(route_id);
+            await db.run(`UPDATE supply_routes SET integrity = 'breach' WHERE id = ?`, [route_id]);
         }
         // Increment rule trigger count
         if (rule_id) {
-            await db.prepare(`UPDATE channel_rules SET triggers_30d = triggers_30d + 1 WHERE id = ?`).run(rule_id);
+            await db.run(`UPDATE channel_rules SET triggers_30d = triggers_30d + 1 WHERE id = ?`, [rule_id]);
         }
         res.status(201).json({ id, status: 'recorded' });
     } catch (err) {
@@ -192,7 +193,7 @@ router.post('/route-breaches', authMiddleware, async (req, res) => {
 // ─── POST /api/scm/supply/routes/:id/simulate – What-if simulation ──────────
 router.post('/routes/:id/simulate', authMiddleware, async (req, res) => {
     try {
-        const route = await db.prepare('SELECT * FROM supply_routes WHERE id = ?').get(req.params.id);
+        const route = await db.get('SELECT * FROM supply_routes WHERE id = ?', [req.params.id]);
         if (!route) return res.status(404).json({ error: 'Route not found' });
 
         const { test_scan_geo, test_device, test_code } = req.body;
@@ -204,7 +205,7 @@ router.post('/routes/:id/simulate', authMiddleware, async (req, res) => {
             return (test_scan_geo || '').toLowerCase().includes(nodeLocation);
         });
 
-        const rules = await db.prepare('SELECT * FROM channel_rules WHERE is_active = 1').all();
+        const rules = await db.all('SELECT * FROM channel_rules WHERE is_active = 1');
         const triggeredRules = [];
 
         for (const rule of rules) {
@@ -223,12 +224,12 @@ router.post('/routes/:id/simulate', authMiddleware, async (req, res) => {
 
         // Save simulation
         const simId = uuidv4();
-        await db.prepare(`
+        await db.run(`
             INSERT INTO route_simulations (id, route_id, scenario, input_data, results, breaches_predicted, created_by, created_at)
-            VALUES (?, ?, 'what_if', ?, ?, ?, ?, datetime('now'))
-        `).run(simId, req.params.id, JSON.stringify({ test_scan_geo, test_device, test_code }),
+            VALUES (?, ?, 'what_if', ?, ?, ?, ?, NOW())
+        `, [simId, req.params.id, JSON.stringify({ test_scan_geo, test_device, test_code }),
             JSON.stringify({ geo_in_route: geoInRoute, triggered_rules: triggeredRules }),
-            triggeredRules.length, req.user?.email || '');
+            triggeredRules.length, req.user?.email || '']);
 
         res.json({
             simulation_id: simId,
@@ -249,7 +250,7 @@ router.post('/routes/:id/simulate', authMiddleware, async (req, res) => {
 // ─── GET /api/scm/supply/routes/:id/replay – Historical route replay ────────
 router.get('/routes/:id/replay', authMiddleware, async (req, res) => {
     try {
-        const route = await db.prepare('SELECT * FROM supply_routes WHERE id = ?').get(req.params.id);
+        const route = await db.get('SELECT * FROM supply_routes WHERE id = ?', [req.params.id]);
         if (!route) return res.status(404).json({ error: 'Route not found' });
 
         const { days = 30 } = req.query;
@@ -260,21 +261,21 @@ router.get('/routes/:id/replay', authMiddleware, async (req, res) => {
         let scanEvents = [];
         if (products.length > 0) {
             const placeholders = products.map(() => '?').join(',');
-            scanEvents = await db.prepare(`
+            scanEvents = await db.all(`
                 SELECT se.*, p.name as product_name FROM scan_events se
                 LEFT JOIN products p ON se.product_id = p.id
                 WHERE se.product_id IN (${placeholders})
-                AND se.scanned_at > datetime('now', '-${parseInt(days)} days')
+                AND se.scanned_at > NOW() - CAST('parseInt(days) days' AS INTERVAL)
                 ORDER BY se.scanned_at ASC
-            `).all(...products);
+             LIMIT 1000`, [...products]);
         }
 
         // Get breaches in period
-        const breaches = await db.prepare(`
+        const breaches = await db.all(`
             SELECT * FROM route_breaches WHERE route_id = ?
-            AND created_at > datetime('now', '-${parseInt(days)} days')
+            AND created_at > NOW() - CAST('parseInt(days) days' AS INTERVAL)
             ORDER BY created_at ASC
-        `).all(req.params.id);
+         LIMIT 1000`, [req.params.id]);
 
         // Build timeline
         const timeline = [];
@@ -316,13 +317,13 @@ router.get('/routes/:id/replay', authMiddleware, async (req, res) => {
 // ─── GET /api/scm/supply/integrity-index – Route Integrity Scoring Index ────
 router.get('/integrity-index', authMiddleware, async (req, res) => {
     try {
-        const routes = await db.prepare('SELECT * FROM supply_routes ORDER BY name').all();
+        const routes = await db.all('SELECT * FROM supply_routes ORDER BY name LIMIT 1000');
 
         const index = [];
         for (const route of routes) {
-            const totalBreaches = (await db.prepare('SELECT COUNT(*) as c FROM route_breaches WHERE route_id = ?').get(route.id))?.c || 0;
-            const recentBreaches = (await db.prepare(`SELECT COUNT(*) as c FROM route_breaches WHERE route_id = ? AND created_at > datetime('now', '-30 days')`).get(route.id))?.c || 0;
-            const criticalBreaches = (await db.prepare(`SELECT COUNT(*) as c FROM route_breaches WHERE route_id = ? AND severity IN ('critical', 'high')`).get(route.id))?.c || 0;
+            const totalBreaches = (await db.get('SELECT COUNT(*) as c FROM route_breaches WHERE route_id = ?', [route.id]))?.c || 0;
+            const recentBreaches = (await db.get(`SELECT COUNT(*) as c FROM route_breaches WHERE route_id = ? AND created_at > NOW() - INTERVAL '30 days'`, [route.id]))?.c || 0;
+            const criticalBreaches = (await db.get(`SELECT COUNT(*) as c FROM route_breaches WHERE route_id = ? AND severity IN ('critical', 'high')`, [route.id]))?.c || 0;
             const chain = JSON.parse(route.chain || '[]');
 
             // Composite Integrity Score (0-100, 100 = perfect)
@@ -369,7 +370,7 @@ router.get('/integrity-index', authMiddleware, async (req, res) => {
 router.get('/reverse-flow', authMiddleware, async (req, res) => {
     try {
         const { days = 30 } = req.query;
-        const routes = await db.prepare('SELECT * FROM supply_routes').all();
+        const routes = await db.all('SELECT * FROM supply_routes');
         const anomalies = [];
 
         for (const route of routes) {
@@ -377,11 +378,11 @@ router.get('/reverse-flow', authMiddleware, async (req, res) => {
             if (chain.length < 2) continue;
 
             // Check for scans that appear at earlier nodes after being at later nodes
-            const breaches = await db.prepare(`
+            const breaches = await db.all(`
                 SELECT * FROM route_breaches WHERE route_id = ? AND severity IN ('high', 'critical')
-                AND created_at > datetime('now', '-${parseInt(days)} days')
+                AND created_at > NOW() - CAST('parseInt(days) days' AS INTERVAL)
                 ORDER BY created_at DESC LIMIT 10
-            `).all(route.id);
+            `, [route.id]);
 
             for (const b of breaches) {
                 const details = safeParse(b.details, {});
@@ -412,7 +413,7 @@ router.get('/reverse-flow', authMiddleware, async (req, res) => {
 // ─── GET /api/scm/supply/simulations – List past simulations ────────────────
 router.get('/simulations', authMiddleware, async (req, res) => {
     try {
-        const sims = await db.prepare('SELECT * FROM route_simulations ORDER BY created_at DESC LIMIT 30').all();
+        const sims = await db.all('SELECT * FROM route_simulations ORDER BY created_at DESC LIMIT 30');
         res.json(sims.map(s => ({
             ...s,
             input_data: JSON.parse(s.input_data || '{}'),

@@ -3637,6 +3637,22 @@ html {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   transition: border-color 0.2s ease-out, box-shadow 0.2s ease-out, transform 0.15s ease-out;
+  overflow: hidden;
+}
+
+/* Allow tables inside cards to scroll horizontally */
+.sa-card .sa-table {
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* sa-code cells: truncate long IDs */
+.sa-table td.sa-code {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sa-card:hover {
@@ -6480,7 +6496,8 @@ html {
 .sidebar-ops .nav-item.active {
   background: linear-gradient(90deg, rgba(20, 184, 166, 0.18), rgba(13, 148, 136, 0.08));
   border-left: 3px solid #14b8a6;
-  color: #5eead4;
+  color: #0f766e;
+  font-weight: 700;
 }
 
 .sidebar-ops .nav-icon svg {
@@ -6488,7 +6505,7 @@ html {
 }
 
 .sidebar-ops .nav-item.active .nav-icon svg {
-  stroke: #5eead4;
+  stroke: #0d9488;
 }
 
 .role-badge.role-ops_manager {

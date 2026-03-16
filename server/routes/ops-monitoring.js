@@ -7,9 +7,12 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
+const { orgGuard } = require('../middleware/org-middleware');
 const opsEngine = require('../engines/ops-monitoring-engine');
 const { v4: uuidv4 } = require('uuid');
+const { withTransaction } = require('../middleware/transaction');
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /health — Pipeline health (SLO-based) ─────────────────
 router.get('/health', async (req, res) => {
@@ -83,6 +86,7 @@ router.post('/incidents/:id/escalate', requirePermission('risk:view'), (req, res
 router.put('/incidents/:id', requirePermission('risk:view'), async (req, res) => {
     try {
         const { status, assignee, severity } = req.body;
+        const orgId = req.user?.org_id || req.user?.orgId || null;
         const updates = [];
         const params = [];
 
@@ -96,6 +100,7 @@ router.put('/incidents/:id', requirePermission('risk:view'), async (req, res) =>
 
         let sql = `UPDATE ops_incidents_v2 SET ${updates.join(', ')} WHERE id = ?`;
         params.push(req.params.id);
+        if (orgId) { sql += ' AND org_id = ?'; params.push(orgId); }
 
         await db.run(sql, params);
         res.json({ ok: true, id: req.params.id, status: status || 'unchanged' });
@@ -108,8 +113,10 @@ router.put('/incidents/:id', requirePermission('risk:view'), async (req, res) =>
 // ─── DELETE /incidents/:id — Remove incident ───────────────────
 router.delete('/incidents/:id', requirePermission('risk:view'), async (req, res) => {
     try {
+        const orgId = req.user?.org_id || req.user?.orgId || null;
         let sql = 'DELETE FROM ops_incidents_v2 WHERE id = ?';
         const params = [req.params.id];
+        if (orgId) { sql += ' AND org_id = ?'; params.push(orgId); }
         await db.run(sql, params);
         res.json({ ok: true, deleted: req.params.id });
     } catch (err) {

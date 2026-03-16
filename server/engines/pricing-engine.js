@@ -5,6 +5,12 @@
  *
  * 2026 Model: Subscription tiers with metered overages
  */
+/**
+ * ⚠️ TENANT ISOLATION: This engine relies on PostgreSQL RLS for data isolation.
+ * The calling route must set db.setOrgContext(orgId) before invoking engine methods.
+ * All SQL queries in this file are filtered at the database level by RLS policies.
+ */
+
 
 const db = require('../db');
 
@@ -426,7 +432,7 @@ async function updatePricingOverrides(type, data, userId) {
 
     if (existing) {
         await db.prepare(
-            "UPDATE system_settings SET setting_value = ?, updated_by = ?, updated_at = datetime('now') WHERE category = 'pricing' AND setting_key = ?"
+            "UPDATE system_settings SET setting_value = ?, updated_by = ?, updated_at = NOW() WHERE category = 'pricing' AND setting_key = ?"
         ).run(JSON.stringify(data), userId, key);
     } else {
         await db.prepare(

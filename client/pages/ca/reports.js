@@ -146,7 +146,7 @@ function downloadCSV(filename, content) {
 
 async function loadData() {
   try {
-    _data = await api.get('/tenant/governance/reports-data?range=' + _range);
+    _data = await api.get('/org-admin/governance/reports-data?range=' + _range);
     window.__setRange = (r) => { _range = r; _data = null; const el = document.getElementById('main-content'); if (el) el.innerHTML = renderPage(); };
     window.__exportCSV = (type) => {
       if (!_data) return;

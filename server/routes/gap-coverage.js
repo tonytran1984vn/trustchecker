@@ -10,6 +10,8 @@
  */
 const express = require('express');
 const router = express.Router();
+const { parsePagination } = require('../middleware/pagination');
+
 const { authMiddleware, requireRole, requireTenantAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
 
@@ -18,6 +20,7 @@ router.use(authMiddleware);
 const dataOwn = require('../engines/data-ownership-engine');
 const metrics = require('../engines/infrastructure-metrics-engine');
 const upgrade = require('../engines/upgrade-governance-engine');
+const { withTransaction } = require('../middleware/transaction');
 
 // ═══════════════════════════════════════════════════════════════════
 // DATA OWNERSHIP — /data-ownership [L3+ admin]

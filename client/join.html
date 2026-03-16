@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join TrustChecker Network</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background: #0a0e1a; color: #e2e8f0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+
+    .join-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; overflow: hidden; }
+    .join-bg::before { content: ''; position: absolute; width: 600px; height: 600px; border-radius: 50%; background: radial-gradient(circle, rgba(99,102,241,0.15), transparent 70%); top: -100px; right: -100px; }
+    .join-bg::after { content: ''; position: absolute; width: 400px; height: 400px; border-radius: 50%; background: radial-gradient(circle, rgba(6,182,212,0.1), transparent 70%); bottom: -50px; left: -50px; }
+
+    .join-container { position: relative; z-index: 1; width: 100%; max-width: 480px; padding: 20px; }
+    .join-card { background: rgba(15,20,35,0.9); backdrop-filter: blur(24px); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 40px 32px; box-shadow: 0 20px 60px rgba(0,0,0,0.4); }
+
+    .join-logo { text-align: center; margin-bottom: 24px; }
+    .join-logo-icon { font-size: 2.5rem; margin-bottom: 8px; }
+    .join-logo h1 { font-size: 1.4rem; font-weight: 800; background: linear-gradient(135deg, #6366f1, #06b6d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .join-logo p { font-size: 0.78rem; color: #94a3b8; margin-top: 4px; }
+
+    .join-invite-info { background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); border-radius: 12px; padding: 16px; margin-bottom: 24px; text-align: center; }
+    .join-invite-org { font-size: 0.92rem; font-weight: 700; color: #818cf8; }
+    .join-invite-msg { font-size: 0.78rem; color: #94a3b8; margin-top: 6px; font-style: italic; }
+    .join-invite-company { font-size: 1.1rem; font-weight: 800; margin-top: 8px; }
+
+    .join-form { display: flex; flex-direction: column; gap: 14px; }
+    .join-field { display: flex; flex-direction: column; gap: 4px; }
+    .join-field label { font-size: 0.72rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+    .join-field input { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px 14px; font-size: 0.88rem; color: #e2e8f0; font-family: inherit; outline: none; transition: border-color 0.2s; }
+    .join-field input:focus { border-color: #6366f1; }
+
+    .join-submit { background: linear-gradient(135deg, #6366f1, #818cf8); color: #fff; border: none; border-radius: 10px; padding: 14px; font-size: 0.92rem; font-weight: 700; cursor: pointer; transition: opacity 0.2s, transform 0.1s; margin-top: 6px; }
+    .join-submit:hover { opacity: 0.9; transform: translateY(-1px); }
+    .join-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .join-error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #f87171; border-radius: 8px; padding: 10px 14px; font-size: 0.78rem; display: none; }
+    .join-success { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); color: #4ade80; border-radius: 12px; padding: 24px; text-align: center; display: none; }
+    .join-success h2 { font-size: 1.2rem; margin-bottom: 8px; }
+    .join-success p { font-size: 0.82rem; color: #94a3b8; }
+    .join-success a { display: inline-block; margin-top: 16px; background: linear-gradient(135deg, #6366f1, #818cf8); color: #fff; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+
+    .join-loading { text-align: center; padding: 40px; }
+    .join-spinner { width: 36px; height: 36px; border: 3px solid rgba(99,102,241,0.2); border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .join-expired { text-align: center; padding: 32px; color: #f87171; }
+    .join-expired h2 { font-size: 1.1rem; margin-bottom: 8px; }
+
+    .join-pw-rules { font-size: 0.68rem; color: #64748b; margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <div class="join-bg"></div>
+  <div class="join-container">
+    <div class="join-card" id="join-card">
+      <div class="join-logo">
+        <div class="join-logo-icon">🛡️</div>
+        <h1>TrustChecker Network</h1>
+        <p>Supply Chain Trust Infrastructure</p>
+      </div>
+      <div class="join-loading" id="join-loading">
+        <div class="join-spinner"></div>
+        <div style="font-size:0.82rem;color:#94a3b8">Validating invitation...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var token = window.location.pathname.split('/').pop();
+    var API_BASE = window.location.origin;
+    if (window.location.pathname.indexOf('/trustchecker') === 0) {
+      API_BASE += '/trustchecker';
+    }
+
+    async function init() {
+      try {
+        var res = await fetch(API_BASE + '/api/trust-network/join/' + token);
+        var data = await res.json();
+
+        if (!res.ok) {
+          showExpired(data.error || 'Invalid invitation');
+          return;
+        }
+
+        showForm(data.invitation);
+      } catch (e) {
+        showExpired('Could not validate invitation');
+      }
+    }
+
+    function showExpired(msg) {
+      document.getElementById('join-loading').innerHTML = '<div class="join-expired"><h2>⚠️ ' + msg + '</h2><p>Please contact the person who sent this invitation.</p><a href="/" style="color:#818cf8;font-size:0.82rem">← Back to TrustChecker</a></div>';
+    }
+
+    function showForm(inv) {
+      var card = document.getElementById('join-card');
+      var logo = card.querySelector('.join-logo').outerHTML;
+      card.innerHTML = logo + '<div class="join-invite-info"><div class="join-invite-org">Invited by ' + (inv.inviter || 'TrustChecker') + '</div>' + (inv.message ? '<div class="join-invite-msg">"' + inv.message + '"</div>' : '') + '<div class="join-invite-company">🏭 ' + inv.company + '</div></div><div class="join-error" id="join-error"></div><form class="join-form" onsubmit="handleJoin(event)"><div class="join-field"><label>Full Name</label><input type="text" id="j-name" required placeholder="Your full name" /></div><div class="join-field"><label>Email</label><input type="email" id="j-email" required value="' + (inv.email || '') + '" /></div><div class="join-field"><label>Password</label><input type="password" id="j-password" required minlength="12" placeholder="Min 12 chars, upper+lower+number+symbol" /><div class="join-pw-rules">At least 12 characters, with uppercase, lowercase, number, and symbol</div></div><button type="submit" class="join-submit" id="j-btn">Join the Network →</button></form>';
+    }
+
+    async function handleJoin(e) {
+      e.preventDefault();
+      var name = document.getElementById('j-name').value.trim();
+      var email = document.getElementById('j-email').value.trim();
+      var password = document.getElementById('j-password').value;
+      var btn = document.getElementById('j-btn');
+      var errEl = document.getElementById('join-error');
+
+      if (password.length < 12 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+        errEl.textContent = 'Password must be at least 12 characters with uppercase, lowercase, number, and symbol';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Creating account...';
+        errEl.style.display = 'none';
+
+        var res = await fetch(API_BASE + '/api/trust-network/join/' + token, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name, email: email, password: password })
+        });
+        var data = await res.json();
+
+        if (!res.ok) {
+          errEl.textContent = data.error || 'Failed to create account';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Join the Network →';
+          return;
+        }
+
+        var card = document.getElementById('join-card');
+        var logo = card.querySelector('.join-logo').outerHTML;
+        card.innerHTML = logo + '<div class="join-success" style="display:block"><h2>🎉 Welcome to the Network!</h2><p>Your account has been created. You can now log in to manage your trust profile and connect with your supply chain partners.</p><a href="/">Log In →</a></div>';
+      } catch (err) {
+        errEl.textContent = 'Network error. Please try again.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Join the Network →';
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

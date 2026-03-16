@@ -224,7 +224,7 @@ router.get('/sovereignty/resolve/:country', (req, res) => {
 router.post('/sovereignty/route', (req, res) => {
     const { org_id, country, data_type } = req.body;
     if (!country) return res.status(400).json({ error: 'country required' });
-    res.json(sovereignty.routeData(org_id || req.user?.org_id || 'default', country, data_type));
+    res.json(sovereignty.routeData(org_id || req.user?.org_id || req.user?.orgId, country, data_type));
 });
 
 router.post('/sovereignty/transfer-assessment', (req, res) => {
@@ -234,7 +234,7 @@ router.post('/sovereignty/transfer-assessment', (req, res) => {
 });
 
 router.get('/sovereignty/compliance/:country', (req, res) => {
-    res.json(sovereignty.getTenantCompliance(req.user?.org_id || 'default', req.params.country));
+    res.json(sovereignty.getTenantCompliance(req.user?.org_id || req.user?.orgId, req.params.country));
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -265,6 +265,7 @@ router.get('/regulatory/sanctions/:country', (req, res) => {
 // MUTATION: contracts, credit → Constitutional
 // ═══════════════════════════════════════════════════════════════════
 const sla = require('../engines/enterprise-sla-engine');
+const { withTransaction } = require('../middleware/transaction');
 
 router.get('/sla/tiers', (req, res) => {
     res.json({ tiers: sla.getSLATiers(), metrics: sla.getSLOMetrics() });
@@ -304,8 +305,8 @@ router.post('/sla/credit',
     }
 );
 
-router.get('/sla/compliance/:tenantId', (req, res) => {
-    const result = sla.getComplianceReport(req.params.tenantId);
+router.get('/sla/compliance/:orgId', (req, res) => {
+    const result = sla.getComplianceReport(req.params.orgId);
     if (result.error) return res.status(404).json(result);
     res.json(result);
 });

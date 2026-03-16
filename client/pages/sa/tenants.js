@@ -26,8 +26,8 @@ async function loadTenants() {
   if (loading) return;
   loading = true;
   try {
-    const data = await API.get('/platform/tenants');
-    tenants = Array.isArray(data) ? data : (data.tenants || []);
+    const data = await API.get('/platform/orgs');
+    tenants = Array.isArray(data) ? data : (data.orgs || []);
   } catch (e) {
     console.error('[SA] Failed to load tenants:', e);
     tenants = [];
@@ -39,7 +39,7 @@ async function loadTenants() {
 async function createTenant(form) {
   creating = true; createError = ''; window.render();
   try {
-    await API.post('/platform/tenants', form);
+    await API.post('/platform/orgs', form);
     creating = false;
     createdCredentials = {
       company: form.name,
@@ -61,7 +61,7 @@ async function createTenant(form) {
 async function suspendTenant(id) {
   if (!confirm('Suspend this organization? Their users will lose access.')) return;
   try {
-    await API.post(`/platform/tenants/${id}/suspend`, { reason: 'Suspended by Super Admin' });
+    await API.post(`/platform/orgs/${id}/suspend`, { reason: 'Suspended by Super Admin' });
     window.showToast?.('Organization suspended', 'warning');
     loadStarted = false; await loadTenants();
   } catch (e) { window.showToast?.('Failed to suspend: ' + e.message, 'error'); }
@@ -69,7 +69,7 @@ async function suspendTenant(id) {
 
 async function activateTenant(id) {
   try {
-    await API.post(`/platform/tenants/${id}/activate`, {});
+    await API.post(`/platform/orgs/${id}/activate`, {});
     window.showToast?.('Organization activated', 'success');
     loadStarted = false; await loadTenants();
   } catch (e) { window.showToast?.('Failed: ' + e.message, 'error'); }

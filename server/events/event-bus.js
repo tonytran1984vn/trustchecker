@@ -64,6 +64,7 @@ class RedisEventBus {
         this._pollers = new Map();     // group → interval
         this._running = false;
         this._stats = { published: 0, consumed: 0, failed: 0, dlq: 0 };
+        this._throttleMap = new Map(); // v9.5.0: Event throttle
     }
 
     _getClient() {
@@ -78,6 +79,17 @@ class RedisEventBus {
      * Publish a domain event to Redis Stream.
      */
     async publish(type, data, context = {}) {
+        // v9.5.0: Throttle — max 1 event per type per org per 500ms
+        const tKey = type + ':' + (data?.org_id || data?.orgId || 'g');
+        const now = Date.now();
+        if (this._throttleMap.has(tKey) && (now - this._throttleMap.get(tKey)) < 500) {
+            return null; // Throttled
+        }
+        this._throttleMap.set(tKey, now);
+        if (this._throttleMap.size > 2000) {
+            const cutoff = now - 60000;
+            for (const [k, t] of this._throttleMap) { if (t < cutoff) this._throttleMap.delete(k); }
+        }
         // Validate schema
         if (CONFIG.enableValidation) {
             const { valid, errors } = validateEvent(type, data);
@@ -250,9 +262,21 @@ class InMemoryEventBus {
         this._emitter = new EventEmitter();
         this._emitter.setMaxListeners(100);
         this._stats = { published: 0, consumed: 0, failed: 0, dlq: 0 };
+        this._throttleMap = new Map(); // v9.5.0: Event throttle
     }
 
     async publish(type, data, context = {}) {
+        // v9.5.0: Throttle — max 1 event per type per org per 500ms
+        const tKey = type + ':' + (data?.org_id || data?.orgId || 'g');
+        const now = Date.now();
+        if (this._throttleMap.has(tKey) && (now - this._throttleMap.get(tKey)) < 500) {
+            return null; // Throttled
+        }
+        this._throttleMap.set(tKey, now);
+        if (this._throttleMap.size > 2000) {
+            const cutoff = now - 60000;
+            for (const [k, t] of this._throttleMap) { if (t < cutoff) this._throttleMap.delete(k); }
+        }
         if (CONFIG.enableValidation) {
             const { valid, errors } = validateEvent(type, data);
             if (!valid) {

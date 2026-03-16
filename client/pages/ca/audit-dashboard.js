@@ -151,7 +151,7 @@ function timeAgo(ts) {
 
 async function loadData() {
   try {
-    _data = await api.get('/tenant/governance/audit-summary');
+    _data = await api.get('/org-admin/governance/audit-summary');
     const el = document.getElementById('main-content');
     if (el) el.innerHTML = renderPage();
   } catch (e) {

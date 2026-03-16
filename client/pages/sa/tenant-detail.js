@@ -1,7 +1,7 @@
 /**
  * Super Admin – Tenant Detail (Premium Design + User CRUD)
  * ════════════════════════════════════════
- * Live data from /api/platform/tenants/:id
+ * Live data from /api/platform/orgs/:id
  * Two-tier user model: Platform ≠ Business
  */
 import { API } from '../../core/api.js';
@@ -53,7 +53,7 @@ async function loadTenant(id) {
   if (loading) return;
   loading = true;
   try {
-    const data = await API.get(`/platform/tenants/${id}`);
+    const data = await API.get(`/platform/orgs/${id}`);
     tenant = data.tenant || data;
     tenantUsers = data.users || [];
     tenantRoles = data.roles || [];
@@ -68,7 +68,7 @@ async function loadTenant(id) {
 async function doSuspend() {
   if (!tenant || !confirm(`Suspend ${tenant.name}? All users will lose access.`)) return;
   try {
-    await API.post(`/platform/tenants/${tenant.id}/suspend`, { reason: 'Suspended by Platform Admin' });
+    await API.post(`/platform/orgs/${tenant.id}/suspend`, { reason: 'Suspended by Platform Admin' });
     window.showToast?.('Organization suspended', 'warning');
     currentTenantId = null; loadTenant(tenant.id);
   } catch (e) { window.showToast?.('Failed: ' + e.message, 'error'); }
@@ -77,7 +77,7 @@ async function doSuspend() {
 async function doActivate() {
   if (!tenant) return;
   try {
-    await API.post(`/platform/tenants/${tenant.id}/activate`, {});
+    await API.post(`/platform/orgs/${tenant.id}/activate`, {});
     window.showToast?.('Organization re-activated', 'success');
     currentTenantId = null; loadTenant(tenant.id);
   } catch (e) { window.showToast?.('Failed: ' + e.message, 'error'); }
@@ -95,7 +95,7 @@ async function addCompanyUser() {
   }
   try {
     // Call platform endpoint to add user to this specific tenant
-    await API.post(`/platform/tenants/${tenant.id}/users`, { username, email, password, role, company: tenant.name });
+    await API.post(`/platform/orgs/${tenant.id}/users`, { username, email, password, role, company: tenant.name });
     window.showToast?.(`User "${username}" added to ${tenant.name}`, 'success');
     showAddUser = false;
     currentTenantId = null;

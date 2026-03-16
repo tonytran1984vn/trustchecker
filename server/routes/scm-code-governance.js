@@ -7,8 +7,12 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();
+
+// All routes require authentication
+router.use(authMiddleware);
 
 // ═══════════════════════════════════════════════════════════
 // AUTO-CREATE FORMAT_RULES TABLES
@@ -68,7 +72,7 @@ router.get('/format-rules', async (req, res) => {
             FROM format_rules fr
             WHERE ${whereClause}
             ORDER BY fr.created_at DESC
-        `, params);
+         LIMIT 1000`, params);
         res.json({ rules, total: rules.length });
     } catch (err) {
         console.error('List format rules error:', err);
@@ -329,9 +333,9 @@ function shannonEntropy(str) {
 // ─── GET /api/scm/code-gov/entropy-config – Get entropy requirements ────────
 router.get('/entropy-config', authMiddleware, async (req, res) => {
     try {
-        const config = await db.prepare(`
+        const config = await db.all(`
             SELECT * FROM system_settings WHERE category = 'code_governance'
-        `).all();
+        `);
 
         const defaults = {
             min_entropy_bits: 4.0,
@@ -381,6 +385,7 @@ router.post('/bulk-entropy-check', authMiddleware, async (req, res) => {
     try {
         const { codes, min_entropy } = req.body;
         if (!codes || !Array.isArray(codes)) return res.status(400).json({ error: 'codes array required' });
+        if (codes.length > 500) return res.status(400).json({ error: 'Maximum 500 codes per batch', max: 500 });
 
         const minRequired = parseFloat(min_entropy) || 4.0;
         const results = codes.map(code => {
@@ -409,7 +414,7 @@ router.post('/bulk-entropy-check', authMiddleware, async (req, res) => {
 // ─── GET /api/scm/code-gov/generation-limits – Per-tenant generation limits ─
 router.get('/generation-limits', authMiddleware, async (req, res) => {
     try {
-        const limits = await db.prepare('SELECT * FROM generation_limits ORDER BY created_at DESC').all();
+        const limits = await db.all('SELECT * FROM generation_limits ORDER BY created_at DESC LIMIT 1000');
         res.json(limits);
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch limits' });
@@ -422,20 +427,20 @@ router.post('/generation-limits', authMiddleware, requirePermission('settings:up
         const { org_id, max_per_hour, max_per_day, max_per_month, max_batch_size } = req.body;
         const id = uuidv4();
 
-        // Check if limit already exists for tenant
-        const existing = await db.prepare('SELECT id FROM generation_limits WHERE org_id = ?').get(org_id);
+        // Check if limit already exists for org
+        const existing = await db.get('SELECT id FROM generation_limits WHERE org_id = ?', [org_id]);
         if (existing) {
-            await db.prepare(`
+            await db.run(`
                 UPDATE generation_limits SET max_per_hour = ?, max_per_day = ?, max_per_month = ?, max_batch_size = ?, updated_at = NOW()
                 WHERE org_id = ?
-            `).run(max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000, org_id);
+            `, [max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000, org_id]);
             return res.json({ id: existing.id, org_id, status: 'updated' });
         }
 
-        await db.prepare(`
+        await db.run(`
             INSERT INTO generation_limits (id, org_id, max_per_hour, max_per_day, max_per_month, max_batch_size, current_hour, current_day, current_month, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, NOW(), NOW())
-        `).run(id, org_id, max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000);
+        `, [id, org_id, max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000]);
 
         res.status(201).json({ id, org_id, status: 'created' });
     } catch (err) {
@@ -447,7 +452,7 @@ router.post('/generation-limits', authMiddleware, requirePermission('settings:up
 router.post('/generation-check', authMiddleware, async (req, res) => {
     try {
         const { org_id, requested_count } = req.body;
-        const limit = await db.prepare('SELECT * FROM generation_limits WHERE org_id = ?').get(org_id);
+        const limit = await db.get('SELECT * FROM generation_limits WHERE org_id = ?', [org_id]);
         if (!limit) return res.json({ allowed: true, message: 'No limit configured for this tenant' });
 
         const count = parseInt(requested_count) || 1;
@@ -480,15 +485,15 @@ router.post('/generation-check', authMiddleware, async (req, res) => {
 // ─── GET /api/scm/code-gov/registry/stats – Registry statistics ─────────────
 router.get('/registry/stats', authMiddleware, async (req, res) => {
     try {
-        const total = (await db.prepare('SELECT COUNT(*) as c FROM code_registry').get())?.c || 0;
-        const byTenant = await db.prepare('SELECT org_id, COUNT(*) as count FROM code_registry GROUP BY org_id').all();
-        const collisions = (await db.prepare('SELECT COUNT(*) as c FROM code_registry WHERE collision_detected = 1').get())?.c || 0;
+        const total = (await db.get('SELECT COUNT(*) as c FROM code_registry'))?.c || 0;
+        const byTenant = await db.all('SELECT org_id, COUNT(*) as count FROM code_registry GROUP BY org_id');
+        const collisions = (await db.get('SELECT COUNT(*) as c FROM code_registry WHERE collision_detected = 1'))?.c || 0;
 
         res.json({
             total_codes_registered: total,
             collisions_detected: collisions,
             collision_rate: total > 0 ? ((collisions / total) * 100).toFixed(4) + '%' : '0%',
-            by_tenant: byTenant
+            by_org: byTenant
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch registry stats' });
@@ -501,20 +506,20 @@ router.post('/registry/check', authMiddleware, async (req, res) => {
         const { code, org_id } = req.body;
         if (!code) return res.status(400).json({ error: 'code required' });
 
-        // Generate HMAC hash for cross-tenant comparison
+        // Generate HMAC hash for cross-org comparison
         const hmacHash = crypto.createHmac('sha256', 'trustchecker-registry-salt').update(code).digest('hex');
 
-        // Check cross-tenant collision
-        const existing = await db.prepare('SELECT org_id, created_at FROM code_registry WHERE hmac_hash = ?').get(hmacHash);
+        // Check cross-org collision
+        const existing = await db.get('SELECT org_id, created_at FROM code_registry WHERE hmac_hash = ?', [hmacHash]);
 
         if (existing) {
             const sameTenant = existing.org_id === org_id;
             return res.json({
                 collision: true,
-                same_tenant: sameTenant,
-                existing_tenant: sameTenant ? org_id : '[REDACTED]',
+                same_org: sameTenant,
+                existing_org: sameTenant ? org_id : '[REDACTED]',
                 registered_at: existing.created_at,
-                action: sameTenant ? 'Duplicate within tenant — reject' : 'Cross-tenant collision — reject and alert Super Admin'
+                action: sameTenant ? 'Duplicate within tenant — reject' : 'Cross-org collision — reject and alert Super Admin'
             });
         }
 
@@ -529,6 +534,7 @@ router.post('/registry/register', authMiddleware, async (req, res) => {
     try {
         const { codes, org_id } = req.body;
         if (!codes || !Array.isArray(codes)) return res.status(400).json({ error: 'codes array required' });
+        if (codes.length > 500) return res.status(400).json({ error: 'Maximum 500 codes per batch', max: 500 });
         if (!org_id) return res.status(400).json({ error: 'org_id required' });
 
         let registered = 0;
@@ -536,26 +542,26 @@ router.post('/registry/register', authMiddleware, async (req, res) => {
 
         for (const code of codes) {
             const hmacHash = crypto.createHmac('sha256', 'trustchecker-registry-salt').update(code).digest('hex');
-            const existing = await db.prepare('SELECT id FROM code_registry WHERE hmac_hash = ?').get(hmacHash);
+            const existing = await db.get('SELECT id FROM code_registry WHERE hmac_hash = ?', [hmacHash]);
 
             if (existing) {
                 collisions++;
-                await db.prepare('UPDATE code_registry SET collision_detected = 1 WHERE id = ?').run(existing.id);
+                await db.run('UPDATE code_registry SET collision_detected = 1 WHERE id = ?', [existing.id]);
             } else {
                 const id = uuidv4();
-                await db.prepare(`
+                await db.run(`
                     INSERT INTO code_registry (id, org_id, hmac_hash, code_prefix, collision_detected, created_at)
                     VALUES (?, ?, ?, ?, 0, NOW())
-                `).run(id, org_id, hmacHash, code.substring(0, 6));
+                `, [id, org_id, hmacHash, code.substring(0, 6)]);
                 registered++;
             }
         }
 
         // Update generation counters
-        await db.prepare(`
+        await db.run(`
             UPDATE generation_limits SET current_hour = current_hour + ?, current_day = current_day + ?, current_month = current_month + ?, updated_at = NOW()
             WHERE org_id = ?
-        `).run(registered, registered, registered, org_id);
+        `, [registered, registered, registered, org_id]);
 
         res.status(201).json({
             submitted: codes.length,

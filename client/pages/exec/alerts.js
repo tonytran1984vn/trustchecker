@@ -166,7 +166,7 @@ function timeAgo(ts) {
 
 async function loadData() {
     try {
-        const r = await api.get('/tenant/owner/ccs/alerts');
+        const r = await api.get('/org-admin/owner/ccs/alerts');
         _data = r;
         window.__alertFilter = (key, val) => { _filter[key] = val; _page = 0; rerender(); };
         window.__alertPage = (dir) => { _page = Math.max(0, _page + dir); rerender(); };

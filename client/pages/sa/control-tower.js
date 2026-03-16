@@ -13,11 +13,11 @@ async function loadMetrics() {
     if (loading) return;
     loading = true;
     try {
-        const data = await API.get('/platform/tenants');
-        const tenants = Array.isArray(data) ? data : (data.tenants || []);
+        const data = await API.get('/platform/orgs');
+        const tenants = Array.isArray(data) ? data : (data.orgs || []);
         const active = tenants.filter(t => (t.status || 'active') === 'active').length;
         const suspended = tenants.filter(t => t.status === 'suspended').length;
-        const totalUsers = tenants.reduce((sum, t) => sum + (t.user_count || 0), 0);
+        const totalUsers = tenants.reduce((sum, t) => sum + (parseInt(t.user_count) || 0), 0);
         const planCounts = {};
         tenants.forEach(t => { const p = (t.plan || 'free').toLowerCase(); planCounts[p] = (planCounts[p] || 0) + 1; });
         metrics = { totalTenants: tenants.length, activeTenants: active, suspended, totalUsers, tenants, planCounts };
@@ -260,7 +260,7 @@ export function renderPage() {
                                 <div class="ct2-tenant-meta">${s}</div>
                             </div>
                             <span class="ct2-plan-badge" style="background:${(planColors[plan] || '#94a3b8')}18;color:${planColors[plan] || '#94a3b8'}">${planLabels[plan] || plan}</span>
-                            <div class="ct2-user-count">${t.user_count || 0}</div>
+                            <div class="ct2-user-count">${parseInt(t.user_count) || 0}</div>
                             <div class="ct2-status-dot" style="background:${s === 'active' ? '#10b981' : '#f59e0b'}"></div>
                         </div>`;
     }).join('')}

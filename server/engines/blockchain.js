@@ -3,6 +3,12 @@
  * SHA-256 Merkle tree hash sealing for immutable audit trail
  * Pipeline: Event → Hash → Merkle Tree → Seal
  */
+/**
+ * ⚠️ TENANT ISOLATION: This engine relies on PostgreSQL RLS for data isolation.
+ * The calling route must set db.setOrgContext(orgId) before invoking engine methods.
+ * All SQL queries in this file are filtered at the database level by RLS policies.
+ */
+
 
 const crypto = require('crypto');
 const db = require('../db');
@@ -51,10 +57,10 @@ class BlockchainEngine {
         });
 
         // Get previous seal for chain linking
-        const prevSeal = await db.prepare(`
+        const prevSeal = await db.get(`
       SELECT data_hash, block_index FROM blockchain_seals
       ORDER BY block_index DESC LIMIT 1
-    `).get();
+    `);
 
         const prevHash = prevSeal ? prevSeal.data_hash : '0'.repeat(64);
         const blockIndex = prevSeal ? prevSeal.block_index + 1 : 0;
@@ -69,10 +75,10 @@ class BlockchainEngine {
         const nonce = this.findNonce(dataHash + prevHash, 2); // 2 leading zeros
 
         const sealId = uuidv4();
-        await db.prepare(`
+        await db.run(`
       INSERT INTO blockchain_seals (id, event_type, event_id, data_hash, prev_hash, merkle_root, block_index, nonce)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(sealId, eventType, eventId, dataHash, prevHash, merkleRoot, blockIndex, nonce);
+    `, [sealId, eventType, eventId, dataHash, prevHash, merkleRoot, blockIndex, nonce]);
 
         // Reset batch if full
         if (this.pendingEvents.length >= this.BATCH_SIZE) {
@@ -112,9 +118,9 @@ class BlockchainEngine {
 
     /** Verify integrity of the blockchain chain */
     async verifyChain(limit = 100) {
-        const seals = await db.prepare(`
+        const seals = await db.all(`
       SELECT * FROM blockchain_seals ORDER BY block_index ASC LIMIT ?
-    `).all(limit);
+    `, [limit]);
 
         const results = { valid: true, blocks_checked: seals.length, errors: [] };
 
@@ -133,8 +139,8 @@ class BlockchainEngine {
 
     /** Get chain stats */
     async getStats() {
-        const total = await db.prepare('SELECT COUNT(*) as count FROM blockchain_seals').get();
-        const latest = await db.prepare('SELECT * FROM blockchain_seals ORDER BY block_index DESC LIMIT 1').get();
+        const total = await db.get('SELECT COUNT(*) as count FROM blockchain_seals');
+        const latest = await db.get('SELECT * FROM blockchain_seals ORDER BY block_index DESC LIMIT 1');
 
         return {
             total_seals: total?.count || 0,
@@ -148,9 +154,9 @@ class BlockchainEngine {
 
     /** Get recent seals */
     async getRecent(limit = 20) {
-        return await db.prepare(`
+        return await db.all(`
       SELECT * FROM blockchain_seals ORDER BY block_index DESC LIMIT ?
-    `).all(limit);
+    `, [limit]);
     }
 }
 

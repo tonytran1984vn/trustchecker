@@ -285,9 +285,9 @@ class CarbonEngine {
 
             const fp = this.calculateFootprint(product, productShipments, productEvents);
             const cat = product.category || 'General';
-            const s1v = fp.scopes[0].value;
-            const s2v = fp.scopes[1].value;
-            const s3v = fp.scopes[2].value;
+            const s1v = parseFloat(fp.scopes[0].value) || 0;
+            const s2v = parseFloat(fp.scopes[1].value) || 0;
+            const s3v = parseFloat(fp.scopes[2].value) || 0;
 
             scope1Total += s1v;
             scope2Total += s2v;

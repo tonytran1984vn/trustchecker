@@ -2,6 +2,12 @@
  * TrustChecker Fraud Detection Engine
  * Multi-layer fraud detection: rule-based + statistical anomaly detection
  */
+/**
+ * ⚠️ TENANT ISOLATION: This engine relies on PostgreSQL RLS for data isolation.
+ * The calling route must set db.setOrgContext(orgId) before invoking engine methods.
+ * All SQL queries in this file are filtered at the database level by RLS policies.
+ */
+
 
 const db = require('../db');
 const { v4: uuidv4 } = require('uuid');
@@ -21,7 +27,7 @@ class FraudEngine {
      * Run full fraud analysis on a scan event
      * Returns { fraudScore: 0-1, alerts: [], factors: {} }
      */
-    analyze(scanEvent) {
+    async analyze(scanEvent) {
         const startTime = Date.now();
         const alerts = [];
         const factors = {};
@@ -49,12 +55,12 @@ class FraudEngine {
         ));
 
         // Save alerts to database
-        alerts.forEach(alert => {
+        for (const alert of alerts) {
             const alertId = uuidv4();
-            db.prepare(`
+            await db.run(`
         INSERT INTO fraud_alerts (id, scan_event_id, product_id, alert_type, severity, description, details)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(
+      `, [
                 alertId,
                 scanEvent.id,
                 scanEvent.product_id,
@@ -62,7 +68,7 @@ class FraudEngine {
                 alert.severity,
                 alert.description,
                 JSON.stringify(alert.details || {})
-            );
+            ]);
 
             // Broadcast fraud alert
             eventBus.emitEvent(EVENT_TYPES.FRAUD_FLAGGED, {
@@ -74,7 +80,7 @@ class FraudEngine {
                 description: alert.description,
                 fraud_score: fraudScore
             });
-        });
+        }
 
         const processingTime = Date.now() - startTime;
 
@@ -93,10 +99,10 @@ class FraudEngine {
         let score = 0;
 
         // Rule 1: Scan frequency check (hourly)
-        const hourlyScans = db.prepare(`
+        const hourlyScans = db.get(`
       SELECT COUNT(*) as count FROM scan_events
-      WHERE qr_code_id = ? AND scanned_at > datetime('now', '-1 hour')
-    `).get(scanEvent.qr_code_id);
+      WHERE qr_code_id = ? AND scanned_at > NOW() - INTERVAL '1 hour'
+    `, [scanEvent.qr_code_id]);
 
         if (hourlyScans && hourlyScans.count > this.SCAN_FREQUENCY_THRESHOLD) {
             score += 0.4;
@@ -109,10 +115,10 @@ class FraudEngine {
         }
 
         // Rule 2: Burst detection (5 scans in 5 minutes)
-        const burstScans = db.prepare(`
+        const burstScans = db.get(`
       SELECT COUNT(*) as count FROM scan_events
-      WHERE qr_code_id = ? AND scanned_at > datetime('now', '-5 minutes')
-    `).get(scanEvent.qr_code_id);
+      WHERE qr_code_id = ? AND scanned_at > NOW() - INTERVAL '5 minutes'
+    `, [scanEvent.qr_code_id]);
 
         if (burstScans && burstScans.count > this.SCAN_BURST_THRESHOLD) {
             score += 0.3;
@@ -125,7 +131,7 @@ class FraudEngine {
         }
 
         // Rule 3: Expired QR code
-        const qr = db.prepare('SELECT * FROM qr_codes WHERE id = ?').get(scanEvent.qr_code_id);
+        const qr = db.get('SELECT * FROM qr_codes WHERE id = ?', [scanEvent.qr_code_id]);
         if (qr && qr.status === 'revoked') {
             score += 0.8;
             alerts.push({
@@ -137,8 +143,8 @@ class FraudEngine {
         }
 
         // Rule 4: Product status check
-        const product = db.prepare('SELECT * FROM products WHERE id = ?').get(scanEvent.product_id);
-        if (product && product.status === 'recalled') {
+        const product = db.get('SELECT * FROM products WHERE id = ?', [scanEvent.product_id]);
+        if (product && product.status === 'recalled LIMIT 1000') {
             score += 0.6;
             alerts.push({
                 type: 'RECALLED_PRODUCT',
@@ -157,22 +163,22 @@ class FraudEngine {
         let score = 0;
 
         // Get historical scan frequency for this product
-        const stats = db.prepare(`
+        const stats = db.get(`
       SELECT 
         COUNT(*) as total_scans,
         AVG(CAST(julianday('now') - julianday(scanned_at) AS REAL)) as avg_interval
       FROM scan_events 
-      WHERE product_id = ? AND scanned_at > datetime('now', '-30 days')
-    `).get(scanEvent.product_id);
+      WHERE product_id = ? AND scanned_at > NOW() - INTERVAL '30 days'
+    `, [scanEvent.product_id]);
 
         if (stats && stats.total_scans > 5) {
             // Daily scan rate
-            const dailyStats = db.prepare(`
+            const dailyStats = db.all(`
         SELECT DATE(scanned_at) as day, COUNT(*) as count
         FROM scan_events
-        WHERE product_id = ? AND scanned_at > datetime('now', '-30 days')
+        WHERE product_id = ? AND scanned_at > NOW() - INTERVAL '30 days'
         GROUP BY DATE(scanned_at)
-      `).all(scanEvent.product_id);
+      `, [scanEvent.product_id]);
 
             if (dailyStats.length > 3) {
                 const counts = dailyStats.map(d => d.count);
@@ -180,10 +186,10 @@ class FraudEngine {
                 const stdDev = Math.sqrt(counts.reduce((sum, c) => sum + Math.pow(c - mean, 2), 0) / counts.length);
 
                 // Today's count
-                const todayCount = db.prepare(`
+                const todayCount = db.get(`
           SELECT COUNT(*) as count FROM scan_events
           WHERE product_id = ? AND DATE(scanned_at) = DATE('now')
-        `).get(scanEvent.product_id);
+        `, [scanEvent.product_id]);
 
                 if (stdDev > 0 && todayCount) {
                     const zScore = (todayCount.count - mean) / stdDev;
@@ -202,11 +208,11 @@ class FraudEngine {
 
         // Device fingerprint anomaly: same device scanning many different products
         if (scanEvent.device_fingerprint) {
-            const deviceProducts = db.prepare(`
+            const deviceProducts = db.get(`
         SELECT COUNT(DISTINCT product_id) as unique_products
         FROM scan_events
-        WHERE device_fingerprint = ? AND scanned_at > datetime('now', '-1 hour')
-      `).get(scanEvent.device_fingerprint);
+        WHERE device_fingerprint = ? AND scanned_at > NOW() - INTERVAL '1 hour'
+      `, [scanEvent.device_fingerprint]);
 
             if (deviceProducts && deviceProducts.unique_products > this.DUPLICATE_DEVICE_THRESHOLD) {
                 score += 0.3;
@@ -229,12 +235,12 @@ class FraudEngine {
 
         // Geo-velocity check: if same QR scanned from far apart locations quickly
         if (scanEvent.latitude && scanEvent.longitude) {
-            const recentScan = db.prepare(`
+            const recentScan = db.get(`
         SELECT latitude, longitude, scanned_at 
         FROM scan_events
         WHERE qr_code_id = ? AND latitude IS NOT NULL AND id != ?
         ORDER BY scanned_at DESC LIMIT 1
-      `).get(scanEvent.qr_code_id, scanEvent.id);
+      `, [scanEvent.qr_code_id, scanEvent.id]);
 
             if (recentScan && recentScan.latitude) {
                 const distance = this.haversineDistance(

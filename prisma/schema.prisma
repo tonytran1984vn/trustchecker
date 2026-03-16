@@ -29,7 +29,8 @@ model Organization {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @map("updated_at")
 
-  users      User[]
+  users        User[]
+  memberships  Membership[]
 
   @@map("organizations")
 }
@@ -60,6 +61,7 @@ model User {
 
   // Relations
   org              Organization? @relation(fields: [orgId], references: [id])
+  memberships      Membership[]
   sessions         Session[]
   refreshTokens    RefreshToken[]
   passkeyCredentials PasskeyCredential[]
@@ -74,6 +76,28 @@ model User {
 
   @@index([orgId])
   @@map("users")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MEMBERSHIP (Enterprise IAM: user → membership → role)
+// ═══════════════════════════════════════════════════════════════════
+
+model Membership {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  orgId        String   @map("org_id")
+  status       String   @default("active")   // active, suspended, invited, removed
+  roleContext  String   @default("member") @map("role_context")  // owner, admin, member, guest
+  joinedAt     DateTime @default(now()) @map("joined_at")
+  invitedBy    String?  @map("invited_by")
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userRoles  RbacUserRole[]
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+  @@map("memberships")
 }
 
 model Session {
@@ -121,12 +145,12 @@ model PasskeyCredential {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// RBAC (Hierarchical Multi-Tenant Permission Model)
+// RBAC (Hierarchical Multi-Org Permission Model)
 // ═══════════════════════════════════════════════════════════════════
 
 model RbacRole {
   id           String   @id @default(uuid())
-  tenantId     String?  @map("tenant_id")
+  orgId        String?  @map("org_id")
   name         String
   displayName  String   @default("") @map("display_name")
   type         String   @default("tenant")
@@ -169,15 +193,18 @@ model RbacRolePermission {
 }
 
 model RbacUserRole {
-  userId     String   @map("user_id")
-  roleId     String   @map("role_id")
-  assignedBy String?  @map("assigned_by")
-  assignedAt DateTime @default(now()) @map("assigned_at")
-  expiresAt  DateTime? @map("expires_at")
+  userId       String    @map("user_id")
+  roleId       String    @map("role_id")
+  membershipId String?   @map("membership_id")
+  assignedBy   String?   @map("assigned_by")
+  assignedAt   DateTime  @default(now()) @map("assigned_at")
+  expiresAt    DateTime? @map("expires_at")
 
-  role RbacRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  role       RbacRole    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  membership Membership? @relation(fields: [membershipId], references: [id], onDelete: Cascade)
 
   @@id([userId, roleId])
+  @@index([membershipId])
   @@map("rbac_user_roles")
 }
 

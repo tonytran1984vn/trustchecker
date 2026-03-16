@@ -1,8 +1,15 @@
+const { withTransaction } = require('../middleware/transaction');
 const { safeError } = require('../utils/safe-error');
 /**
  * Admin Dashboard & User Management Routes
  * Admin-only. System overview, user management, audit, system settings
  */
+
+function _safeId(name) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error("Invalid identifier: " + name);
+  return name;
+}
+
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
@@ -11,30 +18,34 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 
 router.use(authMiddleware);
-router.use(requirePermission('tenant:user_create'));
+router.use(requirePermission('org:user_create'));
 
 // ─── GET /overview — System-wide admin overview ─────────────
 router.get('/overview', async (req, res) => {
     try {
         // NODE-BP-1: Parallelize independent DB queries with Promise.all
+        const isSuper = req.user?.role === 'super_admin' || req.user?.user_type === 'platform';
+        const orgId = req.user?.org_id || req.user?.orgId;
+        const orgFilter = (!isSuper && orgId) ? ' WHERE org_id = ?' : '';
+        const orgP = (!isSuper && orgId) ? [orgId] : [];
         const [users, products, scans, todayScans, openAlerts, seals, evidence, tickets, anomalies, nfts] = await Promise.all([
-            db.get('SELECT COUNT(*) as c FROM users'),
-            db.get('SELECT COUNT(*) as c FROM products'),
-            db.get('SELECT COUNT(*) as c FROM scan_events'),
-            db.get("SELECT COUNT(*) as c FROM scan_events WHERE DATE(scanned_at) = DATE('now')"),
-            db.get("SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'open'"),
-            db.get('SELECT COUNT(*) as c FROM blockchain_seals'),
-            db.get('SELECT COUNT(*) as c FROM evidence_items'),
-            db.get("SELECT COUNT(*) as c FROM support_tickets WHERE status = 'open'"),
-            db.get("SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'open'"),
-            db.get('SELECT COUNT(*) as c FROM nft_certificates'),
+            db.get("SELECT COUNT(*) as c FROM users WHERE status != 'deactivated'" + (orgFilter ? ' AND org_id = ?' : ''), orgP),
+            db.get('SELECT COUNT(*) as c FROM products' + orgFilter, orgP),
+            db.get('SELECT COUNT(*) as c FROM scan_events' + orgFilter, orgP),
+            db.get("SELECT COUNT(*) as c FROM scan_events WHERE DATE(scanned_at) = CURRENT_DATE" + (orgFilter ? ' AND org_id = ?' : ''), orgP),
+            db.get("SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'open'" + (orgFilter ? ' AND org_id = ?' : ''), orgP),
+            db.get('SELECT COUNT(*) as c FROM blockchain_seals' + orgFilter, orgP),
+            db.get('SELECT COUNT(*) as c FROM evidence_items' + orgFilter, orgP),
+            db.get("SELECT COUNT(*) as c FROM support_tickets WHERE status = 'open'" + (orgFilter ? ' AND org_id = ?' : ''), orgP),
+            db.get("SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'open'" + (orgFilter ? ' AND org_id = ?' : ''), orgP),
+            db.get('SELECT COUNT(*) as c FROM nft_certificates' + (orgFilter ? ' WHERE org_id = ?' : ''), orgP),
         ]);
 
         const [userGrowth, scanTrend, activeUsersRow, paidPlans] = await Promise.all([
-            db.all("SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE created_at > datetime('now', '-30 days') GROUP BY date ORDER BY date"),
-            db.all("SELECT DATE(scanned_at) as date, COUNT(*) as count FROM scan_events WHERE scanned_at > datetime('now', '-14 days') GROUP BY date ORDER BY date"),
-            db.get("SELECT COUNT(DISTINCT actor_id) as c FROM audit_log WHERE timestamp > datetime('now', '-7 days')"),
-            db.all("SELECT plan_name, COUNT(*) as count FROM billing_plans WHERE status = 'active' AND plan_name != 'Free' GROUP BY plan_name"),
+            db.all("SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE created_at > NOW() - INTERVAL '30 days'" + (orgFilter ? " AND org_id = ?" : "") + " GROUP BY date ORDER BY date LIMIT 1000"),
+            db.all("SELECT DATE(scanned_at) as date, COUNT(*) as count FROM scan_events WHERE scanned_at > NOW() - INTERVAL '14 days'" + (orgFilter ? " AND org_id = ?" : "") + " GROUP BY date ORDER BY date LIMIT 1000"),
+            db.get("SELECT COUNT(DISTINCT actor_id) as c FROM audit_log WHERE timestamp > NOW() - INTERVAL '7 days'" + (orgFilter ? " AND org_id = ?" : ""), orgP),
+            db.all("SELECT plan_name, COUNT(*) as count FROM billing_plans WHERE status = 'active' AND plan_name != 'Free'" + (orgFilter ? " AND user_id IN (SELECT id FROM users WHERE org_id = ?)" : "") + " GROUP BY plan_name", orgP),
         ]);
 
         const activeUsers = activeUsersRow?.c || 0;
@@ -159,7 +170,7 @@ router.put('/users/:id/role', async (req, res) => {
         const user = await db.get('SELECT id, username FROM users WHERE id = ?', [req.params.id]);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        await db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, req.params.id);
+        await db.run('UPDATE users SET role = ? WHERE id = ?', [role, req.params.id]);
 
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
             .run(uuidv4(), req.user.id, 'USER_ROLE_CHANGED', 'user', req.params.id, JSON.stringify({ username: user.username, new_role: role }));
@@ -180,7 +191,7 @@ router.put('/users/:id/status', async (req, res) => {
         const user = await db.get('SELECT id, username FROM users WHERE id = ?', [req.params.id]);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        await db.prepare('UPDATE users SET status = ? WHERE id = ?').run(status, req.params.id);
+        await db.run('UPDATE users SET status = ? WHERE id = ?', [status, req.params.id]);
 
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
             .run(uuidv4(), req.user.id, 'USER_STATUS_CHANGED', 'user', req.params.id, JSON.stringify({ username: user.username, new_status: status }));
@@ -216,24 +227,27 @@ router.delete('/users/:id', async (req, res) => {
             return res.status(403).json({ error: 'Cannot delete super_admin' });
         }
 
-        // Remove RBAC assignments
-        await db.run('DELETE FROM rbac_user_roles WHERE user_id = ?', [req.params.id]);
-        // Delete user
-        await db.run('DELETE FROM users WHERE id = ?', [req.params.id]);
+        // v9.4.4: Soft-delete instead of hard delete (prevents orphan data + preserves audit trail)
+        await db.run(
+            "UPDATE users SET status = 'deactivated', deactivated_at = NOW(), deactivated_by = $1 WHERE id = $2",
+            [req.user.id, req.params.id]
+        );
+        // Revoke active sessions but keep RBAC history for audit
+        await db.run("UPDATE sessions SET revoked = true WHERE user_id = $1", [req.params.id]);
 
         await db.run(
             'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
             [uuidv4(), req.user.id, 'USER_DELETED', 'user', req.params.id, JSON.stringify({ username: user.username })]
         );
 
-        res.json({ message: `User ${user.username} deleted`, user_id: req.params.id });
+        res.json({ message: `User ${user.username} deactivated`, user_id: req.params.id, soft_deleted: true });
     } catch (e) {
         safeError(res, 'Failed to delete user', e);
     }
 });
 
 // SEC-3: Admin-only endpoint must require authentication
-router.post('/users/:id/reset-password', authMiddleware, requirePermission('tenant:user_create'), async (req, res) => {
+router.post('/users/:id/reset-password', authMiddleware, requirePermission('org:user_create'), async (req, res) => {
     try {
         const { new_password } = req.body;
         if (!new_password || new_password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
@@ -242,7 +256,7 @@ router.post('/users/:id/reset-password', authMiddleware, requirePermission('tena
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const hash = await bcrypt.hash(new_password, 12);
-        await db.prepare('UPDATE users SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?').run(hash, req.params.id);
+        await db.run('UPDATE users SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?', [hash, req.params.id]);
 
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
             .run(uuidv4(), req.user.id, 'ADMIN_PASSWORD_RESET', 'user', req.params.id, JSON.stringify({ username: user.username }));
@@ -361,12 +375,12 @@ router.get('/metrics', async (req, res) => {
         const tableSizes = {};
         for (const t of dbTables) {
             try {
-                tableSizes[t] = (await db.get(`SELECT COUNT(*) as c FROM ${t}`))?.c || 0;
+                tableSizes[t] = (await db.get(`SELECT COUNT(*) as c FROM " + _safeId(t) + "`))?.c || 0;
             } catch { tableSizes[t] = 'N/A'; }
         }
 
         // Avg response times (from recent scans)
-        const avgResponseTime = (await db.get('SELECT AVG(response_time_ms) as avg FROM scan_events WHERE response_time_ms > 0'))?.avg || 0;
+        const avgResponseTime = (await db.get('SELECT AVG(response_time_ms) as avg FROM scan_events WHERE response_time_ms > 0' + (orgFilter ? ' AND org_id = ?' : ''), orgP))?.avg || 0;
 
         res.json({
             uptime_seconds: Math.round(uptime),

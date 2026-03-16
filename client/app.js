@@ -147,6 +147,8 @@ const PAGE_FEATURE_MAP = {
   'scm-risk-radar': 'risk_radar',
   'scm-carbon': 'carbon',
   'scm-twin': 'digital_twin',
+  // 'scm-network': 'trust_network',  // always available
+  // 'supplier-dashboard': 'supplier_portal',  // always available
   'kyc': 'kyc',
   'evidence': 'evidence',
   'sustainability': 'sustainability',
@@ -167,7 +169,7 @@ const PLAN_NAMES = {
 };
 
 const FEATURE_REQUIRED_PLAN = {
-  products: 'free', qr: 'free', dashboard: 'free',
+  products: 'free', qr: 'free', dashboard: 'free', trust_network: 'free', supplier_portal: 'free',
   fraud: 'core', reports: 'core', scm_tracking: 'core', support: 'core',
   inventory: 'pro', logistics: 'pro', partners: 'pro', ai_forecast: 'pro',
   demand_sensing: 'pro', risk_radar: 'pro', anomaly: 'pro', kyc: 'pro',
@@ -668,7 +670,27 @@ async function loadPageData(page) {
       render();
     } else if (page === 'scm-twin') {
       const [model, kpis, anomalies] = await Promise.all([API.get('/scm/twin/model'), API.get('/scm/twin/kpis'), API.get('/scm/twin/anomalies')]);
-      State.twinData = { model, kpis, anomalies };
+      State.twinData = { model, kpis, anomalies }
+    } else if (page === 'scm-network') {
+      const [graph, stats, scores, invitations] = await Promise.all([
+        API.get('/trust-network/graph'),
+        API.get('/trust-network/stats'),
+        API.get('/trust-network/shared-scores'),
+        API.get('/trust-network/invitations')
+      ]);
+      State.networkGraph = graph;
+      State.networkStats = stats;
+      State.networkScores = scores;
+      State.networkInvitations = invitations;
+    } else if (page === 'supplier-dashboard') {
+      const [profile, scoreData, improvements] = await Promise.all([
+        API.get('/supplier-portal/my/profile'),
+        API.get('/supplier-portal/my/scores').catch(() => []),
+        API.get('/supplier-portal/my/improvements').catch(() => ({ suggestions: [] }))
+      ]);
+      State.supplierProfile = profile;
+      State.supplierScores = Array.isArray(scoreData) ? scoreData : (scoreData?.scores || []);
+      State.supplierImprovements = improvements;;
       render();
     } else if (page === 'sustainability') {
       const [stats, scores] = await Promise.all([API.get('/sustainability/stats'), API.get('/sustainability/leaderboard')]);
@@ -1302,6 +1324,8 @@ function renderPage() {
     case 'scm-risk-radar': return renderSCMRiskRadar();
     case 'scm-carbon': return renderSCMCarbon();
     case 'scm-twin': return renderSCMTwin();
+    case 'scm-network': return renderSCMNetwork();
+    case 'supplier-dashboard': return renderSupplierDashboard();
     case 'sustainability': return renderSustainability();
     case 'compliance': return renderCompliance();
     case 'anomaly': return renderAnomaly();
@@ -3971,3 +3995,14 @@ document.addEventListener('DOMContentLoaded', () => {
     loadPageData('dashboard');
   }
 });
+
+
+async function renderSCMNetwork() {
+  const mod = await import('./pages/scm/network.js');
+  const html = mod.renderPage();
+  return html;
+}
+async function renderSupplierDashboard() {
+  const mod = await import('./pages/supplier-dashboard.js');
+  return mod.renderPage();
+}

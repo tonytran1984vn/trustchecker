@@ -23,6 +23,12 @@ const db = require('./db');
 
 // ─── Configuration Validation ────────────────────────────────────────────────
 const config = validateConfig();
+
+// v9.4.3: Sentry error monitoring
+try { require('./observability/sentry'); } catch(e) {}
+const errorMonitor = require('./observability/error-monitor');
+
+
 warnDefaultSecrets();
 
 const app = express();
@@ -48,19 +54,26 @@ app.use(cors({
     maxAge: 86400
 }));
 
-// Helmet — security headers with proper CSP
+// Helmet — security headers with CSP
+// CSP Notes:
+// - 'unsafe-inline' required for legacy client with inline onclick handlers
+// - For full XSS protection: refactor client to use nonces, then remove unsafe-inline
+// - Use 'strict-dynamic' when nonce is implemented
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
             scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
-            scriptSrcAttr: ["'unsafe-inline'"],  // Required: 100+ inline onclick handlers across app.js
+            scriptSrcAttr: ["'unsafe-inline'"],
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdn.jsdelivr.net"],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
             imgSrc: ["'self'", "data:", "https:", "https://*.tile.openstreetmap.org"],
             connectSrc: ["'self'", "ws:", "wss:"],
             objectSrc: ["'none'"],
-            frameAncestors: ["'none'"]
+            frameAncestors: ["'none'"],
+            baseUri: ["'self'"],
+            formAction: ["'self'"],
+            upgradeInsecureRequests: [],
         }
     },
     crossOriginEmbedderPolicy: false,
@@ -86,6 +99,8 @@ const apiLimiter = rateLimit({
     legacyHeaders: false,
     message: { error: 'Too many requests, please try again later' }
 });
+// v9.5.0: API Versioning — /api/v1/* forwards to /api/*
+app.use('/api/v1', (req, res, next) => { req.originalUrl = req.originalUrl.replace('/api/v1', '/api'); req.url = req.url; next(outer); });
 app.use('/api/', apiLimiter);
 
 // Stricter rate limit for auth endpoints
@@ -97,10 +112,18 @@ const authLimiter = rateLimit({
     message: { error: 'Too many auth attempts. Try again in 15 minutes' },
     skipSuccessfulRequests: true
 });
+app.use('/healthz', require('./routes/healthz'));
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/change-password', authLimiter); // SEC-API-2: rate limit password changes
 app.use('/api/auth/reset-password', authLimiter);  // SEC-API-2: rate limit password resets
+app.use("/api/trust-network", require("./routes/trust-network"));
+
+// Trust Network: serve public join page
+app.get("/network/join/:token", function(req, res) {
+    res.sendFile(require("path").join(__dirname, "../client/join.html"));
+});
+
 
 // ─── Boot Sequence ───────────────────────────────────────────────────────────
 async function boot() {
@@ -141,6 +164,8 @@ async function boot() {
             type: 'CONNECTED',
             data: { message: 'Connected to TrustChecker Event Stream', user: ws.user.username, timestamp: new Date().toISOString() }
         }));
+        // v9.4.2: Store org_id on ws for scoped broadcasts
+        ws.orgId = ws.user.org_id || ws.user.orgId || null;
         ws.on('close', () => console.log(`📴 WebSocket client disconnected (${wss.clients.size} total)`));
     });
 

@@ -112,7 +112,7 @@ const TEMPLATES = {
             `<b>Violation:</b> ${data.violation || 'Response time exceeded threshold.'}`,
         ]),
     }),
-    new_tenant: (data) => ({
+    new_org: (data) => ({
         subject: '🏢 New Tenant Registered — TrustChecker',
         html: alertTemplate('New Tenant Registered', '#3b82f6', '🏢', [
             `<b>Organization:</b> ${data.org_name || 'Unknown'}`,

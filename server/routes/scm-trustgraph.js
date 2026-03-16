@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/engine-client');
+const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();
 
@@ -37,20 +38,20 @@ router.get('/nodes', async (req, res) => {
 // ─── GET /api/scm/graph/edges – All relationships ───────────────────────────
 router.get('/edges', async (req, res) => {
     try {
-        const edges = await db.prepare(`
+        const edges = await db.all(`
       SELECT scg.*, fp.name as from_name, tp.name as to_name
       FROM supply_chain_graph scg
       LEFT JOIN partners fp ON scg.from_node_id = fp.id
       LEFT JOIN partners tp ON scg.to_node_id = tp.id
-    `).all();
+    `);
 
         // Also derive edges from supply chain events
-        const eventEdges = await db.prepare(`
+        const eventEdges = await db.all(`
       SELECT partner_id, product_id, COUNT(*) as weight
       FROM supply_chain_events
       WHERE partner_id IS NOT NULL AND product_id IS NOT NULL
       GROUP BY partner_id, product_id
-    `).all();
+    `);
 
         const derived = eventEdges.map(e => ({
             from_node_id: e.partner_id,
@@ -75,9 +76,9 @@ router.get('/analysis', async (req, res) => {
         const orgParams = orgId ? [orgId] : [];
         const partners = await db.prepare('SELECT * FROM partners' + orgFilter).all(...orgParams);
         const products = await db.prepare('SELECT * FROM products' + orgFilter + ' LIMIT 50').all(...orgParams);
-        const edges = await db.prepare('SELECT * FROM supply_chain_graph').all();
-        const alerts = await db.prepare('SELECT * FROM fraud_alerts').all();
-        const leaks = await db.prepare('SELECT * FROM leak_alerts').all();
+        const edges = await db.all('SELECT * FROM supply_chain_graph');
+        const alerts = await db.all('SELECT * FROM fraud_alerts');
+        const leaks = await db.all('SELECT * FROM leak_alerts');
 
         const allNodes = [
             ...partners.map(p => ({ id: p.id, name: p.name, type: p.type, trust_score: p.trust_score })),
@@ -119,8 +120,8 @@ router.get('/toxic', async (req, res) => {
         const orgFilter = orgId ? ' WHERE org_id = ?' : '';
         const orgParams = orgId ? [orgId] : [];
         const partners = await db.prepare('SELECT * FROM partners' + orgFilter).all(...orgParams);
-        const edges = await db.prepare('SELECT * FROM supply_chain_graph').all();
-        const alerts = await db.prepare('SELECT * FROM fraud_alerts').all();
+        const edges = await db.all('SELECT * FROM supply_chain_graph LIMIT 1000');
+        const alerts = await db.all('SELECT * FROM fraud_alerts');
 
         const nodes = partners.map(p => ({ id: p.id, name: p.name, type: p.type, trust_score: p.trust_score }));
         const analysis = await engineClient.scmToxicNodes(nodes, edges, alerts);
@@ -153,10 +154,10 @@ router.post('/edges', authMiddleware, requireRole('operator'), async (req, res) 
         if (!from_node_id || !to_node_id) return res.status(400).json({ error: 'from_node_id and to_node_id required' });
 
         const id = uuidv4();
-        await db.prepare(`
+        await db.run(`
       INSERT INTO supply_chain_graph (id, from_node_id, from_node_type, to_node_id, to_node_type, relationship, weight)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, from_node_id, from_node_type || 'partner', to_node_id, to_node_type || 'partner', relationship || 'supplies', weight || 1.0);
+    `, [id, from_node_id, from_node_type || 'partner', to_node_id, to_node_type || 'partner', relationship || 'supplies', weight || 1.0]);
 
         res.status(201).json({ id, relationship: relationship || 'supplies' });
     } catch (err) {
@@ -170,12 +171,12 @@ router.get('/route', async (req, res) => {
         const { from, to } = req.query;
         if (!from || !to) return res.status(400).json({ error: 'from and to parameters required' });
 
-        const edges = await db.prepare('SELECT * FROM supply_chain_graph').all();
+        const edges = await db.all('SELECT * FROM supply_chain_graph');
         const result = await engineClient.scmOptimizeRoute(edges, from, to);
 
         const enriched = [];
         for (const nodeId of result.path) {
-            const partner = await db.prepare('SELECT name, type FROM partners WHERE id = ?').get(nodeId);
+            const partner = await db.get('SELECT name, type FROM partners WHERE id = ?', [nodeId]);
             enriched.push({ id: nodeId, name: partner ? partner.name : nodeId, type: partner ? partner.type : 'unknown' });
         }
 
@@ -189,8 +190,15 @@ router.get('/route', async (req, res) => {
 router.get('/impact/:nodeId', async (req, res) => {
     try {
         const nodeId = req.params.nodeId;
-        const partner = await db.get('SELECT * FROM partners WHERE id = ?', [nodeId]);
-        const product = !partner ? await db.get('SELECT * FROM products WHERE id = ?', [nodeId]) : null;
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        let partner = orgId
+            ? await db.get('SELECT * FROM partners WHERE id = ? AND org_id = ?', [nodeId, orgId])
+            : await db.get('SELECT * FROM partners WHERE id = ? LIMIT 1000', [nodeId]);
+        let product = !partner
+            ? (orgId
+                ? await db.get('SELECT * FROM products WHERE id = ? AND org_id = ?', [nodeId, orgId])
+                : await db.get('SELECT * FROM products WHERE id = ? LIMIT 1000', [nodeId]))
+            : null;
         const node = partner || product;
         if (!node) return res.status(404).json({ error: 'Node not found' });
 
@@ -203,7 +211,7 @@ router.get('/impact/:nodeId', async (req, res) => {
 
         // Find products handled by this partner
         const affectedProducts = await db.all('SELECT DISTINCT product_id FROM supply_chain_events WHERE partner_id = ?', [nodeId]);
-        const affectedBatches = await db.all('SELECT DISTINCT batch_id FROM supply_chain_events WHERE partner_id = ?', [nodeId]);
+        const affectedBatches = await db.all('SELECT DISTINCT batch_id FROM supply_chain_events WHERE partner_id = ? LIMIT 1000', [nodeId]);
 
         // Cascade: find nodes that ONLY connect through this node
         const allEdges = await db.all('SELECT * FROM supply_chain_graph');

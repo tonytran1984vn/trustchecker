@@ -13,8 +13,8 @@ router.use(authMiddleware);
 // GET /trust-score — Company trust score
 router.get('/trust-score', cacheMiddleware(120), async (req, res) => {
     try {
-        const products = await db.prepare('SELECT COUNT(*) as cnt FROM products').get().catch(() => ({ cnt: 0 }));
-        const creds = await db.prepare('SELECT COUNT(*) as cnt FROM verifiable_credentials WHERE status = ?').get('active').catch(() => ({ cnt: 0 }));
+        const products = await db.get('SELECT COUNT(*) as cnt FROM products').catch(() => ({ cnt: 0 }));
+        const creds = await db.get('SELECT COUNT(*) as cnt FROM verifiable_credentials WHERE status = ?', ['active']).catch(() => ({ cnt: 0 }));
         res.json(reputation.calculateTrustScore({ product_authenticity: 75, supply_chain_transparency: 62, esg_performance: 68, carbon_integrity: 72, compliance_readiness: 65, partner_reliability: 70, verified_credentials: creds.cnt, blockchain_anchored: true, incident_count: 1, total_products: products.cnt }));
     } catch (err) { res.status(500).json({ error: 'Trust score failed' }); }
 });
@@ -22,9 +22,9 @@ router.get('/trust-score', cacheMiddleware(120), async (req, res) => {
 // GET /transparency — Supply Chain Transparency Index
 router.get('/transparency', cacheMiddleware(120), async (req, res) => {
     try {
-        const products = await db.prepare('SELECT COUNT(*) as cnt FROM products').get().catch(() => ({ cnt: 0 }));
-        const partners = await db.prepare('SELECT COUNT(*) as cnt FROM partners').get().catch(() => ({ cnt: 0 }));
-        const dids = await db.prepare('SELECT COUNT(*) as cnt FROM did_registry').get().catch(() => ({ cnt: 0 }));
+        const products = await db.get('SELECT COUNT(*) as cnt FROM products').catch(() => ({ cnt: 0 }));
+        const partners = await db.get('SELECT COUNT(*) as cnt FROM partners').catch(() => ({ cnt: 0 }));
+        const dids = await db.get('SELECT COUNT(*) as cnt FROM did_registry').catch(() => ({ cnt: 0 }));
         res.json(reputation.calculateTransparencyIndex({ total_products: products.cnt, tracked_products: Math.floor(products.cnt * 0.8), total_partners: partners.cnt, verified_partners: Math.floor(partners.cnt * 0.6), total_shipments: 100, traced_shipments: 75, has_did: dids.cnt > 0, has_vc: true, has_blockchain: true, scope_3_covered: true, gri_reported: true }));
     } catch (err) { res.status(500).json({ error: 'Transparency index failed' }); }
 });
@@ -32,14 +32,14 @@ router.get('/transparency', cacheMiddleware(120), async (req, res) => {
 // GET /carbon-integrity — Carbon Integrity Score
 router.get('/carbon-integrity', cacheMiddleware(120), async (req, res) => {
     try {
-        const credits = await db.prepare('SELECT * FROM carbon_credits').all().catch(() => []);
+        const credits = await db.all('SELECT * FROM carbon_credits').catch(() => []);
         const avgConf = credits.length > 0 ? credits.reduce((s, c) => s + (c.mrv_confidence || 0), 0) / credits.length : 0;
         const retiredPct = credits.length > 0 ? credits.filter(c => c.status === 'retired').length / credits.length * 100 : 0;
         res.json(reputation.calculateCarbonIntegrity({ total_credits: credits.length, verified_credits: credits.length, avg_mrv_confidence: avgConf, double_count_incidents: 0, avg_additionality_pass_rate: 85, blockchain_anchored_pct: 100, retired_pct: retiredPct, third_party_verified: false }));
     } catch (err) { res.status(500).json({ error: 'Carbon integrity failed' }); }
 });
 
-// GET /platform-index — Cross-tenant platform index (SA)
+// GET /platform-index — Cross-org platform index (SA)
 router.get('/platform-index', cacheMiddleware(300), async (req, res) => {
     try { res.json(reputation.buildPlatformIndex([])); }
     catch (err) { res.status(500).json({ error: 'Platform index failed' }); }

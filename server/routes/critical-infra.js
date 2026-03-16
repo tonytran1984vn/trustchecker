@@ -10,6 +10,8 @@
  */
 const express = require('express');
 const router = express.Router();
+const { parsePagination } = require('../middleware/pagination');
+
 const { authMiddleware, requireRole, requireConstitutional, requireTenantAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
 
@@ -131,12 +133,12 @@ const econRisk = require('../engines/economic-risk-engine');
 
 router.get('/econrisk/framework', requireTenantAdmin(), (req, res) => { res.json(econRisk.getFullFramework()); });
 router.get('/econrisk/revenue-risk', requireTenantAdmin(), (req, res) => { res.json(econRisk.getRevenueRisk()); });
-router.get('/econrisk/tenant-credit', requireTenantAdmin(), (req, res) => { res.json(econRisk.getTenantCredit()); });
+router.get('/econrisk/org-credit', requireTenantAdmin(), (req, res) => { res.json(econRisk.getTenantCredit()); });
 router.get('/econrisk/cost-allocation', requireTenantAdmin(), (req, res) => { res.json(econRisk.getCostAllocation()); });
 router.get('/econrisk/token-economics', requireTenantAdmin(), (req, res) => { res.json(econRisk.getTokenEconomics()); });
 router.get('/econrisk/trust-feedback', requireTenantAdmin(), (req, res) => { res.json(econRisk.getFinancialTrustFeedback()); });
 
-router.post('/econrisk/score-tenant', requireRole('risk_committee'), (req, res) => {
+router.post('/econrisk/score-org', requireRole('risk_committee'), (req, res) => {
     const { trust_score, payment_pct, settlement_pct, years, external_credit, engagement } = req.body;
     res.json(econRisk.scoreTenant(trust_score, payment_pct, settlement_pct, years, external_credit, engagement));
 });
@@ -146,6 +148,7 @@ router.post('/econrisk/score-tenant', requireRole('risk_committee'), (req, res) 
 // ═══════════════════════════════════════════════════════════════════
 
 const contagion = require('../engines/cross-tenant-contagion-engine');
+const { withTransaction } = require('../middleware/transaction');
 
 router.get('/contagion/framework', requireRole('risk_committee'), (req, res) => { res.json(contagion.getFullFramework()); });
 router.get('/contagion/trust-model', requireRole('risk_committee'), (req, res) => { res.json(contagion.getTrustContagion()); });

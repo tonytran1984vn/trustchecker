@@ -210,7 +210,7 @@ router.post('/reset-password', async (req, res) => {
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
         // SEC-04: Use json_extract instead of LIKE to prevent wildcard injection
         const resetLog = await db.get(
-            `SELECT * FROM audit_log WHERE action = 'PASSWORD_RESET_REQUESTED' AND json_extract(details, '$.token_hash') = ? ORDER BY created_at DESC LIMIT 1`,
+            `SELECT * FROM audit_log WHERE action = 'PASSWORD_RESET_REQUESTED' AND details::jsonb->>'token_hash' = ? ORDER BY created_at DESC LIMIT 1`,
             [tokenHash]
         );
 

@@ -7,6 +7,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission, requirePlatformAdmin } = require('../auth');
+const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();
 
@@ -99,13 +100,14 @@ router.get('/duplicates', authMiddleware, async (req, res) => {
 // ─── GET /api/scm/duplicates/stats – Classification breakdown ───────────────
 router.get('/duplicates/stats', authMiddleware, async (req, res) => {
     try {
-        const total = (await db.get('SELECT COUNT(*) as c FROM duplicate_classifications'))?.c || 0;
-        const curiosity = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'curiosity'"))?.c || 0;
-        const leakage = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'leakage'"))?.c || 0;
-        const counterfeit = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'counterfeit'"))?.c || 0;
-        const unclassified = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'unclassified'"))?.c || 0;
+        const orgId = req.user?.orgId;
+        const total = (await db.get('SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1', [orgId]))?.c || 0;
+        const curiosity = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1 AND classification = 'curiosity'", [orgId]))?.c || 0;
+        const leakage = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1 AND classification = 'leakage'", [orgId]))?.c || 0;
+        const counterfeit = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1 AND classification = 'counterfeit'", [orgId]))?.c || 0;
+        const unclassified = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1 AND classification = 'unclassified'", [orgId]))?.c || 0;
 
-        const totalScans = (await db.get('SELECT COUNT(*) as c FROM scan_events'))?.c || 1;
+        const totalScans = (await db.get('SELECT COUNT(*) as c FROM scan_events WHERE org_id = $1', [orgId]))?.c || 1;
         const rawDupRate = total > 0 ? ((total / totalScans) * 100).toFixed(1) : '0';
         const adjustedRate = total > 0 ? (((counterfeit + leakage) / totalScans) * 100).toFixed(1) : '0';
 
@@ -145,12 +147,12 @@ router.post('/duplicates/classify', authMiddleware, async (req, res) => {
         const timeGap = prevScan ? Math.round((new Date(scan.scanned_at) - new Date(prevScan.scanned_at)) / 1000) : 0;
 
         await db.run(
-            `INSERT INTO duplicate_classifications (id, scan_event_id, code_data, classification, confidence, signals, geo_data, device_hash, time_gap, classified_by, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'system', NOW())`,
+            `INSERT INTO duplicate_classifications (id, scan_event_id, code_data, classification, confidence, signals, geo_data, device_hash, time_gap, classified_by, org_id, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'system', ?, NOW())`,
             [id, scan_event_id, code_data || scan.qr_code_id || '',
                 result.classification, result.confidence, JSON.stringify(result.signals),
                 JSON.stringify({ city: scan.geo_city, country: scan.geo_country, lat: scan.latitude, lng: scan.longitude }),
-                scan.device_fingerprint || '', timeGap]
+                scan.device_fingerprint || '', timeGap, req.user?.orgId || null]
         );
 
         res.status(201).json({ id, ...result, time_gap_seconds: timeGap });
@@ -201,7 +203,7 @@ router.get('/benchmark', authMiddleware, requirePlatformAdmin(), async (req, res
 
         res.json({
             platform_overview: {
-                total_tenants: totalOrgs,
+                total_orgs: totalOrgs,
                 total_scans: totalScans,
                 total_fraud_alerts: totalFraud,
                 avg_ers: (avgErs || 0).toFixed ? avgErs.toFixed(1) : '0'

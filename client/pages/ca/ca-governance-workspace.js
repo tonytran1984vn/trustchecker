@@ -21,13 +21,13 @@ const cache = window._caGovCache;
 if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 30000)) {
     cache._loading = true;
     window._caGovReady = Promise.allSettled([
-        API.get('/tenant/governance/dashboard').catch(() => ({})),
+        API.get('/org-admin/governance/dashboard').catch(() => ({})),
         API.get('/admin/users').catch(() => ({ users: [] })),
-        API.get('/tenant/roles').catch(() => []),
-        API.get('/tenant/users').catch(() => []),
-        API.get('/tenant/permissions').catch(() => []),
-        API.get('/tenant/approvals').catch(() => ({ approvals: [] })),
-        API.get('/tenant/audit?limit=100').catch(() => ({ logs: [] })),
+        API.get('/org-admin/roles').catch(() => []),
+        API.get('/org-admin/users').catch(() => []),
+        API.get('/org-admin/permissions').catch(() => []),
+        API.get('/org-admin/approvals').catch(() => ({ approvals: [] })),
+        API.get('/org-admin/audit?limit=100').catch(() => ({ logs: [] })),
     ]).then(results => {
         const v = results.map(r => r.value);
         cache.dashboard = v[0];

@@ -1,6 +1,6 @@
 /**
  * Organization Management Routes
- * Multi-tenant org CRUD, member management, and Enterprise provisioning.
+ * Multi-org org CRUD, member management, and Enterprise provisioning.
  *
  * Super Admin Endpoints:
  *   GET    /api/org/all            — List ALL organizations (super_admin only)
@@ -16,6 +16,13 @@
  *   GET    /api/org/members       — List members
  *   POST   /api/org/provision     — Provision Enterprise schema
  */
+
+const { withTransaction } = require('../middleware/transaction');
+
+function _safeId(name) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error("Invalid identifier: " + name);
+  return name;
+}
 
 const express = require('express');
 const router = express.Router();
@@ -51,12 +58,12 @@ router.get('/all', requireSuperAdmin(), async (req, res) => {
         params.push(Number(limit), Math.max(Number(offset) || 0, 0));
 
         const orgs = await db.prepare(query).all(...params);
-        const total = await db.prepare('SELECT COUNT(*) as count FROM organizations').get();
+        const total = await db.get('SELECT COUNT(*) as count FROM organizations');
 
         // Enrich with member counts
         const enriched = [];
         for (const org of orgs) {
-            const mc = await db.prepare('SELECT COUNT(*) as count FROM users WHERE org_id = ?').get(org.id);
+            const mc = await db.get('SELECT COUNT(*) as count FROM users WHERE org_id = ?', [org.id]);
             enriched.push({ ...org, member_count: mc?.count || 0 });
         }
 
@@ -71,7 +78,7 @@ router.get('/all', requireSuperAdmin(), async (req, res) => {
 // GOV: Auto-creates org_owner account. Org Owner then appoints Company Admin.
 router.post('/', requireSuperAdmin(), async (req, res) => {
     try {
-        const { name, plan = 'free', owner_email, owner_name } = req.body;
+        const { name, plan = 'free', owner_email, owner_name, template = 'supply_chain' } = req.body;
         if (!name || name.length < 2) {
             return res.status(400).json({ error: 'Organization name is required (min 2 chars)' });
         }
@@ -87,24 +94,24 @@ router.post('/', requireSuperAdmin(), async (req, res) => {
         const id = uuidv4();
 
         // Check name uniqueness
-        const existingName = await db.prepare('SELECT id FROM organizations WHERE name = ?').get(name);
+        const existingName = await db.get('SELECT id FROM organizations WHERE name = ?', [name]);
         if (existingName) {
             return res.status(409).json({ error: 'Organization name already exists' });
         }
 
         // Check slug uniqueness
-        const existing = await db.prepare('SELECT id FROM organizations WHERE slug = ?').get(slug);
+        const existing = await db.get('SELECT id FROM organizations WHERE slug = ?', [slug]);
         if (existing) {
             return res.status(409).json({ error: 'Organization slug already exists' });
         }
 
         await db.prepare(
             `INSERT INTO organizations (id, name, slug, plan, settings, created_by, created_at, updated_at)
-             VALUES (?, ?, ?, ?, '{}', ?, datetime('now'), datetime('now'))`
+             VALUES (?, ?, ?, ?, '{}', ?, NOW(), NOW())`
         ).run(id, name, slug, plan, req.user.id);
 
         // ── Auto-create or assign Org Owner ──────────────────────────────
-        let ownerUser = await db.prepare('SELECT id, email FROM users WHERE email = ?').get(owner_email);
+        let ownerUser = await db.get('SELECT id, email FROM users WHERE email = ?', [owner_email]);
         let ownerCreated = false;
         const tempPassword = 'Change@' + Math.random().toString(36).substring(2, 10) + '!';
 
@@ -116,7 +123,7 @@ router.post('/', requireSuperAdmin(), async (req, res) => {
 
             await db.prepare(
                 `INSERT INTO users (id, username, email, password_hash, role, org_id, user_type, must_change_password, created_at)
-                 VALUES (?, ?, ?, ?, 'org_owner', ?, 'tenant', 1, datetime('now'))`
+                 VALUES (?, ?, ?, ?, 'org_owner', ?, 'org', 1, NOW())`
             ).run(ownerId, displayName, owner_email, passwordHash, id);
             ownerUser = { id: ownerId, email: owner_email };
             ownerCreated = true;
@@ -125,47 +132,81 @@ router.post('/', requireSuperAdmin(), async (req, res) => {
                 .run(id, 'org_owner', ownerUser.id);
         }
 
-        // ── Seed RBAC roles for new org ──────────────────────────────────
+        // ── Seed RBAC roles for new org (filtered by template) ─────────
+        const ROLE_TEMPLATES = {
+            supply_chain: ['org_owner', 'company_admin', 'ops_manager', 'scm_analyst', 'risk_officer', 'supplier_contributor', 'operator', 'viewer'],
+            esg_carbon: ['org_owner', 'company_admin', 'carbon_officer', 'compliance_officer', 'disclosure_officer', 'data_steward', 'internal_reviewer', 'viewer'],
+            audit_ready: ['org_owner', 'company_admin', 'auditor', 'external_auditor', 'compliance_officer', 'legal_counsel', 'security_officer', 'viewer'],
+            minimal: ['org_owner', 'company_admin', 'operator', 'viewer'],
+        };
+        const allowedRoles = ROLE_TEMPLATES[template] || ROLE_TEMPLATES.supply_chain;
+
         const templateRoles = await db.all(
-            `SELECT * FROM rbac_roles WHERE tenant_id = '__TEMPLATE__' AND is_system = 1`
+            `SELECT * FROM rbac_roles WHERE org_id = '__TEMPLATE__' AND is_system = 1`
         );
+        let rolesProvisioned = 0;
         for (const tmpl of templateRoles) {
+            if (!allowedRoles.includes(tmpl.name)) continue; // Skip roles not in template
             const roleId = uuidv4();
             await db.run(
-                `INSERT OR IGNORE INTO rbac_roles (id, tenant_id, name, display_name, type, is_system, description, mfa_policy)
+                `INSERT OR IGNORE INTO rbac_roles (id, org_id, name, display_name, type, is_system, description, mfa_policy)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                 [roleId, id, tmpl.name, tmpl.display_name, 'system', 1, tmpl.description, tmpl.mfa_policy]
             );
+            rolesProvisioned++;
         }
 
-        // Assign org_owner RBAC role
+        // ── Create membership for org owner ─────────────────────────────
+        const membershipId = uuidv4();
+        await db.run(
+            `INSERT INTO memberships (id, user_id, org_id, status, role_context, invited_by) VALUES (?, ?, ?, 'active', 'owner', ?)`,
+            [membershipId, ownerUser.id, id, req.user.id]
+        );
+
+        // Assign org_owner RBAC role via membership
         const ownerRole = await db.get(
-            `SELECT id FROM rbac_roles WHERE tenant_id = ? AND name = 'org_owner'`, [id]
+            `SELECT id FROM rbac_roles WHERE org_id = ? AND name = 'org_owner'`, [id]
         );
         if (ownerRole) {
             await db.run(
-                `INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id, assigned_by) VALUES (?, ?, ?)`,
-                [ownerUser.id, ownerRole.id, req.user.id]
+                `INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id, assigned_by, membership_id) VALUES (?, ?, ?, ?)`,
+                [ownerUser.id, ownerRole.id, req.user.id, membershipId]
+            );
+        }
+
+        // ── Auto-assign default scopes for org owner ─────────────────
+        // Org owner gets access to all supply chains in the org (org-wide)
+        const existingChains = await db.all(
+            `SELECT id FROM supply_chains WHERE org_id = ?`, [id]
+        );
+        for (const chain of existingChains) {
+            await db.run(
+                `INSERT INTO membership_scopes (id, membership_id, scope_type, scope_id, access_level, granted_by)
+                 VALUES (?, ?, 'supply_chain', ?, 'full', ?)
+                 ON CONFLICT (membership_id, scope_type, scope_id) DO NOTHING`,
+                [uuidv4(), membershipId, chain.id, req.user.id]
             );
         }
 
         // Audit
         await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
             .run(uuidv4(), req.user.id, 'ORG_CREATED', 'organization', id, JSON.stringify({
-                name, slug, plan, org_owner_email: owner_email, org_owner_created: ownerCreated,
+                name, slug, plan, template, roles_provisioned: rolesProvisioned,
+                org_owner_email: owner_email, org_owner_created: ownerCreated,
             }));
 
         if (typeof db.save === 'function') await db.save();
 
         res.status(201).json({
-            id, name, slug, plan,
+            id, name, slug, plan, template,
+            roles_provisioned: rolesProvisioned,
             org_owner: {
                 id: ownerUser.id, email: owner_email,
                 created: ownerCreated,
                 temp_password: ownerCreated ? tempPassword : undefined,
                 must_change_password: ownerCreated,
             },
-            message: 'Organization created with Org Owner',
+            message: `Organization created with ${ROLE_TEMPLATES[template]?.length || 0} roles from '${template}' template`,
         });
     } catch (err) {
         console.error('[org] Create error:', err.message);
@@ -182,10 +223,10 @@ router.put('/:id/plan', requireSuperAdmin(), async (req, res) => {
             return res.status(400).json({ error: 'Valid plan required: ' + validPlans.join(', ') });
         }
 
-        const org = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id);
+        const org = await db.get('SELECT * FROM organizations WHERE id = ?', [req.params.id]);
         if (!org) return res.status(404).json({ error: 'Organization not found' });
 
-        await db.prepare("UPDATE organizations SET plan = ?, updated_at = datetime('now') WHERE id = ?")
+        await db.prepare("UPDATE organizations SET plan = ?, updated_at = NOW() WHERE id = ?")
             .run(plan, req.params.id);
 
         // Audit
@@ -203,14 +244,14 @@ router.put('/:id/plan', requireSuperAdmin(), async (req, res) => {
 // ─── Deactivate Organization (super_admin only) ──────────────────────────────
 router.delete('/:id', requireSuperAdmin(), async (req, res) => {
     try {
-        const org = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id);
+        const org = await db.get('SELECT * FROM organizations WHERE id = ?', [req.params.id]);
         if (!org) return res.status(404).json({ error: 'Organization not found' });
 
         if (org.slug === 'trustchecker') {
             return res.status(403).json({ error: 'Cannot deactivate the platform organization' });
         }
 
-        await db.prepare("UPDATE organizations SET status = 'inactive', updated_at = datetime('now') WHERE id = ?")
+        await db.prepare("UPDATE organizations SET status = 'inactive', updated_at = NOW() WHERE id = ?")
             .run(req.params.id);
 
         // Audit
@@ -239,10 +280,10 @@ router.get('/', async (req, res) => {
             return res.json({ org: null, message: 'User is not part of any organization' });
         }
 
-        const org = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(orgId);
+        const org = await db.get('SELECT * FROM organizations WHERE id = ?', [orgId]);
         if (!org) return res.status(404).json({ error: 'Organization not found' });
 
-        const memberCount = await db.prepare('SELECT COUNT(*) as count FROM users WHERE org_id = ?').get(orgId);
+        const memberCount = await db.get('SELECT COUNT(*) as count FROM users WHERE org_id = ?', [orgId]);
 
         res.json({
             ...org,
@@ -256,7 +297,7 @@ router.get('/', async (req, res) => {
 });
 
 // ─── Update Organization ─────────────────────────────────────────────────────
-router.put('/', requirePermission('tenant:settings_update'), async (req, res) => {
+router.put('/', requirePermission('org:settings_update'), async (req, res) => {
     try {
         const { name, settings } = req.body;
         const orgId = req.user.orgId;
@@ -289,7 +330,7 @@ router.get('/members', async (req, res) => {
         if (!orgId) return res.status(403).json({ error: 'No organization context' });
 
         const members = await db.prepare(
-            `SELECT id, username, email, role, created_at, last_login FROM users WHERE org_id = ? ORDER BY created_at`
+            `SELECT id, username, email, role, created_at, last_login FROM users WHERE org_id = ? ORDER BY created_at LIMIT 1000`
         ).all(orgId);
 
         res.json({ members, total: members.length });
@@ -300,7 +341,7 @@ router.get('/members', async (req, res) => {
 });
 
 // ─── Invite Member ───────────────────────────────────────────────────────────
-router.post('/invite', requirePermission('tenant:user_create'), async (req, res) => {
+router.post('/invite', requirePermission('org:user_create'), async (req, res) => {
     try {
         const { email, role = 'operator' } = req.body;
         const orgId = req.user.orgId;
@@ -308,12 +349,17 @@ router.post('/invite', requirePermission('tenant:user_create'), async (req, res)
         if (!orgId) return res.status(403).json({ error: 'No organization context' });
         if (!email) return res.status(400).json({ error: 'Email is required' });
 
-        const existingUser = await db.prepare('SELECT id, org_id FROM users WHERE email = ?').get(email);
+        const existingUser = await db.get('SELECT id, org_id FROM users WHERE email = ?', [email]);
         if (existingUser) {
             if (existingUser.org_id) {
                 return res.status(409).json({ error: 'User already belongs to an organization' });
             }
-            await db.prepare('UPDATE users SET org_id = ? WHERE id = ?').run(orgId, existingUser.id);
+            await db.run('UPDATE users SET org_id = ? WHERE id = ?', [orgId, existingUser.id]);
+            // Create membership
+            await db.run(
+                `INSERT INTO memberships (id, user_id, org_id, status, role_context, invited_by) VALUES (?, ?, ?, 'active', 'member', ?) ON CONFLICT (user_id, org_id) DO UPDATE SET status = 'active'`,
+                [uuidv4(), existingUser.id, orgId, req.user.id]
+            );
             return res.json({ message: 'Existing user added to organization', userId: existingUser.id });
         }
 
@@ -332,7 +378,7 @@ router.post('/invite', requirePermission('tenant:user_create'), async (req, res)
 });
 
 // ─── Remove Member ───────────────────────────────────────────────────────────
-router.delete('/members/:id', requirePermission('tenant:user_delete'), async (req, res) => {
+router.delete('/members/:id', requirePermission('org:user_delete'), async (req, res) => {
     try {
         const orgId = req.user.orgId;
         const targetId = req.params.id;
@@ -340,10 +386,15 @@ router.delete('/members/:id', requirePermission('tenant:user_delete'), async (re
         if (!orgId) return res.status(403).json({ error: 'No organization context' });
         if (targetId === req.user.id) return res.status(400).json({ error: 'Cannot remove yourself' });
 
-        const target = await db.prepare('SELECT id FROM users WHERE id = ? AND org_id = ?').get(targetId, orgId);
+        const target = await db.get('SELECT id FROM users WHERE id = ? AND org_id = ?', [targetId, orgId]);
         if (!target) return res.status(404).json({ error: 'Member not found in organization' });
 
-        await db.prepare('UPDATE users SET org_id = NULL WHERE id = ?').run(targetId);
+        await db.run('UPDATE users SET org_id = NULL WHERE id = ?', [targetId]);
+        // Deactivate membership
+        await db.run(
+            `UPDATE memberships SET status = 'removed' WHERE user_id = ? AND org_id = ?`,
+            [targetId, orgId]
+        );
         res.json({ message: 'Member removed from organization' });
     } catch (err) {
         console.error('[org] Remove member error:', err.message);
@@ -352,12 +403,12 @@ router.delete('/members/:id', requirePermission('tenant:user_delete'), async (re
 });
 
 // ─── Provision Enterprise Schema ─────────────────────────────────────────────
-router.post('/provision', requirePermission('tenant:settings_update'), async (req, res) => {
+router.post('/provision', requirePermission('org:settings_update'), async (req, res) => {
     try {
         const orgId = req.user.orgId;
         if (!orgId) return res.status(403).json({ error: 'No organization context' });
 
-        const org = await db.prepare('SELECT * FROM organizations WHERE id = ?').get(orgId);
+        const org = await db.get('SELECT * FROM organizations WHERE id = ?', [orgId]);
         if (!org) return res.status(404).json({ error: 'Organization not found' });
         if (org.plan !== 'enterprise') {
             return res.status(403).json({ error: 'Schema isolation requires Enterprise plan', current_plan: org.plan });
@@ -366,10 +417,10 @@ router.post('/provision', requirePermission('tenant:settings_update'), async (re
             return res.json({ message: 'Schema already provisioned', schema_name: org.schema_name });
         }
 
-        const schemaName = `tenant_${org.slug.replace(/-/g, '_')}`;
+        const schemaName = `org_${org.slug.replace(/-/g, '_')}`;
         try {
-            await db.run(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
-            await db.prepare("UPDATE organizations SET schema_name = ?, updated_at = datetime('now') WHERE id = ?")
+            await db.run(`CREATE SCHEMA IF NOT EXISTS "${_safeId(schemaName)}"`);
+            await db.prepare("UPDATE organizations SET schema_name = ?, updated_at = NOW() WHERE id = ?")
                 .run(schemaName, orgId);
 
             res.status(201).json({

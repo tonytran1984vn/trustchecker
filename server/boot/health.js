@@ -178,9 +178,9 @@ function setupHealth(app, { config, db, redis, wss, waf, apiGateway, metrics, sl
     });
 
     if (fs.existsSync(clientDist)) {
-        app.use(express.static(clientDist));
+        app.use(express.static(clientDist, { etag: false, maxAge: 0, setHeaders: (res, fp) => { if (fp.endsWith('.js') || fp.endsWith('.css')) { res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); } } }));
     } else if (fs.existsSync(clientPublic)) {
-        app.use(express.static(clientPublic));
+        app.use(express.static(clientPublic, { etag: false, maxAge: 0, setHeaders: (res, fp) => { if (fp.endsWith('.js') || fp.endsWith('.css')) { res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); } } }));
     }
 
     app.get('/check', (req, res) => {

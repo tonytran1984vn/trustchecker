@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/engine-client');
+const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();
 
@@ -51,15 +52,15 @@ router.post('/adjust', authMiddleware, requirePermission('inventory:create'), as
 
         if (inv) {
             const newQty = Math.max(0, inv.quantity + quantity_change);
-            await db.prepare("UPDATE inventory SET quantity = ?, updated_at = datetime('now') WHERE id = ?").run(newQty, inv.id);
+            await db.prepare("UPDATE inventory SET quantity = ?, updated_at = NOW() WHERE id = ?").run(newQty, inv.id);
             inv.quantity = newQty;
         } else {
             const id = uuidv4();
             const qty = Math.max(0, quantity_change);
-            await db.prepare(`
+            await db.run(`
         INSERT INTO inventory (id, product_id, batch_id, partner_id, location, quantity)
         VALUES (?, ?, ?, ?, ?, ?)
-      `).run(id, product_id, batch_id || null, partner_id || null, location || '', qty);
+      `, [id, product_id, batch_id || null, partner_id || null, location || '', qty]);
             inv = { id, product_id, quantity: qty };
         }
 
@@ -77,21 +78,21 @@ router.get('/alerts', async (req, res) => {
         const orgFilter = orgId ? ' AND (p.org_id = ? OR pt.org_id = ?)' : '';
         const orgParams = orgId ? [orgId, orgId] : [];
 
-        const understock = await db.prepare(`
+        const understock = await db.all(`
       SELECT i.*, p.name as product_name, p.sku, pt.name as partner_name
       FROM inventory i
       LEFT JOIN products p ON i.product_id = p.id
       LEFT JOIN partners pt ON i.partner_id = pt.id
       WHERE i.quantity <= i.min_stock${orgFilter}
-    `).all(...orgParams);
+    `, [...orgParams]);
 
-        const overstock = await db.prepare(`
+        const overstock = await db.all(`
       SELECT i.*, p.name as product_name, p.sku, pt.name as partner_name
       FROM inventory i
       LEFT JOIN products p ON i.product_id = p.id
       LEFT JOIN partners pt ON i.partner_id = pt.id
       WHERE i.quantity >= i.max_stock${orgFilter}
-    `).all(...orgParams);
+    `, [...orgParams]);
 
         res.json({
             understock: understock.map(i => ({ ...i, alert_type: 'understock', severity: i.quantity === 0 ? 'critical' : 'high' })),
@@ -110,18 +111,18 @@ router.get('/forecast', async (req, res) => {
         // Get inventory snapshots (group by date for time series)
         let history;
         if (product_id) {
-            history = await db.prepare(`
+            history = await db.all(`
         SELECT quantity, updated_at as date FROM inventory WHERE product_id = ? ORDER BY updated_at ASC
-      `).all(product_id);
+       LIMIT 1000`, [product_id]);
         } else {
-            history = await db.prepare(`
+            history = await db.all(`
         SELECT SUM(quantity) as quantity, date(updated_at) as date FROM inventory GROUP BY date(updated_at) ORDER BY date ASC
-      `).all();
+       LIMIT 1000`);
         }
 
         // If too few data points, create synthetic history from current state
         if (history.length < 3) {
-            const current = await db.prepare('SELECT * FROM inventory ORDER BY updated_at DESC LIMIT 10').all();
+            const current = await db.all('SELECT * FROM inventory ORDER BY updated_at DESC LIMIT 10');
             history = current.map((c, i) => ({ quantity: c.quantity + Math.floor(Math.random() * 20 - 10), date: `day-${i}` }));
         }
 

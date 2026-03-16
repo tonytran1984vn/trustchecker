@@ -14,6 +14,7 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();
 
@@ -78,21 +79,21 @@ function getErsLevel(score) {
 
 function createSeal(eventType, eventId, payload, riskClassification) {
     const dataHash = crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
-    const prevSeal = db.prepare('SELECT data_hash FROM blockchain_seals ORDER BY sealed_at DESC LIMIT 1').get();
+    const prevSeal = db.get('SELECT data_hash FROM blockchain_seals ORDER BY sealed_at DESC LIMIT 1');
     const prevHash = prevSeal?.data_hash || '0';
     const id = uuidv4();
-    const blockIndex = (db.prepare('SELECT COUNT(*) as c FROM blockchain_seals').get()?.c || 0) + 1;
+    const blockIndex = (db.get('SELECT COUNT(*) as c FROM blockchain_seals')?.c || 0) + 1;
 
-    db.prepare(`
+    db.run(`
         INSERT INTO blockchain_seals (id, event_type, event_id, data_hash, prev_hash, block_index, nonce, sealed_at)
-        VALUES (?, ?, ?, ?, ?, ?, 0, datetime('now'))
-    `).run(id, eventType, eventId, dataHash, prevHash, blockIndex);
+        VALUES (?, ?, ?, ?, ?, ?, 0, NOW())
+    `, [id, eventType, eventId, dataHash, prevHash, blockIndex]);
 
     return { id, dataHash, prevHash, blockIndex, risk_level: riskClassification.level, seal_type: riskClassification.seal };
 }
 
 function verifyChainIntegrity(limit = 100) {
-    const seals = db.prepare('SELECT * FROM blockchain_seals ORDER BY block_index ASC LIMIT ?').all(limit);
+    const seals = db.all('SELECT * FROM blockchain_seals ORDER BY block_index ASC LIMIT ?', [limit]);
     let valid = true;
     let brokenAt = null;
     for (let i = 1; i < seals.length; i++) {
@@ -180,10 +181,10 @@ router.get('/public/verify', async (req, res) => {
     try {
         const { hash } = req.query;
         if (!hash) return res.status(400).json({ error: 'hash parameter required.' });
-        const seal = await db.prepare('SELECT * FROM blockchain_seals WHERE data_hash = ?').get(hash);
+        const seal = await db.get('SELECT * FROM blockchain_seals WHERE data_hash = ?', [hash]);
         if (!seal) return res.json({ verified: false, hash, message: 'No matching seal found in TrustChecker chain.', verification_time: new Date().toISOString() });
-        const prevSeal = seal.block_index > 1 ? await db.prepare('SELECT data_hash FROM blockchain_seals WHERE block_index = ?').get(seal.block_index - 1) : null;
-        const nextSeal = await db.prepare('SELECT prev_hash FROM blockchain_seals WHERE block_index = ?').get(seal.block_index + 1);
+        const prevSeal = seal.block_index > 1 ? await db.get('SELECT data_hash FROM blockchain_seals WHERE block_index = ? LIMIT 1000', [seal.block_index - 1]) : null;
+        const nextSeal = await db.get('SELECT prev_hash FROM blockchain_seals WHERE block_index = ?', [seal.block_index + 1]);
         const chainValid = (!prevSeal || seal.prev_hash === prevSeal.data_hash) && (!nextSeal || nextSeal.prev_hash === seal.data_hash);
         res.json({
             verified: true, hash,
@@ -200,11 +201,11 @@ router.post('/public/verify-evidence', async (req, res) => {
         const { evidence_hash, scan_log_hashes, timestamp_token } = req.body;
         if (!evidence_hash) return res.status(400).json({ error: 'evidence_hash required' });
         const results = { evidence_hash: { hash: evidence_hash, verified: false }, component_hashes: [], timestamp: { verified: false }, overall: false };
-        const mainSeal = await db.prepare('SELECT * FROM blockchain_seals WHERE data_hash = ?').get(evidence_hash);
+        const mainSeal = await db.get('SELECT * FROM blockchain_seals WHERE data_hash = ?', [evidence_hash]);
         if (mainSeal) { results.evidence_hash.verified = true; results.evidence_hash.sealed_at = mainSeal.sealed_at; results.evidence_hash.block_index = mainSeal.block_index; }
         if (scan_log_hashes && Array.isArray(scan_log_hashes)) {
             for (const h of scan_log_hashes) {
-                const seal = await db.prepare('SELECT block_index, sealed_at FROM blockchain_seals WHERE data_hash = ?').get(h);
+                const seal = await db.get('SELECT block_index, sealed_at FROM blockchain_seals WHERE data_hash = ? LIMIT 1000', [h]);
                 results.component_hashes.push({ hash: h.substring(0, 16) + '...', verified: !!seal, sealed_at: seal?.sealed_at || null });
             }
         }
@@ -223,15 +224,15 @@ router.post('/public/verify-evidence', async (req, res) => {
 
 router.get('/trust-report', authMiddleware, async (req, res) => {
     try {
-        const totalSeals = (await db.prepare('SELECT COUNT(*) as c FROM blockchain_seals').get())?.c || 0;
-        const fraudSeals = (await db.prepare('SELECT COUNT(*) as c FROM blockchain_seals WHERE event_type = "fraud_alert"').get())?.c || 0;
-        const evidenceSeals = (await db.prepare('SELECT COUNT(*) as c FROM blockchain_seals WHERE event_type = "evidence_sealed"').get())?.c || 0;
-        const modelSeals = (await db.prepare('SELECT COUNT(*) as c FROM blockchain_seals WHERE event_type IN ("model_deployed", "model_rollback")').get())?.c || 0;
-        const breachSeals = (await db.prepare('SELECT COUNT(*) as c FROM blockchain_seals WHERE event_type = "route_breach"').get())?.c || 0;
+        const totalSeals = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals'))?.c || 0;
+        const fraudSeals = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals WHERE event_type = "fraud_alert"'))?.c || 0;
+        const evidenceSeals = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals WHERE event_type = "evidence_sealed"'))?.c || 0;
+        const modelSeals = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals WHERE event_type IN ("model_deployed", "model_rollback")'))?.c || 0;
+        const breachSeals = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals WHERE event_type = "route_breach"'))?.c || 0;
         const integrity = verifyChainIntegrity();
-        const totalFraudAlerts = (await db.prepare('SELECT COUNT(*) as c FROM fraud_alerts').get())?.c || 0;
-        const totalBreaches = (await db.prepare('SELECT COUNT(*) as c FROM route_breaches WHERE severity IN ("critical", "high")').get())?.c || 0;
-        const totalForensic = (await db.prepare('SELECT COUNT(*) as c FROM forensic_cases WHERE status = "frozen"').get())?.c || 0;
+        const totalFraudAlerts = (await db.get('SELECT COUNT(*) as c FROM fraud_alerts'))?.c || 0;
+        const totalBreaches = (await db.get('SELECT COUNT(*) as c FROM route_breaches WHERE severity IN ("critical", "high")'))?.c || 0;
+        const totalForensic = (await db.get('SELECT COUNT(*) as c FROM forensic_cases WHERE status = "frozen"'))?.c || 0;
         const shouldBeSealed = totalFraudAlerts + totalBreaches + totalForensic;
         const actuallySealed = fraudSeals + breachSeals + evidenceSeals;
         const sealCoverage = shouldBeSealed > 0 ? ((actuallySealed / shouldBeSealed) * 100) : 100;
@@ -254,7 +255,7 @@ router.get('/trust-report', authMiddleware, async (req, res) => {
 
 router.get('/anchor-config', authMiddleware, requirePermission('settings:update'), async (req, res) => {
     try {
-        const config = await db.prepare(`SELECT * FROM system_settings WHERE category = 'blockchain_anchor'`).all();
+        const config = await db.all(`SELECT * FROM system_settings WHERE category = 'blockchain_anchor'`);
         const defaults = {
             enabled: false, provider: 'tsa_only', fallback_provider: 'tsa_only',
             anchor_frequency: 'daily', batch_size: 100, merkle_batch: true,
@@ -289,12 +290,12 @@ router.put('/anchor-config', authMiddleware, requirePermission('settings:update'
         const settings = { provider, fallback_provider, anchor_frequency, batch_size: String(batch_size), tsa_provider, gas_budget_monthly: String(gas_budget_monthly), enabled: String(enabled) };
         for (const [key, value] of Object.entries(settings)) {
             if (value !== undefined) {
-                const existing = await db.prepare(`SELECT id FROM system_settings WHERE category = 'blockchain_anchor' AND setting_key = ?`).get(key);
-                if (existing) { await db.prepare(`UPDATE system_settings SET setting_value = ?, updated_at = datetime('now') WHERE id = ?`).run(value, existing.id); }
-                else { await db.prepare(`INSERT INTO system_settings (id, category, setting_key, setting_value, updated_at) VALUES (?, 'blockchain_anchor', ?, ?, datetime('now'))`).run(uuidv4(), key, value); }
+                const existing = await db.get(`SELECT id FROM system_settings WHERE category = 'blockchain_anchor' AND setting_key = ?`, [key]);
+                if (existing) { await db.run(`UPDATE system_settings SET setting_value = ?, updated_at = NOW() WHERE id = ?`, [value, existing.id]); }
+                else { await db.run(`INSERT INTO system_settings (id, category, setting_key, setting_value, updated_at) VALUES (?, 'blockchain_anchor', ?, ?, NOW())`, [uuidv4(), key, value]); }
             }
         }
-        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp) VALUES (?, ?, 'anchor_config_updated', 'system', 'blockchain_anchor', ?, datetime('now'))`).run(uuidv4(), req.user?.id || 'system', JSON.stringify(settings));
+        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp) VALUES (?, ?, 'anchor_config_updated', 'system', 'blockchain_anchor', ?, NOW())`, [uuidv4(), req.user?.id || 'system', JSON.stringify(settings)]);
         res.json({ status: 'updated', settings });
     } catch (err) { res.status(500).json({ error: 'Failed to update anchor config' }); }
 });
@@ -302,14 +303,14 @@ router.put('/anchor-config', authMiddleware, requirePermission('settings:update'
 // ─── GET /api/scm/integrity/module-status ────────────────────────────────────
 router.get('/module-status', authMiddleware, async (req, res) => {
     try {
-        const enabled = (await db.prepare(`SELECT setting_value FROM system_settings WHERE category = 'blockchain_anchor' AND setting_key = 'enabled'`).get())?.setting_value;
-        const totalSeals = (await db.prepare('SELECT COUNT(*) as c FROM blockchain_seals').get())?.c || 0;
+        const enabled = (await db.get(`SELECT setting_value FROM system_settings WHERE category = 'blockchain_anchor' AND setting_key = 'enabled'`))?.setting_value;
+        const totalSeals = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals'))?.c || 0;
         const integrity = verifyChainIntegrity();
         res.json({
             module: 'Enterprise Data Integrity Add-on', enabled: enabled === 'true',
             chain_seals: totalSeals, chain_intact: integrity.valid,
             features: { hash_chain: true, evidence_verification_portal: true, trust_report: true, risk_classification_matrix: true, public_anchor: enabled === 'true', tsa_timestamping: enabled === 'true' },
-            pricing_tier: 'Enterprise', toggle_note: 'Can be enabled/disabled per tenant. Existing seals remain immutable.'
+            pricing_tier: 'Enterprise', toggle_note: 'Can be enabled/disabled per org. Existing seals remain immutable.'
         });
     } catch (err) { res.status(500).json({ error: 'Failed to fetch module status' }); }
 });
@@ -385,8 +386,8 @@ const CONTROL_ZONES = {
     'C': {
         name: 'Platform Infrastructure Zone', roles: ['super_admin'],
         permissions: ['anchor_config', 'key_rotation', 'sla_monitor', 'health_check'],
-        restrictions: ['❌ No tenant evidence access', '❌ No seal creation', '❌ No approval rights'],
-        boundary: 'Infrastructure configuration only — zero tenant data access'
+        restrictions: ['❌ No org evidence access', '❌ No seal creation', '❌ No approval rights'],
+        boundary: 'Infrastructure configuration only — zero org data access'
     }
 };
 
@@ -433,10 +434,10 @@ router.get('/role-matrix', authMiddleware, async (req, res) => {
 // ─── GET /api/scm/integrity/sod-validation – SoD conflict check ─────────────
 router.get('/sod-validation', authMiddleware, async (req, res) => {
     try {
-        const users = await db.prepare('SELECT id, username, role FROM users').all();
+        const users = await db.all('SELECT id, username, role FROM users');
         const violations = [];
         for (const user of users) {
-            const userRoles = await db.prepare('SELECT role_name FROM user_roles WHERE user_id = ?').all(user.id);
+            const userRoles = await db.all('SELECT role_name FROM user_roles WHERE user_id = ?', [user.id]);
             const roleNames = [user.role, ...userRoles.map(r => r.role_name)];
             for (const [roleA, roleB] of SOD_CONFLICTS) {
                 if (roleNames.includes(roleA) && roleNames.includes(roleB)) {
@@ -489,8 +490,8 @@ router.get('/control-zones', authMiddleware, async (req, res) => {
 router.get('/enforcement-layers', authMiddleware, async (req, res) => {
     try {
         const integrity = verifyChainIntegrity();
-        const totalSeals = (await db.prepare('SELECT COUNT(*) as c FROM blockchain_seals').get())?.c || 0;
-        const provider = (await db.prepare(`SELECT setting_value FROM system_settings WHERE category = 'blockchain_anchor' AND setting_key = 'provider'`).get())?.setting_value || 'none';
+        const totalSeals = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals'))?.c || 0;
+        const provider = (await db.get(`SELECT setting_value FROM system_settings WHERE category = 'blockchain_anchor' AND setting_key = 'provider'`))?.setting_value || 'none';
 
         const layers = ENFORCEMENT_LAYERS.map(l => ({
             ...l,
@@ -529,9 +530,9 @@ router.post('/escalation', authMiddleware, async (req, res) => {
             approved_by: null, approved_at: null
         }));
 
-        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
-            VALUES (?, ?, 'seal_escalation', 'integrity', ?, ?, datetime('now'))
-        `).run(escalationId, req.user?.id || 'system', event_id, JSON.stringify({ risk_level, event_type, ers_score, approvals_required: rule.approvals, seal_type: rule.seal, anchor: rule.anchor }));
+        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
+            VALUES (?, ?, 'seal_escalation', 'integrity', ?, ?, NOW())
+        `, [escalationId, req.user?.id || 'system', event_id, JSON.stringify({ risk_level, event_type, ers_score, approvals_required: rule.approvals, seal_type: rule.seal, anchor: rule.anchor })]);
 
         res.status(201).json({
             escalation_id: escalationId, event_id, risk_level,
@@ -547,19 +548,19 @@ router.post('/escalation', authMiddleware, async (req, res) => {
 // ─── GET /api/scm/integrity/governance-checkpoints – All 4 checkpoints ──────
 router.get('/governance-checkpoints', authMiddleware, async (req, res) => {
     try {
-        const users = await db.prepare('SELECT id, role FROM users').all();
+        const users = await db.all('SELECT id, role FROM users');
         let sodPass = true;
         for (const user of users) {
-            const userRoles = await db.prepare('SELECT role_name FROM user_roles WHERE user_id = ?').all(user.id);
+            const userRoles = await db.all('SELECT role_name FROM user_roles WHERE user_id = ?', [user.id]);
             const roleNames = [user.role, ...userRoles.map(r => r.role_name)];
             for (const [a, b] of SOD_CONFLICTS) {
                 if (roleNames.includes(a) && roleNames.includes(b)) { sodPass = false; break; }
             }
         }
         const integrity = verifyChainIntegrity(10000);
-        const orphanSeals = (await db.prepare('SELECT COUNT(*) as c FROM blockchain_seals WHERE prev_hash IS NULL AND block_index > 1').get())?.c || 0;
-        const anchorEnabled = (await db.prepare(`SELECT setting_value FROM system_settings WHERE category = 'blockchain_anchor' AND setting_key = 'enabled'`).get())?.setting_value === 'true';
-        const totalSeals = (await db.prepare('SELECT COUNT(*) as c FROM blockchain_seals').get())?.c || 0;
+        const orphanSeals = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals WHERE prev_hash IS NULL AND block_index > 1'))?.c || 0;
+        const anchorEnabled = (await db.get(`SELECT setting_value FROM system_settings WHERE category = 'blockchain_anchor' AND setting_key = 'enabled'`))?.setting_value === 'true';
+        const totalSeals = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals'))?.c || 0;
 
         const checkpoints = [
             { id: 1, name: 'SoD Validation', checks: ['Signer ≠ Approver', 'Approver ≠ Infra Owner', 'Signer ≠ Configurer'], status: sodPass ? 'PASS' : 'FAIL', icon: sodPass ? '✅' : '❌' },
@@ -581,10 +582,10 @@ router.get('/governance-checkpoints', authMiddleware, async (req, res) => {
 // ─── GET /api/scm/integrity/maturity-level – v2.0 with status targets ───────
 router.get('/maturity-level', authMiddleware, async (req, res) => {
     try {
-        const totalSeals = (await db.prepare('SELECT COUNT(*) as c FROM blockchain_seals').get())?.c || 0;
+        const totalSeals = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals'))?.c || 0;
         const integrity = verifyChainIntegrity();
-        const anchorEnabled = (await db.prepare(`SELECT setting_value FROM system_settings WHERE category = 'blockchain_anchor' AND setting_key = 'enabled'`).get())?.setting_value === 'true';
-        const provider = (await db.prepare(`SELECT setting_value FROM system_settings WHERE category = 'blockchain_anchor' AND setting_key = 'provider'`).get())?.setting_value || 'none';
+        const anchorEnabled = (await db.get(`SELECT setting_value FROM system_settings WHERE category = 'blockchain_anchor' AND setting_key = 'enabled'`))?.setting_value === 'true';
+        const provider = (await db.get(`SELECT setting_value FROM system_settings WHERE category = 'blockchain_anchor' AND setting_key = 'provider'`))?.setting_value || 'none';
 
         const levels = [
             { level: 1, name: 'Internal Hash Chain', target: 'Baseline', achieved: totalSeals > 0 && integrity.valid },

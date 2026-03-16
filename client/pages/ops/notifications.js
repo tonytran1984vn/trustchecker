@@ -1,62 +1,76 @@
 /**
- * Ops – Notifications Center
- * Data from PostgreSQL via /api/notifications
+ * Ops – Notifications Center (Premium Design)
+ * ═══════════════════════════════════════════════
+ * Clean notification cards with type badges, filter chips, and mark-read actions.
  */
 import { icon } from '../../core/icons.js';
 import { API as api } from '../../core/api.js';
 
+const ACCENT = '#0d9488';
 let _data = null;
 let _filter = 'all';
 
 export function renderPage() {
   if (!_data) { loadData(); return loading(); }
   const { notifications, unread_count } = _data;
-  const typeColors = { critical: '#ef4444', warning: '#f59e0b', info: '#3b82f6', success: '#22c55e', error: '#ef4444' };
+
+  const typeMeta = {
+    critical: { c: '#ef4444', bg: 'rgba(239,68,68,0.08)', icon: '🚨', label: 'CRITICAL' },
+    warning:  { c: '#f59e0b', bg: 'rgba(245,158,11,0.08)', icon: '⚠️', label: 'WARNING' },
+    info:     { c: '#3b82f6', bg: 'rgba(59,130,246,0.08)', icon: '📦', label: 'INFO' },
+    success:  { c: '#22c55e', bg: 'rgba(34,197,94,0.08)', icon: '✅', label: 'SUCCESS' },
+    error:    { c: '#ef4444', bg: 'rgba(239,68,68,0.08)', icon: '🚨', label: 'ERROR' },
+  };
 
   const filtered = _filter === 'all' ? notifications : notifications.filter(n => n.type === _filter);
+  const critCount = notifications.filter(n => n.type === 'critical').length;
+  const warnCount = notifications.filter(n => n.type === 'warning').length;
 
   return `
     <div class="sa-page">
-      <div class="sa-page-title">
-        <h1>${icon('bell', 28)} Notifications</h1>
-        <div class="sa-title-actions">
-          ${unread_count > 0 ? `<span style="background:#ef4444;color:#fff;padding:2px 10px;border-radius:10px;font-size:0.75rem;font-weight:700">${unread_count} unread</span>` : ''}
+      <!-- Stats -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:1.5rem">
+        ${nStat(icon('bell', 20, ACCENT), 'Total', notifications.length, ACCENT)}
+        ${nStat(icon('alertTriangle', 20, '#3b82f6'), 'Unread', unread_count, '#3b82f6')}
+        ${nStat(icon('alertTriangle', 20, '#ef4444'), 'Critical', critCount, '#ef4444')}
+        ${nStat(icon('alertTriangle', 20, '#f59e0b'), 'Warnings', warnCount, '#f59e0b')}
+      </div>
+
+      <!-- Filters -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${['all', 'critical', 'warning', 'info', 'success'].map(f => {
+            const isActive = _filter === f;
+            const label = f === 'all' ? 'All' : f === 'critical' ? '🚨 Critical' : f === 'warning' ? '⚠️ Warning' : f === 'info' ? 'ℹ️ Info' : '✅ Success';
+            return `<button style="padding:4px 12px;border-radius:8px;font-size:0.75rem;font-weight:600;cursor:pointer;border:1px solid ${isActive ? '#0d9488' : 'var(--border-color,rgba(0,0,0,0.1))'};background:${isActive ? '#0d9488' : 'transparent'};color:${isActive ? '#fff' : 'var(--text-primary)'}" onclick="window._notiFilter('${f}')">${label}</button>`;
+          }).join('')}
+        </div>
+        <div style="display:flex;gap:6px">
+          ${unread_count > 0 ? `<span style="display:flex;align-items:center;gap:4px;font-size:0.72rem;padding:4px 10px;border-radius:8px;background:rgba(13,148,136,0.08);color:#0d9488;font-weight:600">${unread_count} unread</span>` : ''}
           <button class="btn btn-outline btn-sm" onclick="window._notiMarkAllRead()">Mark All Read</button>
-          <button class="btn btn-ghost btn-sm" onclick="window._notiShowPrefs()">⚙ Preferences</button>
         </div>
       </div>
 
-      <div style="display:flex;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap">
-        ${['all', 'critical', 'warning', 'info', 'success'].map(f =>
-    `<button class="btn btn-sm ${_filter === f ? 'btn-primary' : 'btn-outline'}" onclick="window._notiFilter('${f}')">${f === 'all' ? 'All' : f === 'critical' ? '🚨 Critical' : f === 'warning' ? '⚠️ Warning' : f === 'info' ? 'ℹ️ Info' : '✅ Success'}</button>`
-  ).join('')}
-      </div>
-
-      ${filtered.length === 0 ? '<div class="sa-card" style="padding:2rem;text-align:center;color:var(--text-secondary)">No notifications</div>' : `
+      <!-- Notification List -->
+      ${filtered.length === 0 ? `<div style="background:var(--card-bg);border-radius:12px;border:1px solid var(--border-color,rgba(0,0,0,0.06));padding:3rem;text-align:center;color:var(--text-secondary)">No notifications</div>` : `
       <div style="display:flex;flex-direction:column;gap:8px">
         ${filtered.map(n => {
-    const color = typeColors[n.type] || '#3b82f6';
-    const iconMap = { critical: '🚨', warning: '⚠️', info: '📦', success: '✅', error: '🚨' };
-    return `
-          <div class="sa-card" style="padding:14px 18px;border-left:4px solid ${color};${n.read ? 'opacity:0.7;' : ''}cursor:pointer;transition:transform 0.1s" onmouseover="this.style.transform='translateX(4px)'" onmouseout="this.style.transform=''" onclick="window._notiMarkRead('${n.id}')">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-              <div style="display:flex;gap:12px;flex:1">
-                <span style="font-size:1.5rem;line-height:1">${iconMap[n.type] || '📝'}</span>
-                <div style="flex:1">
-                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
-                    <strong style="font-size:0.88rem">${n.title || n.action || ''}</strong>
-                    ${!n.read ? '<span style="width:8px;height:8px;border-radius:50%;background:#3b82f6;display:inline-block"></span>' : ''}
-                  </div>
-                  <div style="font-size:0.78rem;color:var(--text-secondary);line-height:1.4">${n.message || n.summary || ''}</div>
-                </div>
+          const tm = typeMeta[n.type] || typeMeta.info;
+          return `<div style="background:var(--card-bg);border-radius:10px;border:1px solid var(--border-color,rgba(0,0,0,0.06));padding:16px 20px;display:flex;align-items:flex-start;gap:14px;cursor:pointer;transition:box-shadow 0.15s;${n.read ? 'opacity:0.65;' : ''}"
+            onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,0.05)'" onmouseout="this.style.boxShadow=''"
+            onclick="window._notiMarkRead('${n.id}')">
+            <div style="width:38px;height:38px;border-radius:10px;background:${tm.bg};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.2rem">${tm.icon}</div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+                <span style="font-weight:600;font-size:0.85rem;color:var(--text-primary)">${n.title || 'Notification'}</span>
+                <span style="font-size:0.55rem;padding:2px 6px;border-radius:4px;background:${tm.bg};color:${tm.c};font-weight:700">${tm.label}</span>
+                ${!n.read ? '<span style="width:7px;height:7px;border-radius:50%;background:#3b82f6;flex-shrink:0"></span>' : ''}
               </div>
-              <div style="text-align:right;white-space:nowrap">
-                <div style="font-size:0.7rem;color:var(--text-secondary)">${n.timestamp ? timeAgo(n.timestamp) : ''}</div>
-                <span class="sa-code" style="font-size:0.65rem">${n.id?.slice(0, 8) || ''}</span>
-              </div>
+              <div style="font-size:0.78rem;color:var(--text-secondary);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${n.message || ''}</div>
             </div>
+            <span style="font-size:0.68rem;color:var(--text-secondary);white-space:nowrap;flex-shrink:0">${n.timestamp ? timeAgo(n.timestamp) : ''}</span>
           </div>`;
-  }).join('')}
+        }).join('')}
       </div>`}
     </div>
   `;
@@ -66,58 +80,43 @@ async function loadData() {
   try {
     const r = await api.get('/notifications?limit=50');
     _data = {
-      notifications: (r.notifications || []).map(n => {
-        // Parse details if JSON string
-        let details = {};
-        try { details = typeof n.details === 'string' ? JSON.parse(n.details) : (n.details || {}); } catch (e) { }
-        const action = n.action || '';
-        const type = action.includes('CRITICAL') || action.includes('RECALL') ? 'critical'
-          : action.includes('WARNING') || action.includes('BREACH') || action.includes('SLA') ? 'warning'
-            : action.includes('SUCCESS') || action.includes('RESOLVED') ? 'success' : 'info';
-        return {
-          id: n.id,
-          type,
-          title: details.title || action.replace('NOTIFY_', '').replace(/_/g, ' '),
-          message: details.message || details.summary || n.entity_type || '',
-          timestamp: n.timestamp || n.created_at,
-          read: details.read || false,
-        };
-      }),
+      notifications: (r.notifications || []).map(n => ({
+        id: n.id,
+        type: n.type || 'info',
+        title: n.title || 'Notification',
+        message: n.message || '',
+        timestamp: n.timestamp || n.created_at,
+        read: n.read || false,
+      })),
       unread_count: r.unread_count || 0
     };
-    const el = document.getElementById('main-content');
-    if (el) el.innerHTML = renderPage();
-  } catch (e) { console.error('[Notifications]', e); _data = { notifications: [], unread_count: 0 }; const el = document.getElementById('main-content'); if (el) el.innerHTML = renderPage(); }
+    if (typeof window.render === 'function') window.render();
+  } catch (e) { _data = { notifications: [], unread_count: 0 }; if (typeof window.render === 'function') window.render(); }
 }
 
 function loading() {
-  return `<div class="sa-page"><div style="text-align:center;padding:4rem"><div class="loading-spinner"></div><div style="margin-top:1rem;color:var(--text-secondary)">Loading notifications...</div></div></div>`;
+  return `<div class="sa-page"><div style="text-align:center;padding:4rem"><div class="sa-spinner"></div><p style="color:var(--text-secondary);margin-top:1rem">Loading notifications…</p></div></div>`;
 }
 
-function timeAgo(dateStr) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const min = Math.floor(diff / 60000);
-  if (min < 60) return `${min}m ago`;
-  const hrs = Math.floor(min / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+function timeAgo(d) { const m = Math.floor((Date.now()-new Date(d).getTime())/60000); if (m < 1) return 'Just now'; if (m < 60) return `${m}m ago`; const h = Math.floor(m/60); if (h < 24) return `${h}h ago`; return `${Math.floor(h/24)}d ago`; }
+
+function nStat(iconHtml, label, value, color) {
+  return `<div style="background:var(--card-bg);border-radius:12px;padding:16px 20px;border:1px solid var(--border-color,rgba(0,0,0,0.06))">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <div style="width:32px;height:32px;border-radius:8px;background:${color}10;display:flex;align-items:center;justify-content:center">${iconHtml}</div>
+    </div>
+    <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-secondary);font-weight:600">${label}</div>
+    <div style="font-size:1.5rem;font-weight:700;color:${color};line-height:1.2">${value}</div>
+  </div>`;
 }
 
-window._notiFilter = function (f) {
-  _filter = f;
-  const el = document.getElementById('main-content');
-  if (el) el.innerHTML = renderPage();
-};
+window._notiFilter = function (f) { _filter = f; if (typeof window.render === 'function') window.render(); };
 
 window._notiMarkRead = async function (id) {
   try {
     await api.put(`/notifications/${id}/read`);
-    if (_data) {
-      const n = _data.notifications.find(n => n.id === id);
-      if (n) { n.read = true; _data.unread_count = Math.max(0, _data.unread_count - 1); }
-    }
-    const el = document.getElementById('main-content');
-    if (el) el.innerHTML = renderPage();
+    if (_data) { const n = _data.notifications.find(n => n.id === id); if (n) { n.read = true; _data.unread_count = Math.max(0, _data.unread_count - 1); } }
+    if (typeof window.render === 'function') window.render();
   } catch (e) { console.error('[Notifications] Mark read failed', e); }
 };
 
@@ -126,42 +125,6 @@ window._notiMarkAllRead = async function () {
     await api.put('/notifications/read-all');
     showToast('✅ All notifications marked as read', 'success');
     _data = null;
-    const el = document.getElementById('main-content');
-    if (el) el.innerHTML = renderPage();
+    if (typeof window.render === 'function') window.render();
   } catch (e) { showToast('Failed to mark all read', 'error'); }
-};
-
-window._notiShowPrefs = async function () {
-  try {
-    const prefs = await api.get('/notifications/preferences');
-    const modal = document.createElement('div');
-    modal.id = 'noti-prefs-modal';
-    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5)';
-    modal.innerHTML = `
-      <div style="background:var(--card-bg, #fff);border-radius:12px;padding:24px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
-        <h3 style="margin:0 0 16px">⚙ Notification Preferences</h3>
-        <div style="display:flex;flex-direction:column;gap:12px">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="_np_email" ${prefs.email !== false ? 'checked' : ''}> Email notifications</label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="_np_push" ${prefs.push !== false ? 'checked' : ''}> Push notifications</label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="_np_inapp" ${prefs.in_app !== false ? 'checked' : ''}> In-app notifications</label>
-        </div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('noti-prefs-modal')?.remove()">Cancel</button>
-          <button class="btn btn-primary btn-sm" onclick="window._notiSavePrefs()">Save</button>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
-    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-  } catch (e) { showToast('Failed to load preferences', 'error'); }
-};
-
-window._notiSavePrefs = async function () {
-  const email = document.getElementById('_np_email')?.checked;
-  const push = document.getElementById('_np_push')?.checked;
-  const in_app = document.getElementById('_np_inapp')?.checked;
-  try {
-    await api.put('/notifications/preferences', { email, push, in_app });
-    showToast('✅ Preferences saved', 'success');
-    document.getElementById('noti-prefs-modal')?.remove();
-  } catch (e) { showToast('Failed to save preferences', 'error'); }
 };

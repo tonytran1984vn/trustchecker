@@ -1,3 +1,4 @@
+const { validatePassword } = require('../security/password-policy');
 /**
  * Auth Core — Middleware, helpers, constants
  * Shared by all auth domain modules.
@@ -91,7 +92,7 @@ async function generateTokenPair(user, sessionId) {
         id: user.id,
         email: user.email,
         role: user.role,
-        user_type: user.user_type || 'tenant',
+        user_type: user.user_type || 'org',
         session_id: sessionId,
         plan: user.plan || 'free',
     };
@@ -139,8 +140,8 @@ async function enrichUserWithOrg(user) {
     } catch (_) {
         // org table may not exist yet (pre-migration)
     }
-    // Preserve user_type from DB or default to tenant
-    if (!user.user_type) user.user_type = 'tenant';
+    // Preserve user_type from DB or default to org
+    if (!user.user_type) user.user_type = 'org';
     return user;
 }
 
@@ -229,13 +230,13 @@ async function cleanupExpiredRoles(userId) {
 }
 
 // Re-export RBAC middleware for convenience
-const { requirePermission, requireConstitutional, requirePlatformAdmin, requireTenantAdmin } = require('./rbac');
+const { requirePermission, requireConstitutional, requirePlatformAdmin, requireOrgAdmin, requireTenantAdmin } = require('./rbac');
 
 module.exports = {
     JWT_SECRET, JWT_EXPIRY, REFRESH_EXPIRY_DAYS, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES,
     ROLE_HIERARCHY,
     authMiddleware, requireRole,
-    requirePermission, requireConstitutional, requirePlatformAdmin, requireTenantAdmin,
+    requirePermission, requireConstitutional, requirePlatformAdmin, requireOrgAdmin, requireTenantAdmin,
     generateTokenPair, enrichUserWithOrg, createSession,
     // P3: Advanced Security
     checkIPAnomaly, cleanupExpiredRoles,

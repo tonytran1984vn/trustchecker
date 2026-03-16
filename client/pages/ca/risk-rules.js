@@ -1,7 +1,7 @@
 /**
  * Company Admin – Risk Rules (Tenant Scope)
  * ═══════════════════════════════════════════
- * Real data from /api/scm/model/models + /api/scm/risk/alerts
+ * Real data from /api/scm/risk-model/models + /api/scm/risk/alerts
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
@@ -21,9 +21,9 @@ async function load() {
       models = rc.riskModels; risks = rc.riskAlerts; rulesConfig = rc.rulesConfig;
     } else {
       [models, risks, rulesConfig] = await Promise.all([
-        API.get('/scm/model/models').catch(() => ({ models: [] })),
+        API.get('/scm/risk-model/models').catch(() => ({ models: [] })),
         API.get('/scm/risk/alerts?limit=50').catch(() => ({ alerts: [] })),
-        API.get('/scm/model/rules-config').catch(() => ({ grouped: {} })),
+        API.get('/scm/risk-model/rules-config').catch(() => ({ grouped: {} })),
       ]);
     }
     const modelList = Array.isArray(models) ? models : (models.models || []);
@@ -177,7 +177,7 @@ export function renderPage() {
 window._rrChangeStatus = async function (modelId, newStatus) {
   try {
     const { showToast } = await import('../../components/toast.js');
-    await API.put(`/scm/model/models/${modelId}/status`, { status: newStatus });
+    await API.put(`/scm/risk-model/models/${modelId}/status`, { status: newStatus });
     showToast(`✓ Status changed to ${newStatus}`, 'success');
     rules = null; load();
   } catch (e) {
@@ -205,7 +205,7 @@ window._rrCreate = async function () {
   };
 
   try {
-    await API.post('/scm/model/models', data);
+    await API.post('/scm/risk-model/models', data);
     showForm = false;
     rules = null;
     loading = false;
@@ -227,7 +227,7 @@ window._rrEditRule = function (ruleId, currentValue) {
 
 window._rrSaveRule = async function (ruleId, newValue) {
   try {
-    await API.put(`/scm/model/rules-config/${ruleId}`, { rule_value: newValue });
+    await API.put(`/scm/risk-model/rules-config/${ruleId}`, { rule_value: newValue });
     rules = null; loading = false; load();
   } catch (e) {
     alert('Failed to save: ' + (e.message || 'Unknown error'));

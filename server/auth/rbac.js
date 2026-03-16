@@ -1,16 +1,16 @@
 /**
- * RBAC Engine — Hierarchical Multi-Tenant Permission System
+ * RBAC Engine — Hierarchical Multi-Org Permission System
  *
  * Pure logic module (no routes). Provides:
  *   getUserPermissions(userId)           → Set<string>
  *   hasPermission(userId, perm)          → boolean
  *   hasAnyPermission(userId, perms[])    → boolean
  *   getPermissionsForRole(roleId)        → string[]
- *   checkPlanGuardrail(tenantId, perm)   → boolean
+ *   checkPlanGuardrail(orgId, perm)      → boolean
  *   checkSoD(userId, newPerm)            → { conflict, details }
  *
  * Permission format: "resource:action" (e.g. "product:create")
- * Levels: platform | tenant | business
+ * Levels: platform | org | business
  */
 
 const db = require('../db');
@@ -103,30 +103,48 @@ const SOD_CONFLICTS = [
     ['supplier:onboard', 'supplier:approve_kyc'],
     // v3.0: Purchase Order SoD
     ['po:create', 'po:approve'],
+    // v3.0: Change Management SoD (Platform Security Admin)
+    ['change:create', 'change:approve'],
+    // P3: Record Governance SoD — proposer ≠ approver
+    ['governance:propose_update', 'governance:approve_update'],
 ];
 
 // ─── Permission Cache (per-request) ──────────────────────────────────────────
 // Attach to req._rbacPerms during first check, reuse for rest of request lifecycle
 
 /**
- * Load all effective permissions for a user via RBAC tables:
- *   user → rbac_user_roles → rbac_role_permissions → rbac_permissions
+ * Load all effective permissions for a user via RBAC tables.
+ * Enterprise IAM path: user → membership → rbac_user_roles → rbac_role_permissions → permissions
  *
- * Falls back to legacy role column for backward compatibility.
+ * If orgId provided: returns ONLY org-scoped permissions (via membership).
+ * If orgId null: returns ALL permissions (platform context or legacy fallback).
  */
-async function getUserPermissions(userId) {
-    // Primary: Load from RBAC tables
-    const rows = await db.all(`
-    SELECT DISTINCT p.resource || ':' || p.action AS perm
-    FROM rbac_user_roles ur
-    JOIN rbac_role_permissions rp ON rp.role_id = ur.role_id
-    JOIN rbac_permissions p ON p.id = rp.permission_id
-    WHERE ur.user_id = ?
-      AND (ur.expires_at IS NULL OR ur.expires_at > datetime('now'))
-  `, [userId]);
+async function getUserPermissions(userId, orgId = null) {
+    let rows;
+    if (orgId) {
+        // Org-scoped: permissions via membership (enterprise IAM)
+        rows = await db.all(`
+            SELECT DISTINCT p.resource || ':' || p.action AS perm
+            FROM memberships m
+            JOIN rbac_user_roles ur ON ur.membership_id = m.id
+            JOIN rbac_role_permissions rp ON rp.role_id = ur.role_id
+            JOIN rbac_permissions p ON p.id = rp.permission_id
+            WHERE m.user_id = ? AND m.org_id = ? AND m.status = 'active'
+              AND (ur.expires_at IS NULL OR ur.expires_at > NOW())
+        `, [userId, orgId]);
+    } else {
+        // Platform/legacy: direct user_id lookup (no org scope)
+        rows = await db.all(`
+            SELECT DISTINCT p.resource || ':' || p.action AS perm
+            FROM rbac_user_roles ur
+            JOIN rbac_role_permissions rp ON rp.role_id = ur.role_id
+            JOIN rbac_permissions p ON p.id = rp.permission_id
+            WHERE ur.user_id = ?
+              AND (ur.expires_at IS NULL OR ur.expires_at > NOW())
+        `, [userId]);
+    }
 
-    const perms = new Set(rows.map(r => r.perm));
-    return perms;
+    return new Set(rows.map(r => r.perm));
 }
 
 /**
@@ -134,12 +152,12 @@ async function getUserPermissions(userId) {
  * Uses req._rbacPerms cache if available.
  */
 async function hasPermission(userId, permission, req) {
-    // Use cached permissions if available (set by middleware)
     if (req && req._rbacPerms) {
         return req._rbacPerms.has(permission);
     }
-    const perms = await getUserPermissions(userId);
-    if (req) req._rbacPerms = perms; // cache for this request
+    const orgId = req?.orgId || null;
+    const perms = await getUserPermissions(userId, orgId);
+    if (req) req._rbacPerms = perms;
     return perms.has(permission);
 }
 
@@ -150,7 +168,8 @@ async function hasAnyPermission(userId, permissions, req) {
     if (req && req._rbacPerms) {
         return permissions.some(p => req._rbacPerms.has(p));
     }
-    const perms = await getUserPermissions(userId);
+    const orgId = req?.orgId || null;
+    const perms = await getUserPermissions(userId, orgId);
     if (req) req._rbacPerms = perms;
     return permissions.some(p => perms.has(p));
 }
@@ -169,20 +188,20 @@ async function getPermissionsForRole(roleId) {
 }
 
 /**
- * Plan Guardrail: Check if a permission is allowed by the tenant's plan.
+ * Plan Guardrail: Check if a permission is allowed by the org's plan.
  *
  * feature_flags JSON in organizations table defines what's available:
  *   { "trustgraph": true, "consortium": false, "digital_twin": true }
  *
- * If a permission's resource is gated by a feature flag, check tenant's flags.
+ * If a permission's resource is gated by a feature flag, check org's flags.
  */
-async function checkPlanGuardrail(tenantId, permission) {
-    if (!tenantId) return true; // Platform-level has no guardrails
+async function checkPlanGuardrail(orgId, permission) {
+    if (!orgId) return true; // Platform-level has no guardrails
 
     const [resource] = permission.split(':');
 
-    // Load tenant
-    const org = await db.get('SELECT plan, feature_flags FROM organizations WHERE id = ?', [tenantId]);
+    // Load org
+    const org = await db.get('SELECT plan, feature_flags FROM organizations WHERE id = ?', [orgId]);
     if (!org) return false;
 
     let flags = {};
@@ -201,8 +220,8 @@ async function checkPlanGuardrail(tenantId, permission) {
  *
  * Returns: { conflict: boolean, details: string|null }
  */
-async function checkSoD(userId, newPermission) {
-    const existing = await getUserPermissions(userId);
+async function checkSoD(userId, newPermission, orgId = null) {
+    const existing = await getUserPermissions(userId, orgId);
 
     for (const [p1, p2] of SOD_CONFLICTS) {
         if (newPermission === p1 && existing.has(p2)) {
@@ -225,21 +244,21 @@ async function checkSoD(userId, newPermission) {
  *
  * All waiver usage is audit-logged.
  */
-async function checkSoDWithWaiver(userId, newPermission, tenantId) {
-    const base = await checkSoD(userId, newPermission);
+async function checkSoDWithWaiver(userId, newPermission, orgId) {
+    const base = await checkSoD(userId, newPermission, orgId);
     if (!base.conflict) return base;
 
-    // Check if tenant has a waiver for this specific pair
-    if (!tenantId) return base; // No waivers at platform level
+    // Check if org has a waiver for this specific pair
+    if (!orgId) return base; // No waivers at platform level
 
-    const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [tenantId]);
+    const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [orgId]);
     if (!org || !org.sod_waivers) return base;
 
     let waiverConfig;
     try { waiverConfig = JSON.parse(org.sod_waivers); } catch (_) { return base; }
 
     const waivers = waiverConfig.waivers || [];
-    const existing = await getUserPermissions(userId);
+    const existing = await getUserPermissions(userId, orgId);
 
     for (const [p1, p2] of SOD_CONFLICTS) {
         if ((newPermission === p1 && existing.has(p2)) || (newPermission === p2 && existing.has(p1))) {
@@ -287,7 +306,7 @@ async function getBusinessPermissions() {
  * Express middleware factory: require specific permission(s).
  *
  *   router.get('/products', requirePermission('product:view'), handler)
- *   router.post('/users', requirePermission('tenant:user:create'), handler)
+ *   router.post('/users', requirePermission('org:user:create'), handler)
  */
 function requirePermission(...permissions) {
     return async (req, res, next) => {
@@ -372,27 +391,27 @@ function requirePlatformAdmin() {
 }
 
 /**
- * Express middleware: require tenant admin (Company Admin).
- * Must have tenant:* permissions or role 'admin' within their org.
+ * Express middleware: require org admin (Company Admin).
+ * Must have org admin permissions or role 'admin' within their org.
  */
-function requireTenantAdmin() {
+function requireOrgAdmin() {
     return async (req, res, next) => {
         if (!req.user) {
             return res.status(401).json({ error: 'Authentication required' });
         }
 
-        // Platform admin can act as tenant admin in support override
+        // Platform admin can act as org admin in support override
         if (req.user.user_type === 'platform') return next();
 
-        // Check for tenant admin permissions
+        // Check for org admin permissions
         const has = await hasAnyPermission(req.user.id, [
-            'tenant:user:create',
-            'tenant:role:create',
-            'tenant:settings:update'
+            'org:user:create',
+            'org:role:create',
+            'org:settings:update'
         ], req);
 
         if (!has && req.user.role !== 'admin' && req.user.role !== 'company_admin' && req.user.role !== 'org_owner' && req.user.role !== 'executive' && req.user.role !== 'security_officer') {
-            return res.status(403).json({ error: 'Tenant admin access required', code: 'TENANT_ADMIN_ONLY' });
+            return res.status(403).json({ error: 'Org admin access required', code: 'ORG_ADMIN_ONLY' });
         }
         next();
     };
@@ -403,21 +422,21 @@ function requireTenantAdmin() {
      * If any SoD conflict exists, the assignment is BLOCKED.
      *
      * Usage:
-     *   const result = await safeAssignRole(userId, roleId, assignedBy, tenantId);
+     *   const result = await safeAssignRole(userId, roleId, assignedBy, orgId);
      *   if (!result.success) return res.status(409).json(result);
      */
-async function safeAssignRole(userId, roleId, assignedBy, tenantId) {
+async function safeAssignRole(userId, roleId, assignedBy, orgId) {
     // Get all permissions for the new role
     const newRolePerms = await getPermissionsForRole(roleId);
     if (newRolePerms.length === 0) {
         return { success: false, error: 'Role has no permissions or does not exist', code: 'ROLE_EMPTY' };
     }
 
-    // Check each permission of the new role against existing user permissions
+    // Check each permission of the new role against existing user permissions (org-scoped)
     for (const perm of newRolePerms) {
-        const sodCheck = tenantId
-            ? await checkSoDWithWaiver(userId, perm, tenantId)
-            : await checkSoD(userId, perm);
+        const sodCheck = orgId
+            ? await checkSoDWithWaiver(userId, perm, orgId)
+            : await checkSoD(userId, perm, orgId);
 
         if (sodCheck.conflict && !sodCheck.waived) {
             return {
@@ -430,15 +449,23 @@ async function safeAssignRole(userId, roleId, assignedBy, tenantId) {
         }
     }
 
-    // No conflict — perform the assignment
-    const { v4: uuidv4 } = require('uuid');
-    const id = uuidv4();
+    // Resolve membership for org-scoped assignment
+    let membershipId = null;
+    if (orgId) {
+        const membership = await db.get(
+            'SELECT id FROM memberships WHERE user_id = ? AND org_id = ? AND status = \'active\'',
+            [userId, orgId]
+        );
+        membershipId = membership?.id || null;
+    }
+
+    // Perform the assignment with membership context
     await db.run(
-        'INSERT INTO rbac_user_roles (user_id, role_id, assigned_by) VALUES (?, ?, ?) ON CONFLICT(user_id, role_id) DO NOTHING',
-        [userId, roleId, assignedBy]
+        'INSERT INTO rbac_user_roles (user_id, role_id, assigned_by, membership_id) VALUES (?, ?, ?, ?) ON CONFLICT(user_id, role_id) DO UPDATE SET membership_id = EXCLUDED.membership_id',
+        [userId, roleId, assignedBy, membershipId]
     );
 
-    return { success: true, role_id: roleId, user_id: userId };
+    return { success: true, role_id: roleId, user_id: userId, membership_id: membershipId };
 }
 
 module.exports = {
@@ -454,7 +481,8 @@ module.exports = {
     requirePermission,
     requireConstitutional,
     requirePlatformAdmin,
-    requireTenantAdmin,
+    requireOrgAdmin,
+    requireTenantAdmin: requireOrgAdmin, // backward-compatible alias
     SOD_CONFLICTS,
     // Governance hardening
     CA_FORBIDDEN_PERMISSIONS,

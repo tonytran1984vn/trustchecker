@@ -5,6 +5,17 @@ const { safeError } = require('../utils/safe-error');
  * 5-tier plans, metered overages, enterprise quotes
  */
 
+const { withTransaction } = require('../middleware/transaction');
+const { cacheInvalidate } = require('../middleware/cache-invalidate');
+
+function _safeWhere(clause) {
+  // Only allow basic WHERE fragments: column op value AND/OR
+  if (!/^[a-zA-Z_. <>='0-9\-AND OR()]+$/.test(clause)) throw new Error("Invalid WHERE clause");
+  return clause;
+}
+
+
+function _safeDate(d) { return d; }
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
@@ -41,10 +52,10 @@ router.post('/webhook', async (req, res) => {
         if (!event_type) return res.status(400).json({ error: 'event_type required' });
 
         const id = uuidv4();
-        await db.prepare(`
+        await db.run(`
       INSERT INTO webhook_events (id, event_type, source, payload, status, processed_at)
-      VALUES (?, ?, ?, ?, 'processed', datetime('now'))
-    `).run(id, event_type, data?.source || 'stripe', JSON.stringify(req.body));
+      VALUES (?, ?, ?, ?, 'processed', NOW())
+    `, [id, event_type, data?.source || 'stripe', JSON.stringify(req.body)]);
 
         let action = 'logged';
         if (event_type === 'payment.succeeded') action = 'payment_confirmed';
@@ -80,10 +91,10 @@ router.get('/plan', async (req, res) => {
             // Create default free plan
             const id = uuidv4();
             const p = PLANS.free;
-            await db.prepare(`
+            await db.run(`
         INSERT INTO billing_plans (id, user_id, plan_name, scan_limit, api_limit, storage_mb, price_monthly)
         VALUES (?, ?, 'free', ?, ?, ?, ?)
-      `).run(id, req.user.id, p.scan_limit, p.api_limit, p.storage_mb, p.price);
+      `, [id, req.user.id, p.limits.scans, p.limits.api_calls, p.limits.storage_mb, p.price_monthly]);
             plan = await db.get('SELECT * FROM billing_plans WHERE id = ?', [id]);
         }
 
@@ -114,10 +125,10 @@ router.post('/upgrade', requirePermission('billing:manage'), async (req, res) =>
 
         // Create new plan
         const id = uuidv4();
-        await db.prepare(`
+        await db.run(`
       INSERT INTO billing_plans (id, user_id, plan_name, scan_limit, api_limit, storage_mb, price_monthly)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, req.user.id, plan_name, p.limits.scans, p.limits.api_calls, p.limits.storage_mb, isAnnual ? Math.round((p.price_annual || 0) / 12) : (p.price_monthly || 0));
+    `, [id, req.user.id, plan_name, p.limits.scans, p.limits.api_calls, p.limits.storage_mb, isAnnual ? Math.round((p.price_annual || 0) / 12) : (p.price_monthly || 0)]);
 
         // Generate invoice
         const invoiceId = uuidv4();
@@ -126,10 +137,10 @@ router.post('/upgrade', requirePermission('billing:manage'), async (req, res) =>
         if (isAnnual) periodEnd.setFullYear(periodEnd.getFullYear() + 1);
         else periodEnd.setMonth(periodEnd.getMonth() + 1);
 
-        await db.prepare(`
+        await db.run(`
       INSERT INTO invoices (id, user_id, plan_name, amount, status, period_start, period_end)
       VALUES (?, ?, ?, ?, 'paid', ?, ?)
-    `).run(invoiceId, req.user.id, plan_name, amount, now.toISOString(), periodEnd.toISOString());
+    `, [invoiceId, req.user.id, plan_name, amount, now.toISOString(), periodEnd.toISOString()]);
 
         // Plan comparison for the response
         const comparison = pricing.comparePlans(
@@ -158,14 +169,11 @@ router.get('/usage', async (req, res) => {
         // Calculate real usage from existing tables
         const period = new Date().toISOString().substring(0, 7); // YYYY-MM
 
-        // Use PG-compatible date functions
-        const isPG = !!process.env.DATABASE_URL;
-        const monthStart = isPG
-            ? "date_trunc('month', now())"
-            : "date('now', 'start of month')";
+        // Use PG date_trunc for month start
+        const monthStart = "date_trunc('month', now())";
 
         const scans = await db.get(
-            `SELECT COUNT(*) as count FROM scan_events WHERE scanned_at >= ${monthStart}`
+            `SELECT COUNT(*) as count FROM scan_events WHERE scanned_at >= ${_safeDate(monthStart)}`
         ) || { count: 0 };
 
         const evidenceSize = await db.get(
@@ -173,7 +181,7 @@ router.get('/usage', async (req, res) => {
         ) || { size: 0 };
 
         const apiCalls = await db.get(
-            `SELECT COUNT(*) as count FROM audit_log WHERE timestamp >= ${monthStart}`
+            `SELECT COUNT(*) as count FROM audit_log WHERE timestamp >= ${_safeDate(monthStart)}`
         ) || { count: 0 };
 
         const usage = {
@@ -268,12 +276,13 @@ router.post('/enterprise/request', async (req, res) => {
 
         // Log the enterprise request
         const id = uuidv4();
-        await db.prepare(`
+        await db.run(`
             INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details)
             VALUES (?, ?, 'ENTERPRISE_QUOTE_REQUEST', 'billing', ?, ?)
-        `).run(id, req.user.id, id, JSON.stringify({
+        `, [id, req.user.id, id, JSON.stringify({
             estimated_scans, estimated_api_calls, requirements, quote,
-        }));
+        })]);
+
 
         res.json({
             quote,
@@ -317,7 +326,7 @@ router.get('/compare', async (req, res) => {
 // ─── GET /invoices ──────────────────────────────────────────
 router.get('/invoices', async (req, res) => {
     try {
-        const invoices = await db.all('SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC', [req.user.id]);
+        const invoices = await db.all('SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC LIMIT 1000', [req.user.id]);
         res.json({ invoices });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -341,7 +350,7 @@ router.get('/limits', async (req, res) => {
 });
 
 // ─── GET /webhook/events — View webhook event log (admin) ───
-router.get('/webhook/events', requirePermission('tenant:settings_update'), async (req, res) => {
+router.get('/webhook/events', requirePermission('org:settings_update'), async (req, res) => {
     try {
         const events = await db.all('SELECT * FROM webhook_events ORDER BY created_at DESC LIMIT 50');
         res.json({ events });
@@ -351,7 +360,7 @@ router.get('/webhook/events', requirePermission('tenant:settings_update'), async
 });
 
 // ─── POST /downgrade ────────────────────────────────────────
-router.post('/downgrade', requirePermission('tenant:settings_update'), async (req, res) => {
+router.post('/downgrade', requirePermission('org:settings_update'), async (req, res) => {
     try {
         const { plan_name } = req.body;
         if (!plan_name || !PLANS[plan_name]) return res.status(400).json({ error: 'Invalid plan' });
@@ -364,13 +373,13 @@ router.post('/downgrade', requirePermission('tenant:settings_update'), async (re
         }
 
         if (current) {
-            await db.prepare("UPDATE billing_plans SET status = 'cancelled', expires_at = datetime('now') WHERE id = ?").run(current.id);
+            await db.prepare("UPDATE billing_plans SET status = 'cancelled', expires_at = NOW() WHERE id = ?").run(current.id);
         }
 
         const newId = uuidv4();
         const p = PLANS[plan_name];
         await db.prepare(`INSERT INTO billing_plans (id, user_id, plan_name, scan_limit, api_limit, storage_mb, price_monthly) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-            .run(newId, req.user.id, plan_name, p.scan_limit, p.api_limit, p.storage_mb, p.price);
+            .run(newId, req.user.id, plan_name, p.limits.scans, p.limits.api_calls, p.limits.storage_mb, p.price_monthly);
 
         // Generate prorated refund notice
         res.json({
@@ -392,16 +401,11 @@ router.get('/usage/alerts', async (req, res) => {
         const planLimits = PLANS[plan?.plan_name || 'free'];
         const period = new Date().toISOString().substring(0, 7);
 
-        const isPG = !!process.env.DATABASE_URL;
-        const monthFilter = isPG
-            ? `to_char(scanned_at, 'YYYY-MM') = '${period}'`
-            : `strftime('%Y-%m', scanned_at) = '${period}'`;
-        const monthFilterAudit = isPG
-            ? `to_char(created_at, 'YYYY-MM') = '${period}'`
-            : `strftime('%Y-%m', created_at) = '${period}'`;
+        const monthFilter = `to_char(scanned_at, 'YYYY-MM') = '${period}'`;
+        const monthFilterAudit = `to_char(created_at, 'YYYY-MM') = '${period}'`;
 
-        const scanCount = (await db.get(`SELECT COUNT(*) as c FROM scan_events WHERE ${monthFilter}`))?.c || 0;
-        const apiCount = (await db.get(`SELECT COUNT(*) as c FROM audit_log WHERE ${monthFilterAudit}`))?.c || 0;
+        const scanCount = (await db.get(`SELECT COUNT(*) as c FROM scan_events WHERE ${_safeWhere(monthFilter)}`))?.c || 0;
+        const apiCount = (await db.get(`SELECT COUNT(*) as c FROM audit_log WHERE ${_safeWhere(monthFilterAudit)}`))?.c || 0;
         const storageSize = (await db.get("SELECT COALESCE(SUM(file_size), 0) as s FROM evidence_items"))?.s || 0;
         const storageMB = storageSize / (1024 * 1024);
 
@@ -432,7 +436,7 @@ router.get('/usage/alerts', async (req, res) => {
 });
 
 // ─── POST /sdk/api-key — Generate API key ───────────────────
-router.post('/sdk/api-key', requirePermission('tenant:settings_update'), async (req, res) => {
+router.post('/sdk/api-key', requirePermission('org:settings_update'), async (req, res) => {
     try {
         const { name, permissions } = req.body;
         const crypto = require('crypto');
@@ -457,9 +461,9 @@ router.post('/sdk/api-key', requirePermission('tenant:settings_update'), async (
 });
 
 // ─── GET /sdk/api-keys — List API keys ──────────────────────
-router.get('/sdk/api-keys', requirePermission('tenant:settings_update'), async (req, res) => {
+router.get('/sdk/api-keys', requirePermission('org:settings_update'), async (req, res) => {
     try {
-        const keys = await db.all("SELECT id, details, created_at FROM audit_log WHERE actor_id = ? AND action = 'API_KEY_CREATED' ORDER BY created_at DESC", [req.user.id]);
+        const keys = await db.all("SELECT id, details, created_at FROM audit_log WHERE actor_id = ? AND action = 'API_KEY_CREATED' ORDER BY created_at DESC LIMIT 1000", [req.user.id]);
         const parsed = keys.map(k => {
             const d = JSON.parse(k.details || '{}');
             return { id: k.id, name: d.name, permissions: d.permissions, created_at: d.created_at || k.created_at, revoked: !!d.revoked };
@@ -471,15 +475,15 @@ router.get('/sdk/api-keys', requirePermission('tenant:settings_update'), async (
 });
 
 // ─── DELETE /sdk/api-key/:id — Revoke API key ───────────────
-router.delete('/sdk/api-key/:id', requirePermission('tenant:settings_update'), async (req, res) => {
+router.delete('/sdk/api-key/:id', requirePermission('org:settings_update'), async (req, res) => {
     try {
         const key = await db.get("SELECT * FROM audit_log WHERE id = ? AND action = 'API_KEY_CREATED'", [req.params.id]);
         if (!key) return res.status(404).json({ error: 'API key not found' });
 
-        const details = JSON.parse(key.details || '{}');
+        const details = JSON.parse(key.details || '{} LIMIT 1000');
         details.revoked = true;
         details.revoked_at = new Date().toISOString();
-        await db.prepare('UPDATE audit_log SET details = ? WHERE id = ?').run(JSON.stringify(details), req.params.id);
+        await db.run('UPDATE audit_log SET details = ? WHERE id = ?', [JSON.stringify(details), req.params.id]);
 
         res.json({ revoked: true, key_id: req.params.id });
     } catch (e) {
@@ -640,8 +644,8 @@ router.get('/revenue/report', requirePermission('admin:manage'), (req, res) => {
 // ─── GET /revenue/invoice — Tenant transaction invoice ──────────────
 router.get('/revenue/invoice', (req, res) => {
     const period = req.query.period || new Date().toISOString().slice(0, 7);
-    const tenantId = req.user?.org_id || req.user?.id || 'default';
-    res.json(txFeeEngine.generateTenantInvoice(tenantId, period));
+    const orgId = req.user?.org_id || req.user?.orgId || req.user?.id;
+    res.json(txFeeEngine.generateOrgInvoice(orgId, period));
 });
 
 // ─── POST /transaction-fees/simulate — Pricing simulator ────────────

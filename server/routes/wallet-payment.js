@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const blockchainEngine = require('../engines/blockchain');
+const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);
 
@@ -54,7 +55,7 @@ router.post('/ssi/did/create', async (req, res) => {
 router.get('/ssi/did', async (req, res) => {
     try {
         const dids = await db.all(
-            "SELECT entity_id as did, details, timestamp as created_at FROM audit_log WHERE action = 'DID_CREATED' AND actor_id = ? ORDER BY timestamp DESC",
+            "SELECT entity_id as did, details, timestamp as created_at FROM audit_log WHERE action = 'DID_CREATED' AND actor_id = ? ORDER BY timestamp DESC LIMIT 1000",
             [req.user.id]
         );
 
@@ -115,7 +116,7 @@ router.post('/ssi/credential/verify', async (req, res) => {
         const record = await db.get("SELECT * FROM audit_log WHERE action = 'VC_ISSUED' AND entity_id = ?", [credential_id]);
         if (!record) return res.status(404).json({ error: 'Credential not found', valid: false });
 
-        const details = JSON.parse(record.details || '{}');
+        const details = JSON.parse(record.details || '{} LIMIT 1000');
         const revoked = await db.get("SELECT * FROM audit_log WHERE action = 'VC_REVOKED' AND entity_id = ?", [credential_id]);
 
         res.json({
@@ -181,7 +182,7 @@ router.post('/payment/confirm', async (req, res) => {
         if (!session) return res.status(404).json({ error: 'Checkout session not found' });
 
         const details = JSON.parse(session.details || '{}');
-        const paymentId = `pi_${crypto.randomBytes(16).toString('hex')}`;
+        const paymentId = `pi_${crypto.randomBytes(16).toString('hex')} LIMIT 1000`;
 
         // Create payment record
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
@@ -197,7 +198,7 @@ router.post('/payment/confirm', async (req, res) => {
         const planMap = { 'Starter': 'starter', 'starter': 'starter', 'Pro': 'pro', 'pro': 'pro', 'Enterprise': 'enterprise', 'enterprise': 'enterprise' };
         const tier = planMap[details.plan_name];
         if (tier) {
-            await db.prepare("UPDATE billing_plans SET plan_name = ?, status = 'active', updated_at = datetime('now') WHERE user_id = ?")
+            await db.prepare("UPDATE billing_plans SET plan_name = ?, status = 'active', updated_at = NOW() WHERE user_id = ?")
                 .run(tier, req.user.id);  // Use lowercase tier, not display name
         }
 
@@ -247,7 +248,7 @@ router.post('/payment/refund', async (req, res) => {
         if (!payment) return res.status(404).json({ error: 'Payment not found' });
 
         const details = JSON.parse(payment.details || '{}');
-        const refundId = `re_${crypto.randomBytes(16).toString('hex')}`;
+        const refundId = `re_${crypto.randomBytes(16).toString('hex')} LIMIT 1000`;
 
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
             .run(uuidv4(), req.user.id, 'PAYMENT_REFUNDED', 'payment', refundId,
@@ -274,10 +275,13 @@ router.post('/payment/refund', async (req, res) => {
 router.get('/ipfs/stats', requirePermission('wallet:manage'), async (req, res) => {
     try {
         // Simulate IPFS storage costs based on evidence and blockchain data
-        const evidenceCount = (await db.get('SELECT COUNT(*) as c FROM evidence_items'))?.c || 0;
-        const sealCount = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals'))?.c || 0;
-        const nftCount = (await db.get('SELECT COUNT(*) as c FROM nft_certificates'))?.c || 0;
-        const totalEvents = (await db.get('SELECT COUNT(*) as c FROM supply_chain_events'))?.c || 0;
+        const orgId = req.user?.orgId;
+        const orgF = orgId ? ' WHERE org_id = ?' : '';
+        const orgP = orgId ? [orgId] : [];
+        const evidenceCount = (await db.get('SELECT COUNT(*) as c FROM evidence_items' + orgF, orgP))?.c || 0;
+        const sealCount = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals' + orgF, orgP))?.c || 0;
+        const nftCount = (await db.get('SELECT COUNT(*) as c FROM nft_certificates' + (orgF ? ' WHERE org_id = ?' : ''), orgP))?.c || 0;
+        const totalEvents = (await db.get('SELECT COUNT(*) as c FROM supply_chain_events' + orgF, orgP))?.c || 0;
 
         // Estimated storage (simulated)
         const evidenceStorageMB = evidenceCount * 0.5;  // ~500KB avg per evidence item

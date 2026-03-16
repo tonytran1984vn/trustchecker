@@ -10,6 +10,8 @@
  */
 const express = require('express');
 const router = express.Router();
+const { parsePagination } = require('../middleware/pagination');
+
 const { authMiddleware, requireRole, requireTenantAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
 
@@ -18,6 +20,7 @@ router.use(authMiddleware);
 const incentive = require('../engines/incentive-architecture-engine');
 const entity = require('../engines/entity-structuring-engine');
 const crypto = require('../engines/cryptographic-governance-engine');
+const { withTransaction } = require('../middleware/transaction');
 
 // ═══════════════════════════════════════════════════════════════════
 // INCENTIVE ARCHITECTURE — /incentive-arch [L3+ admin]
@@ -30,7 +33,7 @@ router.get('/incentive-arch/moat', requireTenantAdmin(), (req, res) => { res.jso
 router.get('/incentive-arch/carbon-market', requireTenantAdmin(), (req, res) => { res.json(incentive.getCarbonMarket()); });
 
 router.post('/incentive-arch/network-value', requireRole('risk_committee'), (req, res) => {
-    res.json(incentive.calculateNetworkValue(req.body.tenant_count));
+    res.json(incentive.calculateNetworkValue(req.body.org_count));
 });
 
 // ═══════════════════════════════════════════════════════════════════

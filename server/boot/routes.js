@@ -57,7 +57,7 @@ function setupRoutes(app) {
     const scmCodeGovRoutes = require('../routes/scm-code-governance');
     const scmIntegrityRoutes = require('../routes/scm-integrity');
     const platformRoutes = require('../routes/platform');
-    const tenantAdminRoutes = require('../routes/tenant-admin');
+    const orgAdminRoutes = require('../routes/org-admin');
     const identityRoutes = require('../routes/identity');
     const riskGraphRoutes = require('../routes/risk-graph');
     const complianceRegtechRoutes = require('../routes/compliance-regtech');
@@ -86,12 +86,13 @@ function setupRoutes(app) {
     const cieRoutes = require('../routes/cie');
     const carbonOfficerRoutes = require('../routes/carbon-officer');
     const carbonActionsRoutes = require('../routes/carbon-actions');
-    const tenantIntegrationsFactory = require('../routes/tenant-integrations');
+    const orgIntegrationsFactory = require('../routes/org-integrations');
     const auditChainRoutes = require('../routes/audit');
 
     // Declarative route table — each route is mounted on both /api and /api/v1
     const API_ROUTES = [
         ['/auth', authLimit, authRouter],
+        ['/compliance-evidence', complianceEvidenceRoutes],
         ['/products', productRoutes],
         ['/qr', scanLimit, qrRoutes],
         ['/scm', scmTrackingRoutes],
@@ -134,7 +135,7 @@ function setupRoutes(app) {
         ['/scm/code-gov', scmCodeGovRoutes],
         ['/scm/integrity', scmIntegrityRoutes],
         ['/platform', platformRoutes],
-        ['/tenant', tenantAdminRoutes],
+        ['/org-admin', orgAdminRoutes],
         ['/identity', identityRoutes],
         ['/risk-graph', riskGraphRoutes],
         ['/compliance-regtech', complianceRegtechRoutes],
@@ -165,6 +166,7 @@ function setupRoutes(app) {
         ['/carbon-actions', carbonActionsRoutes],   // Carbon Action Items bridge
         ['/audit', auditChainRoutes],                // Audit hash chain verification
         ['/dual-approval', require('../routes/dual-approval')], // Dual-approval for GDPR/constitutional
+        ['/record-governance', require('../routes/record-governance')], // P3: Immutable record proposals + version history
     ];
 
     // Mount on /api and /api/v1 (versioned alias)
@@ -177,12 +179,24 @@ function setupRoutes(app) {
     const { authMiddleware, requirePermission } = require('../auth');
     const db = require('../db');
     app.use('/api/integrations', authMiddleware, requirePermission('settings:update'), integrationsRouteFactory(db));
-    app.use('/api/tenant-integrations', authMiddleware, tenantIntegrationsFactory(db));
+    app.use('/api/org-integrations', authMiddleware, orgIntegrationsFactory(db));
 
     // API version info
     const { versionInfoHandler } = require('../middleware/api-version');
     app.get('/api/version', versionInfoHandler);
     app.get('/api/v1/version', versionInfoHandler);
+
+    // v9.5.0: Enterprise features
+    app.use('/api/score-validation', require('../routes/score-validation'));
+    app.use('/api/sso', require('../routes/sso'));
+    app.use('/api/network', require('../routes/network-intelligence'));
+    app.use('/api/supplier-portal', require('../routes/supplier-portal'));
+
+    // GDPR routes
+    var { dataExportHandler, dataDeleteHandler } = require('../middleware/gdpr');
+    app.post('/api/gdpr/export', require('../auth').authMiddleware, dataExportHandler);
+    app.post('/api/gdpr/delete', require('../auth').authMiddleware, dataDeleteHandler);
 }
 
 module.exports = { setupRoutes };
+    const complianceEvidenceRoutes = require("../routes/compliance-evidence");

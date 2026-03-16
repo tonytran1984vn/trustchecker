@@ -3,6 +3,13 @@ const { safeError } = require('../utils/safe-error');
  * GDPR Compliance & Data Retention Routes
  * Data retention policies, GDPR rights (export, delete), compliance reporting
  */
+const { withTransaction } = require('../middleware/transaction');
+
+function _safeId(name) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error("Invalid identifier: " + name);
+  return name;
+}
+
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
@@ -15,7 +22,7 @@ router.use(authMiddleware);
 router.get('/policies', requirePermission('compliance:manage'), async (req, res) => {
     try {
         const orgId = req.user.orgId;
-        const policies = await db.all('SELECT * FROM data_retention_policies WHERE org_id = $1 ORDER BY created_at DESC', [orgId]);
+        const policies = await db.all('SELECT * FROM data_retention_policies WHERE org_id = $1 ORDER BY created_at DESC LIMIT 1000', [orgId]);
 
         // If no policies, return defaults
         if (policies.length === 0) {
@@ -108,23 +115,23 @@ router.post('/policies/execute', requirePermission('compliance:manage'), async (
                 }
 
                 if (policy.action === 'delete') {
-                    const count = await db.get(`SELECT COUNT(*) as c FROM ${policy.table_name} WHERE ${dateCol} < ?`, [cutoff]);
+                    const count = await db.get(`SELECT COUNT(*) as c FROM ${_safeId(policy.table_name)} WHERE ${_safeId(dateCol)} < ?`, [cutoff]);
                     affected = count?.c || 0;
                     if (affected > 0) {
-                        await db.run(`DELETE FROM ${policy.table_name} WHERE ${dateCol} < ?`, [cutoff]);
+                        await db.run(`DELETE FROM ${_safeId(policy.table_name)} WHERE ${_safeId(dateCol)} < ?`, [cutoff]);
                     }
                 } else if (policy.action === 'archive') {
                     // Count what would be archived (simulate)
-                    const count = await db.get(`SELECT COUNT(*) as c FROM ${policy.table_name} WHERE ${dateCol} < ?`, [cutoff]);
+                    const count = await db.get(`SELECT COUNT(*) as c FROM ${_safeId(policy.table_name)} WHERE ${_safeId(dateCol)} < ?`, [cutoff]);
                     affected = count?.c || 0;
                     // In production, would move to archive table
                 } else if (policy.action === 'anonymize') {
-                    const count = await db.get(`SELECT COUNT(*) as c FROM ${policy.table_name} WHERE ${dateCol} < ?`, [cutoff]);
+                    const count = await db.get(`SELECT COUNT(*) as c FROM ${_safeId(policy.table_name)} WHERE ${_safeId(dateCol)} < ?`, [cutoff]);
                     affected = count?.c || 0;
                 }
 
                 // Update policy execution
-                await db.prepare("UPDATE data_retention_policies SET last_run = datetime('now'), records_affected = ? WHERE id = ?")
+                await db.prepare("UPDATE data_retention_policies SET last_run = NOW(), records_affected = ? WHERE id = ?")
                     .run(affected, policy.id);
 
                 results.push({ table: policy.table_name, action: policy.action, affected, status: 'success' });
@@ -156,7 +163,7 @@ router.get('/gdpr/export', async (req, res) => {
         }
         try { tickets = await db.all('SELECT id, subject, status, priority, created_at FROM support_tickets WHERE user_id = $1', [userId]); } catch (e) { /* skip */ }
         try { auditLog = await db.all('SELECT id, action, entity_type, entity_id, timestamp FROM audit_log WHERE actor_id = $1 ORDER BY timestamp DESC LIMIT 200', [userId]); } catch (e) { /* skip */ }
-        try { sessions = await db.all('SELECT id, ip_address, user_agent, created_at FROM sessions WHERE user_id = $1 ORDER BY created_at DESC', [userId]); } catch (e) { /* skip */ }
+        try { sessions = await db.all('SELECT id, ip_address, user_agent, created_at FROM sessions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1000', [userId]); } catch (e) { /* skip */ }
         try { billing = await db.get("SELECT id, plan_name, status, scan_limit, api_limit, created_at FROM billing_plans WHERE user_id = $1 AND status = 'active'", [userId]); } catch (e) { /* skip */ }
         try { invoices = await db.all('SELECT id, plan_name, amount, status, period_start, period_end FROM invoices WHERE user_id = $1', [userId]); } catch (e) { /* skip */ }
 
@@ -373,7 +380,7 @@ router.get('/records', async (req, res) => {
 router.get('/retention', async (req, res) => {
     try {
         const orgId = req.user.orgId;
-        const policies = await db.all('SELECT * FROM data_retention_policies WHERE org_id = $1 ORDER BY created_at DESC', [orgId]);
+        const policies = await db.all('SELECT * FROM data_retention_policies WHERE org_id = $1 ORDER BY created_at DESC LIMIT 1000', [orgId]);
         if (policies.length === 0) {
             return res.json({
                 policies: [

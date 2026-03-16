@@ -1,0 +1,469 @@
+/**
+ * RBAC Engine — Hierarchical Multi-Org Permission System
+ *
+ * Pure logic module (no routes). Provides:
+ *   getUserPermissions(userId)           → Set<string>
+ *   hasPermission(userId, perm)          → boolean
+ *   hasAnyPermission(userId, perms[])    → boolean
+ *   getPermissionsForRole(roleId)        → string[]
+ *   checkPlanGuardrail(orgId, perm)      → boolean
+ *   checkSoD(userId, newPerm)            → { conflict, details }
+ *
+ * Permission format: "resource:action" (e.g. "product:create")
+ * Levels: platform | org | business
+ */
+
+const db = require('../db');
+
+// ─── CA Permission Ceiling ───────────────────────────────────────────────────
+// Governance/sensitive permissions that Company Admin CANNOT grant or hold.
+// Enforces: "Control the system, not the decisions."
+const CA_FORBIDDEN_PERMISSIONS = new Set([
+    // Carbon governance — only compliance_officer / carbon_officer
+    'carbon_credit:approve_mint', 'carbon_credit:anchor',
+    'cie_passport:approve', 'cie_passport:seal', 'cie_passport:validate',
+    'cie_methodology:propose', 'cie_methodology:vote', 'cie_methodology:freeze', 'cie_methodology:publish',
+    'cie_disclosure:sign_off', 'cie_disclosure:certify_csrd',
+    // Risk governance — only risk_committee / risk_officer
+    'risk_model:deploy', 'risk_model:approve', 'risk_model:validate',
+    'model_certification:issue',
+    // Compliance governance — only compliance_officer
+    'compliance:freeze', 'regulatory_export:approve', 'gdpr_masking:execute',
+    // Graph governance — only ggc_member / risk_committee
+    'graph_schema:approve', 'graph_schema:deploy',
+    'graph_weight:approve', 'graph_override:approve',
+    // Evidence sealing — integrity chain
+    'evidence:seal', 'evidence:freeze',
+    // LRGF override
+    'lrgf_case:override',
+    // Fraud case approval
+    'fraud_case:approve',
+]);
+
+// Roles that require elevated oversight when assigned
+const HIGH_RISK_ROLES = new Set([
+    'compliance_officer', 'risk_officer', 'risk_committee',
+    'ggc_member', 'ivu_validator', 'carbon_officer',
+    'disclosure_officer', 'company_admin', 'org_owner',
+]);
+
+/**
+ * Check if a permission is forbidden for Company Admin to assign.
+ */
+function isCAForbidden(permission) {
+    if (CA_FORBIDDEN_PERMISSIONS.has(permission)) return true;
+    // Block all platform-level permissions
+    if (permission.startsWith('platform:')) return true;
+    return false;
+}
+
+/**
+ * Check if a role name is high-risk (requires additional oversight).
+ */
+function isHighRiskRole(roleName) {
+    return HIGH_RISK_ROLES.has(roleName);
+}
+
+// ─── SoD Conflict Matrix ─────────────────────────────────────────────────────
+// Pairs of permissions that should NOT be held by the same user
+const SOD_CONFLICTS = [
+    ['fraud_case:create', 'fraud_case:approve'],
+    ['payment:create', 'payment:approve'],
+    ['user:create', 'user:approve'],
+    ['role:create', 'role:approve'],
+    // GOV-3: Risk model governance
+    ['risk_model:create', 'risk_model:deploy'],
+    ['risk_model:deploy', 'risk_model:approve'],
+    // GOV-3: Evidence & compliance separation
+    ['evidence:create', 'evidence:seal'],
+    ['compliance:freeze', 'compliance:export'],
+    // L-RGF: Logistics Risk Governance Flow
+    ['threshold:configure', 'threshold:override'],
+    ['event:ingest', 'event:delete'],
+    ['case:assign', 'case:close'],
+    // Trust Graph Governance
+    ['graph_schema:approve', 'graph_schema:deploy'],
+    ['graph_weight:propose', 'graph_weight:approve'],
+    ['graph_override:request', 'graph_override:approve'],
+    // Data Lineage Immutability
+    ['lineage:record', 'lineage:modify'],
+    ['lineage:replay', 'lineage:delete'],
+    ['lineage:view_full', 'lineage:export_without_approval'],
+    ['lineage:approve_export', 'lineage:perform_export'],
+    // v2.0: Carbon Lifecycle SoD
+    ['carbon_credit:request_mint', 'carbon_credit:approve_mint'],
+    ['carbon_credit:approve_mint', 'carbon_credit:anchor'],
+    // v2.0: Support & Security SoD
+    ['support_session:initiate', 'support_session:approve'],
+    ['incident:declare', 'incident:resolve'],
+    // v2.0: Data Governance SoD
+    ['data_classification:define', 'data_classification:approve'],
+    ['lineage_export:approve', 'lineage_export:execute'],
+    // v3.0: Supplier KYC SoD
+    ['supplier:onboard', 'supplier:approve_kyc'],
+    // v3.0: Purchase Order SoD
+    ['po:create', 'po:approve'],
+    // v3.0: Change Management SoD (Platform Security Admin)
+    ['change:create', 'change:approve'],
+];
+
+// ─── Permission Cache (per-request) ──────────────────────────────────────────
+// Attach to req._rbacPerms during first check, reuse for rest of request lifecycle
+
+/**
+ * Load all effective permissions for a user via RBAC tables:
+ *   user → rbac_user_roles → rbac_role_permissions → rbac_permissions
+ *
+ * Falls back to legacy role column for backward compatibility.
+ */
+async function getUserPermissions(userId) {
+    // Primary: Load from RBAC tables
+    const rows = await db.all(`
+    SELECT DISTINCT p.resource || ':' || p.action AS perm
+    FROM rbac_user_roles ur
+    JOIN rbac_role_permissions rp ON rp.role_id = ur.role_id
+    JOIN rbac_permissions p ON p.id = rp.permission_id
+    WHERE ur.user_id = ?
+      AND (ur.expires_at IS NULL OR ur.expires_at > datetime('now'))
+  `, [userId]);
+
+    const perms = new Set(rows.map(r => r.perm));
+    return perms;
+}
+
+/**
+ * Check if a user has a specific permission.
+ * Uses req._rbacPerms cache if available.
+ */
+async function hasPermission(userId, permission, req) {
+    // Use cached permissions if available (set by middleware)
+    if (req && req._rbacPerms) {
+        return req._rbacPerms.has(permission);
+    }
+    const perms = await getUserPermissions(userId);
+    if (req) req._rbacPerms = perms; // cache for this request
+    return perms.has(permission);
+}
+
+/**
+ * Check if a user has ANY of the listed permissions.
+ */
+async function hasAnyPermission(userId, permissions, req) {
+    if (req && req._rbacPerms) {
+        return permissions.some(p => req._rbacPerms.has(p));
+    }
+    const perms = await getUserPermissions(userId);
+    if (req) req._rbacPerms = perms;
+    return permissions.some(p => perms.has(p));
+}
+
+/**
+ * Get all permission strings for a specific role.
+ */
+async function getPermissionsForRole(roleId) {
+    const rows = await db.all(`
+    SELECT p.resource || ':' || p.action AS perm
+    FROM rbac_role_permissions rp
+    JOIN rbac_permissions p ON p.id = rp.permission_id
+    WHERE rp.role_id = ?
+  `, [roleId]);
+    return rows.map(r => r.perm);
+}
+
+/**
+ * Plan Guardrail: Check if a permission is allowed by the tenant's plan.
+ *
+ * feature_flags JSON in organizations table defines what's available:
+ *   { "trustgraph": true, "consortium": false, "digital_twin": true }
+ *
+ * If a permission's resource is gated by a feature flag, check tenant's flags.
+ */
+async function checkPlanGuardrail(orgId, permission) {
+    if (!orgId) return true; // Platform-level has no guardrails
+
+    const [resource] = permission.split(':');
+
+    // Load tenant
+    const org = await db.get('SELECT plan, feature_flags FROM organizations WHERE id = ?', [orgId]);
+    if (!org) return false;
+
+    let flags = {};
+    try { flags = JSON.parse(org.feature_flags || '{}'); } catch (e) { /* ignore */ }
+
+    // Feature flag gating — if a flag exists for this resource and is false, deny
+    if (flags.hasOwnProperty(resource) && flags[resource] === false) {
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Segregation of Duties: Check if granting a new permission would create a conflict.
+ *
+ * Returns: { conflict: boolean, details: string|null }
+ */
+async function checkSoD(userId, newPermission) {
+    const existing = await getUserPermissions(userId);
+
+    for (const [p1, p2] of SOD_CONFLICTS) {
+        if (newPermission === p1 && existing.has(p2)) {
+            return { conflict: true, details: `SoD conflict: "${p1}" cannot coexist with "${p2}"` };
+        }
+        if (newPermission === p2 && existing.has(p1)) {
+            return { conflict: true, details: `SoD conflict: "${p2}" cannot coexist with "${p1}"` };
+        }
+    }
+
+    return { conflict: false, details: null };
+}
+
+/**
+ * Segregation of Duties with Waiver support.
+ * For small organizations where one person may hold conflicting roles.
+ *
+ * Waiver config stored in organizations.sod_waivers JSON column:
+ *   { "waivers": [{ "pair": ["fraud_case:create","fraud_case:approve"], "reason": "Small team", "approved_by": "admin@co.io", "expires_at": "2027-01-01" }] }
+ *
+ * All waiver usage is audit-logged.
+ */
+async function checkSoDWithWaiver(userId, newPermission, tenantId) {
+    const base = await checkSoD(userId, newPermission);
+    if (!base.conflict) return base;
+
+    // Check if tenant has a waiver for this specific pair
+    if (!tenantId) return base; // No waivers at platform level
+
+    const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [tenantId]);
+    if (!org || !org.sod_waivers) return base;
+
+    let waiverConfig;
+    try { waiverConfig = JSON.parse(org.sod_waivers); } catch (_) { return base; }
+
+    const waivers = waiverConfig.waivers || [];
+    const existing = await getUserPermissions(userId);
+
+    for (const [p1, p2] of SOD_CONFLICTS) {
+        if ((newPermission === p1 && existing.has(p2)) || (newPermission === p2 && existing.has(p1))) {
+            const matchedWaiver = waivers.find(w => {
+                const pair = w.pair || [];
+                return (pair.includes(p1) && pair.includes(p2))
+                    && (!w.expires_at || new Date(w.expires_at) > new Date());
+            });
+            if (matchedWaiver) {
+                // Log waiver usage for audit trail
+                console.log(`[RBAC] SoD WAIVER used: user=${userId}, pair=[${p1},${p2}], reason="${matchedWaiver.reason}", approved_by=${matchedWaiver.approved_by}`);
+                return {
+                    conflict: false,
+                    details: null,
+                    waiver_applied: true,
+                    waiver_reason: matchedWaiver.reason,
+                    waiver_approved_by: matchedWaiver.approved_by,
+                };
+            }
+        }
+    }
+
+    return base;
+}
+
+/**
+ * Get all available permissions filtered by level.
+ */
+async function getPermissionsByLevel(level) {
+    const rows = await db.all(
+        'SELECT id, resource, action, scope, level, description FROM rbac_permissions WHERE level = ?',
+        [level]
+    );
+    return rows;
+}
+
+/**
+ * Get all business-level permissions (for Company Admin UI).
+ */
+async function getBusinessPermissions() {
+    return getPermissionsByLevel('business');
+}
+
+/**
+ * Express middleware factory: require specific permission(s).
+ *
+ *   router.get('/products', requirePermission('product:view'), handler)
+ *   router.post('/users', requirePermission('tenant:user:create'), handler)
+ */
+function requirePermission(...permissions) {
+    return async (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ error: 'Authentication required' });
+        }
+
+        // SuperAdmin (platform user_type with super_admin role) bypasses STANDARD RBAC checks
+        // BUT constitutional constraints are enforced separately via requireConstitutional()
+        if (req.user.user_type === 'platform' && (req.user.role === 'super_admin' || req.user.role === 'admin')) {
+            return next();
+        }
+
+        try {
+            const has = await hasAnyPermission(req.user.id, permissions, req);
+            if (!has) {
+                return res.status(403).json({
+                    error: 'Insufficient permissions',
+                    required: permissions,
+                    code: 'RBAC_DENIED'
+                });
+            }
+            next();
+        } catch (err) {
+            console.error('[RBAC] Permission check error:', err.message);
+            return res.status(500).json({ error: 'Permission check failed' });
+        }
+    };
+}
+
+/**
+ * Constitutional enforcement middleware.
+ * Unlike requirePermission, this CANNOT be bypassed — not even by super_admin.
+ * Uses the Constitutional RBAC Engine to check charter-defined power boundaries.
+ * 
+ * Usage:
+ *   router.post('/reserve/withdraw', requireConstitutional('monetization.reserve.withdraw'), handler)
+ */
+function requireConstitutional(action) {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ error: 'Authentication required' });
+        }
+
+        const constitutionalRBAC = require('../engines/constitutional-rbac-engine');
+        const role = req.user.role;
+        const result = constitutionalRBAC.enforce(role, action);
+
+        if (!result.allowed) {
+            return res.status(403).json({
+                error: 'Constitutional constraint violation',
+                code: 'CONSTITUTIONAL_BLOCK',
+                action,
+                role,
+                reason: result.reason,
+                charter: result.charter,
+                article: result.article,
+                separation: result.separation || null,
+                immutable: result.immutable || false,
+            });
+        }
+
+        // Attach constitutional result to request for downstream use
+        req._constitutional = result;
+        next();
+    };
+}
+
+/**
+ * Express middleware: require platform admin (L5 roles: SuperAdmin, Security, DataGov).
+ */
+function requirePlatformAdmin() {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ error: 'Authentication required' });
+        }
+        if (req.user.user_type !== 'platform') {
+            return res.status(403).json({ error: 'Platform admin access required', code: 'PLATFORM_ONLY' });
+        }
+        next();
+    };
+}
+
+/**
+ * Express middleware: require org admin (Company Admin).
+ * Must have org admin permissions or role 'admin' within their org.
+ */
+function requireOrgAdmin() {
+    return async (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ error: 'Authentication required' });
+        }
+
+        // Platform admin can act as org admin in support override
+        if (req.user.user_type === 'platform') return next();
+
+        // Check for org admin permissions
+        const has = await hasAnyPermission(req.user.id, [
+            'tenant:user:create',
+            'tenant:role:create',
+            'tenant:settings:update'
+        ], req);
+
+        if (!has && req.user.role !== 'admin' && req.user.role !== 'company_admin' && req.user.role !== 'org_owner' && req.user.role !== 'executive' && req.user.role !== 'security_officer') {
+            return res.status(403).json({ error: 'Org admin access required', code: 'ORG_ADMIN_ONLY' });
+        }
+        next();
+    };
+}
+/**
+     * Safe Role Assignment — Enforces SoD at assignment time.
+     * Checks all permissions of the new role against user's existing permissions.
+     * If any SoD conflict exists, the assignment is BLOCKED.
+     *
+     * Usage:
+     *   const result = await safeAssignRole(userId, roleId, assignedBy, tenantId);
+     *   if (!result.success) return res.status(409).json(result);
+     */
+async function safeAssignRole(userId, roleId, assignedBy, tenantId) {
+    // Get all permissions for the new role
+    const newRolePerms = await getPermissionsForRole(roleId);
+    if (newRolePerms.length === 0) {
+        return { success: false, error: 'Role has no permissions or does not exist', code: 'ROLE_EMPTY' };
+    }
+
+    // Check each permission of the new role against existing user permissions
+    for (const perm of newRolePerms) {
+        const sodCheck = tenantId
+            ? await checkSoDWithWaiver(userId, perm, tenantId)
+            : await checkSoD(userId, perm);
+
+        if (sodCheck.conflict && !sodCheck.waived) {
+            return {
+                success: false,
+                error: `Cannot assign role: ${sodCheck.details}`,
+                code: 'SOD_ASSIGNMENT_BLOCKED',
+                conflicting_permission: perm,
+                existing_conflict: sodCheck.details
+            };
+        }
+    }
+
+    // No conflict — perform the assignment
+    const { v4: uuidv4 } = require('uuid');
+    const id = uuidv4();
+    await db.run(
+        'INSERT INTO rbac_user_roles (user_id, role_id, assigned_by) VALUES (?, ?, ?) ON CONFLICT(user_id, role_id) DO NOTHING',
+        [userId, roleId, assignedBy]
+    );
+
+    return { success: true, role_id: roleId, user_id: userId };
+}
+
+module.exports = {
+    getUserPermissions,
+    hasPermission,
+    hasAnyPermission,
+    getPermissionsForRole,
+    checkPlanGuardrail,
+    checkSoD,
+    checkSoDWithWaiver,
+    getPermissionsByLevel,
+    getBusinessPermissions,
+    requirePermission,
+    requireConstitutional,
+    requirePlatformAdmin,
+    requireOrgAdmin,
+    requireTenantAdmin: requireOrgAdmin, // backward-compatible alias
+    SOD_CONFLICTS,
+    // Governance hardening
+    CA_FORBIDDEN_PERMISSIONS,
+    HIGH_RISK_ROLES,
+    isCAForbidden,
+    isHighRiskRole,
+    // Phase 5: Safe assignment
+    safeAssignRole,
+};

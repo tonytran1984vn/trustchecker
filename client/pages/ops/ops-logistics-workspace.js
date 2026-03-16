@@ -23,6 +23,7 @@ if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 30000
         cache._loadedAt = Date.now();
         cache._loading = false;
         console.log('[Ops Logistics] API prefetched ✓');
+        if (typeof window.render === 'function') window.render();
         return cache;
     });
 } else if (cache._loadedAt) {

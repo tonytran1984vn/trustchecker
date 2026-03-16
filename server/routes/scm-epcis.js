@@ -9,6 +9,7 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const epcisEngine = require('../engines/epcis-engine');
 const { cacheMiddleware } = require('../cache');
+const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);
 
@@ -80,7 +81,7 @@ router.get('/events', async (req, res) => {
 // ─── GET /api/scm/epcis/events/:id — Single EPCIS event ─────────────────────
 router.get('/events/:id', async (req, res) => {
     try {
-        const event = await db.prepare(`
+        const event = await db.get(`
       SELECT sce.*, p.name as product_name, p.sku, pt.name as partner_name,
              b.batch_number
       FROM supply_chain_events sce
@@ -88,7 +89,7 @@ router.get('/events/:id', async (req, res) => {
       LEFT JOIN partners pt ON sce.partner_id = pt.id
       LEFT JOIN batches b ON sce.batch_id = b.id
       WHERE sce.id = ?
-    `).get(req.params.id);
+    `, [req.params.id]);
 
         if (!event) return res.status(404).json({ error: 'Event not found' });
 
@@ -124,10 +125,10 @@ router.post('/capture', requirePermission('epcis:create'), async (req, res) => {
             const internal = epcisEngine.fromEpcisEvent(epcisEvent);
             const id = uuidv4();
 
-            await db.prepare(`
+            await db.run(`
         INSERT INTO supply_chain_events (id, event_type, location, actor, details, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
-      `).run(id, internal.event_type, internal.location, internal.actor, internal.details, internal.created_at);
+      `, [id, internal.event_type, internal.location, internal.actor, internal.details, internal.created_at]);
 
             results.push({ id, event_type: internal.event_type, status: 'captured' });
         }
@@ -150,14 +151,14 @@ router.get('/document', cacheMiddleware(90), async (req, res) => {
         const orgId = req.user?.org_id || req.user?.orgId || null;
         const orgFilter = orgId ? ' WHERE org_id = ?' : '';
         const orgParams = orgId ? [orgId] : [];
-        const events = await db.prepare(`
+        const events = await db.all(`
       SELECT sce.* FROM supply_chain_events sce
       ORDER BY sce.created_at DESC LIMIT 200
-    `).all();
+    `);
 
         const products = await db.prepare('SELECT * FROM products' + orgFilter).all(...orgParams);
         const partners = await db.prepare('SELECT * FROM partners' + orgFilter).all(...orgParams);
-        const batches = await db.prepare('SELECT * FROM batches').all();
+        const batches = await db.all('SELECT * FROM batches LIMIT 1000');
 
         const epcisDocument = epcisEngine.toEpcisDocument(events, products, partners, batches);
 
@@ -172,14 +173,14 @@ router.get('/document', cacheMiddleware(90), async (req, res) => {
 // Cache 60s — aggregate counts
 router.get('/stats', cacheMiddleware(60), async (req, res) => {
     try {
-        const totalEvents = (await db.prepare('SELECT COUNT(*) as c FROM supply_chain_events').get())?.c || 0;
-        const byType = await db.prepare(`
+        const totalEvents = (await db.get('SELECT COUNT(*) as c FROM supply_chain_events'))?.c || 0;
+        const byType = await db.all(`
       SELECT event_type, COUNT(*) as count FROM supply_chain_events GROUP BY event_type ORDER BY count DESC
-    `).all();
+     LIMIT 1000`);
 
         const sealed = (await db.prepare("SELECT COUNT(*) as c FROM supply_chain_events WHERE blockchain_seal_id IS NOT NULL AND blockchain_seal_id != ''").get())?.c || 0;
-        const products = (await db.prepare('SELECT COUNT(DISTINCT product_id) as c FROM supply_chain_events WHERE product_id IS NOT NULL').get())?.c || 0;
-        const partners = (await db.prepare('SELECT COUNT(DISTINCT partner_id) as c FROM supply_chain_events WHERE partner_id IS NOT NULL').get())?.c || 0;
+        const products = (await db.get('SELECT COUNT(DISTINCT product_id) as c FROM supply_chain_events WHERE product_id IS NOT NULL'))?.c || 0;
+        const partners = (await db.get('SELECT COUNT(DISTINCT partner_id) as c FROM supply_chain_events WHERE partner_id IS NOT NULL'))?.c || 0;
 
         // Map internal types to EPCIS types
         const epcisTypeBreakdown = byType.map(t => ({

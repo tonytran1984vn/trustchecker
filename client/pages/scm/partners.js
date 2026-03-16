@@ -7,10 +7,33 @@ import { showToast } from '../../components/toast.js';
 import { timeAgo, scoreColor } from '../../utils/helpers.js';
 import { navigate } from '../../core/router.js';
 
+
+function trustBadge(score, kyc, risk, comp, del, conn, rat) {
+  var s = score || 0, k = kyc || 'pending', r = (risk || 'high').toLowerCase();
+  var c = comp || 0, d = del || 0, cn = conn || 0, ra = rat || 0;
+  if (s >= 92 && cn >= 2 && ra >= 4.5 && d >= 85 && c >= 85)
+    return '<span class="trust-badge trust-badge-premium">⭐ Premium</span>';
+  if (s >= 80 && k === 'verified' && (r === 'low' || r === 'medium') && c >= 70)
+    return '<span class="trust-badge trust-badge-trusted">🛡️ Trusted</span>';
+  if (k === 'verified')
+    return '<span class="trust-badge trust-badge-verified">✅ Verified</span>';
+  return '';
+}
+function trustBadgeFromObj(p) {
+  return trustBadge(p.trust_score, p.kyc_status, p.risk_level, p.compliance_score, p.delivery_score, p.network_connections, p.avg_community_rating);
+}
+
 export function renderPage() {
   const partners = State.scmPartners || [];
 
   return `
+    <style>
+      .trust-badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 20px; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; vertical-align: middle; margin-left: 4px; }
+      .trust-badge-premium { background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(251,191,36,0.15)); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
+      .trust-badge-trusted { background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.25); }
+      .trust-badge-verified { background: rgba(34,197,94,0.12); color: #4ade80; border: 1px solid rgba(34,197,94,0.2); }
+</style>
+
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <div style="font-size:0.82rem;color:var(--text-muted)">${partners.length} partners onboarded</div>
       <div style="display:flex;gap:10px">
@@ -24,7 +47,7 @@ export function renderPage() {
         <div class="partner-card scm-animate" data-type="${(p.type || '').toLowerCase()}" onclick="showPartnerDetail('${p.id}')">
           <div class="partner-header">
             <div>
-              <div class="partner-name">${p.name}</div>
+              <div class="partner-name">${p.name} ${trustBadgeFromObj(p)}</div>
               <div class="partner-type">${p.type} • ${p.country || '—'}</div>
             </div>
             <span class="badge ${p.kyc_status === 'verified' ? 'valid' : p.kyc_status === 'pending' ? 'warning' : 'suspicious'}">${p.kyc_status === 'verified' ? '<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> KYC' : p.kyc_status === 'pending' ? '⏳ Pending' : '<span class="status-icon status-fail" aria-label="Fail">✗</span> Failed'}</span>
@@ -63,7 +86,7 @@ async function showPartnerDetail(id) {
           ${Object.entries(r?.factors || {}).map(([k, v]) => `<div style="color:var(--text-muted)">${k}:</div><div>${v}</div>`).join('')}
         </div>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-primary" onclick="verifyPartner('${p.id}')" style="flex:1">🔍 Run KYC Verification</button>
+          <button style="flex:1;padding:9px 18px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-size:0.85rem;font-weight:600;cursor:pointer" onclick="verifyPartner('${p.id}')">🔍 Run KYC Verification</button>
           <button class="btn" onclick="State.modal=null;render()">Close</button>
         </div>
       </div>

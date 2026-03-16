@@ -159,14 +159,14 @@ export function renderPage() {
       .qc-field{margin-bottom:14px}
       .qc-label{display:block;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:5px}
       .qc-input,.qc-select{width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:0.82rem;outline:none;box-sizing:border-box}
-      .qc-input:focus,.qc-select:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,0.15)}
+      .qc-input:focus,.qc-select:focus{border-color:#0d9488;box-shadow:0 0 0 3px rgba(13,148,136,0.15)}
       .qc-btns{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
       .qc-btn-cancel{padding:8px 18px;border-radius:10px;font-size:0.78rem;font-weight:600;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text-primary)}
-      .qc-btn-submit{padding:8px 22px;border-radius:10px;font-size:0.78rem;font-weight:700;cursor:pointer;border:none;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;display:flex;align-items:center;gap:6px;box-shadow:0 4px 12px rgba(59,130,246,0.3)}
-      .qc-btn-submit:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(59,130,246,0.4)}
+      .qc-btn-submit{padding:8px 22px;border-radius:10px;font-size:0.78rem;font-weight:700;cursor:pointer;border:none;background:#0d9488;color:#fff;display:flex;align-items:center;gap:6px;box-shadow:0 4px 12px rgba(13,148,136,0.3)}
+      .qc-btn-submit:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(13,148,136,0.4)}
     </style>
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('check', 28)} Quality Control</h1><div class="sa-title-actions"><button class="btn btn-primary btn-sm" onclick="window._qcShowModal()">+ New Inspection</button></div></div>
+      <div class="sa-page-title"><h1>${icon('check', 28)} Quality Control</h1><div class="sa-title-actions"><button style="padding:6px 16px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-size:0.78rem;font-weight:600;cursor:pointer" onclick="window._qcShowModal()">+ New Inspection</button></div></div>
 
       <div class="sa-metrics-row" style="margin-bottom:1.5rem">
         ${m('Inspections (30d)', '142', '94.4% pass rate', 'green', 'check')}

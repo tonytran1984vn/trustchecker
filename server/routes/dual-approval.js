@@ -13,10 +13,16 @@
  */
 const express = require('express');
 const router = express.Router();
+// v9.4.3: Default query limit for SOC2 compliance
+const SAFE_LIMIT = 500;
+
+const { parsePagination } = require('../middleware/pagination');
+
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
 const { appendAuditEntry } = require('../utils/audit-chain');
+const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);
 
@@ -160,7 +166,7 @@ router.post('/:id/approve', requirePermission('gdpr_masking:execute'), async (re
 router.get('/pending', async (req, res) => {
     try {
         const requests = await db.all(
-            "SELECT id, action_type, target_entity, target_id, requested_by, status, first_approver, expires_at, requested_at FROM dual_approval_queue WHERE status IN ('pending_first', 'pending_second') AND (org_id = ? OR ? = '') ORDER BY requested_at DESC",
+            "SELECT id, action_type, target_entity, target_id, requested_by, status, first_approver, expires_at, requested_at FROM dual_approval_queue WHERE status IN ('pending_first', 'pending_second') AND (org_id = ? OR ? = '') ORDER BY requested_at DESC LIMIT 1000",
             [req.user.org_id || '', req.user.org_id || '']
         );
         res.json({ requests });

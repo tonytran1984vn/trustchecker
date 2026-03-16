@@ -41,6 +41,7 @@ function requireConstitutionalWithAudit(action) {
     return (req, res, next) => {
         if (!req.user) return res.status(401).json({ error: 'Authentication required' });
         const constitutionalRBAC = require('../engines/constitutional-rbac-engine');
+const { withTransaction } = require('../middleware/transaction');
         const result = constitutionalRBAC.enforce(req.user.role, action);
         logConstitutionalAction(req, action, result);
         if (!result.allowed) {

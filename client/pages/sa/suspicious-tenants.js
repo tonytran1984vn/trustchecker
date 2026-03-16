@@ -31,7 +31,7 @@ window._saRiskAction = async (action, tenantId, tenantName) => {
     const reason = prompt(`⚠️ Suspend "${tenantName}"?\n\nEnter reason for suspension:`);
     if (!reason) return; // cancelled
     try {
-      await API.post(`/platform/tenants/${tenantId}/suspend`, { reason });
+      await API.post(`/platform/orgs/${tenantId}/suspend`, { reason });
       alert(`✅ "${tenantName}" has been suspended.\nReason: ${reason}`);
       // Bust cache by forcing fresh reload
       data = null; loading = false;
@@ -44,7 +44,7 @@ window._saRiskAction = async (action, tenantId, tenantName) => {
   } else if (action === 'activate') {
     if (!confirm(`Reactivate "${tenantName}"?`)) return;
     try {
-      await API.post(`/platform/tenants/${tenantId}/activate`, {});
+      await API.post(`/platform/orgs/${tenantId}/activate`, {});
       alert(`✅ "${tenantName}" has been reactivated.`);
       data = null; loading = false;
       try { data = await API.get('/risk-graph/risk-analytics?_t=' + Date.now()); } catch (e) { data = { suspiciousTenants: [] }; }

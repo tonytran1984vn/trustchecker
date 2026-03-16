@@ -4,6 +4,8 @@
  */
 const express = require('express');
 const router = express.Router();
+const { parsePagination } = require('../middleware/pagination');
+
 const { authMiddleware, requirePermission } = require('../auth');
 const custodyEngine = require('../engines/infrastructure-custody-engine');
 const { cacheMiddleware } = require('../cache');

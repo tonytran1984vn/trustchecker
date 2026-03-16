@@ -129,7 +129,7 @@ export function renderPage() {
 
 async function loadData() {
   try {
-    let url = '/tenant/owner/ccs/reports';
+    let url = '/org-admin/owner/ccs/reports';
     if (_customFrom && _customTo) {
       url += `?from=${_customFrom}&to=${_customTo}`;
     } else {
@@ -212,10 +212,10 @@ window._generatePDF = async function (type = 'board', monthIdx = null) {
 
     // Fetch all available executive data in parallel
     const [reports, overview, carbon, trust] = await Promise.all([
-      withTimeout(api.get('/tenant/owner/ccs/reports'), 'reports'),
-      withTimeout(api.get('/tenant/owner/ccs/overview'), 'overview'),
-      withTimeout(api.get('/tenant/owner/ccs/carbon-summary'), 'carbon'),
-      withTimeout(api.get('/tenant/owner/ccs/trust-report'), 'trust'),
+      withTimeout(api.get('/org-admin/owner/ccs/reports'), 'reports'),
+      withTimeout(api.get('/org-admin/owner/ccs/overview'), 'overview'),
+      withTimeout(api.get('/org-admin/owner/ccs/carbon-summary'), 'carbon'),
+      withTimeout(api.get('/org-admin/owner/ccs/trust-report'), 'trust'),
     ]);
 
     console.log('[PDF] Data fetched:', { reports: !!reports, overview: !!overview, carbon: !!carbon, trust: !!trust });

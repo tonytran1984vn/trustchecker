@@ -23,8 +23,8 @@ let _prisma = null;
 function getPrisma() {
     if (!_prisma) {
         try {
-            const { getDb } = require('../prisma-db');
-            _prisma = getDb();
+            const db = require('../db');
+            _prisma = db.prisma || db.client;
         } catch {
             return null;
         }

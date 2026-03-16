@@ -2,27 +2,42 @@
  * SCM Partner Management Routes (FR-INTEG-013 + FR-INTEG-015)
  * Partner onboarding, KYC-Business, trust scoring, SAP/Oracle sync
  */
+const { withTransaction } = require('../middleware/transaction');
+const { cacheInvalidate } = require('../middleware/cache-invalidate');
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const { orgGuard } = require('../middleware/org-middleware');
+const { requireScope, scopeFilter } = require('../auth/scope-engine');
 const engineClient = require('../engines/engine-client');
 const { eventBus } = require('../events');
 
 const router = express.Router();
 
 
-// GOV-1: All routes require authentication
+// GOV-1: All routes require authentication + org context + scope loading
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /api/scm/partners – List partners ───────────────────────────────────
-router.get('/', async (req, res) => {
+router.get('/', scopeFilter('supplier'), async (req, res) => {
     try {
-        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const orgId = req.orgId || null;
         const { type, status, kyc_status } = req.query;
         let query = 'SELECT * FROM partners WHERE 1=1';
         const params = [];
         if (orgId) { query += ' AND org_id = ?'; params.push(orgId); }
+
+        // Scope filter: restrict to scoped supplier IDs if user has scopes
+        const scopedIds = req.scopedIds?.supplier;
+        if (scopedIds !== null && scopedIds !== undefined) {
+            if (scopedIds.length === 0) return res.json({ partners: [] });
+            const placeholders = scopedIds.map(() => '?').join(',');
+            query += ` AND id IN (${placeholders})`;
+            params.push(...scopedIds);
+        }
+
         if (type) { query += ' AND type = ?'; params.push(type); }
         if (status) { query += ' AND status = ?'; params.push(status); }
         if (kyc_status) { query += ' AND kyc_status = ?'; params.push(kyc_status); }
@@ -35,19 +50,28 @@ router.get('/', async (req, res) => {
 });
 
 // ─── POST /api/scm/partners – Onboard partner ───────────────────────────────
-router.post('/', authMiddleware, requirePermission('partner:create'), async (req, res) => {
+router.post('/', requirePermission('partner:create'), async (req, res) => {
+    // v9.5.0: Rate limit — max 10 suppliers per hour per org
+    const orgId = req.orgId || req.user?.org_id;
+    const recentCount = await db.get(
+        "SELECT COUNT(*) as c FROM partners WHERE org_id = ? AND created_at > NOW() - INTERVAL '1 hour'",
+        [orgId]
+    );
+    if (recentCount?.c >= 10) {
+        return res.status(429).json({ error: 'Rate limit: maximum 10 suppliers per hour' });
+    }
     try {
-        const { name, type, country, region, contact_email } = req.body;
+        const { name, type, country, region, contact_email, supply_chain_id } = req.body;
         if (!name) return res.status(400).json({ error: 'Name is required' });
 
         const id = uuidv4();
         const apiKey = `tc_${uuidv4().replace(/-/g, '').substring(0, 24)}`;
 
-        const orgId = req.user?.org_id || req.user?.orgId || null;
-        await db.prepare(`
-      INSERT INTO partners (id, name, type, country, region, contact_email, api_key, org_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, name, type || 'distributor', country || '', region || '', contact_email || '', apiKey, orgId);
+        const orgId = req.orgId || null;
+        await db.run(`
+      INSERT INTO partners (id, name, type, country, region, contact_email, api_key, org_id, supply_chain_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, name, type || 'distributor', country || '', region || '', contact_email || '', apiKey, orgId, supply_chain_id || null]);
 
         eventBus.emitEvent('PartnerOnboarded', { id, name, type: type || 'distributor' });
         res.status(201).json({ id, name, api_key: apiKey, kyc_status: 'pending' });
@@ -58,35 +82,34 @@ router.post('/', authMiddleware, requirePermission('partner:create'), async (req
 });
 
 // ─── GET /api/scm/partners/:id – Partner detail + trust score ────────────────
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireScope('supplier', 'id'), async (req, res) => {
     try {
-        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const orgId = req.orgId || null;
         let pQuery = 'SELECT * FROM partners WHERE id = ?';
         const pParams = [req.params.id];
         if (orgId) { pQuery += ' AND org_id = ?'; pParams.push(orgId); }
         const partner = await db.prepare(pQuery).get(...pParams);
         if (!partner) return res.status(404).json({ error: 'Partner not found' });
 
-        const shipments = await db.prepare(`
+        const shipments = await db.all(`
       SELECT * FROM shipments WHERE from_partner_id = ? OR to_partner_id = ? ORDER BY created_at DESC LIMIT 20
-    `).all(req.params.id, req.params.id);
+    `, [req.params.id, req.params.id]);
 
-        const violations = await db.prepare('SELECT * FROM sla_violations WHERE partner_id = ?').all(req.params.id);
-        const alerts = await db.prepare(`
+        const violations = await db.all('SELECT * FROM sla_violations WHERE partner_id = ?', [req.params.id]);
+        const alerts = await db.all(`
       SELECT * FROM fraud_alerts WHERE product_id IN (
         SELECT DISTINCT product_id FROM supply_chain_events WHERE partner_id = ?
       )
-    `).all(req.params.id);
+    `, [req.params.id]);
 
         const riskScore = await engineClient.scmPartnerRisk(partner, alerts, shipments, violations);
 
         // Update trust score in DB
-        await db.prepare('UPDATE partners SET trust_score = ?, risk_level = ? WHERE id = ?')
-            .run(riskScore.score, riskScore.risk_level, req.params.id);
+        await db.run('UPDATE partners SET trust_score = ?, risk_level = ? WHERE id = ?', [riskScore.score, riskScore.risk_level, req.params.id]);
 
-        const events = await db.prepare(`
+        const events = await db.all(`
       SELECT * FROM supply_chain_events WHERE partner_id = ? ORDER BY created_at DESC LIMIT 20
-    `).all(req.params.id);
+    `, [req.params.id]);
 
         res.json({ partner: { ...partner, trust_score: riskScore.score }, risk: riskScore, shipments, violations, events });
     } catch (err) {
@@ -96,9 +119,9 @@ router.get('/:id', async (req, res) => {
 });
 
 // ─── POST /api/scm/partners/:id/verify – KYC-Business verify ────────────────
-router.post('/:id/verify', authMiddleware, requirePermission('partner:verify'), async (req, res) => {
+router.post('/:id/verify', requirePermission('partner:verify'), requireScope('supplier', 'id'), async (req, res) => {
     try {
-        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const orgId = req.orgId || null;
         let vQuery = 'SELECT * FROM partners WHERE id = ?';
         const vParams = [req.params.id];
         if (orgId) { vQuery += ' AND org_id = ?'; vParams.push(orgId); }
@@ -115,7 +138,7 @@ router.post('/:id/verify', authMiddleware, requirePermission('partner:verify'), 
 
         const allPassed = Object.values(checks).every(c => c.status === 'passed' || c.status === 'not_applicable');
 
-        await db.prepare("UPDATE partners SET kyc_status = ?, kyc_verified_at = datetime('now') WHERE id = ?")
+        await db.prepare("UPDATE partners SET kyc_status = ?, kyc_verified_at = NOW() WHERE id = ?")
             .run(allPassed ? 'verified' : 'failed', req.params.id);
 
         eventBus.emitEvent('KYCVerification', { partner_id: req.params.id, result: allPassed ? 'verified' : 'failed' });
@@ -133,7 +156,7 @@ router.post('/:id/verify', authMiddleware, requirePermission('partner:verify'), 
 });
 
 // ─── POST /api/scm/connectors/sync – SAP/Oracle sync (simulated) ────────────
-router.post('/connectors/sync', authMiddleware, requirePermission('tenant:settings_update'), async (req, res) => {
+router.post('/connectors/sync', authMiddleware, requirePermission('org:settings_update'), async (req, res) => {
     try {
         const { connector_type, sync_scope } = req.body;
         const type = connector_type || 'SAP';

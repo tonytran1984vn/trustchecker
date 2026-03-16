@@ -38,12 +38,12 @@ async function loadCCSData() {
   try {
     const API = window.API;
     [_exposure, _decisions, _valuation, _trends, _alerts, _roi] = await Promise.all([
-      API.get('/tenant/owner/ccs/exposure').catch(() => null),
-      API.get('/tenant/owner/ccs/decisions').catch(() => null),
-      API.get('/tenant/owner/ccs/valuation').catch(() => null),
-      API.get('/tenant/owner/ccs/trends').catch(() => null),
-      API.get('/tenant/owner/ccs/alerts').catch(() => null),
-      API.get('/tenant/owner/ccs/roi').catch(() => null),
+      API.get('/org-admin/owner/ccs/exposure').catch(() => null),
+      API.get('/org-admin/owner/ccs/decisions').catch(() => null),
+      API.get('/org-admin/owner/ccs/valuation').catch(() => null),
+      API.get('/org-admin/owner/ccs/trends').catch(() => null),
+      API.get('/org-admin/owner/ccs/alerts').catch(() => null),
+      API.get('/org-admin/owner/ccs/roi').catch(() => null),
     ]);
     renderCCS();
     setTimeout(() => injectMyActionsWidget('my-actions-widget'), 200);
@@ -878,7 +878,7 @@ window.saveCCSFinancials = async function () {
     custom_avg_fine: Number(document.getElementById('ccs-fin-avgfine')?.value || 0),
   };
   try {
-    await API.patch('/tenant/owner/org-financials', body);
+    await API.patch('/org-admin/owner/org-financials', body);
     document.getElementById('ccs-fin-modal').style.display = 'none';
     loadCCSData(); // Refresh all data
   } catch (e) {
@@ -929,7 +929,7 @@ window._buRows = [];       // current BU rows
 window.openBUConfigModal = async function () {
   try {
     const API = window.API;
-    const res = await API.get('/tenant/owner/ccs/bu-config');
+    const res = await API.get('/org-admin/owner/ccs/bu-config');
     window._buCategories = res.available_categories || [];
     const cfg = res.bu_config || {};
     window._buRows = cfg.business_units && cfg.business_units.length > 0
@@ -1155,7 +1155,7 @@ window._saveBUConfig = async function () {
     if (!confirm(`Revenue weights sum to ${Math.round(totalWeight * 100)}% (should be ~100%). Continue anyway?`)) return;
   }
   try {
-    await API.patch('/tenant/owner/ccs/bu-config', {
+    await API.patch('/org-admin/owner/ccs/bu-config', {
       business_units: window._buRows,
       brand_architecture: window._buBrandArch,
       contagion_factor: window._buContagion,
@@ -1172,7 +1172,7 @@ window._clearBUConfig = async function () {
   if (!confirm('Remove all Business Unit configuration? This will revert to single-industry mode.')) return;
   const API = window.API;
   try {
-    await API.patch('/tenant/owner/ccs/bu-config', { business_units: [] });
+    await API.patch('/org-admin/owner/ccs/bu-config', { business_units: [] });
     document.getElementById('ccs-bu-modal').style.display = 'none';
     loadCCSData();
   } catch (e) {

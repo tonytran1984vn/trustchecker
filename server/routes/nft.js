@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const blockchainEngine = require('../engines/blockchain');
+const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);
 
@@ -46,11 +47,11 @@ router.post('/mint', requirePermission('nft:mint'), async (req, res) => {
 
         const expiresAt = expires_in_days ? new Date(Date.now() + expires_in_days * 86400000).toISOString() : null;
 
-        await db.prepare(`
+        await db.run(`
       INSERT INTO nft_certificates (id, token_id, product_id, entity_type, entity_id, certificate_type, owner, metadata_hash, blockchain_seal_id, expires_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, tokenId, product_id || null, targetType, targetId, certificate_type || 'authenticity',
-            req.user.id, metadataHash, seal.seal_id, expiresAt);
+    `, [id, tokenId, product_id || null, targetType, targetId, certificate_type || 'authenticity',
+            req.user.id, metadataHash, seal.seal_id, expiresAt]);
 
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
             .run(uuidv4(), req.user.id, 'NFT_MINTED', 'nft', id, JSON.stringify({ token_id: tokenId, product_id, certificate_type }));
@@ -94,7 +95,7 @@ router.get('/:id', async (req, res) => {
         const cert = await db.get('SELECT nc.*, p.name as product_name FROM nft_certificates nc LEFT JOIN products p ON nc.product_id = p.id WHERE nc.id = ?', [req.params.id]);
         if (!cert) return res.status(404).json({ error: 'Certificate not found' });
 
-        const seal = cert.blockchain_seal_id ? await db.get('SELECT * FROM blockchain_seals WHERE id = ?', [cert.blockchain_seal_id]) : null;
+        const seal = cert.blockchain_seal_id ? await db.get('SELECT * FROM blockchain_seals WHERE id = ? LIMIT 1000', [cert.blockchain_seal_id]) : null;
 
         res.json({
             certificate: cert,

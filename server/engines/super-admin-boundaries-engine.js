@@ -7,6 +7,12 @@
  * 
  * This is the first audit question in any infrastructure review.
  */
+/**
+ * ⚠️ TENANT ISOLATION: This engine relies on PostgreSQL RLS for data isolation.
+ * The calling route must set db.setOrgContext(orgId) before invoking engine methods.
+ * All SQL queries in this file are filtered at the database level by RLS policies.
+ */
+
 
 // ═══════════════════════════════════════════════════════════════════
 // 1. SUPER ADMIN — PERMITTED ACTIONS (CAN DO)

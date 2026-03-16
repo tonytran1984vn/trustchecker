@@ -4,6 +4,8 @@ const { safeError } = require('../utils/safe-error');
  * Tamper-proof digital evidence with hash anchoring & forensic export
  */
 
+const { withTransaction } = require('../middleware/transaction');
+const { cacheInvalidate } = require('../middleware/cache-invalidate');
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
@@ -13,6 +15,7 @@ const fs = require('fs');
 const multer = require('multer');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const { orgGuard } = require('../middleware/org-middleware');
 
 // Ensure evidence upload directory exists
 const EVIDENCE_DIR = path.join(__dirname, '..', '..', 'data', 'evidence');
@@ -47,6 +50,13 @@ const upload = multer({
 });
 
 router.use(authMiddleware);
+router.use(orgGuard());
+
+// Org-scoped helper: builds WHERE clause for evidence_items
+function evidenceOrgFilter(orgId) {
+    if (!orgId) return { clause: '', params: [] };
+    return { clause: ' AND org_id = ?', params: [orgId] };
+}
 
 // BUG-19 FIX: HTML escape helper to prevent stored XSS in forensic reports
 function escapeHtml(str) {
@@ -58,12 +68,13 @@ function escapeHtml(str) {
 router.get('/stats', async (req, res) => {
     try {
         // NODE-BP-1: Parallelize independent queries
+        const { clause: orgC, params: orgP } = evidenceOrgFilter(req.orgId);
         const [total, anchored, verified, tampered, totalSize] = await Promise.all([
-            db.get('SELECT COUNT(*) as count FROM evidence_items'),
-            db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'anchored'"),
-            db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'verified'"),
-            db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'tampered'"),
-            db.get('SELECT COALESCE(SUM(file_size), 0) as size FROM evidence_items'),
+            db.get('SELECT COUNT(*) as count FROM evidence_items WHERE 1=1' + orgC, orgP),
+            db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'anchored'" + orgC, orgP),
+            db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'verified'" + orgC, orgP),
+            db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'tampered'" + orgC, orgP),
+            db.get('SELECT COALESCE(SUM(file_size), 0) as size FROM evidence_items WHERE 1=1' + orgC, orgP),
         ]).then(rows => rows.map(r => r || { count: 0, size: 0 }));
 
         res.json({
@@ -82,12 +93,13 @@ router.get('/stats', async (req, res) => {
 // ─── GET / (list) ───────────────────────────────────────────
 router.get('/', async (req, res) => {
     try {
+        const { clause: orgC, params: orgP } = evidenceOrgFilter(req.orgId);
         const items = await db.all(`
       SELECT id, title, description, file_name, file_type, file_size, sha256_hash,
              blockchain_seal_id, entity_type, entity_id, uploaded_by,
              verification_status, verified_at, created_at
-      FROM evidence_items ORDER BY created_at DESC LIMIT 100
-    `);
+      FROM evidence_items WHERE 1=1${orgC} ORDER BY created_at DESC LIMIT 100
+    `, orgP);
         res.json({ items });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -118,7 +130,8 @@ router.get('/search/tags', async (req, res) => {
         const searchTags = tagsParam ? tagsParam.split(',') : tag ? [tag] : [];
         if (searchTags.length === 0) return res.status(400).json({ error: 'tag or tags query parameter required' });
 
-        const allItems = await db.all('SELECT id, title, entity_type, entity_id, verification_status, tags, created_at FROM evidence_items WHERE tags IS NOT NULL');
+        const { clause: orgC, params: orgP } = evidenceOrgFilter(req.orgId);
+        const allItems = await db.all('SELECT id, title, entity_type, entity_id, verification_status, tags, created_at FROM evidence_items WHERE tags IS NOT NULL' + orgC, orgP);
         const matched = allItems.filter(item => {
             const itemTags = JSON.parse(item.tags || '[]');
             return searchTags.some(st => itemTags.includes(st));
@@ -133,7 +146,8 @@ router.get('/search/tags', async (req, res) => {
 // ─── GET /:id ───────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
     try {
-        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?', [req.params.id]);
+        const { clause: orgC, params: orgP } = evidenceOrgFilter(req.orgId);
+        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?' + orgC, [req.params.id, ...orgP]);
         if (!item) return res.status(404).json({ error: 'Evidence not found' });
 
         // Get blockchain seal if exists
@@ -168,20 +182,20 @@ router.post('/upload', requirePermission('evidence:upload'), async (req, res) =>
         const merkleData = `${sha256}|${prevHash}|${blockIndex}`;
         const merkleRoot = crypto.createHash('sha256').update(merkleData).digest('hex');
 
-        await db.prepare(`
+        await db.run(`
       INSERT INTO blockchain_seals (id, event_type, event_id, data_hash, prev_hash, merkle_root, block_index)
       VALUES (?, 'evidence_anchor', ?, ?, ?, ?, ?)
-    `).run(sealId, sha256, sha256, prevHash, merkleRoot, blockIndex);
+    `, [sealId, sha256, sha256, prevHash, merkleRoot, blockIndex]);
 
         // Create evidence item
         const id = uuidv4();
         const fileSize = file_data ? Buffer.byteLength(file_data, 'utf8') : 0;
-        await db.prepare(`
+        await db.run(`
       INSERT INTO evidence_items (id, title, description, file_name, file_type, file_size, file_data,
-        sha256_hash, blockchain_seal_id, entity_type, entity_id, uploaded_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, title, description || '', file_name || '', file_type || '', fileSize,
-            file_data || null, sha256, sealId, entity_type || '', entity_id || '', req.user.id);
+        sha256_hash, blockchain_seal_id, entity_type, entity_id, uploaded_by, org_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, title, description || '', file_name || '', file_type || '', fileSize,
+            file_data || null, sha256, sealId, entity_type || '', entity_id || '', req.user.id, req.orgId || null]);
 
         // Tamper-evident audit log
         const { appendAuditEntry } = require('../utils/audit-chain');
@@ -203,7 +217,8 @@ router.post('/upload', requirePermission('evidence:upload'), async (req, res) =>
 // ─── GET /:id/verify ────────────────────────────────────────
 router.get('/:id/verify', async (req, res) => {
     try {
-        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?', [req.params.id]);
+        const { clause: orgC, params: orgP } = evidenceOrgFilter(req.orgId);
+        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?' + orgC, [req.params.id, ...orgP]);
         if (!item) return res.status(404).json({ error: 'Evidence not found' });
 
         const seal = item.blockchain_seal_id ?
@@ -216,12 +231,12 @@ router.get('/:id/verify', async (req, res) => {
             // Check chain continuity
             let chainValid = true;
             if (seal.block_index > 0) {
-                const prevSeal = await db.get('SELECT * FROM blockchain_seals WHERE block_index = ?', [seal.block_index - 1]);
+                const prevSeal = await db.get('SELECT * FROM blockchain_seals WHERE block_index = ? LIMIT 1000', [seal.block_index - 1]);
                 chainValid = prevSeal && prevSeal.data_hash === seal.prev_hash;
             }
             integrity = hashMatch && chainValid ? 'verified' : 'tampered';
 
-            await db.prepare('UPDATE evidence_items SET verification_status = ?, verified_at = datetime(?) WHERE id = ?')
+            await db.prepare('UPDATE evidence_items SET verification_status = ?, verified_at = NOW() WHERE id = ?')
                 .run(integrity, 'now', req.params.id);
         }
 
@@ -241,14 +256,15 @@ router.get('/:id/verify', async (req, res) => {
 // ─── GET /:id/export ────────────────────────────────────────
 router.get('/:id/export', async (req, res) => {
     try {
-        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?', [req.params.id]);
+        const { clause: orgC, params: orgP } = evidenceOrgFilter(req.orgId);
+        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?' + orgC, [req.params.id, ...orgP]);
         if (!item) return res.status(404).json({ error: 'Evidence not found' });
 
         const seal = item.blockchain_seal_id ?
             await db.get('SELECT * FROM blockchain_seals WHERE id = ?', [item.blockchain_seal_id]) : null;
 
         const auditTrail = await db.all(
-            "SELECT * FROM audit_log WHERE entity_type = 'evidence' AND entity_id = ? ORDER BY timestamp ASC",
+            "SELECT * FROM audit_log WHERE entity_type = 'evidence' AND entity_id = ? ORDER BY timestamp ASC LIMIT 1000",
             [req.params.id]
         );
 
@@ -314,29 +330,29 @@ router.post('/upload-file', requireRole('operator'), upload.single('file'), asyn
         const merkleData = `${sha256}|${prevHash}|${blockIndex}`;
         const merkleRoot = crypto.createHash('sha256').update(merkleData).digest('hex');
 
-        await db.prepare(`
+        await db.run(`
       INSERT INTO blockchain_seals (id, event_type, event_id, data_hash, prev_hash, merkle_root, block_index)
       VALUES (?, 'evidence_anchor', ?, ?, ?, ?, ?)
-    `).run(sealId, sha256, sha256, prevHash, merkleRoot, blockIndex);
+    `, [sealId, sha256, sha256, prevHash, merkleRoot, blockIndex]);
 
         // Create evidence item
         const id = uuidv4();
-        await db.prepare(`
+        await db.run(`
       INSERT INTO evidence_items (id, title, description, file_name, file_type, file_size,
-        sha256_hash, blockchain_seal_id, entity_type, entity_id, uploaded_by, file_path)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, title, description || '', req.file.originalname, req.file.mimetype,
+        sha256_hash, blockchain_seal_id, entity_type, entity_id, uploaded_by, file_path, org_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, title, description || '', req.file.originalname, req.file.mimetype,
             req.file.size, sha256, sealId, entity_type || '', entity_id || '',
-            req.user.id, req.file.filename);
+            req.user.id, req.file.filename, req.orgId || null]);
 
         // Audit log
-        await db.prepare(`
+        await db.run(`
       INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'evidence_file_upload', 'evidence', ?, ?)
-    `).run(uuidv4(), req.user.id, id, JSON.stringify({
+    `, [uuidv4(), req.user.id, id, JSON.stringify({
             title, sha256, seal_id: sealId,
             original_name: req.file.originalname, size: req.file.size
-        }));
+        })]);
 
         res.json({
             id, sha256, seal_id: sealId, block_index: blockIndex,
@@ -350,7 +366,8 @@ router.post('/upload-file', requireRole('operator'), upload.single('file'), asyn
 // ─── GET /:id/download ──────────────────────────────────────
 router.get('/:id/download', async (req, res) => {
     try {
-        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?', [req.params.id]);
+        const { clause: orgC, params: orgP } = evidenceOrgFilter(req.orgId);
+        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?' + orgC, [req.params.id, ...orgP]);
         if (!item) return res.status(404).json({ error: 'Evidence not found' });
 
         // Try disk-stored file path first
@@ -381,13 +398,14 @@ router.get('/:id/download', async (req, res) => {
 // ─── GET /:id/report — Printable HTML forensic report ───────
 router.get('/:id/report', async (req, res) => {
     try {
-        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?', [req.params.id]);
+        const { clause: orgC, params: orgP } = evidenceOrgFilter(req.orgId);
+        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?' + orgC, [req.params.id, ...orgP]);
         if (!item) return res.status(404).json({ error: 'Evidence not found' });
 
         const seal = item.blockchain_seal_id ?
             await db.get('SELECT * FROM blockchain_seals WHERE id = ?', [item.blockchain_seal_id]) : null;
         const auditTrail = await db.all(
-            "SELECT a.*, u.username as actor_name FROM audit_log a LEFT JOIN users u ON a.actor_id = u.id WHERE a.entity_type = 'evidence' AND a.entity_id = ? ORDER BY a.timestamp ASC",
+            "SELECT a.*, u.username as actor_name FROM audit_log a LEFT JOIN users u ON a.actor_id = u.id WHERE a.entity_type = 'evidence' AND a.entity_id = ? ORDER BY a.timestamp ASC LIMIT 1000",
             [req.params.id]
         );
 
@@ -481,13 +499,14 @@ router.post('/:id/tag', requireRole('operator'), async (req, res) => {
         const { tags } = req.body;
         if (!tags || !Array.isArray(tags)) return res.status(400).json({ error: 'tags array required' });
 
-        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?', [req.params.id]);
+        const { clause: orgC, params: orgP } = evidenceOrgFilter(req.orgId);
+        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?' + orgC, [req.params.id, ...orgP]);
         if (!item) return res.status(404).json({ error: 'Evidence not found' });
 
         const existingTags = item.tags ? JSON.parse(item.tags) : [];
         const newTags = [...new Set([...existingTags, ...tags])];
 
-        await db.prepare('UPDATE evidence_items SET tags = ? WHERE id = ?').run(JSON.stringify(newTags), req.params.id);
+        await db.run('UPDATE evidence_items SET tags = ? WHERE id = ?', [JSON.stringify(newTags), req.params.id]);
 
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
             .run(uuidv4(), req.user.id, 'EVIDENCE_TAGGED', 'evidence', req.params.id, JSON.stringify({ added_tags: tags, all_tags: newTags }));
@@ -504,13 +523,14 @@ router.delete('/:id/tag', requireRole('operator'), async (req, res) => {
         const { tag } = req.body;
         if (!tag) return res.status(400).json({ error: 'tag required' });
 
-        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?', [req.params.id]);
+        const { clause: orgC, params: orgP } = evidenceOrgFilter(req.orgId);
+        const item = await db.get('SELECT * FROM evidence_items WHERE id = ?' + orgC, [req.params.id, ...orgP]);
         if (!item) return res.status(404).json({ error: 'Evidence not found' });
 
         const existingTags = item.tags ? JSON.parse(item.tags) : [];
         const newTags = existingTags.filter(t => t !== tag);
 
-        await db.prepare('UPDATE evidence_items SET tags = ? WHERE id = ?').run(JSON.stringify(newTags), req.params.id);
+        await db.run('UPDATE evidence_items SET tags = ? WHERE id = ?', [JSON.stringify(newTags), req.params.id]);
 
         res.json({ id: req.params.id, tags: newTags, removed: tag });
     } catch (e) {
@@ -525,10 +545,12 @@ router.post('/batch-verify', requirePermission('evidence:verify'), async (req, r
     try {
         const { evidence_ids } = req.body;
         if (!evidence_ids || !Array.isArray(evidence_ids)) return res.status(400).json({ error: 'evidence_ids array required' });
+        if (evidence_ids.length > 100) return res.status(400).json({ error: 'Maximum 100 items per batch', max: 100 });
 
         const results = [];
+        const { clause: orgC, params: orgP } = evidenceOrgFilter(req.orgId);
         for (const eid of evidence_ids) {
-            const item = await db.get('SELECT * FROM evidence_items WHERE id = ?', [eid]);
+            const item = await db.get('SELECT * FROM evidence_items WHERE id = ?' + orgC, [eid, ...orgP]);
             if (!item) { results.push({ id: eid, status: 'not_found' }); continue; }
 
             const seal = item.blockchain_seal_id ? await db.get('SELECT * FROM blockchain_seals WHERE id = ?', [item.blockchain_seal_id]) : null;
@@ -569,28 +591,30 @@ router.get('/activity/timeline', async (req, res) => {
         const safeDays = Math.max(1, Math.min(365, Math.floor(Number(days)) || 30));
         const daysModifier = `-${safeDays} days`;
 
+        const { clause: orgC, params: orgP } = evidenceOrgFilter(req.orgId);
+
         const created = await db.all(`
       SELECT DATE(created_at) as date, COUNT(*) as count
-      FROM evidence_items WHERE created_at > datetime('now', ?)
+      FROM evidence_items WHERE created_at > NOW() + CAST(? AS INTERVAL)${orgC}
       GROUP BY date ORDER BY date ASC
-    `, [daysModifier]);
+     LIMIT 1000`, [daysModifier, ...orgP]);
 
         const verified = await db.all(`
       SELECT DATE(timestamp) as date, COUNT(*) as count
       FROM audit_log WHERE action LIKE '%EVIDENCE%' AND entity_type = 'evidence'
-      AND timestamp > datetime('now', ?)
+      AND timestamp > NOW() + CAST(? AS INTERVAL)
       GROUP BY date ORDER BY date ASC
-    `, [daysModifier]);
+     LIMIT 1000`, [daysModifier]);
 
         const byType = await db.all(`
       SELECT entity_type, COUNT(*) as count
-      FROM evidence_items GROUP BY entity_type
-    `);
+      FROM evidence_items WHERE 1=1${orgC} GROUP BY entity_type
+    `, orgP);
 
         const byStatus = await db.all(`
       SELECT status, COUNT(*) as count
-      FROM evidence_items GROUP BY status
-    `);
+      FROM evidence_items WHERE 1=1${orgC} GROUP BY status
+    `, orgP);
 
         res.json({
             period_days: Number(days),

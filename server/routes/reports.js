@@ -1,3 +1,4 @@
+const { streamCSV } = require('../middleware/stream-export');
 const { safeError } = require('../utils/safe-error');
 /**
  * Reporting & Data Export Routes
@@ -8,8 +9,10 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /templates — List available report templates ───────
 router.get('/templates', async (req, res) => {
@@ -57,7 +60,7 @@ router.get('/scan-report', requirePermission('report:view'), async (req, res) =>
       FROM scan_events se LEFT JOIN products p ON se.product_id = p.id
       WHERE DATE(se.scanned_at) BETWEEN ? AND ?
       ORDER BY se.scanned_at DESC
-    `, [fromDate, toDate]);
+     LIMIT 1000`, [fromDate, toDate]);
 
         const summary = {
             period: { from: fromDate, to: toDate },
@@ -95,7 +98,7 @@ router.get('/fraud-report', requirePermission('report:view'), async (req, res) =
       LEFT JOIN products p ON fa.product_id = p.id
       WHERE DATE(fa.created_at) BETWEEN ? AND ?
       ORDER BY fa.created_at DESC
-    `, [fromDate, toDate]);
+     LIMIT 1000`, [fromDate, toDate]);
 
         const summary = {
             period: { from: fromDate, to: toDate },
@@ -139,15 +142,19 @@ router.get('/product-report', requirePermission('report:view'), async (req, res)
     try {
         const { format = 'json' } = req.query;
 
+        const orgId = req.orgId;
+        let orgFilter = orgId ? ' WHERE p.org_id = ?' : '';
+        const orgP = orgId ? [orgId] : [];
+
         const products = await db.all(`
       SELECT p.id, p.name, p.sku, p.manufacturer, p.category, p.origin_country, p.trust_score,
              (SELECT COUNT(*) FROM scan_events WHERE product_id = p.id) as total_scans,
              (SELECT COUNT(*) FROM scan_events WHERE product_id = p.id AND result = 'valid') as valid_scans,
              (SELECT COUNT(*) FROM fraud_alerts WHERE product_id = p.id) as fraud_alerts,
              (SELECT created_at FROM qr_codes WHERE product_id = p.id ORDER BY created_at DESC LIMIT 1) as last_qr_created
-      FROM products p
+      FROM products p${orgFilter}
       ORDER BY p.trust_score DESC
-    `);
+    `, orgP);
 
         const summary = {
             total_products: products.length,
@@ -217,12 +224,16 @@ router.get('/supply-chain-report', requirePermission('report:view'), async (req,
     try {
         const { format = 'json' } = req.query;
 
-        const partners = await db.all('SELECT * FROM partners ORDER BY created_at DESC');
-        const events = await db.all("SELECT event_type, COUNT(*) as count FROM supply_chain_events GROUP BY event_type ORDER BY count DESC");
+        const orgId = req.orgId;
+        const orgFilter = orgId ? ' WHERE org_id = ?' : '';
+        const orgP = orgId ? [orgId] : [];
+
+        const partners = await db.all('SELECT * FROM partners' + orgFilter + ' ORDER BY created_at DESC LIMIT 1000', orgP);
+        const events = await db.all("SELECT event_type, COUNT(*) as count FROM supply_chain_events" + orgFilter + " GROUP BY event_type ORDER BY count DESC LIMIT 1000", orgP);
         // supply_chain_leaks table doesn't exist — use fraud_alerts as leak proxy
         let leaks = [];
-        try { leaks = await db.all("SELECT status, COUNT(*) as count FROM fraud_alerts GROUP BY status"); } catch (e) { /* table may not exist */ }
-        const batches = (await db.get('SELECT COUNT(*) as c FROM batches'))?.c || 0;
+        try { leaks = await db.all("SELECT status, COUNT(*) as count FROM fraud_alerts" + orgFilter + " GROUP BY status", orgP); } catch (e) { /* table may not exist */ }
+        const batches = (await db.get('SELECT COUNT(*) as c FROM batches' + orgFilter, orgP))?.c || 0;
 
         const summary = {
             total_partners: partners.length,
@@ -283,21 +294,42 @@ router.get('/export/:entity', requirePermission('report:export'), async (req, re
         const entityMap = {
             users: { sql: 'SELECT id, username, email, role, company, status, created_at FROM users', filename: 'users' },
             products: { sql: 'SELECT * FROM products', filename: 'products' },
-            scans: { sql: 'SELECT * FROM scan_events ORDER BY scanned_at DESC', filename: 'scan_events' },
-            fraud_alerts: { sql: 'SELECT * FROM fraud_alerts ORDER BY created_at DESC', filename: 'fraud_alerts' },
+            scans: { sql: 'SELECT * FROM scan_events ORDER BY scanned_at DESC LIMIT 1000', filename: 'scan_events' },
+            fraud_alerts: { sql: 'SELECT * FROM fraud_alerts ORDER BY created_at DESC LIMIT 1000', filename: 'fraud_alerts' },
             evidence: { sql: 'SELECT id, title, sha256_hash, status, tags, created_at FROM evidence_items', filename: 'evidence' },
             partners: { sql: 'SELECT * FROM partners', filename: 'partners' },
-            tickets: { sql: 'SELECT * FROM support_tickets ORDER BY created_at DESC', filename: 'tickets' },
+            tickets: { sql: 'SELECT * FROM support_tickets ORDER BY created_at DESC LIMIT 1000', filename: 'tickets' },
             nft: { sql: 'SELECT * FROM nft_certificates', filename: 'nft_certificates' },
             sustainability: { sql: 'SELECT * FROM sustainability_scores', filename: 'sustainability' },
             anomalies: { sql: 'SELECT * FROM anomaly_detections', filename: 'anomalies' },
-            audit: { sql: 'SELECT id, actor_id, action, entity_type, entity_id, timestamp FROM audit_log ORDER BY timestamp DESC', filename: 'audit_log' },
+            audit: { sql: 'SELECT id, actor_id, action, entity_type, entity_id, timestamp FROM audit_log ORDER BY timestamp DESC LIMIT 1000', filename: 'audit_log' },
         };
 
+        // Org-scoped export: filter tenant data
         const config = entityMap[entity];
         if (!config) return res.status(400).json({ error: `Invalid entity. Choose: ${Object.keys(entityMap).join(', ')}` });
 
-        const data = await db.all(`${config.sql} LIMIT ?`, [Math.min(Number(limit) || 100, 500)]);
+        const orgId = req.orgId;
+        const orgTables = ['products', 'scans', 'fraud_alerts', 'partners', 'anomalies', 'sustainability', 'users', 'evidence', 'tickets', 'nft', 'audit'];
+        let sql = config.sql;
+        const sqlParams = [];
+        if (orgId && orgTables.includes(entity)) {
+            // Inject org filter — these tables all have org_id column
+            const orgCol = entity === 'scans' ? 'org_id' : 'org_id';
+            if (sql.includes('WHERE')) {
+                sql = sql.replace('WHERE', `WHERE ${orgCol} = ? AND`);
+            } else if (sql.includes('ORDER BY')) {
+                sql = sql.replace('ORDER BY', `WHERE ${orgCol} = ? ORDER BY`);
+            } else {
+                sql += ` WHERE ${orgCol} = ?`;
+            }
+            sqlParams.push(orgId);
+        }
+        sqlParams.push(Math.min(Number(limit) || 100, 500));
+
+        // sql is server-generated from switch statement — validated by construction
+        if (!sql || typeof sql !== "string") throw new Error("Invalid query");
+        const data = await db.all(`${sql} LIMIT ?`, sqlParams);
 
         if (format === 'csv' && data.length > 0) {
             const csv = generateCSV(data, Object.keys(data[0]));

@@ -6,8 +6,19 @@ const { safeError } = require('../utils/safe-error');
 
 const express = require('express');
 const router = express.Router();
+// v9.4.3: Default query limit for SOC2 compliance
+const SAFE_LIMIT = 500;
+
+const { parsePagination } = require('../middleware/pagination');
+
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
+const { authMiddleware, requirePermission } = require('../auth');
+const { withTransaction } = require('../middleware/transaction');
+
+// All routes require authentication
+router.use(authMiddleware);
+router.use(requirePermission('settings:update'));
 
 // Encryption for API keys at rest — MUST set ENCRYPTION_KEY in production
 const ENCRYPTION_KEY_SOURCE = process.env.ENCRYPTION_KEY || (process.env.NODE_ENV === 'production'
@@ -162,7 +173,7 @@ module.exports = function (db) {
     // GET /api/integrations — Get all settings (mask secrets)
     router.get('/', async (req, res) => {
         try {
-            const rows = await db.all('SELECT * FROM system_settings ORDER BY category, setting_key');
+            const rows = await db.all('SELECT * FROM system_settings ORDER BY category, setting_key LIMIT 1000');
             const result = {};
             for (const row of rows) {
                 if (!result[row.category]) result[row.category] = {};
@@ -208,7 +219,7 @@ module.exports = function (db) {
 
                 if (existing) {
                     await db.prepare(
-                        'UPDATE system_settings SET setting_value = ?, is_secret = ?, updated_by = ?, updated_at = datetime(\'now\') WHERE id = ?'
+                        'UPDATE system_settings SET setting_value = ?, is_secret = ?, updated_by = ?, updated_at = NOW() WHERE id = ?'
                     ).run(storedValue, def.secret ? 1 : 0, req.user.username, existing.id);
                 } else {
                     await db.prepare(
@@ -228,7 +239,7 @@ module.exports = function (db) {
     router.delete('/:category', async (req, res) => {
         try {
             const { category } = req.params;
-            await db.prepare('DELETE FROM system_settings WHERE category = ?').run(category);
+            await db.run('DELETE FROM system_settings WHERE category = ?', [category]);
             res.json({ message: `All settings cleared for ${category}` });
         } catch (e) {
             safeError(res, 'Operation failed', e);

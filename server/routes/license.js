@@ -26,6 +26,13 @@ const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
+const { authMiddleware, requirePlatformAdmin } = require('../auth');
+
+// All management routes require platform admin authentication
+router.use('/activate', authMiddleware, requirePlatformAdmin());
+router.use('/deactivate', authMiddleware, requirePlatformAdmin());
+router.use('/generate', authMiddleware, requirePlatformAdmin());
+router.use('/status', authMiddleware);
 
 // ─── Ed25519 Key Management ─────────────────────────────────────────────────
 // In production, the public key is bundled with the app.
@@ -38,6 +45,7 @@ async function loadKeys() {
     // Try loading from file first
     const keyDir = path.join(__dirname, '..', '..', 'certs');
     const fsp = require('fs').promises;
+const { withTransaction } = require('../middleware/transaction');
 
     try {
         const pubKeyPath = process.env.LICENSE_PUBLIC_KEY_PATH || path.join(keyDir, 'license-public.pem');
@@ -179,7 +187,7 @@ let currentLicense = null;
 
 
 // ─── Activate License ────────────────────────────────────────────────────────
-router.post('/activate', async (req, res) => {
+router.post('/activate', authMiddleware, requirePlatformAdmin(), async (req, res) => {
     try {
         const { license_key } = req.body;
         if (!license_key) {
@@ -207,8 +215,8 @@ router.post('/activate', async (req, res) => {
         if (db) {
             await db.run(
                 `INSERT INTO system_settings (key, value, updated_at)
-                 VALUES ('license', ?, datetime('now'))
-                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+                 VALUES ('license', ?, NOW())
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = NOW()`,
                 [JSON.stringify(currentLicense)]
             );
         }
@@ -231,7 +239,7 @@ router.post('/activate', async (req, res) => {
 
 
 // ─── License Status ──────────────────────────────────────────────────────────
-router.get('/status', (req, res) => {
+router.get('/status', authMiddleware, (req, res) => {
     if (!currentLicense) {
         return res.json({
             status: 'unlicensed',
@@ -258,7 +266,7 @@ router.get('/status', (req, res) => {
 
 
 // ─── Deactivate License ──────────────────────────────────────────────────────
-router.post('/deactivate', async (req, res) => {
+router.post('/deactivate', authMiddleware, requirePlatformAdmin(), async (req, res) => {
     try {
         if (!currentLicense) {
             return res.status(400).json({ error: 'No active license' });
@@ -296,7 +304,7 @@ router.get('/fingerprint', (req, res) => {
 
 // ─── Generate License (internal/dev only) ────────────────────────────────────
 // This endpoint is only available when PRIVATE_KEY is loaded (dev/license-server)
-router.post('/generate', async (req, res) => {
+router.post('/generate', authMiddleware, requirePlatformAdmin(), async (req, res) => {
     if (!PRIVATE_KEY) {
         return res.status(403).json({
             error: 'License generation not available on this deployment',

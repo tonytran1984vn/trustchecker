@@ -12,8 +12,13 @@ const trustEngine = require('../engines/trust');
 const blockchainEngine = require('../engines/blockchain');
 const { eventBus, EVENT_TYPES } = require('../events');
 const { validate, schemas } = require('../middleware/validate');
+const { orgGuard } = require('../middleware/org-middleware');
 
 const router = express.Router();
+
+// All routes require authentication
+router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── POST /api/qr/validate ──────────────────────────────────────────────────
 // The core real-time validation endpoint
@@ -28,15 +33,15 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
         }
 
         // Step 1: Look up QR code
-        const qrCode = await db.prepare('SELECT * FROM qr_codes WHERE qr_data = ?').get(qr_data);
+        const qrCode = await db.get('SELECT * FROM qr_codes WHERE qr_data = ?', [qr_data]);
 
         if (!qrCode) {
             // Unknown QR — potential counterfeit
             const scanId = uuidv4();
-            await db.prepare(`
+            await db.run(`
         INSERT INTO scan_events (id, scan_type, device_fingerprint, ip_address, latitude, longitude, user_agent, result, fraud_score, scanned_at)
-        VALUES (?, 'validation', ?, ?, ?, ?, ?, 'counterfeit', 1.0, datetime('now'))
-      `).run(scanId, device_fingerprint || '', ip_address || '', latitude || null, longitude || null, user_agent || '');
+        VALUES (?, 'validation', ?, ?, ?, ?, ?, 'counterfeit', 1.0, NOW())
+      `, [scanId, device_fingerprint || '', ip_address || '', latitude || null, longitude || null, user_agent || '']);
 
             await blockchainEngine.seal('QRInvalid', scanId, { qr_data, result: 'counterfeit' });
 
@@ -56,15 +61,18 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             });
         }
 
-        // Step 2: Get product
-        const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(qrCode.product_id);
+        // Step 2: Get product (org-scoped)
+        let prodSql = 'SELECT * FROM products WHERE id = ?';
+        const prodParams = [qrCode.product_id];
+        if (req.orgId) { prodSql += ' AND org_id = ?'; prodParams.push(req.orgId); }
+        const product = await db.prepare(prodSql).get(...prodParams);
 
         // Step 2.5: Check previous scans — CORE ANTI-COUNTERFEIT LOGIC
         const previousScans = await db.all(
             `SELECT id, scanned_at, ip_address, device_fingerprint, geo_city, geo_country 
              FROM scan_events 
              WHERE qr_code_id = ? AND result != 'pending'
-             ORDER BY scanned_at ASC`,
+             ORDER BY scanned_at ASC LIMIT 1000`,
             [qrCode.id]
         );
         const scanCount = previousScans.length;
@@ -73,10 +81,10 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
 
         // Step 3: Create scan event
         const scanId = uuidv4();
-        await db.prepare(`
+        await db.run(`
       INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, device_fingerprint, ip_address, latitude, longitude, user_agent, result, scanned_at)
-      VALUES (?, ?, ?, 'validation', ?, ?, ?, ?, ?, 'pending', datetime('now'))
-    `).run(scanId, qrCode.id, qrCode.product_id, device_fingerprint || '', ip_address || '', latitude || null, longitude || null, user_agent || '');
+      VALUES (?, ?, ?, 'validation', ?, ?, ?, ?, ?, 'pending', NOW())
+    `, [scanId, qrCode.id, qrCode.product_id, device_fingerprint || '', ip_address || '', latitude || null, longitude || null, user_agent || '']);
 
         eventBus.emitEvent(EVENT_TYPES.QR_SCANNED, {
             scan_id: scanId,
@@ -146,9 +154,9 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
 
         // Step 7: Update scan event
         const responseTime = Date.now() - startTime;
-        await db.prepare(`
+        await db.run(`
       UPDATE scan_events SET result = ?, fraud_score = ?, trust_score = ?, response_time_ms = ? WHERE id = ?
-    `).run(result, fraudResult.fraudScore, trustResult.score, responseTime, scanId);
+    `, [result, fraudResult.fraudScore, trustResult.score, responseTime, scanId]);
 
         // Step 8: Blockchain seal
         const seal = await blockchainEngine.seal('QRValidated', scanId, {
@@ -215,7 +223,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
 });
 
 // ─── POST /api/qr/generate — Bulk QR Code Generation ────────────────────────
-router.post('/generate', authMiddleware, async (req, res) => {
+router.post('/generate', async (req, res) => {
     try {
         const { product_id, quantity = 1, batch_id, prefix } = req.body;
 
@@ -225,14 +233,17 @@ router.post('/generate', authMiddleware, async (req, res) => {
 
         const qty = Math.min(Math.max(1, parseInt(quantity) || 1), 10000);
 
-        // Verify product exists
-        const product = await db.prepare('SELECT id, name, sku FROM products WHERE id = ?').get(product_id);
+        // Verify product exists (org-scoped)
+        let prodSql = 'SELECT id, name, sku FROM products WHERE id = ?';
+        const prodParams = [product_id];
+        if (req.orgId) { prodSql += ' AND org_id = ?'; prodParams.push(req.orgId); }
+        const product = await db.prepare(prodSql).get(...prodParams);
         if (!product) {
             return res.status(404).json({ error: 'Product not found' });
         }
 
         // Determine org_id from the product or the logged-in user
-        const orgId = req.tenantId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.org_id || null;
 
         // Generate unique codes
         const codePrefix = prefix || product.sku || 'TC';
@@ -247,10 +258,10 @@ router.post('/generate', authMiddleware, async (req, res) => {
 
             const id = uuidv4();
             try {
-                await db.prepare(`
+                await db.run(`
                     INSERT INTO qr_codes (id, product_id, qr_data, org_id, status, generated_by, generated_at)
-                    VALUES (?, ?, ?, ?, 'active', ?, datetime('now'))
-                `).run(id, product_id, qrData, orgId, req.user?.id || 'system');
+                    VALUES (?, ?, ?, ?, 'active', ?, NOW())
+                `, [id, product_id, qrData, orgId, req.user?.id || 'system']);
 
                 generated.push({
                     id,
@@ -287,7 +298,7 @@ router.post('/generate', authMiddleware, async (req, res) => {
 });
 
 // ─── GET /api/qr/scan-history ────────────────────────────────────────────────
-router.get('/scan-history', authMiddleware, async (req, res) => {
+router.get('/scan-history', async (req, res) => {
     try {
         const { product_id, limit = 50 } = req.query;
         const orgId = req.user?.org_id || req.user?.orgId;
@@ -321,16 +332,16 @@ router.get('/scan-history', authMiddleware, async (req, res) => {
 });
 
 // ─── GET /api/qr/fraud-alerts ────────────────────────────────────────────────
-router.get('/fraud-alerts', authMiddleware, async (req, res) => {
+router.get('/fraud-alerts', async (req, res) => {
     try {
         const { status = 'open', limit = 50 } = req.query;
-        const alerts = await db.prepare(`
+        const alerts = await db.all(`
       SELECT fa.*, p.name as product_name, p.sku as product_sku
       FROM fraud_alerts fa
       LEFT JOIN products p ON fa.product_id = p.id
       WHERE fa.status = ?
       ORDER BY fa.created_at DESC LIMIT ?
-    `).all(status, Math.min(Number(limit) || 50, 200));
+    `, [status, Math.min(Number(limit) || 50, 200)]);
 
         res.json({ alerts });
     } catch (err) {
@@ -340,7 +351,7 @@ router.get('/fraud-alerts', authMiddleware, async (req, res) => {
 });
 
 // ─── GET /api/qr/blockchain ─────────────────────────────────────────────────
-router.get('/blockchain', authMiddleware, async (req, res) => {
+router.get('/blockchain', async (req, res) => {
     try {
         const stats = await blockchainEngine.getStats();
         const recent = await blockchainEngine.getRecent(20);
@@ -352,7 +363,7 @@ router.get('/blockchain', authMiddleware, async (req, res) => {
 });
 
 // ─── GET /api/qr/blockchain/verify ──────────────────────────────────────────
-router.get('/blockchain/verify', authMiddleware, async (req, res) => {
+router.get('/blockchain/verify', async (req, res) => {
     try {
         const verification = await blockchainEngine.verifyChain();
         res.json(verification);
@@ -363,38 +374,41 @@ router.get('/blockchain/verify', authMiddleware, async (req, res) => {
 });
 
 // ─── GET /api/qr/dashboard-stats ─────────────────────────────────────────────
-router.get('/dashboard-stats', authMiddleware, async (req, res) => {
+router.get('/dashboard-stats', async (req, res) => {
     try {
+        const oid = req.orgId;
+        const orgF = oid ? ' WHERE org_id = ?' : '';
+        const orgP = oid ? [oid] : [];
         // NODE-BP-1: Parallelize independent DB queries
         const [totalProducts, totalScans, todayScans, openAlerts, avgTrustScore, totalSeals] = await Promise.all([
-            db.prepare('SELECT COUNT(*) as count FROM products').get(),
-            db.prepare('SELECT COUNT(*) as count FROM scan_events').get(),
-            db.prepare(`SELECT COUNT(*) as count FROM scan_events WHERE DATE(scanned_at) = DATE('now')`).get(),
-            db.prepare(`SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'`).get(),
-            db.prepare('SELECT AVG(trust_score) as avg FROM products WHERE trust_score > 0').get(),
-            db.prepare('SELECT COUNT(*) as count FROM blockchain_seals').get(),
+            db.prepare('SELECT COUNT(*) as count FROM products' + orgF).get(...orgP),
+            db.prepare('SELECT COUNT(*) as count FROM scan_events' + orgF).get(...orgP),
+            db.prepare(`SELECT COUNT(*) as count FROM scan_events WHERE DATE(scanned_at) = DATE('now')` + (oid ? ' AND org_id = ?' : '')).get(...orgP),
+            db.prepare(`SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'` + (oid ? ' AND org_id = ?' : '')).get(...orgP),
+            db.prepare('SELECT AVG(trust_score) as avg FROM products WHERE trust_score > 0' + (oid ? ' AND org_id = ?' : '')).get(...orgP),
+            db.prepare('SELECT COUNT(*) as count FROM blockchain_seals' + orgF).get(...orgP),
         ]);
 
         const [scansByResult, alertsBySeverity, recentActivity, scanTrend] = await Promise.all([
-            db.prepare('SELECT result, COUNT(*) as count FROM scan_events GROUP BY result').all(),
-            db.prepare(`SELECT severity, COUNT(*) as count FROM fraud_alerts WHERE status = 'open' GROUP BY severity`).all(),
+            db.prepare('SELECT result, COUNT(*) as count FROM scan_events' + (oid ? ' WHERE org_id = ?' : '') + ' GROUP BY result').all(...orgP),
+            db.prepare(`SELECT severity, COUNT(*) as count FROM fraud_alerts WHERE status = 'open'` + (oid ? ' AND org_id = ?' : '') + ' GROUP BY severity').all(...orgP),
             db.prepare(`SELECT se.id, se.result, se.fraud_score, se.trust_score, se.scanned_at, p.name as product_name
-              FROM scan_events se LEFT JOIN products p ON se.product_id = p.id
-              ORDER BY se.scanned_at DESC LIMIT 10`).all(),
+              FROM scan_events se LEFT JOIN products p ON se.product_id = p.id` + (oid ? ' WHERE se.org_id = ?' : '') + `
+              ORDER BY se.scanned_at DESC LIMIT 10`).all(...orgP),
             db.prepare(`SELECT DATE(scanned_at) as day, COUNT(*) as count FROM scan_events
-              WHERE scanned_at > datetime('now', '-7 days') GROUP BY DATE(scanned_at) ORDER BY day ASC`).all(),
+              WHERE scanned_at > (NOW() - interval '7 days')` + (oid ? ' AND org_id = ?' : '') + ` GROUP BY DATE(scanned_at) ORDER BY day ASC LIMIT 1000`).all(...orgP),
         ]);
 
         // ── CIE (Carbon Integrity Engine) metrics ──
-        const orgId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId || null;
         let cieAnomalies = 0, cieSealedCIPs = 0, cieAnchoredProofs = 0, cieIntegrity = 87;
         try {
             // Anomalies = open fraud alerts
             cieAnomalies = openAlerts.count;
             // Sealed CIPs = distinct carbon passport entries (products with carbon data)
             const sealedRes = orgId
-                ? await db.prepare('SELECT COUNT(*) as c FROM products WHERE org_id = ? AND carbon_footprint_kgco2e > 0').get(orgId)
-                : await db.prepare('SELECT COUNT(*) as c FROM products WHERE carbon_footprint_kgco2e > 0').get();
+                ? await db.get('SELECT COUNT(*) as c FROM products WHERE org_id = ? AND carbon_footprint_kgco2e > 0', [orgId])
+                : await db.get('SELECT COUNT(*) as c FROM products WHERE carbon_footprint_kgco2e > 0');
             cieSealedCIPs = sealedRes?.c || 0;
             // Anchored proofs = blockchain seals
             cieAnchoredProofs = totalSeals.count;
@@ -429,7 +443,7 @@ router.get('/dashboard-stats', authMiddleware, async (req, res) => {
 });
 
 // ─── GET /api/qr/events ─────────────────────────────────────────────────────
-router.get('/events', authMiddleware, async (req, res) => {
+router.get('/events', async (req, res) => {
     try {
         const events = eventBus.getRecentEvents(50);
         res.json({ events });
@@ -487,7 +501,7 @@ router.post('/mobile-scan', validate(schemas.qrScan), async (req, res) => {
         if (!qr_data) return res.status(400).json({ error: 'qr_data required' });
 
         // Reuse the core validation logic
-        const qrCode = await db.prepare('SELECT * FROM qr_codes WHERE qr_data = ?').get(qr_data);
+        const qrCode = await db.get('SELECT * FROM qr_codes WHERE qr_data = ?', [qr_data]);
         if (!qrCode) {
             return res.json({
                 valid: false, result: 'counterfeit',
@@ -497,14 +511,17 @@ router.post('/mobile-scan', validate(schemas.qrScan), async (req, res) => {
             });
         }
 
-        const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(qrCode.product_id);
+        let mpSql = 'SELECT * FROM products WHERE id = ?';
+        const mpParams = [qrCode.product_id];
+        if (req.orgId) { mpSql += ' AND org_id = ?'; mpParams.push(req.orgId); }
+        const product = await db.prepare(mpSql).get(...mpParams);
         const scanId = uuidv4();
 
-        await db.prepare(`
+        await db.run(`
       INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, device_fingerprint, user_agent, result, scanned_at)
-      VALUES (?, ?, ?, 'mobile_camera', ?, ?, 'valid', datetime('now'))
-    `).run(scanId, qrCode.id, qrCode.product_id,
-            device_info?.model || 'mobile', device_info?.userAgent || 'Mobile Camera');
+      VALUES (?, ?, ?, 'mobile_camera', ?, ?, 'valid', NOW())
+    `, [scanId, qrCode.id, qrCode.product_id,
+            device_info?.model || 'mobile', device_info?.userAgent || 'Mobile Camera']);
 
         const fraudResult = await engineClient.fraudAnalyze({ id: scanId, qr_code_id: qrCode.id, product_id: qrCode.product_id });
         const trustResult = trustEngine.calculate(qrCode.product_id, fraudResult.fraudScore);
@@ -532,6 +549,7 @@ router.post('/mobile-scan', validate(schemas.qrScan), async (req, res) => {
 // ─── GET /api/qr/public/check/:productId — Freemium public trust check ──────
 // No auth required. Rate limited per IP. Returns limited data + signup CTA.
 const rateLimit = require('express-rate-limit');
+const { withTransaction } = require('../middleware/transaction');
 const publicCheckLimiter = rateLimit({
     windowMs: 60_000,
     max: 10,
@@ -560,7 +578,7 @@ router.get('/public/check/:productId', publicCheckLimiter, async (req, res) => {
         ).get(product.id);
 
         const recentScans = await db.prepare(
-            "SELECT COUNT(*) as c FROM scan_events WHERE product_id = ? AND scanned_at >= datetime('now', '-30 days')"
+            "SELECT COUNT(*) as c FROM scan_events WHERE product_id = ? AND scanned_at >= NOW() - INTERVAL '30 days'"
         ).get(product.id);
 
         res.json({

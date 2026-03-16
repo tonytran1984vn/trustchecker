@@ -126,7 +126,7 @@ function renderResults(r) {
 
 async function loadBaseline() {
   try {
-    _baseline = await api.get('/tenant/owner/ccs/allocation-baseline');
+    _baseline = await api.get('/org-admin/owner/ccs/allocation-baseline');
     _baseline.investment_options.forEach(o => { _investments[o.id] = 0; });
     const el = document.getElementById('main-content');
     if (el) el.innerHTML = renderPage();
@@ -201,7 +201,7 @@ window._runSimulation = async function () {
     const btn = document.querySelector('button[onclick*="_runSimulation"]');
     if (btn) { btn.textContent = '⏳ Simulating...'; btn.disabled = true; }
 
-    _result = await api.post('/tenant/owner/ccs/allocation-simulate', {
+    _result = await api.post('/org-admin/owner/ccs/allocation-simulate', {
       investments: _investments,
       baseline: _baseline.baseline,
     });

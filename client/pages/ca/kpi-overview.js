@@ -258,7 +258,7 @@ function renderAlertTrend(weeks) {
 
 async function load() {
   try {
-    _d = await api.get('/tenant/governance/kpi-overview');
+    _d = await api.get('/org-admin/governance/kpi-overview');
     const el = document.getElementById('main-content');
     if (el) el.innerHTML = renderPage();
   } catch (e) {

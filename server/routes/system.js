@@ -3,6 +3,12 @@ const { safeError } = require('../utils/safe-error');
  * System Routes — Backup, Restore, Seed, and System Info
  * Admin-only endpoints for system maintenance
  */
+
+function _safeId(name) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error("Invalid identifier: " + name);
+  return name;
+}
+
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
@@ -15,11 +21,11 @@ router.use(requirePermission('settings:update'));
 // ─── GET /info — Full system info ────────────────────────────
 router.get('/info', async (req, res) => {
     try {
-        const tables = await db.all("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
+        const tables = await db.all("SELECT table_name::TEXT as name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1000");
         const tableDetails = [];
         for (const t of tables) {
             try {
-                const count = (await db.get(`SELECT COUNT(*) as c FROM ${t.name}`))?.c || 0;
+                const count = (await db.get(`SELECT COUNT(*) as c FROM ${_safeId(t.name)}`))?.c || 0;
                 tableDetails.push({ name: t.name, rows: count });
             } catch (e) {
                 tableDetails.push({ name: t.name, rows: -1 });
@@ -133,16 +139,16 @@ router.post('/seed', async (req, res) => {
 // ─── POST /backup — Export database snapshot ─────────────────
 router.post('/backup', async (req, res) => {
     try {
-        const tables = await db.all("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
+        const tables = await db.all("SELECT table_name::TEXT as name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1000");
         const backup = {};
         let totalRows = 0;
 
         for (const t of tables) {
             try {
-                const rows = await db.all(`SELECT * FROM ${t.name}`);
+                const rows = await db.all(`SELECT * FROM ${_safeId(t.name)}`);
                 backup[t.name] = rows;
                 totalRows += rows.length;
-            } catch (e) { console.warn(`[system] Backup skip table '${t.name}':`, e.message); }
+            } catch (e) { console.warn(`[system] Backup skip table '${_safeId(t.name)}':`, e.message); }
         }
 
         res.json({
@@ -182,7 +188,7 @@ router.post('/restore', async (req, res) => {
                 continue;
             }
             try {
-                const exists = await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", [table]);
+                const exists = await db.get("SELECT table_name::TEXT as name FROM information_schema.tables WHERE table_schema='public' AND table_name = $1", [table]);
                 if (!exists) continue;
 
                 for (const row of rows) {
@@ -212,16 +218,16 @@ router.delete('/purge', async (req, res) => {
             return res.status(400).json({ error: 'Send { confirm: "DELETE_ALL_DATA" } to purge all data' });
         }
 
-        const tables = await db.all("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
+        const tables = await db.all("SELECT table_name::TEXT as name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1000");
         const results = {};
 
         for (const t of tables) {
             if (t.name === 'users') continue; // Never delete users
             try {
-                const before = (await db.get(`SELECT COUNT(*) as c FROM ${t.name}`))?.c || 0;
-                await db.run(`DELETE FROM ${t.name}`);
+                const before = (await db.get(`SELECT COUNT(*) as c FROM ${_safeId(t.name)}`))?.c || 0;
+                await db.run(`DELETE FROM ${_safeId(t.name)}`);
                 results[t.name] = before;
-            } catch (e) { console.warn(`[system] Purge skip table '${t.name}':`, e.message); }
+            } catch (e) { console.warn(`[system] Purge skip table '${_safeId(t.name)}':`, e.message); }
         }
 
         res.json({ message: 'Data purged (users preserved)', tables_cleared: results });
@@ -234,6 +240,7 @@ router.delete('/purge', async (req, res) => {
 router.get('/logs', async (req, res) => {
     try {
         const { requestLogger } = require('../middleware/security');
+const { withTransaction } = require('../middleware/transaction');
         const { limit = 50 } = req.query;
         res.json({
             entries: requestLogger.getEntries(Number(limit)),

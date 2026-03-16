@@ -14,6 +14,7 @@ const db = require('../db');
 const { authMiddleware } = require('../auth');
 const { cacheMiddleware } = require('../cache');
 const crypto = require('crypto');
+const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);
 
@@ -50,7 +51,7 @@ router.use(authMiddleware);
 // ─── GET / — List all actions for this org ─────────────────────────────────────
 router.get('/', cacheMiddleware(10), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const { status, priority, assigned_to } = req.query;
 
         let sql = `SELECT ca.*, u1.email as creator_email, u2.email as assignee_email
@@ -101,12 +102,12 @@ router.get('/my', async (req, res) => {
 // ─── GET /suggestions — Auto-generated action suggestions ──────────────────────
 router.get('/suggestions', cacheMiddleware(120), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const suggestions = [];
 
         // Check for low-grade partners
         const lowPartners = await db.all(
-            `SELECT id, name, trust_score FROM partners WHERE org_id = ? AND trust_score < 50`, [orgId]
+            `SELECT id, name, trust_score FROM partners WHERE org_id = ? AND trust_score < 50 LIMIT 1000`, [orgId]
         ).catch(() => []);
         lowPartners.forEach(p => {
             suggestions.push({
@@ -189,7 +190,7 @@ router.get('/suggestions', cacheMiddleware(120), async (req, res) => {
 // ─── POST / — Create action ────────────────────────────────────────────────────
 router.post('/', async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const userId = req.user?.id || req.user?.userId;
         const { title, description, category, priority, assigned_to, assigned_role, due_date, source_type, source_ref } = req.body;
 
@@ -230,8 +231,8 @@ router.patch('/:id', async (req, res) => {
         if (priority) { updates.push('priority = ?'); params.push(priority); }
         if (assigned_to !== undefined) { updates.push('assigned_to = ?'); params.push(assigned_to || null); }
         if (due_date !== undefined) { updates.push('due_date = ?'); params.push(due_date || null); }
-        if (status === 'done') { updates.push("completed_at = datetime('now')"); }
-        updates.push("updated_at = datetime('now')");
+        if (status === 'done') { updates.push("completed_at = NOW()"); }
+        updates.push("updated_at = NOW()");
 
         params.push(id);
         await db.run(`UPDATE carbon_actions SET ${updates.join(', ')} WHERE id = ?`, params);
@@ -281,12 +282,12 @@ const ACTIONABLE_ROLE_LIST = Object.keys(ACTIONABLE_ROLES);
 
 router.get('/users', cacheMiddleware(60), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const placeholders = ACTIONABLE_ROLE_LIST.map(() => '?').join(',');
         const users = await db.all(
             `SELECT u.id, u.email, u.username, u.role FROM users u
              WHERE u.org_id = ? AND u.role IN (${placeholders})
-             ORDER BY u.role, u.email`,
+             ORDER BY u.role, u.email LIMIT 1000`,
             [orgId, ...ACTIONABLE_ROLE_LIST]
         ).catch(() => []);
         // Enrich with role labels

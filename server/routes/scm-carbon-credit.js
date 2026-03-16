@@ -15,6 +15,7 @@ const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const ccme = require('../engines/carbon-credit-engine');
 const { cacheMiddleware } = require('../cache');
 const { v4: uuidv4 } = require('uuid');
+const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);
 
@@ -47,8 +48,8 @@ const init = async () => {
                 provenance TEXT DEFAULT '[]',
                 retirement_data TEXT,
                 blockchain_status TEXT DEFAULT 'anchored',
-                created_at DATETIME DEFAULT (datetime('now')),
-                updated_at DATETIME DEFAULT (datetime('now'))
+                created_at DATETIME DEFAULT (NOW()),
+                updated_at DATETIME DEFAULT (NOW())
             );
             CREATE TABLE IF NOT EXISTS carbon_simulations (
                 id TEXT PRIMARY KEY,
@@ -77,12 +78,12 @@ const init = async () => {
                 credit_id TEXT,
                 pipeline_result TEXT,
                 simulated_by TEXT,
-                created_at DATETIME DEFAULT (datetime('now'))
+                created_at DATETIME DEFAULT (NOW())
             );
             CREATE TABLE IF NOT EXISTS carbon_fractional (
                 org_id TEXT PRIMARY KEY,
                 accumulated_kgCO2e REAL DEFAULT 0,
-                updated_at DATETIME DEFAULT (datetime('now'))
+                updated_at DATETIME DEFAULT (NOW())
             );
         `);
     } catch (e) { /* already exists */ }
@@ -99,7 +100,7 @@ router.post('/pipeline', requirePermission('esg:manage'), async (req, res) => {
         const rawEvent = {
             ...req.body,
             issuer_id: req.user?.id || 'system',
-            org_id: req.user?.org_id || 'default'
+            org_id: req.user?.org_id || req.user?.orgId
         };
 
         // Fetch historical routes for additionality
@@ -118,14 +119,14 @@ router.post('/pipeline', requirePermission('esg:manage'), async (req, res) => {
         // Persist simulation
         const simId = uuidv4();
         const layerData = result.layers || {};
-        await db.prepare(`
+        await db.run(`
             INSERT INTO carbon_simulations (id, simulation_id, event_id, route_type, distance_km, weight_tonnes, origin_region,
                 baseline_mode, baseline_type, baseline_emission, actual_mode, actual_emission,
                 reduction_kgCO2e, reduction_tCO2e, reduction_pct, intervention_type,
                 mrv_status, mrv_confidence, mrv_hash, additionality_status, additionality_passed,
                 reduction_uid, credit_eligible, credit_id, pipeline_result, simulated_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(simId,
+        `, [simId,
             layerData.L1_ingestion?.event_id || simId,
             rawEvent.shipment_id || null,
             rawEvent.route_type || 'international',
@@ -151,30 +152,30 @@ router.post('/pipeline', requirePermission('esg:manage'), async (req, res) => {
             result.credit?.credit_id || null,
             result.pipeline,
             req.user?.id || 'system'
-        );
+        ]);
 
         // Persist credit if minted
         if (result.pipeline === 'minted' && result.credit) {
             const c = result.credit;
-            await db.prepare(`
+            await db.run(`
                 INSERT INTO carbon_credits (id, credit_id, serial_number, status, quantity_tCO2e, quantity_kgCO2e,
                     vintage_year, project_name, project_type, intervention, route_type, origin_region,
                     simulation_id, reduction_uid, mrv_confidence, mrv_hash, evidence_hash,
                     issuer_id, org_id, current_owner_id, beneficiary_id, provenance, blockchain_status)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(uuidv4(), c.credit_id, c.serial_number, c.status,
+            `, [uuidv4(), c.credit_id, c.serial_number, c.status,
                 c.quantity_tCO2e, c.quantity_kgCO2e, c.vintage_year,
                 c.project.name, c.project.type, c.project.intervention,
                 c.project.route_type, c.project.origin_region,
                 layerData.L1_ingestion?.event_id, c.additionality.reduction_uid,
                 c.mrv.confidence_score, c.mrv.verification_hash, c.blockchain.evidence_hash,
                 c.issuer_id, c.org_id, c.current_owner_id, c.beneficiary_id,
-                JSON.stringify(c.provenance), 'anchored');
+                JSON.stringify(c.provenance), 'anchored']);
 
             // Audit log
-            await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
-                VALUES (?, ?, 'carbon_credit_minted', 'carbon_credit', ?, ?, datetime('now'))
-            `).run(uuidv4(), req.user?.id, c.credit_id, JSON.stringify({ tCO2e: c.quantity_tCO2e, confidence: c.mrv.confidence_score, uid: c.additionality.reduction_uid?.slice(0, 16) }));
+            await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
+                VALUES (?, ?, 'carbon_credit_minted', 'carbon_credit', ?, ?, NOW())
+            `, [uuidv4(), req.user?.id, c.credit_id, JSON.stringify({ tCO2e: c.quantity_tCO2e, confidence: c.mrv.confidence_score, uid: c.additionality.reduction_uid?.slice(0, 16) })]);
         }
 
         res.status(result.pipeline === 'minted' ? 201 : 200).json(result);
@@ -192,7 +193,7 @@ router.post('/pipeline', requirePermission('esg:manage'), async (req, res) => {
 // ─── POST /simulate — L1+L2+L3+L4 (simulate without minting) ───────────────
 router.post('/simulate', async (req, res) => {
     try {
-        const rawEvent = { ...req.body, issuer_id: req.user?.id || 'system', org_id: req.user?.org_id || 'default' };
+        const rawEvent = { ...req.body, issuer_id: req.user?.id || 'system', org_id: req.user?.org_id || req.user?.orgId };
         const ingestion = ccme.ingestEvent(rawEvent);
         if (ingestion.status === 'duplicate') return res.json({ pipeline: 'rejected', reason: 'duplicate', ingestion });
 
@@ -228,11 +229,11 @@ router.post('/simulate', async (req, res) => {
 // ─── GET /registry — Credit ledger ──────────────────────────────────────────
 router.get('/registry', cacheMiddleware(30), async (req, res) => {
     try {
-        const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId || null;
         const { status, vintage, limit = 50 } = req.query;
         let q = 'SELECT * FROM carbon_credits';
         const conds = []; const params = [];
-        if (tenantId) { conds.push('org_id = ?'); params.push(tenantId); }
+        if (orgId) { conds.push('org_id = ?'); params.push(orgId); }
         if (status) { conds.push('status = ?'); params.push(status); }
         if (vintage) { conds.push('vintage_year = ?'); params.push(parseInt(vintage)); }
         if (conds.length) q += ' WHERE ' + conds.join(' AND ');
@@ -251,12 +252,12 @@ router.get('/registry', cacheMiddleware(30), async (req, res) => {
 // ─── GET /registry/:creditId — Single credit ───────────────────────────────
 router.get('/registry/:creditId', async (req, res) => {
     try {
-        const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
-        const credit = tenantId
-            ? await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ? AND org_id = ?').get(req.params.creditId, tenantId)
-            : await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ?').get(req.params.creditId);
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId || null;
+        const credit = orgId
+            ? await db.get('SELECT * FROM carbon_credits WHERE credit_id = ? AND org_id = ?', [req.params.creditId, orgId])
+            : await db.get('SELECT * FROM carbon_credits WHERE credit_id = ?', [req.params.creditId]);
         if (!credit) return res.status(404).json({ error: 'Credit not found' });
-        const sim = credit.simulation_id ? await db.prepare('SELECT * FROM carbon_simulations WHERE event_id = ? OR simulation_id = ?').get(credit.simulation_id, credit.simulation_id) : null;
+        const sim = credit.simulation_id ? await db.get('SELECT * FROM carbon_simulations WHERE event_id = ? OR simulation_id = ?', [credit.simulation_id, credit.simulation_id]) : null;
         res.json({ ...credit, provenance: JSON.parse(credit.provenance || '[]'), retirement_data: credit.retirement_data ? JSON.parse(credit.retirement_data) : null, simulation: sim });
     } catch (err) { res.status(500).json({ error: 'Credit detail failed' }); }
 });
@@ -268,25 +269,25 @@ router.get('/registry/:creditId', async (req, res) => {
 // ─── POST /transfer — Transfer credit ──────────────────────────────────────
 router.post('/transfer', requirePermission('esg:manage'), async (req, res) => {
     try {
-        const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId || null;
         const { credit_id, new_owner_id } = req.body;
         if (!credit_id || !new_owner_id) return res.status(400).json({ error: 'credit_id and new_owner_id required' });
 
-        const row = tenantId
-            ? await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ? AND org_id = ?').get(credit_id, tenantId)
-            : await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ?').get(credit_id);
+        const row = orgId
+            ? await db.get('SELECT * FROM carbon_credits WHERE credit_id = ? AND org_id = ?', [credit_id, orgId])
+            : await db.get('SELECT * FROM carbon_credits WHERE credit_id = ?', [credit_id]);
         if (!row) return res.status(404).json({ error: 'Credit not found' });
 
         const credit = { ...row, provenance: JSON.parse(row.provenance || '[]') };
         const result = ccme.transferCredit(credit, new_owner_id, { id: req.user?.id, org_id: req.user?.org_id }, [req.user?.role || 'company_admin']);
         if (result.error) return res.status(400).json(result);
 
-        await db.prepare(`UPDATE carbon_credits SET status = ?, current_owner_id = ?, provenance = ?, updated_at = datetime('now') WHERE credit_id = ?`)
+        await db.prepare(`UPDATE carbon_credits SET status = ?, current_owner_id = ?, provenance = ?, updated_at = NOW() WHERE credit_id = ?`)
             .run(result.credit.status, new_owner_id, JSON.stringify(result.credit.provenance), credit_id);
 
-        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
-            VALUES (?, ?, 'carbon_credit_transferred', 'carbon_credit', ?, ?, datetime('now'))
-        `).run(uuidv4(), req.user?.id, credit_id, JSON.stringify({ from: credit.current_owner_id, to: new_owner_id, sod_eyes: result.sod?.actual_eyes }));
+        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
+            VALUES (?, ?, 'carbon_credit_transferred', 'carbon_credit', ?, ?, NOW())
+        `, [uuidv4(), req.user?.id, credit_id, JSON.stringify({ from: credit.current_owner_id, to: new_owner_id, sod_eyes: result.sod?.actual_eyes })]);
 
         res.json({ message: 'Credit transferred', ...result });
     } catch (err) { res.status(500).json({ error: 'Transfer failed' }); }
@@ -295,25 +296,25 @@ router.post('/transfer', requirePermission('esg:manage'), async (req, res) => {
 // ─── POST /retire — Retire credit permanently ─────────────────────────────
 router.post('/retire', requirePermission('esg:manage'), async (req, res) => {
     try {
-        const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId || null;
         const { credit_id, reason } = req.body;
         if (!credit_id) return res.status(400).json({ error: 'credit_id required' });
 
-        const row = tenantId
-            ? await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ? AND org_id = ?').get(credit_id, tenantId)
-            : await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ?').get(credit_id);
+        const row = orgId
+            ? await db.get('SELECT * FROM carbon_credits WHERE credit_id = ? AND org_id = ?', [credit_id, orgId])
+            : await db.get('SELECT * FROM carbon_credits WHERE credit_id = ?', [credit_id]);
         if (!row) return res.status(404).json({ error: 'Credit not found' });
 
         const credit = { ...row, provenance: JSON.parse(row.provenance || '[]') };
         const result = ccme.retireCredit(credit, req.user?.id || 'system', reason || 'Offset supply chain emissions');
         if (result.error) return res.status(400).json(result);
 
-        await db.prepare(`UPDATE carbon_credits SET status = 'retired', retirement_data = ?, provenance = ?, updated_at = datetime('now') WHERE credit_id = ?`)
+        await db.prepare(`UPDATE carbon_credits SET status = 'retired', retirement_data = ?, provenance = ?, updated_at = NOW() WHERE credit_id = ?`)
             .run(JSON.stringify(result.credit.retirement), JSON.stringify(result.credit.provenance), credit_id);
 
-        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
-            VALUES (?, ?, 'carbon_credit_retired', 'carbon_credit', ?, ?, datetime('now'))
-        `).run(uuidv4(), req.user?.id, credit_id, JSON.stringify({ reason: result.credit.retirement.reason, hash: result.credit.retirement.hash }));
+        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
+            VALUES (?, ?, 'carbon_credit_retired', 'carbon_credit', ?, ?, NOW())
+        `, [uuidv4(), req.user?.id, credit_id, JSON.stringify({ reason: result.credit.retirement.reason, hash: result.credit.retirement.hash })]);
 
         res.json({ message: 'Credit retired permanently', ...result });
     } catch (err) { res.status(500).json({ error: 'Retirement failed' }); }
@@ -326,16 +327,16 @@ router.post('/retire', requirePermission('esg:manage'), async (req, res) => {
 // ─── GET /balance — Portfolio balance ───────────────────────────────────────
 router.get('/balance', async (req, res) => {
     try {
-        const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
-        const credits = tenantId
-            ? await db.prepare('SELECT * FROM carbon_credits WHERE org_id = ?').all(tenantId)
-            : await db.prepare('SELECT * FROM carbon_credits').all();
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId || null;
+        const credits = orgId
+            ? await db.all('SELECT * FROM carbon_credits WHERE org_id = ?', [orgId])
+            : await db.all('SELECT * FROM carbon_credits');
         const active = credits.filter(c => c.status === 'minted' || c.status === 'active');
         const retired = credits.filter(c => c.status === 'retired');
         const transferred = credits.filter(c => c.status === 'transferred');
         const sum = arr => arr.reduce((s, c) => s + (c.quantity_tCO2e || 0), 0);
 
-        const frac = await db.prepare('SELECT * FROM carbon_fractional WHERE org_id = ?').get(req.user?.org_id || 'default');
+        const frac = await db.get('SELECT * FROM carbon_fractional WHERE org_id = ?', [req.user?.org_id || req.user?.orgId]);
 
         res.json({
             title: 'Carbon Credit Portfolio (CCME v3.0)',
@@ -354,8 +355,8 @@ router.get('/balance', async (req, res) => {
 // ─── GET /risk-score — Portfolio fraud risk ─────────────────────────────────
 router.get('/risk-score', cacheMiddleware(60), async (req, res) => {
     try {
-        const credits = (await db.prepare('SELECT * FROM carbon_credits').all()).map(c => ({ ...c, provenance: JSON.parse(c.provenance || '[]') }));
-        const sims = await db.prepare('SELECT * FROM carbon_simulations').all();
+        const credits = (await db.all('SELECT * FROM carbon_credits')).map(c => ({ ...c, provenance: JSON.parse(c.provenance || '[]') }));
+        const sims = await db.all('SELECT * FROM carbon_simulations');
         res.json(ccme.assessPortfolioRisk(credits, sims));
     } catch (err) { res.status(500).json({ error: 'Risk assessment failed' }); }
 });
@@ -363,7 +364,7 @@ router.get('/risk-score', cacheMiddleware(60), async (req, res) => {
 // ─── GET /verify/:creditId — Public verification portal ────────────────────
 router.get('/verify/:creditId', async (req, res) => {
     try {
-        const c = await db.prepare('SELECT credit_id, serial_number, status, quantity_tCO2e, vintage_year, project_name, project_type, intervention, mrv_confidence, evidence_hash, blockchain_status, created_at FROM carbon_credits WHERE credit_id = ?').get(req.params.creditId);
+        const c = await db.get('SELECT credit_id, serial_number, status, quantity_tCO2e, vintage_year, project_name, project_type, intervention, mrv_confidence, evidence_hash, blockchain_status, created_at FROM carbon_credits WHERE credit_id = ?', [req.params.creditId]);
         if (!c) return res.status(404).json({ verified: false, error: 'Credit not found' });
 
         res.json({
@@ -383,7 +384,7 @@ router.get('/verify/:creditId', async (req, res) => {
 // ─── GET /market-stats — Market overview ────────────────────────────────────
 router.get('/market-stats', cacheMiddleware(60), async (req, res) => {
     try {
-        const credits = (await db.prepare('SELECT * FROM carbon_credits').all()).map(c => ({ ...c, provenance: JSON.parse(c.provenance || '[]') }));
+        const credits = (await db.all('SELECT * FROM carbon_credits')).map(c => ({ ...c, provenance: JSON.parse(c.provenance || '[]') }));
         const vintages = {};
         credits.forEach(c => { const y = c.vintage_year || 'unknown'; if (!vintages[y]) vintages[y] = { count: 0, tCO2e: 0 }; vintages[y].count++; vintages[y].tCO2e += c.quantity_tCO2e || 0; });
 
@@ -408,7 +409,7 @@ router.get('/market-stats', cacheMiddleware(60), async (req, res) => {
 // ─── GET /evidence/:creditId — Court-ready evidence package ────────────────
 router.get('/evidence/:creditId', requirePermission('compliance:view'), async (req, res) => {
     try {
-        const c = await db.prepare('SELECT * FROM carbon_credits WHERE credit_id = ?').get(req.params.creditId);
+        const c = await db.get('SELECT * FROM carbon_credits WHERE credit_id = ?', [req.params.creditId]);
         if (!c) return res.status(404).json({ error: 'Credit not found' });
 
         const credit = { ...c, provenance: JSON.parse(c.provenance || '[]'), retirement_data: c.retirement_data ? JSON.parse(c.retirement_data) : null };
@@ -436,12 +437,12 @@ router.get('/governance', (req, res) => {
 // ─── GET /simulations — Simulation history ──────────────────────────────────
 router.get('/simulations', cacheMiddleware(30), async (req, res) => {
     try {
-        const tenantId = req.tenantId || req.user?.org_id || req.user?.orgId || null;
-        const q = tenantId
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId || null;
+        const q = orgId
             ? 'SELECT * FROM carbon_simulations WHERE simulated_by IN (SELECT id FROM users WHERE org_id = ?) ORDER BY created_at DESC LIMIT 50'
             : 'SELECT * FROM carbon_simulations ORDER BY created_at DESC LIMIT 50';
-        const sims = tenantId
-            ? await db.prepare(q).all(tenantId)
+        const sims = orgId
+            ? await db.prepare(q).all(orgId)
             : await db.prepare(q).all();
         res.json({ title: 'MRV Simulation History', total: sims.length, simulations: sims });
     } catch (err) { res.status(500).json({ error: 'Simulations query failed' }); }

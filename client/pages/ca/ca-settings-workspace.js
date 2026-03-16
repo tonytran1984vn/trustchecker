@@ -23,8 +23,8 @@ if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 30000
         API.get('/products?limit=1&offset=0').catch(() => ({ total: 0 })),
         API.get('/auth/me').catch(() => ({})),
         API.get('/auth/sessions').catch(() => ({ sessions: [] })),
-        API.get('/tenant-integrations/schema').catch(() => ({})),
-        API.get('/tenant-integrations').catch(() => ({})),
+        API.get('/org-integrations/schema').catch(() => ({})),
+        API.get('/org-integrations').catch(() => ({})),
     ]).then(results => {
         const v = results.map(r => r.value);
         cache.org = v[0];

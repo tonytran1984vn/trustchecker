@@ -10,6 +10,8 @@
  */
 const express = require('express');
 const router = express.Router();
+const { parsePagination } = require('../middleware/pagination');
+
 const { authMiddleware, requireRole } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
 
@@ -18,6 +20,7 @@ router.use(authMiddleware);
 const coherence = require('../engines/architecture-coherence-engine');
 const playbook = require('../engines/operational-playbook-engine');
 const humanGov = require('../engines/human-governance-stress-engine');
+const { withTransaction } = require('../middleware/transaction');
 
 // ═══════════════════════════════════════════════════════════════════
 // ARCHITECTURE COHERENCE — /coherence [L4+ risk_committee]

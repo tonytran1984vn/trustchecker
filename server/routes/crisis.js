@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const { authMiddleware, requirePermission } = require('../auth');
 const crisis = require('../engines/crisis-engine');
+const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);
 
@@ -16,8 +17,8 @@ router.get('/status', (req, res) => {
     res.json(crisis.getStatus());
 });
 
-// ─── POST /kill-switch/tenant/:id — Halt specific tenant ───────────
-router.post('/kill-switch/tenant/:id', requirePermission('admin:manage'), (req, res) => {
+// ─── POST /kill-switch/org/:id — Halt specific org ───────────
+router.post('/kill-switch/org/:id', requirePermission('admin:manage'), (req, res) => {
     const result = crisis.killTenant(
         req.params.id,
         req.user?.id || 'unknown',

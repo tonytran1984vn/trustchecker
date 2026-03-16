@@ -20,7 +20,7 @@ export function renderPage() {
             ${field('Sub-batch 2 Qty', 'Remaining')}
             ${field('Sub-batch 2 Dest', 'Select node')}
           </div>
-          <button class="btn btn-primary btn-sm" style="margin-top:1rem" onclick="showToast('✂️ Split operation submitted — processing batch division','info')">Execute Split</button>
+          <button style="margin-top:1rem;padding:7px 18px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-size:0.78rem;font-weight:600;cursor:pointer" onclick="if(confirm('Split this batch into sub-batches?\n\nThis action cannot be undone.')){showToast('✂️ Split operation submitted — processing batch division','info')}">Execute Split</button>
         </div>
 
         <div class="sa-card">
@@ -32,7 +32,7 @@ export function renderPage() {
             ${field('Merged Batch ID', 'Auto-generated')}
             ${field('Target Node', 'Select destination')}
           </div>
-          <button class="btn btn-primary btn-sm" style="margin-top:1rem" onclick="showToast('🔗 Merge operation submitted — combining batches','info')">Execute Merge</button>
+          <button style="margin-top:1rem;padding:7px 18px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-size:0.78rem;font-weight:600;cursor:pointer" onclick="if(confirm('Merge selected batches?\n\nThis will combine all items into a single batch.')){showToast('🔗 Merge operation submitted — combining batches','info')}">Execute Merge</button>
         </div>
       </div>
 

@@ -162,6 +162,7 @@ router.post('/regscenario/simulate', (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 
 const narrative = require('../engines/market-narrative-engine');
+const { withTransaction } = require('../middleware/transaction');
 
 router.get('/narrative/full', (req, res) => { res.json(narrative.getFullNarrative()); });
 router.get('/narrative/investor-summary', (req, res) => { res.json(narrative.getInvestorSummary()); });

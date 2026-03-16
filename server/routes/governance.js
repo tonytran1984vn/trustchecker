@@ -8,12 +8,13 @@ const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
 const governance = require('../engines/governance-engine');
 const { v4: uuidv4 } = require('uuid');
+const { withTransaction } = require('../middleware/transaction');
 router.use(authMiddleware);
 
 const init = async () => {
     try {
         await db.exec(`
-    CREATE TABLE IF NOT EXISTS governance_proposals (id TEXT PRIMARY KEY, proposal_id TEXT UNIQUE NOT NULL, type TEXT, title TEXT, description TEXT, proposed_by TEXT, status TEXT DEFAULT 'open', voting TEXT DEFAULT '{}', evidence TEXT DEFAULT '[]', hash TEXT, created_at DATETIME DEFAULT (datetime('now')));
+    CREATE TABLE IF NOT EXISTS governance_proposals (id TEXT PRIMARY KEY, proposal_id TEXT UNIQUE NOT NULL, type TEXT, title TEXT, description TEXT, proposed_by TEXT, status TEXT DEFAULT 'open', voting TEXT DEFAULT '{}', evidence TEXT DEFAULT '[]', hash TEXT, created_at DATETIME DEFAULT (NOW()));
 `);
     } catch (e) { }
 };
@@ -33,7 +34,7 @@ router.post('/proposals', requirePermission('admin:manage'), async (req, res) =>
 // POST /proposals/:id/vote — Cast vote
 router.post('/proposals/:id/vote', async (req, res) => {
     try {
-        const row = await db.prepare('SELECT * FROM governance_proposals WHERE proposal_id = ?').get(req.params.id);
+        const row = await db.get('SELECT * FROM governance_proposals WHERE proposal_id = ?', [req.params.id]);
         if (!row) return res.status(404).json({ error: 'Proposal not found' });
         const proposal = { ...row, voting: JSON.parse(row.voting || '{}'), type: { key: row.type, ...governance.getProposalTypes()[row.type] } };
         const result = governance.castVote(proposal, { voter_id: req.user?.id, role: req.body.role || 'platform_admin', vote: req.body.vote, reason: req.body.reason });
@@ -47,7 +48,7 @@ router.post('/proposals/:id/vote', async (req, res) => {
 // GET /proposals — List proposals
 router.get('/proposals', async (req, res) => {
     try {
-        const rows = await db.prepare('SELECT * FROM governance_proposals ORDER BY created_at DESC LIMIT 20').all();
+        const rows = await db.all('SELECT * FROM governance_proposals ORDER BY created_at DESC LIMIT 20');
         const proposals = rows.map(r => ({ ...r, voting: JSON.parse(r.voting || '{}') }));
         res.json(governance.getGovernanceState(proposals));
     } catch (err) { res.status(500).json({ error: 'Proposals query failed' }); }
@@ -65,7 +66,7 @@ router.get('/roles', (req, res) => { res.json({ roles: governance.getRoles(), pr
 // GET /dashboard — Governance overview
 router.get('/dashboard', async (req, res) => {
     try {
-        const rows = await db.prepare('SELECT * FROM governance_proposals ORDER BY created_at DESC LIMIT 20').all();
+        const rows = await db.all('SELECT * FROM governance_proposals ORDER BY created_at DESC LIMIT 20');
         const proposals = rows.map(r => ({ ...r, voting: JSON.parse(r.voting || '{}') }));
         res.json(governance.getGovernanceState(proposals));
     } catch (err) { res.status(500).json({ error: 'Dashboard failed' }); }

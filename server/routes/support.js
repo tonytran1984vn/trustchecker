@@ -8,6 +8,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);
 
@@ -21,12 +22,12 @@ router.post('/', async (req, res) => {
         const validPriorities = ['low', 'medium', 'high', 'critical'];
 
         const id = uuidv4();
-        await db.prepare(`
+        await db.run(`
       INSERT INTO support_tickets (id, user_id, subject, description, category, priority)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, req.user.id, subject, description || '',
+    `, [id, req.user.id, subject, description || '',
             validCategories.includes(category) ? category : 'general',
-            validPriorities.includes(priority) ? priority : 'medium');
+            validPriorities.includes(priority) ? priority : 'medium']);
 
         // Auto-create first message
         await db.prepare('INSERT INTO ticket_messages (id, ticket_id, sender_id, sender_role, message) VALUES (?, ?, ?, ?, ?)')
@@ -76,7 +77,7 @@ router.get('/', async (req, res) => {
 
 // ─── GET /stats/summary — Ticket statistics ─────────────────
 // NOTE: Must be BEFORE /:id to avoid route shadowing
-router.get('/stats/summary', requirePermission('tenant:user_create'), async (req, res) => {
+router.get('/stats/summary', requirePermission('org:user_create'), async (req, res) => {
     try {
         const total = (await db.get('SELECT COUNT(*) as c FROM support_tickets'))?.c || 0;
         const byStatus = await db.all('SELECT status, COUNT(*) as count FROM support_tickets GROUP BY status');
@@ -108,7 +109,7 @@ router.get('/:id', async (req, res) => {
         }
 
         const messages = await db.all(
-            'SELECT tm.*, u.username as sender_name FROM ticket_messages tm LEFT JOIN users u ON tm.sender_id = u.id WHERE tm.ticket_id = ? ORDER BY tm.created_at ASC',
+            'SELECT tm.*, u.username as sender_name FROM ticket_messages tm LEFT JOIN users u ON tm.sender_id = u.id WHERE tm.ticket_id = ? ORDER BY tm.created_at ASC LIMIT 1000',
             [req.params.id]
         );
 
@@ -133,9 +134,9 @@ router.post('/:id/message', async (req, res) => {
 
         // Auto-reopen if closed/resolved and user messages
         if (['resolved', 'closed'].includes(ticket.status) && ticket.user_id === req.user.id) {
-            await db.prepare("UPDATE support_tickets SET status = 'open', updated_at = datetime('now') WHERE id = ?").run(req.params.id);
+            await db.prepare("UPDATE support_tickets SET status = 'open', updated_at = NOW() WHERE id = ?").run(req.params.id);
         } else {
-            await db.prepare("UPDATE support_tickets SET updated_at = datetime('now') WHERE id = ?").run(req.params.id);
+            await db.prepare("UPDATE support_tickets SET updated_at = NOW() WHERE id = ?").run(req.params.id);
         }
 
         res.status(201).json({ id, ticket_id: req.params.id, message });
@@ -145,7 +146,7 @@ router.post('/:id/message', async (req, res) => {
 });
 
 // ─── PUT /:id/assign — Assign ticket (admin/manager) ───────
-router.put('/:id/assign', requirePermission('tenant:user_create'), async (req, res) => {
+router.put('/:id/assign', requirePermission('org:user_create'), async (req, res) => {
     try {
         const { assigned_to } = req.body;
         if (!assigned_to) return res.status(400).json({ error: 'assigned_to user ID required' });
@@ -156,7 +157,7 @@ router.put('/:id/assign', requirePermission('tenant:user_create'), async (req, r
         const assignee = await db.get('SELECT id, username FROM users WHERE id = ?', [assigned_to]);
         if (!assignee) return res.status(404).json({ error: 'Assignee not found' });
 
-        await db.prepare("UPDATE support_tickets SET assigned_to = ?, status = 'in_progress', updated_at = datetime('now') WHERE id = ?")
+        await db.prepare("UPDATE support_tickets SET assigned_to = ?, status = 'in_progress', updated_at = NOW() WHERE id = ?")
             .run(assigned_to, req.params.id);
 
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
@@ -180,7 +181,7 @@ router.put('/:id/resolve', async (req, res) => {
             return res.status(403).json({ error: 'Only assigned agents or admins can resolve tickets' });
         }
 
-        await db.prepare("UPDATE support_tickets SET status = 'resolved', resolution = ?, resolved_at = datetime('now'), updated_at = datetime('now') WHERE id = ?")
+        await db.prepare("UPDATE support_tickets SET status = 'resolved', resolution = ?, resolved_at = NOW(), updated_at = NOW() WHERE id = ?")
             .run(resolution || '', req.params.id);
 
         await db.prepare('INSERT INTO ticket_messages (id, ticket_id, sender_id, sender_role, message) VALUES (?, ?, ?, ?, ?)')
@@ -198,7 +199,7 @@ router.put('/:id/close', async (req, res) => {
         const ticket = await db.get('SELECT * FROM support_tickets WHERE id = ?', [req.params.id]);
         if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
 
-        await db.prepare("UPDATE support_tickets SET status = 'closed', updated_at = datetime('now') WHERE id = ?").run(req.params.id);
+        await db.prepare("UPDATE support_tickets SET status = 'closed', updated_at = NOW() WHERE id = ?").run(req.params.id);
 
         res.json({ id: req.params.id, status: 'closed' });
     } catch (e) {

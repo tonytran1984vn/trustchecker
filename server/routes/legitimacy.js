@@ -19,6 +19,7 @@ router.use(authMiddleware);
 const econ = require('../engines/economic-logic-engine');
 const forensic = require('../engines/forensic-logic-engine');
 const jurisLogic = require('../engines/jurisdiction-logic-engine');
+const { withTransaction } = require('../middleware/transaction');
 
 // ═══════════════════════════════════════════════════════════════════
 // ECONOMIC LOGIC — /economic-logic [L3+ admin]

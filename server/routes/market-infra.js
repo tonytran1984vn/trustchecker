@@ -12,6 +12,7 @@ router.use(authMiddleware);
 const capital = require('../engines/capital-liability-engine');
 const incentive = require('../engines/incentive-economics-engine');
 const risklab = require('../engines/systemic-risk-lab-engine');
+const { withTransaction } = require('../middleware/transaction');
 
 // ═══════════════════════════════════════════════════════════════════
 // CAPITAL & LIABILITY — /capital

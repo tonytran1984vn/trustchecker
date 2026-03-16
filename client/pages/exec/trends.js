@@ -271,7 +271,7 @@ function formatDay(d) {
 
 async function loadData() {
   try {
-    const r = await api.get('/tenant/owner/ccs/trends?range=full');
+    const r = await api.get('/org-admin/owner/ccs/trends?range=full');
     _data = r;
     rerender();
   } catch (e) { console.error('[Trends]', e); }

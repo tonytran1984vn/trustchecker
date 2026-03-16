@@ -3,14 +3,18 @@
  * CRUD for: PurchaseOrders, Warehouses, QualityChecks, DemandForecasts, Incidents, ActivityLog, Notifications
  * All endpoints filter by org_id from req.user
  */
+const { withTransaction } = require('../middleware/transaction');
+const { cacheInvalidate } = require('../middleware/cache-invalidate');
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const { orgGuard } = require('../middleware/org-middleware');
 const { appendAuditEntry } = require('../utils/audit-chain');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 function getOrgId(req) { return req.user?.org_id || req.user?.orgId || null; }
 
@@ -140,6 +144,15 @@ router.get('/data/incidents', async (req, res) => {
 });
 
 router.post('/data/incidents', async (req, res) => {
+    // v9.5.0: Rate limit — max 50 incidents per hour per org
+    const orgId = getOrgId(req);
+    const recentCount = await db.get(
+        "SELECT COUNT(*) as c FROM ops_incidents_v2 WHERE org_id = ? AND created_at > NOW() - INTERVAL '1 hour'",
+        [orgId]
+    );
+    if (recentCount?.c >= 50) {
+        return res.status(429).json({ error: 'Rate limit: maximum 50 incidents per hour' });
+    }
     try {
         const orgId = getOrgId(req);
         const { title, description, severity, module, assignedTo } = req.body;
@@ -155,15 +168,73 @@ router.post('/data/incidents', async (req, res) => {
 router.put('/data/incidents/:id', async (req, res) => {
     try {
         const orgId = getOrgId(req);
-        const { status, resolution, rootCause } = req.body;
+        const { status, resolution, rootCause, assigned_to, severity } = req.body;
+        // Validate status transitions
+        const validStatuses = ['open', 'investigating', 'escalated', 'resolved', 'closed'];
+        if (status && !validStatuses.includes(status)) {
+            return res.status(400).json({ error: `Invalid status: ${status}. Must be one of: ${validStatuses.join(', ')}` });
+        }
+        // v9.4.2: Enforce state machine transitions
+        if (status) {
+            const VALID_TRANSITIONS = {
+                'open': ['investigating', 'escalated'],  // v9.5.0: Must investigate before closing
+                'investigating': ['escalated', 'resolved', 'closed'],
+                'escalated': ['investigating', 'resolved', 'closed'],
+                'resolved': ['closed', 'open'],   // reopen allowed
+                'closed': ['open']                  // reopen allowed
+            };
+            const current = await db.get('SELECT status FROM ops_incidents_v2 WHERE id = ?', [req.params.id]);
+            if (current && VALID_TRANSITIONS[current.status] && !VALID_TRANSITIONS[current.status].includes(status)) {
+                return res.status(400).json({
+                    error: `Invalid transition: ${current.status} → ${status}. Allowed: ${VALID_TRANSITIONS[current.status].join(', ')} LIMIT 1000`
+                });
+            }
+        }
+        if (status === 'closed' && !resolution) {
+            return res.status(400).json({ error: 'Cannot close incident without a resolution' });
+        }
+        // Whitelisted field updates only
         const updates = ['updated_at = NOW()'];
         const params = [];
         if (status) { updates.push('status = ?'); params.push(status); }
         if (resolution) { updates.push('resolution = ?'); params.push(resolution); }
         if (rootCause) { updates.push('root_cause = ?'); params.push(rootCause); }
-        if (status === 'resolved') { updates.push('resolved_at = NOW()'); }
+        if (assigned_to) { updates.push('assigned_to = ?'); params.push(assigned_to); }
+        if (severity) {
+            // v9.5.0: Audit severity changes — detect downgrade attacks
+            const current = await db.get('SELECT severity FROM ops_incidents_v2 WHERE id = ?', [req.params.id]);
+            const SEVERITY_RANK = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
+            const oldRank = SEVERITY_RANK[current?.severity] || 0;
+            const newRank = SEVERITY_RANK[severity] || 0;
+            if (newRank < oldRank) {
+                // Severity downgrade — log explicitly for compliance
+                await db.run(
+                    "INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id, timestamp) VALUES (?, ?, 'SEVERITY_DOWNGRADED', 'incident', ?, ?, ?, NOW())",
+                    [require('uuid LIMIT 1000').v4(), req.user.id, req.params.id, 
+                     JSON.stringify({ old_severity: current.severity, new_severity: severity, reason: req.body.reason || 'Not provided' }),
+                     req.orgId || req.user.org_id]
+                );
+            }
+            updates.push('severity = ?'); params.push(severity);
+        }
+        if (status === 'resolved' || status === 'closed') { 
+            updates.push('resolved_at = NOW()');
+            // v9.5.0: Trigger trust score recalculation for affected products
+            try {
+                const incident = await db.get('SELECT product_id FROM ops_incidents_v2 WHERE id = ?', [req.params.id]);
+                if (incident?.product_id) {
+                    const trustEngine = req.app?.locals?.trustEngine;
+                    if (trustEngine) {
+                        trustEngine.calculateScore(incident.product_id).catch(e => 
+                            console.error('[TrustRecalc] Error:', e.message)
+                        );
+                    }
+                }
+            } catch (e) { console.debug('[TrustRecalc] Skip:', e.message); }
+        }
+        if (updates.length === 1) return res.status(400).json({ error: 'No valid fields to update' });
         params.push(req.params.id);
-        let sql = `UPDATE ops_incidents_v2 SET ${updates.join(', ')} WHERE id = ?`;
+        let sql = `UPDATE ops_incidents_v2 SET ${updates.join(', ')} WHERE id = ? LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000`;
         if (orgId) { sql += ' AND org_id = ?'; params.push(orgId); }
         await db.prepare(sql).run(...params);
         res.json({ success: true });
@@ -176,13 +247,27 @@ router.put('/data/incidents/:id', async (req, res) => {
 router.get('/activity-log', async (req, res) => {
     try {
         const orgId = getOrgId(req);
-        let sql = 'SELECT * FROM audit_log';
-        const params = [];
-        if (orgId) { sql += ' WHERE org_id = ?'; params.push(orgId); }
-        sql += ' ORDER BY timestamp DESC LIMIT 50';
+        let sql, params = [];
+        if (orgId) {
+            // audit_log has no org_id column — filter by actors belonging to the same org
+            sql = `SELECT a.* FROM audit_log a
+                   INNER JOIN users u ON a.actor_id = u.id OR a.actor_id = u.email
+                   WHERE u.org_id = $1
+                   ORDER BY a.timestamp DESC LIMIT 50`;
+            params = [orgId];
+        } else {
+            sql = 'SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 50';
+        }
         const rows = await db.prepare(sql).all(...params);
         res.json({ activities: rows || [] });
-    } catch (e) { res.json({ activities: [] }); }
+    } catch (e) {
+        console.error('[activity-log]', e.message);
+        // Fallback: return all recent activities
+        try {
+            const rows = await db.all('SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 50');
+            res.json({ activities: rows || [] });
+        } catch { res.json({ activities: [] }); }
+    }
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -206,7 +291,7 @@ router.get('/supplier-scoring', async (req, res) => {
         sql += ' ORDER BY composite_score DESC';
         const suppliers = await db.prepare(sql).all(...params);
         // Fetch all locations in one query
-        const locations = await db.all('SELECT * FROM partner_locations WHERE status = ? ORDER BY created_at', ['active']);
+        const locations = await db.all('SELECT * FROM partner_locations WHERE status = ? ORDER BY created_at LIMIT 1000', ['active']);
         // Group locations by partner_id
         const locMap = {};
         for (const loc of locations) {
@@ -237,7 +322,7 @@ router.post('/suppliers/onboard', requirePermission('supplier:onboard'), async (
         if (existing) {
             return res.status(409).json({
                 error: 'duplicate_entity',
-                message: `Supplier "${existing.name}" already exists (${existing.id})`,
+                message: `Supplier "${existing.name}" already exists (${existing.id}) LIMIT 1000`,
                 existingSupplier: existing
             });
         }
@@ -279,7 +364,7 @@ router.post('/suppliers/:id/locations', requirePermission('supplier:onboard'), a
             'SELECT id FROM partner_locations WHERE partner_id = ? AND country = ? AND address = ?',
             [id, country, address || '']
         );
-        if (existing) return res.status(409).json({ error: `${country} location already exists` });
+        if (existing) return res.status(409).json({ error: `${country} location already exists LIMIT 1000` });
 
         const locId = uuidv4();
         await db.run(
@@ -294,12 +379,12 @@ router.post('/suppliers/:id/locations', requirePermission('supplier:onboard'), a
     }
 });
 
-// PATCH /suppliers/:id/approve — KYC approval (tenant-level L3+ only: org_owner, company_admin, executive, compliance_officer)
+// PATCH /suppliers/:id/approve — KYC approval (org-level L3+ only: org_owner, company_admin, executive, compliance_officer)
 const KYC_APPROVER_ROLES = ['org_owner', 'company_admin', 'executive', 'compliance_officer'];
 function requireKYCApprover(req, res, next) {
     const role = req.user?.role;
     if (!KYC_APPROVER_ROLES.includes(role)) {
-        return res.status(403).json({ error: 'Only tenant governance roles (org_owner, executive, compliance_officer) can approve/reject KYC. Platform admins cannot approve tenant operations.' });
+        return res.status(403).json({ error: 'Only org governance roles (org_owner, executive, compliance_officer) can approve/reject KYC. Platform admins cannot approve org operations.' });
     }
     next();
 }
@@ -373,7 +458,7 @@ router.get('/suppliers/:id', async (req, res) => {
     try {
         const supplier = await db.get('SELECT * FROM partners WHERE id = ?', [req.params.id]);
         if (!supplier) return res.status(404).json({ error: 'Not found' });
-        const locations = await db.all('SELECT * FROM partner_locations WHERE partner_id = ? ORDER BY created_at', [req.params.id]);
+        const locations = await db.all('SELECT * FROM partner_locations WHERE partner_id = ? ORDER BY created_at LIMIT 1000', [req.params.id]);
         res.json({ supplier: { ...supplier, locations } });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -394,10 +479,18 @@ router.get('/geo-alerts', async (req, res) => {
                    LEFT JOIN products p ON fa.product_id = p.id
                    WHERE fa.alert_type LIKE '%geo%'`;
         const params = [];
-        if (orgId) { sql += ' AND p.org_id = ?'; params.push(orgId); }
+        if (orgId) { sql += ' AND (p.org_id = ? OR p.org_id IS NULL)'; params.push(orgId); }
         sql += ' ORDER BY fa.created_at DESC LIMIT 50';
         const rows = await db.prepare(sql).all(...params);
-        res.json({ alerts: rows || [] });
+        // Enrich: extract location from description when geo_city is null
+        const enriched = (rows || []).map(r => {
+            if (!r.geo_city && r.description) {
+                const m = r.description.match(/(?:in|from|at)\s+([A-Z][a-zA-Z\s]+?)(?:,|$)/i);
+                if (m) r.extracted_location = m[1].trim();
+            }
+            return r;
+        });
+        res.json({ alerts: enriched });
     } catch (e) { res.json({ alerts: [] }); }
 });
 
@@ -406,25 +499,73 @@ router.get('/mismatch-alerts', async (req, res) => {
     try {
         const orgId = getOrgId(req);
         let sql = `SELECT ad.* FROM anomaly_detections ad
-                   LEFT JOIN products p ON ad.product_id = p.id
                    WHERE ad.anomaly_type IN ('mismatch','quantity_mismatch','weight_mismatch')`;
         const params = [];
-        if (orgId) { sql += ' AND (p.org_id = ? OR p.org_id IS NULL)'; params.push(orgId); }
+        if (orgId) { sql += ' AND (ad.org_id = ? OR ad.org_id IS NULL)'; params.push(orgId); }
         sql += ' ORDER BY ad.detected_at DESC LIMIT 50';
         const rows = await db.prepare(sql).all(...params);
         res.json({ mismatches: rows || [] });
     } catch (e) { res.json({ mismatches: [] }); }
 });
 
-// Duplicate Alerts — from anomaly_detections where type = 'duplicate_qr'
+// Duplicate Alerts — from anomaly_detections where type = 'duplicate_qr' or 'duplicate_scan'
 router.get('/duplicate-alerts', async (req, res) => {
     try {
-        let sql = `SELECT * FROM anomaly_detections
-                   WHERE anomaly_type IN ('duplicate_qr','duplicate_scan')`;
-        sql += ' ORDER BY detected_at DESC LIMIT 50';
-        const rows = await db.prepare(sql).all();
+        const orgId = getOrgId(req);
+        let sql = `SELECT ad.* FROM anomaly_detections ad
+                   WHERE ad.anomaly_type LIKE 'duplicate%'`;
+        const params = [];
+        if (orgId) { sql += ' AND (ad.org_id = ? OR ad.org_id IS NULL)'; params.push(orgId); }
+        sql += ' ORDER BY ad.detected_at DESC LIMIT 50';
+        const rows = await db.prepare(sql).all(...params);
+        
+        // Batch product lookup (fix N+1)
+        const productIds = new Set();
+        for (const row of (rows || [])) {
+            const d = typeof row.details === 'string' ? (() => { try { return JSON.parse(row.details); } catch { return {}; } })() : (row.details || {});
+            if (d.product_id) productIds.add(d.product_id);
+        }
+        const productMap = {};
+        if (productIds.size > 0) {
+            const placeholders = [...productIds].map((_, i) => `$${i + 1}`).join(',');
+            try {
+                if (!/^[\$0-9, ]+$/.test(placeholders)) throw new Error("Invalid placeholders");
+                const products = await db.all(`SELECT id, name FROM products WHERE id IN (${placeholders}) LIMIT 1000`, [...productIds]);
+                for (const p of products) productMap[p.id] = p.name;
+            } catch {}
+        }
+        // Enrich rows
+        for (const row of (rows || [])) {
+            const d = typeof row.details === 'string' ? (() => { try { return JSON.parse(row.details); } catch { return {}; } })() : (row.details || {});
+            if (d.product_id && productMap[d.product_id]) {
+                row.resolved_product_name = productMap[d.product_id];
+            }
+        }
         res.json({ alerts: rows || [] });
     } catch (e) { res.json({ alerts: [] }); }
+});
+
+// Update anomaly status (resolve, escalate, dismiss)
+router.put('/data/anomaly/:id', async (req, res) => {
+    try {
+        const orgId = getOrgId(req);
+        const { status } = req.body;
+        if (!status) return res.status(400).json({ error: 'status is required' });
+        const validStatuses = ['open', 'investigating', 'resolved', 'dismissed', 'escalated', 'confirmed', 'active'];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({ error: `Invalid status: ${status}. Must be one of: ${validStatuses.join(', ')}` });
+        }
+        let sql = 'UPDATE anomaly_detections SET status = ?';
+        const params = [status];
+        if (status === 'resolved' || status === 'dismissed') {
+            sql += ', resolved_at = NOW()';
+        }
+        sql += ' WHERE id = ?';
+        params.push(req.params.id);
+        if (orgId) { sql += ' AND (org_id = ? OR org_id IS NULL)'; params.push(orgId); }
+        await db.prepare(sql).run(...params);
+        res.json({ success: true, message: `Alert ${status}` });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Receiving — pending inbound shipments

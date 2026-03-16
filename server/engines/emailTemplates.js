@@ -171,6 +171,31 @@ code{background:#f0f0f5;padding:2px 6px;border-radius:4px;font-size:13px}
 
         return sampleData[templateName] ? sampleData[templateName]() : null;
     }
+
+    /** Supplier Network Invitation */
+    supplierInvite(inviterName, inviterOrg, companyName, joinUrl, message) {
+        var msgBlock = message ? '<div class="alert-box alert-success"><strong>Message from ' + inviterName + ':</strong><br>' + message + '</div>' : '';
+        return this._wrap("Network Invitation", 
+            '<div class="body">' +
+            '<h2>You are invited to join the TrustChecker Network</h2>' +
+            '<p><strong>' + inviterName + '</strong> from <strong>' + inviterOrg + '</strong> has invited <strong>' + companyName + '</strong> to join the TrustChecker Supply Chain Trust Network.</p>' +
+            msgBlock +
+            '<p>By joining, you will:</p>' +
+            '<ul style="color:#4a4a68;line-height:2">' +
+            '<li>Build your <strong>verified trust profile</strong></li>' +
+            '<li>Share trust scores with your supply chain partners</li>' +
+            '<li>Gain visibility across the network</li>' +
+            '<li>Access compliance and ESG tools — free for suppliers</li>' +
+            '</ul>' +
+            '<div style="text-align:center">' +
+            '<a href="' + joinUrl + '" class="btn" style="color:#fff">Join the Network →</a>' +
+            '</div>' +
+            '<p style="font-size:13px;color:#9a9abd;margin-top:24px">This invitation expires in 30 days.</p>' +
+            '</div>'
+        );
+    }
+
+
 }
 
 module.exports = new EmailTemplates();

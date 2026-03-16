@@ -8,18 +8,19 @@ const db = require('../db');
 router.get('/stats', async (req, res) => {
     try {
         // NODE-BP-1: Parallelize 11 independent queries
+        // Using PostgreSQL syntax (not SQLite)
         const [products, scans, todayScans, avgTrust, seals, alerts, partners, batches, evidence, certifications, validScans] = await Promise.all([
             db.get('SELECT COUNT(*) as count FROM products'),
             db.get('SELECT COUNT(*) as count FROM scan_events'),
-            db.get(`SELECT COUNT(*) as count FROM scan_events WHERE scanned_at >= datetime('now', '-1 day')`),
-            db.get('SELECT ROUND(AVG(score), 1) as avg FROM trust_scores'),
+            db.get('SELECT COUNT(*) as count FROM scan_events WHERE scanned_at >= NOW() - INTERVAL \'1 day\''),
+            db.get('SELECT ROUND(AVG(score)::numeric, 1) as avg FROM trust_scores'),
             db.get('SELECT COUNT(*) as count FROM blockchain_seals'),
-            db.get(`SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'`),
+            db.get('SELECT COUNT(*) as count FROM fraud_alerts WHERE status = \'open\''),
             db.get('SELECT COUNT(*) as count FROM partners'),
             db.get('SELECT COUNT(*) as count FROM batches'),
             db.get('SELECT COUNT(*) as count FROM evidence_items'),
-            db.get(`SELECT COUNT(*) as count FROM certifications WHERE status = 'active'`),
-            db.get(`SELECT COUNT(*) as count FROM scan_events WHERE result = 'valid'`),
+            db.get('SELECT COUNT(*) as count FROM certifications WHERE status = \'active\''),
+            db.get('SELECT COUNT(*) as count FROM scan_events WHERE result = \'valid\''),
         ]);
 
         const verificationRate = scans.count > 0 ? Math.round((validScans.count / scans.count) * 100) : 0;
@@ -55,10 +56,10 @@ router.get('/scan-trends', async (req, res) => {
              SUM(CASE WHEN result = 'suspicious' THEN 1 ELSE 0 END) as suspicious,
              SUM(CASE WHEN result = 'counterfeit' THEN 1 ELSE 0 END) as counterfeit
       FROM scan_events
-      WHERE scanned_at >= datetime('now', '-7 days')
+      WHERE scanned_at >= NOW() - INTERVAL '7 days'
       GROUP BY DATE(scanned_at)
       ORDER BY date ASC
-    `);
+     LIMIT 1000`);
         res.json(trends);
     } catch (err) {
         console.error('Scan trends error:', err);
@@ -83,7 +84,7 @@ router.get('/trust-distribution', async (req, res) => {
       FROM trust_scores
       GROUP BY bracket
       ORDER BY MIN(score) DESC
-    `);
+     LIMIT 1000`);
         res.json(dist);
     } catch (err) {
         console.error('Trust distribution error:', err);
@@ -99,7 +100,7 @@ router.get('/scan-results', async (req, res) => {
       FROM scan_events
       GROUP BY result
       ORDER BY count DESC
-    `);
+     LIMIT 1000`);
         res.json(results);
     } catch (err) {
         console.error('Product check error:', err);
@@ -382,7 +383,7 @@ router.get('/health', corsHeaders, async (req, res) => {
         // NODE-BP-1: Parallelize 6 queries
         const [productsRow, scans24hRow, fraudAlertsRow, leakAlertsRow, blockchainRow, avgTrustRow] = await Promise.all([
             db.get('SELECT COUNT(*) as c FROM products'),
-            db.get("SELECT COUNT(*) as c FROM scan_events WHERE scanned_at > datetime('now', '-1 day')"),
+            db.get("SELECT COUNT(*) as c FROM scan_events WHERE scanned_at > NOW() - INTERVAL '1 day'"),
             db.get("SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'active'"),
             db.get("SELECT COUNT(*) as c FROM leak_alerts WHERE status = 'open'"),
             db.get('SELECT COUNT(*) as c FROM blockchain_seals'),
@@ -454,7 +455,7 @@ router.post('/check', async (req, res) => {
         const previousScans = await db.all(
             `SELECT id, scanned_at, ip_address FROM scan_events 
              WHERE qr_code_id = ? AND result != 'pending'
-             ORDER BY scanned_at ASC`,
+             ORDER BY scanned_at ASC LIMIT 1000`,
             [qrCode.id]
         );
         const scanCount = previousScans.length;
@@ -463,10 +464,11 @@ router.post('/check', async (req, res) => {
 
         // Create scan event for this check
         const scanId = require('uuid').v4();
-        await db.prepare(`
+const { withTransaction } = require('../middleware/transaction');
+        await db.run(`
             INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, ip_address, user_agent, result, scanned_at)
-            VALUES (?, ?, ?, 'code_check', ?, ?, 'pending', datetime('now'))
-        `).run(scanId, qrCode.id, qrCode.product_id, req.ip || '', req.get('user-agent') || '');
+            VALUES (?, ?, ?, 'code_check', ?, ?, 'pending', NOW())
+        `, [scanId, qrCode.id, qrCode.product_id, req.ip || '', req.get('user-agent') || '']);
 
         // Determine result
         let result, message, risk_level;

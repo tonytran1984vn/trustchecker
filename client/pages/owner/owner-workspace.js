@@ -92,16 +92,16 @@ window._riskSubTab = function (sub) {
 async function loadOwnerData() {
   try {
     // Primary dashboard data
-    _ownerData = await API.get('/tenant/owner/dashboard');
+    _ownerData = await API.get('/org-admin/owner/dashboard');
     renderOwnerContent();
     setTimeout(() => injectMyActionsWidget('my-actions-widget'), 150);
 
     // Prefetch ALL other tab data in parallel (background, non-blocking)
     Promise.allSettled([
-      API.get('/tenant/owner/risk-monitoring').then(d => { _riskData = d; _riskMonLoaded = true; }),
-      API.get('/tenant/owner/governance-log').then(d => { _govLogData = d; _govLogLoaded = true; }),
-      API.get('/tenant/owner/privilege-governance').then(d => { _privilegeData = d; _privilegeLoaded = true; }),
-      API.get('/tenant/owner/access-oversight').then(d => { _teamData = d; _teamLoaded = true; }),
+      API.get('/org-admin/owner/risk-monitoring').then(d => { _riskData = d; _riskMonLoaded = true; }),
+      API.get('/org-admin/owner/governance-log').then(d => { _govLogData = d; _govLogLoaded = true; }),
+      API.get('/org-admin/owner/privilege-governance').then(d => { _privilegeData = d; _privilegeLoaded = true; }),
+      API.get('/org-admin/owner/access-oversight').then(d => { _teamData = d; _teamLoaded = true; }),
     ]).then(() => {
       console.log('[Owner] All tab data prefetched ✓');
     });
@@ -114,7 +114,7 @@ async function loadOwnerData() {
 
 async function loadPrivilegeData() {
   try {
-    _privilegeData = await API.get('/tenant/owner/privilege-governance');
+    _privilegeData = await API.get('/org-admin/owner/privilege-governance');
     _privilegeLoaded = true;
     renderOwnerContent();
   } catch (e) { _privilegeData = {}; _privilegeLoaded = true; renderOwnerContent(); }
@@ -122,7 +122,7 @@ async function loadPrivilegeData() {
 
 async function loadRiskMonitoring() {
   try {
-    _riskData = await API.get('/tenant/owner/risk-monitoring');
+    _riskData = await API.get('/org-admin/owner/risk-monitoring');
     _riskMonLoaded = true;
     renderOwnerContent();
   } catch (e) { _riskData = {}; _riskMonLoaded = true; renderOwnerContent(); }
@@ -130,7 +130,7 @@ async function loadRiskMonitoring() {
 
 async function loadGovernanceLog() {
   try {
-    _govLogData = await API.get('/tenant/owner/governance-log');
+    _govLogData = await API.get('/org-admin/owner/governance-log');
     _govLogLoaded = true;
     if (_activeTab === 'risk' && _riskMonLoaded) renderOwnerContent();
   } catch (e) { _govLogData = {}; _govLogLoaded = true; if (_activeTab === 'risk') renderOwnerContent(); }
@@ -138,7 +138,7 @@ async function loadGovernanceLog() {
 
 async function loadTeamData() {
   try {
-    _teamData = await API.get('/tenant/owner/access-oversight');
+    _teamData = await API.get('/org-admin/owner/access-oversight');
     _teamLoaded = true;
     renderOwnerContent();
   } catch (e) { _teamData = {}; _teamLoaded = true; renderOwnerContent(); }
@@ -263,7 +263,7 @@ function renderOverview() {
 function loadCompanyHealth() {
   setTimeout(async () => {
     try {
-      const data = await API.get('/tenant/governance/kpi-overview').catch(() => null);
+      const data = await API.get('/org-admin/governance/kpi-overview').catch(() => null);
       const el = document.getElementById('company-health-kpi');
       if (!el || !data) return;
       const crce = data.crce || 0;
@@ -391,7 +391,7 @@ window._ownerAppoint = async function (role) {
   const name = document.getElementById(`appoint-${prefix}-name`)?.value;
   if (!email) { showToast('Email is required', 'error'); return; }
   try {
-    const res = await API.post('/tenant/owner/appoint', { email, name, role });
+    const res = await API.post('/org-admin/owner/appoint', { email, name, role });
     let msg = `✓ ${res.message}`;
     if (res.temp_password) msg += ` — Temp: ${res.temp_password}`;
     showToast(msg, 'success');
@@ -742,7 +742,7 @@ function renderActivityContent(d) {
 function renderCompliance() {
   setTimeout(async () => {
     try {
-      const data = await API.get('/tenant/owner/compliance').catch(() => null);
+      const data = await API.get('/org-admin/owner/compliance').catch(() => null);
       const el = document.getElementById('owner-compliance-content');
       if (!el) return;
       if (!data) throw new Error('No data');
@@ -863,7 +863,7 @@ function renderCompliance() {
 function renderFinancial() {
   setTimeout(async () => {
     try {
-      const data = await API.get('/tenant/owner/financial').catch(() => null);
+      const data = await API.get('/org-admin/owner/financial').catch(() => null);
       const el = document.getElementById('owner-billing-content');
       if (!el) return;
       if (!data) throw new Error('No data');
@@ -1043,7 +1043,7 @@ window._ownerEmergency = async function (action, needsRole = false) {
   if (!confirm(`⚠️ EMERGENCY ACTION: ${action}\n\nThis action is irreversible and will be permanently logged.\n\nProceed?`)) return;
 
   try {
-    const res = await API.post('/tenant/owner/emergency', { action, justification, target_role });
+    const res = await API.post('/org-admin/owner/emergency', { action, justification, target_role });
     showToast(`🚨 ${res.message}`, 'warning');
     renderOwnerContent();
   } catch (e) {

@@ -1,6 +1,6 @@
 /**
  * Governance Dashboard — Real-time governance health monitoring
- * Calls: GET /api/tenant/governance/dashboard
+ * Calls: GET /api/org-admin/governance/dashboard
  * Shows: SoD warnings, pending approvals, role distribution, high-severity events
  */
 import { icon } from '../../core/icons.js';
@@ -20,7 +20,7 @@ async function _load() {
     if (window._caGovReady) { try { await window._caGovReady; } catch { } }
     const gc = window._caGovCache;
     if (gc?.dashboard && gc._loadedAt && !_data) { _data = gc.dashboard; }
-    else { _data = await API.get('/tenant/governance/dashboard'); }
+    else { _data = await API.get('/org-admin/governance/dashboard'); }
   } catch (e) {
     _data = { pending_approvals: 0, sod_warnings: [], sod_warning_count: 0, high_severity_events: [], total_users: 0, role_distribution: [] };
   }

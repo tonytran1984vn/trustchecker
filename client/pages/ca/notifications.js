@@ -98,7 +98,7 @@ function toggleField(id, label, checked, desc) {
 
 async function loadData() {
     try {
-        _data = await api.get('/tenant/governance/notifications');
+        _data = await api.get('/org-admin/governance/notifications');
         window.__toggleSev = (sev) => {
             const idx = _data.severity_filter.indexOf(sev);
             if (idx >= 0) _data.severity_filter.splice(idx, 1);
@@ -119,7 +119,7 @@ async function loadData() {
                     },
                     severity_filter: _data.severity_filter,
                 };
-                const result = await api.post('/tenant/governance/notifications', body);
+                const result = await api.post('/org-admin/governance/notifications', body);
                 _data = result.notifications || _data;
                 _saving = false;
                 if (el) el.innerHTML = renderPage();

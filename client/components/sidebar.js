@@ -58,6 +58,7 @@ const ROLE_VISIBILITY = {
       { id: 'green-finance', domain: 'corporate-governance', icon: icon('globe'), label: 'Green Finance' },
       { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
     ],
   },
 
@@ -132,6 +133,7 @@ const ROLE_VISIBILITY = {
     extraItems: [
       { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
       { id: 'green-finance', domain: 'corporate-governance', icon: icon('globe'), label: 'Green Finance Layer' },
       { id: 'carbon-registry', domain: 'corporate-governance', icon: icon('scroll'), label: 'Carbon Registry' },
     ],
@@ -150,6 +152,7 @@ const ROLE_VISIBILITY = {
       { id: 'reports', domain: 'risk-protection', icon: icon('scroll'), label: 'Reports' },
       { id: 'compliance-regtech', domain: 'risk-protection', icon: icon('globe'), label: 'RegTech' },
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
     ],
   },
 
@@ -159,6 +162,7 @@ const ROLE_VISIBILITY = {
     items: ['dashboard'],
     extraItems: [
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
       { id: 'governance', domain: 'corporate-governance', icon: icon('shield'), label: 'Governance' },
     ],
   },
@@ -170,6 +174,7 @@ const ROLE_VISIBILITY = {
     extraItems: [
       { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
     ],
   },
 
@@ -179,6 +184,7 @@ const ROLE_VISIBILITY = {
     items: ['dashboard'],
     extraItems: [
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
       { id: 'governance', domain: 'corporate-governance', icon: icon('shield'), label: 'Governance' },
     ],
   },
@@ -189,6 +195,7 @@ const ROLE_VISIBILITY = {
     items: ['dashboard'],
     extraItems: [
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
     ],
   },
 
@@ -199,6 +206,7 @@ const ROLE_VISIBILITY = {
     extraItems: [
       { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
       { id: 'green-finance', domain: 'corporate-governance', icon: icon('globe'), label: 'Green Finance Layer' },
     ],
   },
@@ -209,6 +217,7 @@ const ROLE_VISIBILITY = {
     items: ['dashboard'],
     extraItems: [
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
     ],
   },
 
@@ -218,6 +227,7 @@ const ROLE_VISIBILITY = {
     items: ['dashboard'],
     extraItems: [
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
     ],
   },
 
@@ -227,6 +237,7 @@ const ROLE_VISIBILITY = {
     items: ['dashboard'],
     extraItems: [
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
     ],
   },
 
@@ -236,6 +247,7 @@ const ROLE_VISIBILITY = {
     items: ['dashboard'],
     extraItems: [
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
+      { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
       { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
       { id: 'green-finance', domain: 'corporate-governance', icon: icon('globe'), label: 'Green Finance Layer' },
     ],
@@ -281,6 +293,7 @@ const COMPANY_ADMIN_NAV = [
   { id: 'ca-audit-dashboard', icon: icon('search'), label: 'Audit Dashboard' },
   { id: 'ca-settings', icon: icon('settings'), label: 'Settings' },
   { id: 'ca-notifications', icon: icon('bell'), label: 'Notifications' },
+  { id: 'scm-network', icon: icon('globe'), label: 'Trust Network' },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -301,6 +314,7 @@ const DOMAIN_ITEMS = {
     { id: 'ca-traceability', icon: icon('search'), label: 'Traceability Map' },
     { id: 'scans', icon: icon('check'), label: 'Verification Logs' },
     { id: 'scm-carbon', icon: icon('globe'), label: 'Carbon Accounting' },
+    { id: 'scm-network', icon: icon('globe'), label: 'Trust Network' },
   ],
   'risk-protection': [
     { id: 'fraud', icon: icon('alert'), label: 'Fraud Monitoring' },
@@ -329,6 +343,7 @@ const DOMAIN_ITEMS = {
     { id: 'ca-company-profile', icon: icon('building'), label: 'Company Profile' },
     { id: 'settings', icon: icon('lock'), label: 'Security' },
     { id: 'ca-notifications', icon: icon('bell'), label: 'Notifications' },
+  { id: 'scm-network', icon: icon('globe'), label: 'Trust Network' },
     { id: 'ca-integrations', icon: icon('plug'), label: 'API & Integrations' },
     { id: 'billing', icon: icon('creditCard'), label: 'Billing & Quota' },
   ],

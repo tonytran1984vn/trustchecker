@@ -92,7 +92,7 @@ export function renderPage() {
 
 async function loadData() {
   try {
-    const r = await api.get('/tenant/owner/ccs/risk-intel');
+    const r = await api.get('/org-admin/owner/ccs/risk-intel');
     _data = r;
     const el = document.getElementById('main-content');
     if (el) el.innerHTML = renderPage();

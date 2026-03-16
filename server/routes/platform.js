@@ -1,7 +1,8 @@
+const { encrypt, decrypt } = require('../security/field-encryption');
 /**
  * Platform Routes — SuperAdmin Only
  *
- * Manages tenants (companies), licensing, feature flags, and platform audit.
+ * Manages orgs (companies), licensing, feature flags, and platform audit.
  * All routes require platform admin access.
  *
  * Base path: /api/platform
@@ -20,8 +21,8 @@ const { clearCacheByPrefix } = require('../cache');
 router.use(authMiddleware);
 router.use(requirePlatformAdmin());
 
-// ─── POST /tenants — Create new tenant/company ──────────────────────────────
-router.post('/tenants', async (req, res) => {
+// ─── POST /orgs — Create new org/company ──────────────────────────────
+router.post('/orgs', async (req, res) => {
     try {
         const { name, slug, plan = 'free', feature_flags = {}, admin_email, admin_username, admin_password } = req.body;
 
@@ -44,28 +45,28 @@ router.post('/tenants', async (req, res) => {
             return res.status(409).json({ error: `Slug "${slug}" already taken` });
         }
 
-        const tenantId = uuidv4();
+        const orgId = uuidv4();
         const flags = typeof feature_flags === 'string' ? feature_flags : JSON.stringify(feature_flags);
 
-        // Create tenant
+        // Create org
         await db.run(
             `INSERT INTO organizations (id, name, slug, plan, feature_flags, status, created_by) VALUES (?, ?, ?, ?, ?, 'active', ?)`,
-            [tenantId, name, slug, plan, flags, req.user.id]
+            [orgId, name, slug, plan, flags, req.user.id]
         );
 
         // Create Company Admin user
         const adminId = uuidv4();
         const hash = await bcrypt.hash(admin_password, 12);
         await db.run(
-            `INSERT INTO users (id, username, email, password_hash, role, user_type, company, org_id) VALUES (?, ?, ?, ?, 'admin', 'tenant', ?, ?)`,
-            [adminId, admin_username, admin_email, hash, name, tenantId]
+            `INSERT INTO users (id, username, email, password_hash, role, user_type, company, org_id) VALUES (?, ?, ?, ?, 'admin', 'org', ?, ?)`,
+            [adminId, admin_username, admin_email, hash, name, orgId]
         );
 
-        // Create tenant-scoped company_admin role
-        const roleId = `role-${tenantId}-company_admin`;
+        // Create org-scoped company_admin role
+        const roleId = `role-${orgId}-company_admin`;
         await db.run(
-            `INSERT OR IGNORE INTO rbac_roles (id, tenant_id, name, display_name, type, is_system, description) VALUES (?, ?, 'company_admin', 'Company Admin', 'system', 1, 'Tenant administrator')`,
-            [roleId, tenantId]
+            `INSERT OR IGNORE INTO rbac_roles (id, org_id, name, display_name, type, is_system, description) VALUES (?, ?, 'company_admin', 'Company Admin', 'system', 1, 'Org administrator')`,
+            [roleId, orgId]
         );
 
         // Copy company_admin template permissions
@@ -85,20 +86,20 @@ router.post('/tenants', async (req, res) => {
         // Audit log
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'TENANT_CREATED', 'organization', ?, ?)`,
-            [uuidv4(), req.user.id, tenantId, JSON.stringify({ name, slug, plan, admin_username })]
+            [uuidv4(), req.user.id, orgId, JSON.stringify({ name, slug, plan, admin_username })]
         );
 
         // Save if SQLite
         if (typeof db.save === 'function') await db.save();
 
         res.status(201).json({
-            tenant: { id: tenantId, name, slug, plan, status: 'active' },
+            org: { id: orgId, name, slug, plan, status: 'active' },
             admin: { id: adminId, username: admin_username, email: admin_email, role: 'admin' },
             message: 'Tenant created with Company Admin'
         });
     } catch (err) {
-        console.error('[Platform] Create tenant error:', err);
-        res.status(500).json({ error: 'Failed to create tenant' });
+        console.error('[Platform] Create org error:', err);
+        res.status(500).json({ error: 'Failed to create org' });
     }
 });
 
@@ -109,7 +110,7 @@ router.post('/tenants', async (req, res) => {
 // GET /feature-flags — Read platform-wide flags from dedicated table
 router.get('/feature-flags', async (req, res) => {
     try {
-        const rows = await db.all('SELECT key, label, description, icon, color, enabled FROM platform_feature_flags ORDER BY key');
+        const rows = await db.all('SELECT key, label, description, icon, color, enabled FROM platform_feature_flags ORDER BY key LIMIT 1000');
         // Also return as a simple key→value map for backward compat
         const flags = {};
         rows.forEach(r => { flags[r.key] = r.enabled; });
@@ -161,11 +162,11 @@ router.put('/feature-flags', async (req, res) => {
 router.get('/notifications', async (req, res) => {
     try {
         const channels = await db.all(
-            "SELECT id, key, label, description, icon, enabled FROM notification_preferences WHERE user_id = ? AND category = 'channel' ORDER BY created_at",
+            "SELECT id, key, label, description, icon, enabled FROM notification_preferences WHERE user_id = ? AND category = 'channel' ORDER BY created_at LIMIT 1000",
             [req.user.id]
         );
         const events = await db.all(
-            "SELECT id, key, label, description, severity, enabled FROM notification_preferences WHERE user_id = ? AND category = 'event' ORDER BY created_at",
+            "SELECT id, key, label, description, severity, enabled FROM notification_preferences WHERE user_id = ? AND category = 'event' ORDER BY created_at LIMIT 1000",
             [req.user.id]
         );
         res.json({ channels, events });
@@ -278,6 +279,7 @@ router.post('/email-settings/test', async (req, res) => {
 // CHANNEL SETTINGS (Slack / SMS / Push)
 // ═══════════════════════════════════════════════════════════════════════════════
 const slackService = require('../services/slack');
+const { withTransaction } = require('../middleware/transaction');
 
 // GET /channel-settings/:channel
 router.get('/channel-settings/:channel', async (req, res) => {
@@ -347,8 +349,8 @@ const PLATFORM_ROLES = ['super_admin', 'platform_security', 'data_gov_officer', 
 router.get('/users', async (req, res) => {
     try {
         const users = await db.all(
-            `SELECT id, username, email, role, user_type, mfa_enabled, created_at, last_login, status
-             FROM users WHERE user_type = 'platform' ORDER BY created_at ASC`
+            `SELECT id, username, email, role, user_type, mfa_enabled, created_at, last_login
+             FROM users WHERE user_type = 'platform' ORDER BY created_at ASC LIMIT 1000`
         );
         res.json({ users });
     } catch (err) {
@@ -470,27 +472,27 @@ router.delete('/users/:id', async (req, res) => {
     }
 });
 
-// ─── GET /tenants — List all tenants ─────────────────────────────────────────
-router.get('/tenants', async (req, res) => {
+// ─── GET /orgs — List all orgs ─────────────────────────────────────────
+router.get('/orgs', async (req, res) => {
     try {
-        const tenants = await db.all(`
+        const orgs = await db.all(`
       SELECT o.*, 
-        (SELECT COUNT(*) FROM users WHERE org_id = o.id) as user_count
+        (SELECT COUNT(*)::INT FROM users WHERE org_id = o.id) as user_count
       FROM organizations o
       ORDER BY o.created_at DESC
-    `);
-        res.json({ tenants });
+     LIMIT 1000`);
+        res.json({ orgs });
     } catch (err) {
-        console.error('[Platform] List tenants error:', err);
-        res.status(500).json({ error: 'Failed to list tenants' });
+        console.error('[Platform] List orgs error:', err);
+        res.status(500).json({ error: 'Failed to list orgs' });
     }
 });
 
-// ─── GET /tenants/:id — Get tenant details ───────────────────────────────────
-router.get('/tenants/:id', async (req, res) => {
+// ─── GET /orgs/:id — Get org details ───────────────────────────────────
+router.get('/orgs/:id', async (req, res) => {
     try {
-        const tenant = await db.get('SELECT * FROM organizations WHERE id = ?', [req.params.id]);
-        if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+        const org = await db.get('SELECT * FROM organizations WHERE id = ?', [req.params.id]);
+        if (!org) return res.status(404).json({ error: 'Tenant not found' });
 
         const users = await db.all(
             'SELECT id, username, email, role, user_type, created_at, last_login FROM users WHERE org_id = ?',
@@ -498,22 +500,22 @@ router.get('/tenants/:id', async (req, res) => {
         );
 
         const roles = await db.all(
-            'SELECT * FROM rbac_roles WHERE tenant_id = ?',
+            'SELECT * FROM rbac_roles WHERE org_id = ?',
             [req.params.id]
         );
 
-        res.json({ tenant, users, roles });
+        res.json({ org, users, roles });
     } catch (err) {
-        console.error('[Platform] Get tenant error:', err);
-        res.status(500).json({ error: 'Failed to get tenant' });
+        console.error('[Platform] Get org error:', err);
+        res.status(500).json({ error: 'Failed to get org' });
     }
 });
 
-// ─── POST /tenants/:id/users — Create company user within tenant ─────────────
-router.post('/tenants/:id/users', async (req, res) => {
+// ─── POST /orgs/:id/users — Create company user within org ─────────────
+router.post('/orgs/:id/users', async (req, res) => {
     try {
-        const tenant = await db.get('SELECT id, name FROM organizations WHERE id = ?', [req.params.id]);
-        if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+        const org = await db.get('SELECT id, name FROM organizations WHERE id = ?', [req.params.id]);
+        if (!org) return res.status(404).json({ error: 'Tenant not found' });
 
         const { username, email, password, role, company } = req.body;
         if (!username || !email || !password || !role) {
@@ -527,29 +529,29 @@ router.post('/tenants/:id/users', async (req, res) => {
         const hash = await bcrypt.hash(password, 12);
         await db.run(
             `INSERT INTO users (id, username, email, password_hash, role, user_type, company, org_id)
-             VALUES (?, ?, ?, ?, ?, 'tenant', ?, ?)`,
-            [id, username, email, hash, role, company || tenant.name, req.params.id]
+             VALUES (?, ?, ?, ?, ?, 'org', ?, ?)`,
+            [id, username, email, hash, role, company || org.name, req.params.id]
         );
 
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'TENANT_USER_CREATED', 'user', ?, ?)`,
-            [uuidv4(), req.user.id, id, JSON.stringify({ username, email, role, tenant_id: req.params.id, tenant_name: tenant.name })]
+            [uuidv4(), req.user.id, id, JSON.stringify({ username, email, role, org_id: req.params.id, org_name: org.name })]
         );
 
         if (typeof db.save === 'function') await db.save();
-        res.status(201).json({ id, username, email, role, user_type: 'tenant', org_id: req.params.id, message: 'Company user created' });
+        res.status(201).json({ id, username, email, role, user_type: 'org', org_id: req.params.id, message: 'Company user created' });
     } catch (err) {
-        console.error('[Platform] Create tenant user error:', err);
+        console.error('[Platform] Create org user error:', err);
         res.status(500).json({ error: 'Failed to create company user' });
     }
 });
 
-// ─── PUT /tenants/:id — Update tenant plan/flags ─────────────────────────────
-router.put('/tenants/:id', async (req, res) => {
+// ─── PUT /orgs/:id — Update org plan/flags ─────────────────────────────
+router.put('/orgs/:id', async (req, res) => {
     try {
         const { plan, feature_flags, name } = req.body;
-        const tenant = await db.get('SELECT id FROM organizations WHERE id = ?', [req.params.id]);
-        if (!tenant) return res.status(404).json({ error: 'Tenant not found' });
+        const org = await db.get('SELECT id FROM organizations WHERE id = ?', [req.params.id]);
+        if (!org) return res.status(404).json({ error: 'Tenant not found' });
 
         const updates = [];
         const params = [];
@@ -566,7 +568,7 @@ router.put('/tenants/:id', async (req, res) => {
             }
             updates.push('name = ?'); params.push(name);
         }
-        updates.push("updated_at = datetime('now')");
+        updates.push("updated_at = NOW()");
 
         if (updates.length > 1) {
             params.push(req.params.id);
@@ -582,17 +584,17 @@ router.put('/tenants/:id', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Tenant updated', id: req.params.id });
     } catch (err) {
-        console.error('[Platform] Update tenant error:', err);
-        res.status(500).json({ error: 'Failed to update tenant' });
+        console.error('[Platform] Update org error:', err);
+        res.status(500).json({ error: 'Failed to update org' });
     }
 });
 
-// ─── POST /tenants/:id/suspend — Suspend tenant ─────────────────────────────
-router.post('/tenants/:id/suspend', async (req, res) => {
+// ─── POST /orgs/:id/suspend — Suspend org ─────────────────────────────
+router.post('/orgs/:id/suspend', async (req, res) => {
     try {
         const { reason } = req.body;
         await db.run(
-            "UPDATE organizations SET status = 'suspended', updated_at = datetime('now') WHERE id = ?",
+            "UPDATE organizations SET status = 'suspended', updated_at = NOW() WHERE id = ?",
             [req.params.id]
         );
 
@@ -605,16 +607,16 @@ router.post('/tenants/:id/suspend', async (req, res) => {
         clearCacheByPrefix('/api/risk-graph').catch(() => { });
         res.json({ message: 'Tenant suspended', id: req.params.id });
     } catch (err) {
-        console.error('[Platform] Suspend tenant error:', err);
-        res.status(500).json({ error: 'Failed to suspend tenant' });
+        console.error('[Platform] Suspend org error:', err);
+        res.status(500).json({ error: 'Failed to suspend org' });
     }
 });
 
-// ─── POST /tenants/:id/activate — Reactivate tenant ─────────────────────────
-router.post('/tenants/:id/activate', async (req, res) => {
+// ─── POST /orgs/:id/activate — Reactivate org ─────────────────────────
+router.post('/orgs/:id/activate', async (req, res) => {
     try {
         await db.run(
-            "UPDATE organizations SET status = 'active', updated_at = datetime('now') WHERE id = ?",
+            "UPDATE organizations SET status = 'active', updated_at = NOW() WHERE id = ?",
             [req.params.id]
         );
 
@@ -627,32 +629,32 @@ router.post('/tenants/:id/activate', async (req, res) => {
         clearCacheByPrefix('/api/risk-graph').catch(() => { });
         res.json({ message: 'Tenant activated', id: req.params.id });
     } catch (err) {
-        console.error('[Platform] Activate tenant error:', err);
-        res.status(500).json({ error: 'Failed to activate tenant' });
+        console.error('[Platform] Activate org error:', err);
+        res.status(500).json({ error: 'Failed to activate org' });
     }
 });
 
-// ─── POST /tenants/:id/admin-reset — Reset Company Admin password ────────────
-router.post('/tenants/:id/admin-reset', async (req, res) => {
+// ─── POST /orgs/:id/admin-reset — Reset Company Admin password ────────────
+router.post('/orgs/:id/admin-reset', async (req, res) => {
     try {
         const { new_password } = req.body;
         if (!new_password || new_password.length < 8) {
             return res.status(400).json({ error: 'new_password required (min 8 chars)' });
         }
 
-        // Find company admin for this tenant
+        // Find company admin for this org
         const admin = await db.get(
             "SELECT id, username FROM users WHERE org_id = ? AND (role = 'admin' OR role = 'company_admin') ORDER BY created_at ASC LIMIT 1",
             [req.params.id]
         );
-        if (!admin) return res.status(404).json({ error: 'No Company Admin found for this tenant' });
+        if (!admin) return res.status(404).json({ error: 'No Company Admin found for this org' });
 
         const hash = await bcrypt.hash(new_password, 12);
         await db.run('UPDATE users SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?', [hash, admin.id]);
 
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'ADMIN_PASSWORD_RESET', 'user', ?, ?)`,
-            [uuidv4(), req.user.id, admin.id, JSON.stringify({ tenant_id: req.params.id, target_username: admin.username })]
+            [uuidv4(), req.user.id, admin.id, JSON.stringify({ org_id: req.params.id, target_username: admin.username })]
         );
 
         if (typeof db.save === 'function') await db.save();

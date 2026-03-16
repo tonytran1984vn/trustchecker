@@ -15,32 +15,32 @@ router.use(authMiddleware);
 // ─── GET /dashboard — Carbon Officer Overview KPIs ──────────────────────────
 router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
 
         // ── Scope breakdown ─────────────────────────────────────────
         let products = [], shipments = [], events = [];
         try {
             const pq = orgId
-                ? await db.prepare('SELECT * FROM products WHERE org_id = ?').all(orgId)
-                : await db.prepare('SELECT * FROM products').all();
+                ? await db.all('SELECT * FROM products WHERE org_id = ?', [orgId])
+                : await db.all('SELECT * FROM products');
             products = pq || [];
         } catch (_) { }
 
         try {
             const sq = orgId
-                ? await db.prepare(`SELECT s.* FROM shipments s
+                ? await db.all(`SELECT s.* FROM shipments s
                     INNER JOIN batches b ON s.batch_id = b.id
                     INNER JOIN products p ON b.product_id = p.id
-                    WHERE p.org_id = ?`).all(orgId)
-                : await db.prepare('SELECT * FROM shipments').all();
+                    WHERE p.org_id = ? LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000`, [orgId])
+                : await db.all('SELECT * FROM shipments');
             shipments = sq || [];
         } catch (_) { }
 
         try {
             const eq = orgId
-                ? await db.prepare(`SELECT e.* FROM supply_chain_events e
+                ? await db.all(`SELECT e.* FROM supply_chain_events e
                     INNER JOIN products p ON e.product_id = p.id
-                    WHERE p.org_id = ? ORDER BY e.created_at DESC LIMIT 200`).all(orgId)
+                    WHERE p.org_id = ? ORDER BY e.created_at DESC LIMIT 200`, [orgId])
                 : await db.prepare("SELECT * FROM supply_chain_events ORDER BY created_at DESC LIMIT 200").all();
             events = eq || [];
         } catch (_) { }
@@ -51,10 +51,10 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
         let credits_minted = 0, credits_pending = 0, credits_retired = 0, total_tCO2e = 0;
         try {
             const creditStats = orgId
-                ? await db.prepare(`SELECT status, COUNT(*) as cnt, COALESCE(SUM(quantity_tCO2e),0) as total
-                    FROM carbon_credits WHERE org_id = ? GROUP BY status`).all(orgId)
-                : await db.prepare(`SELECT status, COUNT(*) as cnt, COALESCE(SUM(quantity_tCO2e),0) as total
-                    FROM carbon_credits GROUP BY status`).all();
+                ? await db.all(`SELECT status, COUNT(*) as cnt, COALESCE(SUM(quantity_tCO2e),0) as total
+                    FROM carbon_credits WHERE org_id = ? GROUP BY status`, [orgId])
+                : await db.all(`SELECT status, COUNT(*) as cnt, COALESCE(SUM(quantity_tCO2e),0) as total
+                    FROM carbon_credits GROUP BY status`);
             for (const row of (creditStats || [])) {
                 if (row.status === 'minted' || row.status === 'active') { credits_minted += row.cnt; total_tCO2e += row.total; }
                 else if (row.status === 'pending') credits_pending += row.cnt;
@@ -66,10 +66,10 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
         let simulations_total = 0, simulations_eligible = 0;
         try {
             const simStats = orgId
-                ? await db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN credit_eligible = 1 THEN 1 ELSE 0 END) as eligible
-                    FROM carbon_simulations WHERE simulated_by IN (SELECT id FROM users WHERE org_id = ?)`).get(orgId)
-                : await db.prepare(`SELECT COUNT(*) as total, SUM(CASE WHEN credit_eligible = 1 THEN 1 ELSE 0 END) as eligible
-                    FROM carbon_simulations`).get();
+                ? await db.get(`SELECT COUNT(*) as total, SUM(CASE WHEN credit_eligible = 1 THEN 1 ELSE 0 END) as eligible
+                    FROM carbon_simulations WHERE simulated_by IN (SELECT id FROM users WHERE org_id = ?)`, [orgId])
+                : await db.get(`SELECT COUNT(*) as total, SUM(CASE WHEN credit_eligible = 1 THEN 1 ELSE 0 END) as eligible
+                    FROM carbon_simulations`);
             simulations_total = simStats?.total || 0;
             simulations_eligible = simStats?.eligible || 0;
         } catch (_) { }
@@ -113,7 +113,7 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
                    LEFT JOIN users u ON al.actor_id = u.id
                    WHERE (al.action LIKE '%carbon%' OR al.action LIKE '%CARBON%' OR al.action LIKE '%emission%' OR al.action LIKE '%CIP%' OR al.entity_type = 'carbon_credit')
                    AND u.org_id = ?
-                   ORDER BY al.timestamp DESC LIMIT 15`
+                   ORDER BY al.timestamp DESC LIMIT 15 LIMIT 1000`
                 : `SELECT al.*, u.email as actor_email FROM audit_log al
                    LEFT JOIN users u ON al.actor_id = u.id
                    WHERE al.action LIKE '%carbon%' OR al.action LIKE '%CARBON%' OR al.action LIKE '%emission%' OR al.action LIKE '%CIP%' OR al.entity_type = 'carbon_credit'

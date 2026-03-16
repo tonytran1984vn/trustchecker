@@ -67,73 +67,84 @@ let _initialized = false;
 export function renderPage() {
   // Lazy init: load data on first render, not at import time
   if (!_initialized) { _initialized = true; loadSuppliers(); }
-  if (_loading) return `<div class="sa-page"><div class="sa-loading-indicator"><div class="sa-spinner"></div><p>Loading suppliers from database...</p></div></div>`;
+  if (_loading) return `<div class="sa-page"><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4rem"><div class="sa-spinner" style="margin-bottom:16px"></div><div style="color:var(--text-secondary);font-size:0.85rem">Loading suppliers from database…</div></div></div>`;
 
   const verified = SUPPLIERS.filter(s => s.kyc === 'verified');
   const pending = SUPPLIERS.filter(s => s.kyc === 'pending_kyc' || s.kyc === 'pending');
   const totalLocs = SUPPLIERS.reduce((s, sup) => s + (sup.locations?.length || 0), 0);
+  const highRisk = SUPPLIERS.filter(s => s.risk === 'High').length;
+  const countriesCount = new Set(SUPPLIERS.flatMap(s => (s.locations || []).map(l => l.country))).size;
 
   return `
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('users', 28)} Supplier Scoring</h1><div class="sa-title-actions"><button class="btn btn-primary btn-sm" onclick="window._showOnboardSupplier()">+ Onboard Supplier</button></div></div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:1.2rem">
+        <button style="padding:7px 18px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-size:0.78rem;font-weight:600;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='#0f766e'" onmouseout="this.style.background='#0d9488'" onclick="window._showOnboardSupplier()">+ Onboard Supplier</button>
+      </div>
 
-      <div class="sa-metrics-row" style="margin-bottom:1.5rem">
-        ${m('Legal Entities', SUPPLIERS.length.toString(), `${verified.length} verified`, 'green', 'users')}
-        ${m('Locations', totalLocs.toString(), `Across ${new Set(SUPPLIERS.flatMap(s => (s.locations || []).map(l => l.country))).size} countries`, 'blue', 'globe')}
-        ${m('Pending KYC', pending.length.toString(), 'Awaiting verification', 'orange', 'shield')}
-        ${m('High Risk', SUPPLIERS.filter(s => s.risk === 'High').length.toString(), 'Below threshold (< 70)', 'red', 'alertTriangle')}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:1.5rem">
+        ${_statCard(icon('users',20),'Legal Entities',SUPPLIERS.length,verified.length+' verified','#0d9488')}
+        ${_statCard(icon('globe',20),'Locations',totalLocs,countriesCount+' countries','#3b82f6')}
+        ${_statCard(icon('shield',20),'Pending KYC',pending.length,'Awaiting verification','#f59e0b')}
+        ${_statCard(icon('alertTriangle',20),'High Risk',highRisk,'Below threshold (< 70)',highRisk>0?'#ef4444':'#22c55e')}
       </div>
 
       ${pending.length > 0 ? `
-      <div class="sa-card" style="margin-bottom:1.5rem;border:1px solid #f59e0b40">
-        <h3 style="color:#f59e0b">⏳ Pending KYC Review (${pending.length})</h3>
-        <table class="sa-table"><thead><tr><th>Supplier</th><th>Type</th><th>Country</th><th>Contact</th><th>Submitted</th><th>${canApproveKYC() ? 'Actions' : 'Status'}</th></tr></thead><tbody>
-          ${pending.map(s => `<tr>
-            <td><strong>${s.name}</strong><div style="font-size:0.65rem;color:var(--text-secondary)">${s.id}</div></td>
-            <td style="font-size:0.78rem">${s.type}</td>
-            <td>${s.hqCountry}</td>
-            <td style="font-size:0.75rem">${s.contact_email || s.contactEmail || '—'}</td>
-            <td style="font-size:0.75rem">${s.since}</td>
-            <td>${canApproveKYC()
-      ? `<button class="btn btn-xs btn-primary" onclick="window._approveSupplier('${s.id}','${s.name.replace(/'/g, "\\'")}')">✓ Approve</button>
-                 <button class="btn btn-xs btn-ghost" onclick="window._rejectSupplier('${s.id}','${s.name.replace(/'/g, "\\'")}')">✗ Reject</button>`
-      : `<span class="sa-status-pill sa-pill-orange">Awaiting review</span>`}
-            </td>
-          </tr>`).join('')}
-        </tbody></table>
+      <div style="background:var(--card-bg);border-radius:12px;border:1px solid rgba(245,158,11,0.15);border-left:4px solid #f59e0b;padding:20px 24px;margin-bottom:1.5rem">
+        <h3 style="margin:0 0 14px;font-size:0.95rem;font-weight:700;color:#f59e0b;display:flex;align-items:center;gap:6px">⏳ Pending KYC Review (${pending.length})</h3>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${pending.map(s => `
+            <div style="padding:14px 16px;border-radius:10px;background:rgba(245,158,11,0.03);border:1px solid rgba(245,158,11,0.08);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;transition:all 0.15s"
+              onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,0.04)'" onmouseout="this.style.boxShadow=''">
+              <div style="display:flex;align-items:center;gap:14px;flex:1;min-width:200px">
+                <div style="width:38px;height:38px;border-radius:10px;background:rgba(245,158,11,0.08);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">🏢</div>
+                <div>
+                  <div style="font-weight:700;font-size:0.88rem;color:var(--text-primary)">${s.name}</div>
+                  <div style="font-size:0.72rem;color:var(--text-secondary)">${s.id} · ${s.type} · ${s.hqCountry}</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:16px;flex-shrink:0">
+                <div style="text-align:center"><div style="font-size:0.58rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);font-weight:600">Contact</div><div style="font-size:0.72rem;color:var(--text-secondary)">${s.contact_email || s.contactEmail || '—'}</div></div>
+                <div style="text-align:center"><div style="font-size:0.58rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);font-weight:600">Since</div><div style="font-size:0.72rem;color:var(--text-secondary)">${s.since}</div></div>
+                ${canApproveKYC() ? `<div style="display:flex;gap:6px">
+                  <button style="padding:5px 14px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-size:0.72rem;font-weight:600;cursor:pointer" onclick="window._approveSupplier('${s.id}','${s.name.replace(/'/g, "\\'")}')">✓ Approve</button>
+                  <button style="padding:5px 14px;border:1px solid var(--border-color,rgba(0,0,0,0.1));border-radius:8px;background:transparent;color:var(--text-secondary);font-size:0.72rem;font-weight:600;cursor:pointer" onclick="window._rejectSupplier('${s.id}','${s.name.replace(/'/g, "\\'")}')">✗ Reject</button>
+                </div>` : `<span style="font-size:0.68rem;padding:3px 10px;border-radius:12px;font-weight:600;background:rgba(245,158,11,0.08);color:#f59e0b">Awaiting review</span>`}
+              </div>
+            </div>
+          `).join('')}
+        </div>
       </div>` : ''}
 
-      <div class="sa-card" style="margin-bottom:1.5rem">
-        <h3>📊 Supplier Performance Matrix</h3>
-        <table class="sa-table"><thead><tr><th>Supplier</th><th>HQ</th><th>Locations</th><th>Type</th><th>KYC</th><th>Trust</th><th>Delivery</th><th>Quality</th><th>Compliance</th><th>Financial</th><th>Composite</th><th>Tier</th><th>Risk</th></tr></thead><tbody>
-          ${verified.map(s => {
+      <div style="background:var(--card-bg);border-radius:12px;border:1px solid var(--border-color,rgba(0,0,0,0.06));padding:20px 24px;margin-bottom:1.5rem">
+        <h3 style="margin:0 0 14px;font-size:0.95rem;font-weight:700;display:flex;align-items:center;gap:6px">📊 Supplier Performance Matrix</h3>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:separate;border-spacing:0;font-size:0.82rem">
+          <thead><tr>
+            ${['Supplier','HQ','Locs','Type','KYC','Trust','Delivery','Quality','Compliance','Financial','Score','Tier','Risk'].map(h=>`<th style="padding:10px 10px;font-weight:600;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.4px;color:var(--text-secondary);border-bottom:1px solid var(--border-color,rgba(0,0,0,0.06));text-align:left;white-space:nowrap">${h}</th>`).join('')}
+          </tr></thead>
+          <tbody>${verified.map(s => {
         const tierColor = s.tier === 'Platinum' ? '#8b5cf6' : s.tier === 'Gold' ? '#f59e0b' : s.tier === 'Silver' ? '#94a3b8' : '#cd7f32';
         const locList = (s.locations || []).map(l => l.country).join(', ') || s.hqCountry;
-        return `<tr class="${s.risk === 'High' ? 'ops-alert-row' : ''}">
-              <td><strong>${s.name}</strong><div style="font-size:0.65rem;color:var(--text-secondary)">${s.id} · Since ${s.since}</div></td>
-              <td>${s.hqCountry}</td>
-              <td style="font-size:0.72rem" title="${locList}">${(s.locations || []).length} <span style="color:var(--text-muted)">(${locList})</span></td>
-              <td style="font-size:0.78rem">${s.type}</td>
-              <td><span class="sa-status-pill sa-pill-${s.kyc === 'verified' ? 'green' : 'orange'}">${s.kyc}</span></td>
-              ${[s.trust, s.delivery, s.quality, s.compliance, s.financial].map(v => `<td style="text-align:center;font-weight:600;color:${v >= 90 ? '#22c55e' : v >= 75 ? '#f59e0b' : '#ef4444'}">${Math.round(v)}</td>`).join('')}
-              <td style="text-align:center;font-weight:800;font-size:1.1rem;color:${s.composite >= 90 ? '#22c55e' : s.composite >= 75 ? '#f59e0b' : '#ef4444'}">${Math.round(s.composite)}</td>
-              <td><span style="font-weight:700;color:${tierColor}">⬤ ${s.tier}</span></td>
-              <td><span class="sa-status-pill sa-pill-${s.risk === 'Low' ? 'green' : s.risk === 'Medium' ? 'orange' : 'red'}">${s.risk}</span></td>
-            </tr>`;
-      }).join('')}
-        </tbody></table>
+        const _td = 'padding:10px 10px;border-bottom:1px solid var(--border-color,rgba(0,0,0,0.04));';
+        return `<tr style="transition:background 0.15s${s.risk==='High'?';background:rgba(239,68,68,0.02)':''}" onmouseover="this.style.background='rgba(13,148,136,0.02)'" onmouseout="this.style.background='${s.risk==='High'?'rgba(239,68,68,0.02)':''}'"><td style="${_td}"><span style="font-weight:600;color:var(--text-primary)">${s.name}</span><div style="font-size:0.62rem;color:var(--text-secondary)">${s.id}</div></td><td style="${_td}font-size:0.75rem">${s.hqCountry}</td><td style="${_td}font-size:0.72rem" title="${locList}">${(s.locations||[]).length}</td><td style="${_td}font-size:0.72rem">${s.type}</td><td style="${_td}"><span style="font-size:0.6rem;padding:2px 8px;border-radius:12px;font-weight:600;background:${s.kyc==='verified'?'rgba(34,197,94,0.08)':'rgba(245,158,11,0.08)'};color:${s.kyc==='verified'?'#22c55e':'#f59e0b'}">${s.kyc}</span></td>${[s.trust,s.delivery,s.quality,s.compliance,s.financial].map(v=>{const c=v>=90?'#22c55e':v>=75?'#f59e0b':'#ef4444';return`<td style="${_td}text-align:center"><span style="font-weight:600;color:${c}">${Math.round(v)}</span></td>`;}).join('')}<td style="${_td}text-align:center"><span style="font-weight:800;font-size:1.05rem;color:${s.composite>=90?'#22c55e':s.composite>=75?'#f59e0b':'#ef4444'}">${Math.round(s.composite)}</span></td><td style="${_td}"><span style="font-weight:700;color:${tierColor}">⬤ ${s.tier}</span></td><td style="${_td}"><span style="font-size:0.6rem;padding:2px 8px;border-radius:12px;font-weight:600;background:${s.risk==='Low'?'rgba(34,197,94,0.08)':s.risk==='Medium'?'rgba(245,158,11,0.08)':'rgba(239,68,68,0.08)'};color:${s.risk==='Low'?'#22c55e':s.risk==='Medium'?'#f59e0b':'#ef4444'}">${s.risk}</span></td></tr>`;
+      }).join('')}</tbody></table></div>
       </div>
 
-      <div class="sa-card">
-        <h3>📐 Scoring Methodology</h3>
-        <p style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:0.75rem">Composite Score = Σ(Dimension × Weight). Review cycle: quarterly. Auto-downgrade if composite falls below 70.</p>
-        <table class="sa-table"><thead><tr><th>Dimension</th><th>Weight</th><th>Factors</th><th>Data Source</th></tr></thead><tbody>
-          ${SCORING_DIMENSIONS.map(d => `<tr>
-            <td><strong>${d.dim}</strong></td><td style="font-weight:700">${d.weight}</td>
-            <td style="font-size:0.78rem">${d.factors}</td>
-            <td style="font-size:0.78rem">${d.source}</td>
-          </tr>`).join('')}
-        </tbody></table>
+      <div style="background:var(--card-bg);border-radius:12px;border:1px solid var(--border-color,rgba(0,0,0,0.06));padding:20px 24px">
+        <h3 style="margin:0 0 8px;font-size:0.95rem;font-weight:700;display:flex;align-items:center;gap:6px">📐 Scoring Methodology</h3>
+        <p style="font-size:0.78rem;color:var(--text-secondary);margin:0 0 14px">Composite Score = Σ(Dimension × Weight). Review cycle: quarterly. Auto-downgrade if composite falls below 70.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">
+          ${SCORING_DIMENSIONS.map(d => `
+            <div style="padding:14px 16px;border-radius:10px;background:rgba(13,148,136,0.03);border:1px solid rgba(13,148,136,0.06);transition:transform 0.15s"
+              onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <span style="font-weight:700;font-size:0.82rem;color:var(--text-primary)">${d.dim}</span>
+                <span style="font-size:0.72rem;font-weight:700;padding:2px 10px;border-radius:12px;background:rgba(13,148,136,0.08);color:#0d9488">${d.weight}</span>
+              </div>
+              <div style="font-size:0.72rem;color:var(--text-secondary);margin-bottom:4px">${d.factors}</div>
+              <div style="font-size:0.65rem;color:var(--text-secondary);opacity:0.7">📊 ${d.source}</div>
+            </div>
+          `).join('')}
+        </div>
       </div>
     </div>
 
@@ -182,7 +193,7 @@ export function renderPage() {
           </div>
         </div>
         <div style="display:flex;gap:10px;margin-top:20px">
-          <button onclick="window._submitOnboardSupplier()" style="flex:1;padding:11px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.9rem;transition:background 0.2s" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">Submit for KYC Review</button>
+          <button onclick="window._submitOnboardSupplier()" style="flex:1;padding:11px;background:#0d9488;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.9rem;transition:background 0.2s" onmouseover="this.style.background='#0f766e'" onmouseout="this.style.background='#0d9488'">Submit for KYC Review</button>
           <button onclick="window._closeOnboardSupplier()" style="flex:0.5;padding:11px;background:var(--bg-secondary, #f1f5f9);color:var(--text-primary, #1e293b);border:1px solid var(--border, #e2e8f0);border-radius:8px;cursor:pointer;font-weight:500;font-size:0.9rem">Cancel</button>
         </div>
       </div>
@@ -282,7 +293,7 @@ window._obCheckLive = () => {
         <div style="font-size:0.85rem;color:var(--text-primary)"><strong>${s.name}</strong> (${s.id}, ${s.tier} tier)</div>
         <div style="font-size:0.78rem;color:var(--text-secondary);margin-top:4px">📍 Locations: ${locs}</div>
         <div style="display:flex;gap:8px;margin-top:10px">
-          <button onclick="window._addLocationToExisting('${s.id}')" style="padding:7px 14px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:600">+ Add New Location</button>
+          <button onclick="window._addLocationToExisting('${s.id}')" style="padding:7px 14px;background:#0d9488;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.8rem;font-weight:600">+ Add New Location</button>
           <button onclick="window._confirmNewEntity()" style="padding:7px 14px;background:var(--bg-secondary, #f1f5f9);color:var(--text-primary);border:1px solid var(--border,#e2e8f0);border-radius:6px;cursor:pointer;font-size:0.8rem">Different Legal Entity</button>
         </div>`;
     } else if (match.type === 'fuzzy') {
@@ -395,6 +406,16 @@ window._doRejectSupplier = async (id, name) => {
   } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
 };
 
-function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
+function _statCard(iconHtml, label, value, sub, color) {
+  return `<div style="background:var(--card-bg);border-radius:12px;padding:18px 20px;border:1px solid var(--border-color,rgba(0,0,0,0.06));transition:transform 0.15s"
+    onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="width:36px;height:36px;border-radius:10px;background:${color}12;display:flex;align-items:center;justify-content:center;color:${color}">${iconHtml}</div>
+      <span style="font-size:0.6rem;padding:3px 8px;border-radius:12px;background:${color}08;color:${color};font-weight:600">${sub}</span>
+    </div>
+    <div style="font-size:1.5rem;font-weight:800;color:${color};line-height:1">${value}</div>
+    <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-secondary);font-weight:600;margin-top:4px">${label}</div>
+  </div>`;
+}
 
 // No auto-load at import — lazy init via renderPage()

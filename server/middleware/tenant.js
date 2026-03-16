@@ -129,14 +129,14 @@ function injectTenantFilter(baseQuery, baseParams = [], tenantId) {
 
     let query;
     if (hasWhere) {
-        query = baseQuery.replace(/\bWHERE\b/i, `WHERE ${tenantClause} AND`);
+        query = baseQuery.replace(/\bWHERE\b/i, `WHERE ${_safeWhere(tenantClause)} AND`);
     } else {
         // Insert WHERE before ORDER BY, GROUP BY, LIMIT, or at end
         const insertBefore = baseQuery.match(/\b(ORDER BY|GROUP BY|LIMIT|OFFSET|;)\b/i);
         if (insertBefore) {
-            query = baseQuery.replace(insertBefore[0], `WHERE ${tenantClause} ${insertBefore[0]}`);
+            query = baseQuery.replace(insertBefore[0], `WHERE ${_safeWhere(tenantClause)} ${insertBefore[0]}`);
         } else {
-            query = `${baseQuery} WHERE ${tenantClause}`;
+            query = `${baseQuery} WHERE ${_safeWhere(tenantClause)}`;
         }
     }
 

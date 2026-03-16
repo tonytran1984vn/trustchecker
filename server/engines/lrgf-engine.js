@@ -108,18 +108,18 @@ function ingestEvent(eventData, sourceMetadata = {}) {
     };
 
     // Immutable audit log
-    db.prepare(`
+    db.run(`
         INSERT INTO lrgf_events (
             id, event_type, source, org_id, idempotency_key,
             event_hash, device_fingerprint, geo_lat, geo_lng,
             ip_address, user_agent, payload, created_at, integrity_status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `, [
         record.id, record.event_type, record.source, record.org_id,
         record.idempotency_key, record.event_hash, record.device_fingerprint,
         record.geo_lat, record.geo_lng, record.ip_address, record.user_agent,
         record.payload, record.created_at, record.integrity_status
-    );
+    ]);
 
     return {
         event_id: eventId,
@@ -179,10 +179,10 @@ function validateRoute(eventId, routeData) {
     }
 
     // Log validation result
-    db.prepare(`
+    db.run(`
         INSERT INTO lrgf_validations (id, event_id, violation_count, violations, validated_at)
-        VALUES (?, ?, ?, ?, datetime('now'))
-    `).run(uuidv4(), eventId, violations.length, JSON.stringify(violations));
+        VALUES (?, ?, ?, ?, NOW())
+    `, [uuidv4(), eventId, violations.length, JSON.stringify(violations)]);
 
     return {
         event_id: eventId,
@@ -225,26 +225,26 @@ function scoreRisk(eventId, factors) {
     const ers = Math.min(100, Math.round(rawScore * 100));
 
     // Drift monitoring — compare to historical average
-    const historicalAvg = db.prepare(`
+    const historicalAvg = db.get(`
         SELECT AVG(ers_score) as avg_ers FROM lrgf_risk_scores
-        WHERE created_at > datetime('now', '-30 days')
-    `).get();
+        WHERE created_at > NOW() - INTERVAL '30 days'
+    `);
 
     const avgErs = historicalAvg?.avg_ers || 50;
     const driftIndex = Math.abs(ers - avgErs) / (avgErs || 1);
 
     // Audit artifact: score record with model version
     const scoreId = uuidv4();
-    db.prepare(`
+    db.run(`
         INSERT INTO lrgf_risk_scores (
             id, event_id, ers_score, model_version, weight_hash,
             factor_contributions, drift_index, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `).run(
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+    `, [
         scoreId, eventId, ers, MODEL_REGISTRY.current_version,
         MODEL_REGISTRY.weight_hash, JSON.stringify(contributions),
         driftIndex
-    );
+    ]);
 
     return {
         score_id: scoreId,
@@ -289,16 +289,16 @@ function decide(scoreResult) {
     const decisionId = uuidv4();
     const slaDeadline = sla ? new Date(Date.now() + parseSLA(sla)).toISOString() : null;
 
-    db.prepare(`
+    db.run(`
         INSERT INTO lrgf_decisions (
             id, score_id, event_id, ers_score, action, sla,
             sla_deadline, escalation_level, override_applied,
             decided_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))
-    `).run(
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())
+    `, [
         decisionId, scoreResult.score_id, scoreResult.event_id,
         ers, action, sla, slaDeadline, escalation_level
-    );
+    ]);
 
     return {
         decision_id: decisionId,
@@ -337,23 +337,23 @@ function overrideDecision(decisionId, overrideData, approvers) {
     const overrideId = uuidv4();
 
     // Immutable override record
-    db.prepare(`
+    db.run(`
         INSERT INTO lrgf_overrides (
             id, decision_id, override_type, justification,
             new_action, approver_1_id, approver_1_role,
             approver_2_id, approver_2_role, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `).run(
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    `, [
         overrideId, decisionId, overrideData.type || 'manual',
         overrideData.justification, overrideData.new_action,
         approvers[0].id, approvers[0].role,
         approvers[1].id, approvers[1].role
-    );
+    ]);
 
     // Update decision
-    db.prepare(`
+    db.run(`
         UPDATE lrgf_decisions SET override_applied = 1, action = ? WHERE id = ?
-    `).run(overrideData.new_action, decisionId);
+    `, [overrideData.new_action, decisionId]);
 
     return {
         override_id: overrideId,
@@ -401,19 +401,19 @@ function assignCase(decision) {
     // Check if Line 3 should be triggered
     const line3Trigger = checkLine3Trigger(decision);
 
-    db.prepare(`
+    db.run(`
         INSERT INTO lrgf_cases (
             id, decision_id, event_id, assigned_line, assigned_role,
             permissions, restrictions, sla, sla_deadline,
             line3_triggered, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', datetime('now'))
-    `).run(
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', NOW())
+    `, [
         caseId, decision.decision_id, decision.event_id,
         assignedLine, assignedRole,
         JSON.stringify(permissions), JSON.stringify(restrictions),
         decision.sla, decision.sla_deadline,
         line3Trigger ? 1 : 0
-    );
+    ]);
 
     return {
         case_id: caseId,
@@ -432,19 +432,19 @@ function assignCase(decision) {
  */
 function checkLine3Trigger(decision) {
     // Override frequency > 3 in 7 days
-    const recentOverrides = db.prepare(`
+    const recentOverrides = db.get(`
         SELECT COUNT(*) as c FROM lrgf_overrides
-        WHERE created_at > datetime('now', '-7 days')
-    `).get();
+        WHERE created_at > NOW() - INTERVAL '7 days'
+    `);
     if (recentOverrides?.c > 3) return true;
 
     // High-value lock
     if (decision.ers >= 90) return true;
 
     // Drift > 0.5
-    const drift = db.prepare(`
+    const drift = db.get(`
         SELECT drift_index FROM lrgf_risk_scores WHERE event_id = ?
-    `).get(decision.event_id);
+    `, [decision.event_id]);
     if (drift?.drift_index > 0.5) return true;
 
     return false;
@@ -457,13 +457,13 @@ function checkLine3Trigger(decision) {
 
 function freezeEvidence(caseId) {
     // Gather all evidence for this case
-    const caseData = db.prepare('SELECT * FROM lrgf_cases WHERE id = ?').get(caseId);
+    const caseData = db.get('SELECT * FROM lrgf_cases WHERE id = ?', [caseId]);
     if (!caseData) return { error: 'Case not found' };
 
-    const eventData = db.prepare('SELECT * FROM lrgf_events WHERE id = ?').get(caseData.event_id);
-    const scoreData = db.prepare('SELECT * FROM lrgf_risk_scores WHERE event_id = ?').get(caseData.event_id);
-    const decisionData = db.prepare('SELECT * FROM lrgf_decisions WHERE id = ?').get(caseData.decision_id);
-    const overrides = db.prepare('SELECT * FROM lrgf_overrides WHERE decision_id = ?').all(caseData.decision_id);
+    const eventData = db.get('SELECT * FROM lrgf_events WHERE id = ?', [caseData.event_id]);
+    const scoreData = db.get('SELECT * FROM lrgf_risk_scores WHERE event_id = ?', [caseData.event_id]);
+    const decisionData = db.get('SELECT * FROM lrgf_decisions WHERE id = ?', [caseData.decision_id]);
+    const overrides = db.all('SELECT * FROM lrgf_overrides WHERE decision_id = ?', [caseData.decision_id]);
 
     // Build evidence package
     const evidencePackage = {
@@ -497,20 +497,20 @@ function freezeEvidence(caseId) {
     };
 
     const chainId = uuidv4();
-    db.prepare(`
+    db.run(`
         INSERT INTO lrgf_evidence_chain (
             id, case_id, evidence_hash, prev_hash, evidence_package,
             timestamp_authority, frozen, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now'))
-    `).run(
+        ) VALUES (?, ?, ?, ?, ?, ?, 1, NOW())
+    `, [
         chainId, caseId, evidenceHash,
         prevHash?.evidence_hash || '0'.repeat(64),
         JSON.stringify(evidencePackage),
         JSON.stringify(timestamp)
-    );
+    ]);
 
     // Lock case — no modification allowed
-    db.prepare('UPDATE lrgf_cases SET status = ? WHERE id = ?').run('frozen', caseId);
+    db.run('UPDATE lrgf_cases SET status = ? WHERE id = ?', ['frozen', caseId]);
 
     // Trust Graph: Create snapshot at evidence freeze
     let graphSnapshot = null;
@@ -569,15 +569,15 @@ function anchorBlockchain(evidenceResult, triggerReason) {
         .update(JSON.stringify(anchorData))
         .digest('hex');
 
-    db.prepare(`
+    db.run(`
         INSERT INTO lrgf_blockchain_anchors (
             id, evidence_chain_id, anchor_hash, anchor_data,
             trigger_reason, anchored_at
-        ) VALUES (?, ?, ?, ?, ?, datetime('now'))
-    `).run(
+        ) VALUES (?, ?, ?, ?, ?, NOW())
+    `, [
         anchorId, evidenceResult.chain_id, anchorHash,
         JSON.stringify(anchorData), triggerReason
-    );
+    ]);
 
     return {
         anchor_id: anchorId,
@@ -597,40 +597,40 @@ function reportExposure(tenantId) {
     const period = '30 days';
 
     const metrics = {
-        anomaly_rate: db.prepare(`
+        anomaly_rate: db.get(`
             SELECT COUNT(*) as c FROM lrgf_decisions
-            WHERE action != 'LOG' AND decided_at > datetime('now', '-${period}')
-        `).get()?.c || 0,
+            WHERE action != 'LOG' AND decided_at > NOW() - CAST(period || ' days' AS INTERVAL)
+        `)?.c || 0,
 
-        total_events: db.prepare(`
+        total_events: db.get(`
             SELECT COUNT(*) as c FROM lrgf_events
-            WHERE created_at > datetime('now', '-${period}')
-        `).get()?.c || 0,
+            WHERE created_at > NOW() - CAST(period || ' days' AS INTERVAL)
+        `)?.c || 0,
 
-        lock_count: db.prepare(`
+        lock_count: db.get(`
             SELECT COUNT(*) as c FROM lrgf_decisions
-            WHERE action = 'LOCK_CEO_NOTIFY' AND decided_at > datetime('now', '-${period}')
-        `).get()?.c || 0,
+            WHERE action = 'LOCK_CEO_NOTIFY' AND decided_at > NOW() - CAST(period || ' days' AS INTERVAL)
+        `)?.c || 0,
 
-        override_count: db.prepare(`
+        override_count: db.get(`
             SELECT COUNT(*) as c FROM lrgf_overrides
-            WHERE created_at > datetime('now', '-${period}')
-        `).get()?.c || 0,
+            WHERE created_at > NOW() - CAST(period || ' days' AS INTERVAL)
+        `)?.c || 0,
 
-        avg_drift: db.prepare(`
+        avg_drift: db.get(`
             SELECT AVG(drift_index) as avg FROM lrgf_risk_scores
-            WHERE created_at > datetime('now', '-${period}')
-        `).get()?.avg || 0,
+            WHERE created_at > NOW() - CAST(period || ' days' AS INTERVAL)
+        `)?.avg || 0,
 
-        frozen_cases: db.prepare(`
+        frozen_cases: db.get(`
             SELECT COUNT(*) as c FROM lrgf_cases
-            WHERE status = 'frozen' AND created_at > datetime('now', '-${period}')
-        `).get()?.c || 0,
+            WHERE status = 'frozen' AND created_at > NOW() - CAST(period || ' days' AS INTERVAL)
+        `)?.c || 0,
 
-        sla_breaches: db.prepare(`
+        sla_breaches: db.get(`
             SELECT COUNT(*) as c FROM lrgf_cases
-            WHERE sla_deadline < datetime('now') AND status = 'open'
-        `).get()?.c || 0,
+            WHERE sla_deadline < NOW() AND status = 'open'
+        `)?.c || 0,
     };
 
     const totalEvents = metrics.total_events || 1;

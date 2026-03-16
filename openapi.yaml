@@ -1,0 +1,269 @@
+openapi: 3.0.3
+info:
+  title: TrustChecker Enterprise API
+  version: 1.0.0
+  description: |
+    Supply Chain Trust Intelligence Platform API.
+    TrustChecker provides trust scoring, supply chain operations,
+    compliance automation, and carbon tracking for enterprise customers.
+  contact:
+    name: TrustChecker Support
+    email: support@trustchecker.io
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://tonytran.work/api/v1
+    description: Production
+  - url: http://localhost:4000/api
+    description: Development
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+    Product:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        sku: { type: string }
+        origin_country: { type: string }
+        trust_score: { type: number }
+    Supplier:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        country: { type: string }
+        network_score: { type: number }
+    TrustDashboard:
+      type: object
+      properties:
+        trust_score: { type: number }
+        risk_level: { type: string }
+        factors: { type: object }
+    ScoreValidation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        entity_type: { type: string }
+        predicted_score: { type: number }
+        actual_outcome: { type: string }
+        accuracy_delta: { type: number }
+    AccuracyMetrics:
+      type: object
+      properties:
+        precision: { type: number }
+        recall: { type: number }
+        f1_score: { type: number }
+    NetworkIntelligence:
+      type: object
+      properties:
+        supplier_name: { type: string }
+        network_score: { type: number }
+        evaluating_organizations: { type: integer }
+        score_confidence: { type: string, enum: [high, medium, low, insufficient] }
+    SSOConfig:
+      type: object
+      properties:
+        provider: { type: string, enum: [saml, oauth2, oidc] }
+        issuer_url: { type: string }
+        sso_url: { type: string }
+        enabled: { type: boolean }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login with email/password
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        200: { description: JWT token returned }
+        401: { description: Invalid credentials }
+
+  /products:
+    get:
+      tags: [Products]
+      summary: List all products
+      responses:
+        200:
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products:
+                    type: array
+                    items: { $ref: "#/components/schemas/Product" }
+
+  /trust/dashboard:
+    get:
+      tags: [Trust Scoring]
+      summary: Get trust dashboard
+      responses:
+        200:
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrustDashboard" }
+
+  /score-validation/metrics:
+    get:
+      tags: [Score Validation]
+      summary: Get score accuracy metrics (precision, recall, F1)
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  metrics:
+                    type: array
+                    items: { $ref: "#/components/schemas/AccuracyMetrics" }
+
+  /score-validation/record:
+    post:
+      tags: [Score Validation]
+      summary: Record a trust score prediction for validation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entity_type, entity_id, predicted_score]
+              properties:
+                entity_type: { type: string }
+                entity_id: { type: string }
+                predicted_score: { type: number }
+                risk_level: { type: string }
+      responses:
+        200: { description: Prediction recorded }
+
+  /score-validation/{id}/validate:
+    post:
+      tags: [Score Validation]
+      summary: Validate a prediction against actual outcome
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [actual_outcome]
+              properties:
+                actual_outcome:
+                  type: string
+                  enum: [incident, no_incident, fraud, compliant]
+      responses:
+        200: { description: Validated }
+
+  /network/supplier/{name}:
+    get:
+      tags: [Network Intelligence]
+      summary: Get cross-org supplier intelligence (anonymized)
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  intelligence: { $ref: "#/components/schemas/NetworkIntelligence" }
+
+  /network/search:
+    get:
+      tags: [Network Intelligence]
+      summary: Search suppliers with network intelligence
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        200: { description: Supplier search results }
+
+  /network/benchmarks:
+    get:
+      tags: [Network Intelligence]
+      summary: Industry benchmarks by country
+      responses:
+        200: { description: Benchmark data }
+
+  /sso/config:
+    get:
+      tags: [SSO]
+      summary: Get SSO configuration
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  config: { $ref: "#/components/schemas/SSOConfig" }
+    put:
+      tags: [SSO]
+      summary: Configure SSO for organization
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SSOConfig" }
+      responses:
+        200: { description: SSO configured }
+
+  /sso/login/{orgSlug}:
+    get:
+      tags: [SSO]
+      summary: Initiate SSO login (redirects to IdP)
+      security: []
+      parameters:
+        - name: orgSlug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        302: { description: Redirect to IdP }
+
+  /healthz:
+    get:
+      tags: [System]
+      summary: Health check
+      security: []
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  version: { type: string }

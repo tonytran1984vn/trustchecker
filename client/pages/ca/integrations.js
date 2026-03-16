@@ -21,8 +21,8 @@ async function load() {
       s = sc.integrationsSchema; d = sc.integrations;
     } else {
       [s, d] = await Promise.all([
-        API.get('/tenant-integrations/schema').catch(() => ({})),
-        API.get('/tenant-integrations').catch(() => ({})),
+        API.get('/org-integrations/schema').catch(() => ({})),
+        API.get('/org-integrations').catch(() => ({})),
       ]);
     }
     schema = s || {};
@@ -36,7 +36,7 @@ async function load() {
 
 function refresh() {
   setTimeout(() => {
-    const el = document.getElementById('tenant-integrations-root');
+    const el = document.getElementById('org-integrations-root');
     if (el) el.innerHTML = renderContent();
   }, 50);
 }
@@ -149,7 +149,7 @@ function renderEditForm(cat, def, activeData) {
 }
 
 export function renderPage() {
-  return `<div id="tenant-integrations-root">${renderContent()}</div>`;
+  return `<div id="org-integrations-root">${renderContent()}</div>`;
 }
 
 // ─── Global handlers ────────────────────────────────────────
@@ -167,7 +167,7 @@ window._tiSave = async function (cat) {
     if (el) body[s.key] = el.value;
   }
   try {
-    await API.put('/tenant-integrations/' + cat, body);
+    await API.put('/org-integrations/' + cat, body);
     editing = null;
     data = null;
     await load();
@@ -179,7 +179,7 @@ window._tiSave = async function (cat) {
 window._tiClear = async function (cat) {
   if (!confirm(`Clear all ${schema[cat]?.label || cat} settings?`)) return;
   try {
-    await API.delete('/tenant-integrations/' + cat);
+    await API.delete('/org-integrations/' + cat);
     data = null;
     await load();
   } catch (e) { alert('Failed to clear'); }

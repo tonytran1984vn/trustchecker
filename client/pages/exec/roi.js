@@ -278,7 +278,7 @@ function formatMonth(m) {
 
 async function loadData() {
   try {
-    const r = await api.get('/tenant/owner/ccs/roi?detail=full');
+    const r = await api.get('/org-admin/owner/ccs/roi?detail=full');
     _data = r;
     rerender();
   } catch (e) { console.error('[ROI]', e); }

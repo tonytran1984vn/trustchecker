@@ -5,6 +5,8 @@
  */
 const express = require('express');
 const router = express.Router();
+const { parsePagination } = require('../middleware/pagination');
+
 const { authMiddleware } = require('../auth');
 
 router.use(authMiddleware);
@@ -93,6 +95,7 @@ router.get('/domain/:domain', (req, res) => {
 
 // ─── Governance Safeguards (Anti-Collusion) ─────────────────────
 const safeguards = require('../engines/governance-safeguards-engine');
+const { withTransaction } = require('../middleware/transaction');
 
 // Full safeguards overview
 router.get('/safeguards', (req, res) => {

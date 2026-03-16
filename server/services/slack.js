@@ -44,7 +44,7 @@ const TEMPLATES = {
             `*Violation:* ${data.violation || 'Threshold exceeded.'}`,
         ]),
     }),
-    new_tenant: (data) => ({
+    new_org: (data) => ({
         text: `🏢 New Tenant: ${data.org_name || 'Unknown'}`,
         blocks: alertBlocks('🏢 New Tenant Registered', '#3b82f6', [
             `*Organization:* ${data.org_name || 'Unknown'}`,

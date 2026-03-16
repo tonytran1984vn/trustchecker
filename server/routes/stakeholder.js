@@ -1,4 +1,6 @@
 const { safeError } = require('../utils/safe-error');
+const { checkAbuse } = require('../middleware/abuse-detection');
+const { withTransaction } = require('../middleware/transaction');
 /**
  * Multi-Stakeholder Trust Routes
  * Community ratings, certifications, and regulatory compliance
@@ -15,17 +17,18 @@ router.use(authMiddleware);
 // ─── GET /dashboard ─────────────────────────────────────────
 router.get('/dashboard', async (req, res) => {
     try {
-        const totalRatings = await db.get('SELECT COUNT(*) as count FROM ratings') || { count: 0 };
-        const avgRating = await db.get('SELECT COALESCE(AVG(score), 0) as avg FROM ratings') || { avg: 0 };
-        const totalCerts = await db.get('SELECT COUNT(*) as count FROM certifications') || { count: 0 };
-        const activeCerts = await db.get("SELECT COUNT(*) as count FROM certifications WHERE status = 'active'") || { count: 0 };
-        const expiredCerts = await db.get("SELECT COUNT(*) as count FROM certifications WHERE status = 'expired'") || { count: 0 };
-        const totalCompliance = await db.get('SELECT COUNT(*) as count FROM compliance_records') || { count: 0 };
-        const compliant = await db.get("SELECT COUNT(*) as count FROM compliance_records WHERE status = 'compliant'") || { count: 0 };
-        const nonCompliant = await db.get("SELECT COUNT(*) as count FROM compliance_records WHERE status = 'non_compliant'") || { count: 0 };
+        const orgId = req.user.orgId;
+        const totalRatings = await db.get('SELECT COUNT(*) as count FROM ratings WHERE org_id = $1', [orgId]) || { count: 0 };
+        const avgRating = await db.get('SELECT COALESCE(AVG(score), 0) as avg FROM ratings WHERE org_id = $1', [orgId]) || { avg: 0 };
+        const totalCerts = await db.get('SELECT COUNT(*) as count FROM certifications WHERE org_id = $1', [orgId]) || { count: 0 };
+        const activeCerts = await db.get("SELECT COUNT(*) as count FROM certifications WHERE org_id = $1 AND status = 'active'", [orgId]) || { count: 0 };
+        const expiredCerts = await db.get("SELECT COUNT(*) as count FROM certifications WHERE org_id = $1 AND status = 'expired'", [orgId]) || { count: 0 };
+        const totalCompliance = await db.get('SELECT COUNT(*) as count FROM compliance_records WHERE org_id = $1', [orgId]) || { count: 0 };
+        const compliant = await db.get("SELECT COUNT(*) as count FROM compliance_records WHERE org_id = $1 AND status = 'compliant'", [orgId]) || { count: 0 };
+        const nonCompliant = await db.get("SELECT COUNT(*) as count FROM compliance_records WHERE org_id = $1 AND status = 'non_compliant'", [orgId]) || { count: 0 };
 
         // Rating distribution
-        const dist = await db.all('SELECT score, COUNT(*) as count FROM ratings GROUP BY score ORDER BY score');
+        const dist = await db.all('SELECT score, COUNT(*) as count FROM ratings WHERE org_id = $1 GROUP BY score ORDER BY score LIMIT 1000', [orgId]);
         const distribution = {};
         for (let i = 1; i <= 5; i++) {
             const found = dist.find(d => d.score === i);
@@ -35,10 +38,10 @@ router.get('/dashboard', async (req, res) => {
         // Top-rated entities
         const topRated = await db.all(`
       SELECT entity_type, entity_id, AVG(score) as avg_score, COUNT(*) as num_ratings
-      FROM ratings GROUP BY entity_type, entity_id
-      HAVING num_ratings >= 2
+      FROM ratings WHERE org_id = $1 GROUP BY entity_type, entity_id
+      HAVING COUNT(*) >= 2
       ORDER BY avg_score DESC LIMIT 5
-    `);
+    `, [orgId]);
 
         res.json({
             ratings: { total: totalRatings.count, average: Math.round(avgRating.avg * 10) / 10, distribution },
@@ -59,6 +62,15 @@ router.get('/dashboard', async (req, res) => {
 // ─── RATINGS ────────────────────────────────────────────────
 router.post('/ratings', async (req, res) => {
     try {
+        // v9.5.0: Rate limit — max 20 ratings per user per day
+        const todayRatings = await db.get(
+            "SELECT COUNT(*) as c FROM ratings WHERE user_id = ? AND created_at > NOW() - INTERVAL '1 day'",
+            [req.user.id]
+        );
+        if (todayRatings?.c >= 20) {
+            return res.status(429).json({ error: 'Rate limit: maximum 20 ratings per day' });
+        }
+        
         const { entity_type, entity_id, score, comment } = req.body;
         if (!entity_type || !entity_id || !score) return res.status(400).json({ error: 'entity_type, entity_id, score required' });
         if (score < 1 || score > 5) return res.status(400).json({ error: 'Score must be 1-5' });
@@ -76,10 +88,10 @@ router.post('/ratings', async (req, res) => {
         }
 
         const id = uuidv4();
-        await db.prepare(`
+        await db.run(`
       INSERT INTO ratings (id, entity_type, entity_id, user_id, score, comment)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, entity_type, entity_id, req.user.id, score, comment || '');
+    `, [id, entity_type, entity_id, req.user.id, score, comment || '']);
 
         res.json({ rating_id: id });
     } catch (e) {
@@ -117,18 +129,56 @@ router.post('/certifications', requirePermission('stakeholder:manage'), async (r
         const { entity_type, entity_id, cert_name, cert_body, cert_number, issued_date, expiry_date } = req.body;
         if (!entity_id || !cert_name) return res.status(400).json({ error: 'entity_id and cert_name required' });
 
+        // v9.5.0: Certification verification — require cert_number + known body validation
+        const KNOWN_CERT_BODIES = new Set([
+            'ISO', 'BSI', 'TUV', 'SGS', 'Bureau Veritas', 'Intertek', 'DNV', 'Lloyds Register',
+            'UL', 'CSA', 'DEKRA', 'RINA', 'BRC', 'FSSC', 'SQF', 'IFS', 'GFSI',
+            'PCI SSC', 'SOC', 'AICPA', 'ISAE', 'NIST', 'FedRAMP', 'HITRUST'
+        ]);
+        
+        if (!cert_number || cert_number.trim() === '') {
+            return res.status(400).json({ error: 'Certificate number is required for compliance verification' });
+        }
+        if (cert_number.trim().length < 5) {
+            return res.status(400).json({ error: 'Certificate number must be at least 5 characters' });
+        }
+        
+        // Rate limit: max 5 certs per entity per org
+        const existingCount = await db.get(
+            'SELECT COUNT(*) as c FROM certifications WHERE entity_id = ? AND org_id = ?',
+            [entity_id, req.user.orgId]
+        );
+        if (existingCount?.c >= 10) {
+            return res.status(429).json({ error: 'Maximum 10 certifications per entity' });
+        }
+        
+        // Check for duplicate cert
+        const dupeCert = await db.get(
+            'SELECT id FROM certifications WHERE cert_name = ? AND cert_number = ? AND entity_id = ?',
+            [cert_name, cert_number, entity_id]
+        );
+        if (dupeCert) {
+            return res.status(409).json({ error: 'Duplicate certification already exists' });
+        }
+
         const id = uuidv4();
         const docHash = require('crypto').createHash('sha256')
             .update(`${cert_name}|${cert_number}|${entity_id}`).digest('hex').substring(0, 16);
 
-        await db.prepare(`
-      INSERT INTO certifications (id, entity_type, entity_id, cert_name, cert_body, cert_number,
-        issued_date, expiry_date, document_hash, added_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, entity_type || 'product', entity_id, cert_name, cert_body || '', cert_number || '',
-            issued_date || new Date().toISOString().split('T')[0], expiry_date || '', docHash, req.user.id);
+        // New certs start as 'pending_verification' — require admin/auditor to verify
+        const certBody = cert_body || '';
+        const isKnownBody = KNOWN_CERT_BODIES.has(certBody);
+        const initialStatus = isKnownBody ? 'active' : 'pending_verification';
 
-        res.json({ certification_id: id, document_hash: docHash });
+        await db.run(`
+      INSERT INTO certifications (id, entity_type, entity_id, cert_name, cert_body, cert_number,
+        issued_date, expiry_date, document_hash, added_by, org_id, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, entity_type || 'product', entity_id, cert_name, certBody, cert_number,
+            issued_date || new Date().toISOString().split('T')[0], expiry_date || '', docHash, req.user.id, req.user.orgId, initialStatus]);
+
+        res.json({ certification_id: id, document_hash: docHash, status: initialStatus,
+            warning: !isKnownBody ? 'Certification from unknown body — requires admin verification' : undefined });
     } catch (e) {
         safeError(res, 'Operation failed', e);
     }
@@ -137,11 +187,12 @@ router.post('/certifications', requirePermission('stakeholder:manage'), async (r
 router.get('/certifications', async (req, res) => {
     try {
         const { entity_type, entity_id } = req.query;
-        let sql = 'SELECT * FROM certifications';
-        const params = [];
+        const orgId = req.user.orgId;
+        let sql = 'SELECT * FROM certifications WHERE org_id = $1';
+        const params = [orgId];
 
         if (entity_type && entity_id) {
-            sql += ' WHERE entity_type = ? AND entity_id = ?';
+            sql += ' AND entity_type = $2 AND entity_id = $3';
             params.push(entity_type, entity_id);
         }
         sql += ' ORDER BY created_at DESC';
@@ -159,11 +210,11 @@ router.post('/compliance', requirePermission('compliance:manage'), async (req, r
         if (!entity_id || !framework) return res.status(400).json({ error: 'entity_id and framework required' });
 
         const id = uuidv4();
-        await db.prepare(`
-      INSERT INTO compliance_records (id, entity_type, entity_id, framework, requirement, status, evidence, checked_by, next_review)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, entity_type || 'product', entity_id, framework, requirement || '',
-            status || 'compliant', evidence || '', req.user.id, next_review || '');
+        await db.run(`
+      INSERT INTO compliance_records (id, entity_type, entity_id, framework, requirement, status, evidence, checked_by, next_review, org_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, entity_type || 'product', entity_id, framework, requirement || '',
+            status || 'compliant', evidence || '', req.user.id, next_review || '', req.user.orgId]);
 
         res.json({ record_id: id });
     } catch (e) {
@@ -174,11 +225,12 @@ router.post('/compliance', requirePermission('compliance:manage'), async (req, r
 router.get('/compliance', async (req, res) => {
     try {
         const { entity_type, entity_id } = req.query;
-        let sql = 'SELECT * FROM compliance_records';
-        const params = [];
+        const orgId = req.user.orgId;
+        let sql = 'SELECT * FROM compliance_records WHERE org_id = $1';
+        const params = [orgId];
 
         if (entity_type && entity_id) {
-            sql += ' WHERE entity_type = ? AND entity_id = ?';
+            sql += ' AND entity_type = $2 AND entity_id = $3';
             params.push(entity_type, entity_id);
         }
         sql += ' ORDER BY created_at DESC';
@@ -196,10 +248,10 @@ router.post('/disputes', async (req, res) => {
         if (!entity_type || !entity_id || !reason) return res.status(400).json({ error: 'entity_type, entity_id, reason required' });
 
         const id = uuidv4();
-        await db.prepare(`
+        await db.run(`
       INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details)
       VALUES (?, ?, 'DISPUTE_OPENED', ?, ?, ?)
-    `).run(id, req.user.id, entity_type, entity_id, JSON.stringify({ reason, description: description || '', status: 'open' }));
+    `, [id, req.user.id, entity_type, entity_id, JSON.stringify({ reason, description: description || '', status: 'open' })]);
 
         res.json({ dispute_id: id, status: 'open', message: 'Dispute filed successfully' });
     } catch (e) {
@@ -231,7 +283,7 @@ router.get('/disputes', async (req, res) => {
 router.put('/disputes/:id/resolve', requirePermission('stakeholder:manage'), async (req, res) => {
     try {
         const { resolution, outcome } = req.body;
-        const dispute = await db.get(`SELECT * FROM audit_log WHERE id = ? AND action = 'DISPUTE_OPENED'`, [req.params.id]);
+        const dispute = await db.get(`SELECT * FROM audit_log WHERE id = ? AND action = 'DISPUTE_OPENED' LIMIT 1000`, [req.params.id]);
         if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
 
         const existing = JSON.parse(dispute.details || '{}');
@@ -241,7 +293,7 @@ router.put('/disputes/:id/resolve', requirePermission('stakeholder:manage'), asy
         existing.resolved_by = req.user.id;
         existing.resolved_at = new Date().toISOString();
 
-        await db.prepare('UPDATE audit_log SET details = ? WHERE id = ?').run(JSON.stringify(existing), req.params.id);
+        await db.run('UPDATE audit_log SET details = ? WHERE id = ?', [JSON.stringify(existing), req.params.id]);
 
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
             .run(uuidv4(), req.user.id, 'DISPUTE_RESOLVED', dispute.entity_type, dispute.entity_id,
@@ -333,31 +385,32 @@ router.post('/certifications/:id/verify', async (req, res) => {
 // ─── COMPLIANCE ALERTS ──────────────────────────────────────
 router.get('/compliance/alerts', async (req, res) => {
     try {
+        const orgId = req.user.orgId;
         // Expiring within 30 days
         const expiringSoon = await db.all(`
       SELECT * FROM compliance_records
-      WHERE next_review != '' AND next_review <= date('now', '+30 days') AND status = 'compliant'
+      WHERE org_id = $1 AND next_review != '' AND next_review <= (NOW() + interval '30 days')::text AND status = 'compliant'
       ORDER BY next_review ASC
-    `);
+    `, [orgId]);
 
         // Overdue reviews
         const overdue = await db.all(`
       SELECT * FROM compliance_records
-      WHERE next_review != '' AND next_review < date('now') AND status = 'compliant'
+      WHERE org_id = $1 AND next_review != '' AND next_review < NOW()::text AND status = 'compliant'
       ORDER BY next_review ASC
-    `);
+    `, [orgId]);
 
         // Non-compliant items
         const nonCompliant = await db.all(`
-      SELECT * FROM compliance_records WHERE status = 'non_compliant'
+      SELECT * FROM compliance_records WHERE org_id = $1 AND status = 'non_compliant'
       ORDER BY created_at DESC
-    `);
+    `, [orgId]);
 
         // Expired certifications
         const expiredCerts = await db.all(`
       SELECT * FROM certifications
-      WHERE expiry_date != '' AND expiry_date < date('now') AND status = 'active'
-    `);
+      WHERE org_id = $1 AND expiry_date != '' AND expiry_date < NOW()::text AND status = 'active'
+    `, [orgId]);
 
         // Auto-update expired certs
         if (expiredCerts.length > 0) {

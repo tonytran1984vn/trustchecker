@@ -323,6 +323,7 @@ router.get('/platform/isolation', requirePermission('admin:manage'), (req, res) 
 // ═══════════════════════════════════════════════════════════════════
 
 const carbonReg = require('../engines/carbon-registry-engine');
+const { withTransaction } = require('../middleware/transaction');
 
 router.get('/carbon-registry/jurisdictions', (req, res) => { res.json(carbonReg.getJurisdictions()); });
 router.get('/carbon-registry/protocol', (req, res) => { res.json(carbonReg.getProtocol()); });

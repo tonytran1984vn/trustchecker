@@ -265,18 +265,18 @@ class ScmAI {
         const incoming = {};
         nodeIds.forEach(id => { outgoing[id] = []; incoming[id] = []; });
 
-        edges.forEach(e => {
-            if (outgoing[e.from_node_id]) outgoing[e.from_node_id].push(e.to_node_id);
-            if (incoming[e.to_node_id]) incoming[e.to_node_id].push(e.from_node_id);
+        (edges || []).forEach(e => {
+            if (e && e.from_node_id && outgoing[e.from_node_id]) outgoing[e.from_node_id].push(e.to_node_id);
+            if (e && e.to_node_id && incoming[e.to_node_id]) incoming[e.to_node_id].push(e.from_node_id);
         });
 
         for (let iter = 0; iter < iterations; iter++) {
             const newRanks = {};
             nodeIds.forEach(id => {
                 let incomingRank = 0;
-                incoming[id].forEach(fromId => {
-                    const outDegree = outgoing[fromId].length || 1;
-                    incomingRank += ranks[fromId] / outDegree;
+                (incoming[id] || []).forEach(fromId => {
+                    const outDegree = (outgoing[fromId] || []).length || 1;
+                    incomingRank += (ranks[fromId] || 0) / outDegree;
                 });
                 newRanks[id] = (1 - damping) / n + damping * incomingRank;
             });

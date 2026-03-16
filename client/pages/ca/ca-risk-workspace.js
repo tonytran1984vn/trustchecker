@@ -20,9 +20,9 @@ if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 30000
     cache._loading = true;
     window._caRiskReady = Promise.allSettled([
         API.get('/ops/incidents').catch(() => ({ incidents: [] })),
-        API.get('/scm/model/models').catch(() => ({ models: [] })),
+        API.get('/scm/risk-model/models').catch(() => ({ models: [] })),
         API.get('/scm/risk/alerts?limit=50').catch(() => ({ alerts: [] })),
-        API.get('/scm/model/rules-config').catch(() => ({ grouped: {} })),
+        API.get('/scm/risk-model/rules-config').catch(() => ({ grouped: {} })),
         API.get('/products?limit=1&offset=0').catch(() => ({ total: 0 })),
         API.get('/scm/events?limit=100').catch(() => ({ events: [] })),
         API.get('/anomaly?limit=100').catch(() => ({ anomalies: [] })),

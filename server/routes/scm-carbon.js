@@ -3,7 +3,7 @@
  * Product carbon passports, partner ESG leaderboard, GRI reporting,
  * Risk factor mapping, regulatory alignment, maturity assessment
  * 
- * ★ Multi-tenant: all data queries scoped by req.tenantId (org_id)
+ * ★ Multi-org: all data queries scoped by req.orgId (org_id)
  * Endpoints: 11 (5 original + 6 new v3.0)
  */
 const express = require('express');
@@ -17,10 +17,11 @@ const { cacheMiddleware } = require('../cache');
 
 router.use(authMiddleware);
 
-// ─── Helper: tenant-scoped data fetchers with optional date range ────────────
+// ─── Helper: org-scoped data fetchers with optional date range ────────────
 // Data cache (60s TTL) — prevents duplicate DB calls when 9 endpoints fire simultaneously
 const _dataCache = new Map();
-function cached(key, ttlSec, fn) {
+function cached(key, ttlSec, fn, orgId) {
+    key = (orgId || "global") + ":" + key;
     const entry = _dataCache.get(key);
     if (entry && Date.now() - entry.ts < ttlSec * 1000) return Promise.resolve(entry.data);
     return fn().then(data => { _dataCache.set(key, { data, ts: Date.now() }); return data; });
@@ -78,7 +79,7 @@ async function _getOrgEvents(orgId, from, to) {
                 q2 += dateClause('e.created_at', from, to, p2);
                 return db.prepare(q2).all(...p2);
             })
-            .catch(() => db.prepare('SELECT * FROM supply_chain_events').all());
+            .catch(() => []);
     }
     const params = [];
     let q = 'SELECT * FROM supply_chain_events WHERE 1=1';
@@ -91,10 +92,10 @@ function getOrgEvents(orgId, from, to) {
 
 async function _getOrgPartners(orgId) {
     if (orgId) {
-        return db.prepare('SELECT * FROM partners WHERE org_id = ?').all(orgId)
-            .catch(() => db.prepare('SELECT * FROM partners').all());
+        return db.all('SELECT * FROM partners WHERE org_id = ?', [orgId])
+            .catch(() => []);
     }
-    return db.prepare('SELECT * FROM partners').all();
+    return db.all('SELECT * FROM partners');
 }
 function getOrgPartners(orgId) {
     return cached(`partners:${orgId}`, 60, () => _getOrgPartners(orgId));
@@ -102,13 +103,12 @@ function getOrgPartners(orgId) {
 
 async function _getOrgViolations(orgId) {
     if (orgId) {
-        return db.prepare(`
+        return db.all(`
             SELECT v.* FROM sla_violations v
-            INNER JOIN partners p ON v.partner_id = p.id
-            WHERE p.org_id = ?
-        `).all(orgId).catch(() => db.prepare('SELECT * FROM sla_violations').all());
+            WHERE v.org_id = ?
+        `, [orgId]).catch(() => []);
     }
-    return db.prepare('SELECT * FROM sla_violations').all();
+    return db.all('SELECT * FROM sla_violations');
 }
 function getOrgViolations(orgId) {
     return cached(`violations:${orgId}`, 60, () => _getOrgViolations(orgId));
@@ -119,7 +119,7 @@ function getOrgViolations(orgId) {
 // ═══════════════════════════════════════════════════════════════════════════════
 router.get('/bundle', cacheMiddleware(180), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const { from, to } = req.query;
 
         // Fetch ALL data in parallel (each has 60s data cache)
@@ -129,7 +129,7 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
             getOrgEvents(orgId, from, to),
             getOrgPartners(orgId),
             getOrgViolations(orgId),
-            db.prepare('SELECT * FROM certifications').all().catch(() => [])
+            orgId ? db.all('SELECT * FROM certifications WHERE org_id = ?', [orgId]).catch(() => []) : db.all('SELECT * FROM certifications').catch(() => [])
         ]);
 
         // Run ALL engine calculations in parallel with shared data
@@ -171,7 +171,7 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
                 { level: 2, name: 'Developing', description: 'Active data collection across Scope 1 & 2, initial reporting', target: 'Automated reporting' },
                 { level: 3, name: 'Intermediate', description: 'Offset recording, risk integration, and GRI-aligned reporting', target: 'Scope 3 screening' },
                 { level: 4, name: 'Advanced', description: 'Full Scope 1-3 coverage, partner ESG scoring, materiality assessment', target: 'SBTi alignment' },
-                { level: 5, name: 'Leader', description: 'Net zero pathway with cross-tenant benchmarks, blockchain-anchored verification', target: 'Net Zero by 2030' },
+                { level: 5, name: 'Leader', description: 'Net zero pathway with cross-org benchmarks, blockchain-anchored verification', target: 'Net Zero by 2030' },
             ],
             features_detected: features, products_count: productCount, offsets_count: offsetCount, partners_count: partnerCount,
         };
@@ -276,18 +276,18 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
 // ─── GET /api/scm/carbon/footprint/:productId — Product carbon passport ─────
 router.get('/footprint/:productId', async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const product = orgId
-            ? await db.prepare('SELECT * FROM products WHERE id = ? AND org_id = ?').get(req.params.productId, orgId)
-            : await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.productId);
+            ? await db.get('SELECT * FROM products WHERE id = ? AND org_id = ?', [req.params.productId, orgId])
+            : await db.get('SELECT * FROM products WHERE id = ?', [req.params.productId]);
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
-        const events = await db.prepare('SELECT * FROM supply_chain_events WHERE product_id = ?').all(product.id);
-        const shipments = await db.prepare(`
+        const events = await db.all('SELECT * FROM supply_chain_events WHERE product_id = ?', [product.id]);
+        const shipments = await db.all(`
       SELECT s.* FROM shipments s
       INNER JOIN batches b ON s.batch_id = b.id
       WHERE b.product_id = ?
-    `).all(product.id);
+    `, [product.id]);
 
         const passport = await engineClient.carbonFootprint(product, shipments, events);
 
@@ -301,7 +301,7 @@ router.get('/footprint/:productId', async (req, res) => {
 // ─── GET /api/scm/carbon/scope — Scope 1/2/3 breakdown ─────────────────────
 router.get('/scope', cacheMiddleware(120), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const { from, to } = req.query;
         const [products, shipments, events] = await Promise.all([
             getOrgProducts(orgId, from, to),
@@ -436,7 +436,7 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
 // ─── GET /api/scm/carbon/leaderboard — Partner ESG leaderboard ──────────────
 router.get('/leaderboard', cacheMiddleware(120), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const [partners, shipments, violations] = await Promise.all([
             getOrgPartners(orgId),
             getOrgShipments(orgId),
@@ -467,7 +467,7 @@ router.get('/leaderboard', cacheMiddleware(120), async (req, res) => {
 // ─── GET /api/scm/carbon/report — GRI-format ESG report ─────────────────────
 router.get('/report', cacheMiddleware(180), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const { from, to } = req.query;
         const [products, shipments, events, partners, violations, certifications] = await Promise.all([
             getOrgProducts(orgId, from, to),
@@ -475,7 +475,7 @@ router.get('/report', cacheMiddleware(180), async (req, res) => {
             getOrgEvents(orgId, from, to),
             getOrgPartners(orgId),
             getOrgViolations(orgId),
-            db.prepare('SELECT * FROM certifications').all().catch(() => [])
+            orgId ? db.all('SELECT * FROM certifications WHERE org_id = ?', [orgId]).catch(() => []) : db.all('SELECT * FROM certifications').catch(() => [])
         ]);
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
@@ -527,17 +527,17 @@ router.post('/offset', requirePermission('esg:manage'), async (req, res) => {
         const id = require('uuid').v4();
         const hash = require('crypto').createHash('sha256').update(JSON.stringify({ offset_amount, offset_type, certificate_id, provider })).digest('hex');
 
-        await db.prepare(`
+        await db.run(`
       INSERT INTO evidence_items (id, title, description, sha256_hash, entity_type, entity_id, uploaded_by, verification_status, tags)
       VALUES (?, ?, ?, ?, 'carbon_offset', ?, ?, 'anchored', '["carbon", "esg", "offset"]')
-    `).run(
+    `, [
             id,
             `Carbon Offset: ${offset_amount} kgCO2e`,
             `Type: ${offset_type || 'VER'}, Provider: ${provider || 'Self'}, Certificate: ${certificate_id || 'N/A'}, Cost: $${cost || 0}`,
             hash,
             id,
             req.user.id
-        );
+        ]);
 
         res.status(201).json({
             id,
@@ -563,7 +563,7 @@ router.post('/offset', requirePermission('esg:manage'), async (req, res) => {
 // ─── GET /api/scm/carbon/risk-factors — Carbon → Risk factor mapping ────────
 router.get('/risk-factors', cacheMiddleware(120), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
         const totalCarbon = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
         const avgCarbon = products.length > 0 ? totalCarbon / products.length : 0;
@@ -652,7 +652,7 @@ router.get('/risk-factors', cacheMiddleware(120), async (req, res) => {
 // ─── GET /api/scm/carbon/regulatory — Regulatory alignment status ───────────
 router.get('/regulatory', cacheMiddleware(120), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
         const totalCarbon = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
         const hasData = totalCarbon > 0;
@@ -730,7 +730,7 @@ router.get('/regulatory', cacheMiddleware(120), async (req, res) => {
 // ─── GET /api/scm/carbon/maturity — Carbon maturity level ───────────────────
 router.get('/maturity', async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const productQ = orgId
             ? await db.get('SELECT COUNT(*) as c FROM products WHERE org_id = ?', [orgId])
             : await db.get('SELECT COUNT(*) as c FROM products');
@@ -776,7 +776,7 @@ router.get('/maturity', async (req, res) => {
                 { level: 2, name: 'Developing', description: 'Active data collection across Scope 1 & 2, initial reporting', target: 'Automated reporting' },
                 { level: 3, name: 'Intermediate', description: 'Offset recording, risk integration, and GRI-aligned reporting', target: 'Scope 3 screening' },
                 { level: 4, name: 'Advanced', description: 'Full Scope 1-3 coverage, partner ESG scoring, materiality assessment', target: 'SBTi alignment' },
-                { level: 5, name: 'Leader', description: 'Net zero pathway with cross-tenant benchmarks, blockchain-anchored verification', target: 'Net Zero by 2030' },
+                { level: 5, name: 'Leader', description: 'Net zero pathway with cross-org benchmarks, blockchain-anchored verification', target: 'Net Zero by 2030' },
             ],
             features_detected: features,
             products_count: productCount,
@@ -816,10 +816,10 @@ router.get('/role-matrix', cacheMiddleware(300), (req, res) => {
     }
 });
 
-// ─── GET /api/scm/carbon/benchmark — Cross-tenant industry benchmark ────────
+// ─── GET /api/scm/carbon/benchmark — Cross-org industry benchmark ────────
 router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const [products, shipments, events] = await Promise.all([
             getOrgProducts(orgId),
             getOrgShipments(orgId),
@@ -884,7 +884,7 @@ router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
 // ─── GET /api/scm/carbon/scope3-materiality — 15-category screening matrix ──
 router.get('/scope3-materiality', cacheMiddleware(180), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const [products, shipments, events, partners] = await Promise.all([
             getOrgProducts(orgId),
             getOrgShipments(orgId),
@@ -907,7 +907,7 @@ router.get('/scope3-materiality', cacheMiddleware(180), async (req, res) => {
 // ─── GET /api/scm/carbon/net-position — Gross vs Net emissions ──────────────
 router.get('/net-position', cacheMiddleware(60), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
 
         // Calculate gross emissions from products
@@ -971,7 +971,7 @@ router.post('/offset/retire', requirePermission('esg:manage'), async (req, res) 
         // Fetch the credit
         let credit;
         try {
-            credit = await db.prepare('SELECT * FROM carbon_credits WHERE id = ? OR credit_id = ?').get(credit_id, credit_id);
+            credit = await db.get('SELECT * FROM carbon_credits WHERE id = ? OR credit_id = ?', [credit_id, credit_id]);
         } catch (_) {
             return res.status(404).json({ error: 'Credit not found or carbon_credits table does not exist' });
         }
@@ -1003,12 +1003,12 @@ router.post('/offset/retire', requirePermission('esg:manage'), async (req, res) 
         // Audit log
         const { v4: uuidv4 } = require('uuid');
         try {
-            await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
-                VALUES (?, ?, 'carbon_credit_retired', 'carbon_credit', ?, ?, datetime('now'))
-            `).run(
+            await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
+                VALUES (?, ?, 'carbon_credit_retired', 'carbon_credit', ?, ?, NOW())
+            `, [
                 uuidv4(), req.user?.id || 'system', credit.id,
                 JSON.stringify({ quantity_tCO2e: qty, credit_id: credit_id, verification })
-            );
+            ]);
         } catch (_) { }
 
         res.json({
@@ -1061,12 +1061,13 @@ router.put('/factors/:id', requirePermission('esg:manage'), async (req, res) => 
 
         // Audit log
         const { v4: uuidv4 } = require('uuid');
-        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
-            VALUES (?, ?, 'emission_factor_updated', 'emission_factor', ?, ?, datetime('now'))
-        `).run(
+const { withTransaction } = require('../middleware/transaction');
+        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
+            VALUES (?, ?, 'emission_factor_updated', 'emission_factor', ?, ?, NOW())
+        `, [
             uuidv4(), req.user?.id, result.id,
             JSON.stringify({ factor_key: result.factor_key, old_value: result.old_value, new_value: result.new_value, version: result.version })
-        );
+        ]);
 
         res.json({
             message: 'Factor updated with version tracking',
@@ -1102,7 +1103,7 @@ router.get('/factors/history', async (req, res) => {
 // ─── GET /scope3-deep — Scope 3 deep dive with per-category breakdown ────────
 router.get('/scope3-deep', cacheMiddleware(180), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
         // Build per-category Scope 3 breakdown from product footprints
         const catMap = {};
@@ -1142,7 +1143,7 @@ router.get('/scope3-deep', cacheMiddleware(180), async (req, res) => {
 // ─── GET /marketplace — Carbon credit marketplace listings ───────────────────
 router.get('/marketplace', cacheMiddleware(120), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         // Generate marketplace listings from available offset data
         const offsets = await db.all(
             `SELECT * FROM carbon_offsets WHERE org_id = ? ORDER BY created_at DESC LIMIT 20`,
@@ -1178,7 +1179,7 @@ router.get('/marketplace', cacheMiddleware(120), async (req, res) => {
 // ─── GET /report/csrd — CSRD / ESRS E1 compliance report ───────────────────
 router.get('/report/csrd', cacheMiddleware(180), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const products = await getOrgProducts(orgId);
         const totalKg = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
         const totalT = +(totalKg / 1000).toFixed(2);
@@ -1206,10 +1207,10 @@ router.get('/report/csrd', cacheMiddleware(180), async (req, res) => {
     }
 });
 
-// ─── GET /benchmark/cross-tenant — Cross-tenant carbon benchmark ─────────────
-router.get('/benchmark/cross-tenant', cacheMiddleware(300), async (req, res) => {
+// ─── GET /benchmark/cross-org — Cross-org carbon benchmark ─────────────
+router.get('/benchmark/cross-org', cacheMiddleware(300), async (req, res) => {
     try {
-        const orgId = req.tenantId || req.user?.orgId || req.user?.org_id || null;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         // Get current org's carbon intensity
         const products = await getOrgProducts(orgId);
         const totalKg = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
@@ -1222,7 +1223,7 @@ router.get('/benchmark/cross-tenant', cacheMiddleware(300), async (req, res) => 
              FROM organizations o
              LEFT JOIN users u ON u.org_id = o.id
              LEFT JOIN products p ON p.registered_by = u.id
-             GROUP BY o.id, o.name ORDER BY total_kg ASC`
+             GROUP BY o.id, o.name ORDER BY total_kg ASC LIMIT 1000`
         ).catch(() => []);
 
         // Rank by intensity (lower = better)
@@ -1268,14 +1269,14 @@ router.get('/benchmark/cross-tenant', cacheMiddleware(300), async (req, res) => 
             your_intensity: myIntensity,
             your_offset_coverage: Math.round(offsetRatio * 100) + '%',
             performance_label: perfLabel,
-            methodology: 'Cross-tenant benchmarking based on total tCO₂e emissions across all TrustChecker organizations',
+            methodology: 'Cross-org benchmarking based on total tCO₂e emissions across all TrustChecker organizations',
             leaderboard: comparison.slice(0, 10),
             insight: offsetRatio >= 0.4
                 ? '✅ Strong offset strategy — ' + Math.round(offsetRatio * 100) + '% of emissions retired'
                 : '⚠️ Consider increasing carbon offset coverage',
         });
     } catch (err) {
-        console.error('Cross-tenant benchmark error:', err);
+        console.error('Cross-org benchmark error:', err);
         res.json({ percentile: 0, rank: 0, total_orgs: 0, your_intensity: 0, leaderboard: [] });
     }
 });

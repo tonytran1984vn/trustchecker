@@ -13,10 +13,10 @@ router.use(authMiddleware);
 // GET /report — Auto-generate compliance report
 router.get('/report', cacheMiddleware(120), async (req, res) => {
     try {
-        const scope = await db.prepare('SELECT * FROM carbon_simulations LIMIT 1').get().catch(() => null);
-        const credits = await db.prepare('SELECT * FROM carbon_credits').all().catch(() => []);
-        const products = await db.prepare('SELECT COUNT(*) as cnt FROM products').get().catch(() => ({ cnt: 0 }));
-        const partners = await db.prepare('SELECT COUNT(*) as cnt FROM partners').get().catch(() => ({ cnt: 0 }));
+        const scope = await db.get('SELECT * FROM carbon_simulations LIMIT 1').catch(() => null);
+        const credits = await db.all('SELECT * FROM carbon_credits').catch(() => []);
+        const products = await db.get('SELECT COUNT(*) as cnt FROM products').catch(() => ({ cnt: 0 }));
+        const partners = await db.get('SELECT COUNT(*) as cnt FROM partners').catch(() => ({ cnt: 0 }));
         const report = compliance.generateComplianceReport({
             scope_1: 150, scope_2: 80, scope_3: 420, total_emissions: 650,
             products_count: products.cnt, partners_count: partners.cnt,

@@ -17,6 +17,7 @@ const router = express.Router();
 const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
 const { SOD_CONFLICTS } = require('../auth/rbac');
+const { withTransaction } = require('../middleware/transaction');
 
 // All routes require auth + role management permission
 router.use(authMiddleware, requirePermission('role:create'));
@@ -40,10 +41,10 @@ router.get('/conflicts', (req, res) => {
  */
 router.get('/waivers', async (req, res) => {
     try {
-        const tenantId = req.user.org_id;
-        if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
+        const orgId = req.user.org_id;
+        if (!orgId) return res.status(400).json({ error: 'No org context' });
 
-        const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [tenantId]);
+        const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [orgId]);
         if (!org || !org.sod_waivers) {
             return res.json({ waivers: [], total: 0 });
         }
@@ -74,8 +75,8 @@ router.get('/waivers', async (req, res) => {
  */
 router.post('/waivers', async (req, res) => {
     try {
-        const tenantId = req.user.org_id;
-        if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
+        const orgId = req.user.org_id;
+        if (!orgId) return res.status(400).json({ error: 'No org context' });
 
         const { pair, reason, expires_at } = req.body;
 
@@ -96,7 +97,7 @@ router.post('/waivers', async (req, res) => {
         }
 
         // Load existing waivers
-        const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [tenantId]);
+        const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [orgId]);
         let config;
         try { config = JSON.parse(org?.sod_waivers || '{}'); } catch (_) { config = {}; }
         if (!config.waivers) config.waivers = [];
@@ -119,9 +120,9 @@ router.post('/waivers', async (req, res) => {
         };
         config.waivers.push(newWaiver);
 
-        await db.run('UPDATE organizations SET sod_waivers = ? WHERE id = ?', [JSON.stringify(config), tenantId]);
+        await db.run('UPDATE organizations SET sod_waivers = ? WHERE id = ?', [JSON.stringify(config), orgId]);
 
-        console.log(`[RBAC] SoD WAIVER created: tenant=${tenantId}, pair=[${pair}], by=${req.user.email}, reason="${reason}"`);
+        console.log(`[RBAC] SoD WAIVER created: tenant=${orgId}, pair=[${pair}], by=${req.user.email}, reason="${reason}"`);
 
         res.json({ success: true, waiver: newWaiver, total: config.waivers.length });
     } catch (err) {
@@ -136,15 +137,15 @@ router.post('/waivers', async (req, res) => {
  */
 router.delete('/waivers', async (req, res) => {
     try {
-        const tenantId = req.user.org_id;
-        if (!tenantId) return res.status(400).json({ error: 'No tenant context' });
+        const orgId = req.user.org_id;
+        if (!orgId) return res.status(400).json({ error: 'No org context' });
 
         const { pair } = req.body;
         if (!pair || !Array.isArray(pair) || pair.length !== 2) {
             return res.status(400).json({ error: 'pair must be an array of 2 permission strings' });
         }
 
-        const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [tenantId]);
+        const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [orgId]);
         let config;
         try { config = JSON.parse(org?.sod_waivers || '{}'); } catch (_) { config = {}; }
         if (!config.waivers) config.waivers = [];
@@ -158,9 +159,9 @@ router.delete('/waivers', async (req, res) => {
             return res.status(404).json({ error: 'Waiver not found for this pair' });
         }
 
-        await db.run('UPDATE organizations SET sod_waivers = ? WHERE id = ?', [JSON.stringify(config), tenantId]);
+        await db.run('UPDATE organizations SET sod_waivers = ? WHERE id = ?', [JSON.stringify(config), orgId]);
 
-        console.log(`[RBAC] SoD WAIVER removed: tenant=${tenantId}, pair=[${pair}], by=${req.user.email}`);
+        console.log(`[RBAC] SoD WAIVER removed: tenant=${orgId}, pair=[${pair}], by=${req.user.email}`);
 
         res.json({ success: true, remaining: config.waivers.length });
     } catch (err) {

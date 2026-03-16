@@ -22,14 +22,19 @@ if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 30000
         API.get('/qr/scan-history?limit=100').catch(() => ({ scans: [] })),
         API.get('/scm/classify/duplicates?limit=50').catch(() => ({ classifications: [] })),
         API.get('/ops/incidents?status=open&limit=50').catch(() => ({ incidents: [] })),
+        API.get('/ops/incidents?status=resolved&limit=50').catch(() => ({ incidents: [] })),
+        API.get('/ops/incidents?status=closed&limit=50').catch(() => ({ incidents: [] })),
     ]).then(results => {
         const v = results.map(r => r.value);
         cache.scanHistory = v[0];
         cache.duplicates = v[1];
         cache.openCases = v[2];
+        // Merge resolved + closed for Case History
+        cache.closedCases = { incidents: [...(v[3]?.incidents || []), ...(v[4]?.incidents || [])] };
         cache._loadedAt = Date.now();
         cache._loading = false;
-        console.log('[Ops Monitor] All 3 APIs prefetched ✓');
+        console.log('[Ops Monitor] All 5 APIs prefetched ✓');
+        if (typeof window.render === 'function') window.render();
         return cache;
     });
 } else if (cache._loadedAt) {

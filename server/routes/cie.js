@@ -1,14 +1,14 @@
 /**
  * CIE v2.0 API Routes
- * Carbon Integrity Engine — Backend API for passports, snapshots, anchoring, and tenant config
+ * Carbon Integrity Engine — Backend API for passports, snapshots, anchoring, and org config
  * 
  * Endpoints:
  *   POST   /api/cie/passport           — Create/seal a CIP
  *   GET    /api/cie/passport/:id        — Get CIP details + snapshot
- *   GET    /api/cie/passports           — List all CIPs for tenant
+ *   GET    /api/cie/passports           — List all CIPs for org
  *   POST   /api/cie/calculate           — Calculate emission (single input)
  *   POST   /api/cie/anchor              — Anchor hash to blockchain
- *   GET    /api/cie/anchors             — List anchors for tenant
+ *   GET    /api/cie/anchors             — List anchors for org
  *   GET    /api/cie/snapshot/:cipId     — Get snapshot capsule for CIP
  *   GET    /api/cie/regulatory/:country — Get regulatory mapping
  *   GET    /api/cie/gaps/:country       — Get compliance gaps
@@ -44,7 +44,7 @@ console.log('✅ CIE v2.0 routes loaded (PostgreSQL via Prisma)');
 router.post('/passport', requirePermission('esg:manage'), async (req, res) => {
     try {
         const d = getDb();
-        const tenantId = req.user?.org_id || 'default';
+        const orgId = req.user?.org_id || req.user?.orgId;
         const { product_name, batch_id, scope_1, scope_2, scope_3, benchmark_score, seal } = req.body;
 
         if (!product_name) return res.status(400).json({ error: 'product_name is required' });
@@ -62,7 +62,7 @@ router.post('/passport', requirePermission('esg:manage'), async (req, res) => {
             (id, cip_id, org_id, product_name, batch_id, scope_1, scope_2, scope_3, total_emission, 
              benchmark_score, risk_score, risk_action, status, methodology, factor_version, sealed_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, cipId, tenantId, product_name, batch_id || null,
+            .run(id, cipId, orgId, product_name, batch_id || null,
                 scope_1 || 0, scope_2 || 0, scope_3 || 0, total,
                 benchmark_score || 0, risk.composite_risk, risk.action, status,
                 cie.METHODOLOGY.id, cie.ACTIVE_FACTOR_VERSION,
@@ -80,7 +80,7 @@ router.post('/passport', requirePermission('esg:manage'), async (req, res) => {
                 (id, cip_id, org_id, capsule_hash, data_hash, method_version, method_hash, 
                  factor_version, factor_hash, governance_chain, benchmark_ref, scope_snapshot, risk_thresholds)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-                .run(uuidv4(), cipId, tenantId, snapshot.capsule_hash, snapshot.data_hash,
+                .run(uuidv4(), cipId, orgId, snapshot.capsule_hash, snapshot.data_hash,
                     snapshot.method_version, snapshot.method_hash,
                     snapshot.factor_version, snapshot.factor_hash,
                     snapshot.governance_chain, snapshot.benchmark_ref,
@@ -100,14 +100,14 @@ router.post('/passport', requirePermission('esg:manage'), async (req, res) => {
     }
 });
 
-// GET /api/cie/passports — List CIPs for tenant
+// GET /api/cie/passports — List CIPs for org
 router.get('/passports', async (req, res) => {
     try {
         const d = getDb();
-        const tenantId = req.user?.org_id || 'default';
+        const orgId = req.user?.org_id || req.user?.orgId;
         const { status, limit = 50 } = req.query;
         let q = 'SELECT * FROM cie_passports WHERE org_id = ?';
-        const params = [tenantId];
+        const params = [orgId];
         if (status) { q += ' AND status = ?'; params.push(status); }
         q += ' ORDER BY created_at DESC LIMIT ?';
         params.push(parseInt(limit));
@@ -146,7 +146,7 @@ router.post('/calculate', async (req, res) => {
 router.post('/anchor', requirePermission('esg:manage'), async (req, res) => {
     try {
         const d = getDb();
-        const tenantId = req.user?.org_id || 'default';
+        const orgId = req.user?.org_id || req.user?.orgId;
         const { type, target_id, data } = req.body;
         if (!type || !data) return res.status(400).json({ error: 'type and data required' });
 
@@ -156,7 +156,7 @@ router.post('/anchor', requirePermission('esg:manage'), async (req, res) => {
         await d.prepare(`INSERT INTO cie_anchors 
             (id, org_id, anchor_type, target_id, anchor_hash, payload_hash, chain, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed')`)
-            .run(id, tenantId, anchor.anchor_type, target_id || null,
+            .run(id, orgId, anchor.anchor_type, target_id || null,
                 anchor.anchor_hash, anchor.payload_hash, anchor.chain);
 
         res.status(201).json({ id, ...anchor, status: 'confirmed' });
@@ -166,13 +166,13 @@ router.post('/anchor', requirePermission('esg:manage'), async (req, res) => {
     }
 });
 
-// GET /api/cie/anchors — List anchors for tenant
+// GET /api/cie/anchors — List anchors for org
 router.get('/anchors', async (req, res) => {
     try {
         const d = getDb();
-        const tenantId = req.user?.org_id || 'default';
+        const orgId = req.user?.org_id || req.user?.orgId;
         const rows = await d.prepare('SELECT * FROM cie_anchors WHERE org_id = ? ORDER BY created_at DESC LIMIT 50')
-            .all(tenantId);
+            .all(orgId);
         res.json({ anchors: rows || [] });
     } catch (err) { res.status(500).json({ error: 'Failed to list anchors' }); }
 });
@@ -228,12 +228,12 @@ router.get('/factors', (req, res) => {
 router.get('/config', async (req, res) => {
     try {
         const d = getDb();
-        const tenantId = req.user?.org_id || 'default';
-        let config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(tenantId);
+        const orgId = req.user?.org_id || req.user?.orgId;
+        let config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(orgId);
         if (!config) {
             // Create default config
-            await d.prepare(`INSERT INTO cie_tenant_config (org_id) VALUES (?)`).run(tenantId);
-            config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(tenantId);
+            await d.prepare(`INSERT INTO cie_tenant_config (org_id) VALUES (?)`).run(orgId);
+            config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(orgId);
         }
         config.modules = JSON.parse(config.modules || '{}');
         config.risk_thresholds = JSON.parse(config.risk_thresholds || '{}');
@@ -243,29 +243,29 @@ router.get('/config', async (req, res) => {
 });
 
 // PUT /api/cie/config — Update tenant CIE config
-router.put('/config', requirePermission('tenant:settings_update'), async (req, res) => {
+router.put('/config', requirePermission('org:settings_update'), async (req, res) => {
     try {
         const d = getDb();
-        const tenantId = req.user?.org_id || 'default';
+        const orgId = req.user?.org_id || req.user?.orgId;
         const { tier, batch_limit, modules, risk_thresholds, rme_countries, mgb_enabled, snapshot_enabled } = req.body;
 
         // Ensure config exists
-        const existing = await d.prepare('SELECT org_id FROM cie_tenant_config WHERE org_id = ?').get(tenantId);
+        const existing = await d.prepare('SELECT org_id FROM cie_tenant_config WHERE org_id = ?').get(orgId);
         if (!existing) {
-            await d.prepare('INSERT INTO cie_tenant_config (org_id) VALUES (?)').run(tenantId);
+            await d.prepare('INSERT INTO cie_tenant_config (org_id) VALUES (?)').run(orgId);
         }
 
         // Update fields individually
-        if (tier) await d.prepare('UPDATE cie_tenant_config SET tier = ? WHERE org_id = ?').run(tier, tenantId);
-        if (batch_limit) await d.prepare('UPDATE cie_tenant_config SET batch_limit = ? WHERE org_id = ?').run(batch_limit, tenantId);
-        if (modules) await d.prepare('UPDATE cie_tenant_config SET modules = ?::jsonb WHERE org_id = ?').run(JSON.stringify(modules), tenantId);
-        if (risk_thresholds) await d.prepare('UPDATE cie_tenant_config SET risk_thresholds = ?::jsonb WHERE org_id = ?').run(JSON.stringify(risk_thresholds), tenantId);
-        if (rme_countries) await d.prepare('UPDATE cie_tenant_config SET rme_countries = ?::jsonb WHERE org_id = ?').run(JSON.stringify(rme_countries), tenantId);
-        if (mgb_enabled != null) await d.prepare('UPDATE cie_tenant_config SET mgb_enabled = ? WHERE org_id = ?').run(!!mgb_enabled, tenantId);
-        if (snapshot_enabled != null) await d.prepare('UPDATE cie_tenant_config SET snapshot_enabled = ? WHERE org_id = ?').run(!!snapshot_enabled, tenantId);
-        await d.prepare("UPDATE cie_tenant_config SET updated_at = NOW() WHERE org_id = ?").run(tenantId);
+        if (tier) await d.prepare('UPDATE cie_tenant_config SET tier = ? WHERE org_id = ?').run(tier, orgId);
+        if (batch_limit) await d.prepare('UPDATE cie_tenant_config SET batch_limit = ? WHERE org_id = ?').run(batch_limit, orgId);
+        if (modules) await d.prepare('UPDATE cie_tenant_config SET modules = ?::jsonb WHERE org_id = ?').run(JSON.stringify(modules), orgId);
+        if (risk_thresholds) await d.prepare('UPDATE cie_tenant_config SET risk_thresholds = ?::jsonb WHERE org_id = ?').run(JSON.stringify(risk_thresholds), orgId);
+        if (rme_countries) await d.prepare('UPDATE cie_tenant_config SET rme_countries = ?::jsonb WHERE org_id = ?').run(JSON.stringify(rme_countries), orgId);
+        if (mgb_enabled != null) await d.prepare('UPDATE cie_tenant_config SET mgb_enabled = ? WHERE org_id = ?').run(!!mgb_enabled, orgId);
+        if (snapshot_enabled != null) await d.prepare('UPDATE cie_tenant_config SET snapshot_enabled = ? WHERE org_id = ?').run(!!snapshot_enabled, orgId);
+        await d.prepare("UPDATE cie_tenant_config SET updated_at = NOW() WHERE org_id = ?").run(orgId);
 
-        const config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(tenantId);
+        const config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(orgId);
         res.json({ message: 'Config updated', config });
     } catch (err) {
         console.error('Config update error:', err);
@@ -277,21 +277,21 @@ router.put('/config', requirePermission('tenant:settings_update'), async (req, r
 // OVERVIEW / DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// GET /api/cie/overview — Dashboard summary for tenant
+// GET /api/cie/overview — Dashboard summary for org
 router.get('/overview', async (req, res) => {
     try {
         const d = getDb();
-        const tenantId = req.user?.org_id || 'default';
+        const orgId = req.user?.org_id || req.user?.orgId;
 
-        const total = (await d.prepare('SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ?').get(tenantId))?.c || 0;
-        const sealed = (await d.prepare("SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ? AND status = 'sealed'").get(tenantId))?.c || 0;
-        const blocked = (await d.prepare("SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ? AND status = 'block_approval'").get(tenantId))?.c || 0;
-        const anchors = (await d.prepare('SELECT COUNT(*) as c FROM cie_anchors WHERE org_id = ?').get(tenantId))?.c || 0;
-        const snapshots = (await d.prepare('SELECT COUNT(*) as c FROM cie_snapshots WHERE org_id = ?').get(tenantId))?.c || 0;
+        const total = (await d.prepare('SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ?').get(orgId))?.c || 0;
+        const sealed = (await d.prepare("SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ? AND status = 'sealed'").get(orgId))?.c || 0;
+        const blocked = (await d.prepare("SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ? AND status = 'block_approval'").get(orgId))?.c || 0;
+        const anchors = (await d.prepare('SELECT COUNT(*) as c FROM cie_anchors WHERE org_id = ?').get(orgId))?.c || 0;
+        const snapshots = (await d.prepare('SELECT COUNT(*) as c FROM cie_snapshots WHERE org_id = ?').get(orgId))?.c || 0;
 
         res.json({
             version: 'CIE v2.0',
-            org_id: tenantId,
+            org_id: orgId,
             passports: { total, sealed, blocked, pending: total - sealed - blocked },
             anchors,
             snapshots,
@@ -306,6 +306,7 @@ router.get('/overview', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const cieRoles = require('../engines/cie-role-engine');
+const { withTransaction } = require('../middleware/transaction');
 
 // GET /api/cie/roles — All roles (platform + company)
 router.get('/roles', (req, res) => {

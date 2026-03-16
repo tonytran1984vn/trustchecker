@@ -11,7 +11,7 @@ const db = require('../db');
 router.use(authMiddleware);
 
 // ─── GET /verify-chain — Verify audit log hash chain integrity ──────────────
-// Only tenant admins (or platform admins) can verify
+// Only org admins (or platform admins) can verify
 router.get('/verify-chain', requireTenantAdmin(), async (req, res) => {
     try {
         const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
@@ -40,9 +40,9 @@ router.get('/verify-chain', requireTenantAdmin(), async (req, res) => {
 // ─── GET /stats — Audit log statistics ──────────────────────────────────────
 router.get('/stats', requireTenantAdmin(), async (req, res) => {
     try {
-        const total = await db.get('SELECT COUNT(*) as count FROM audit_log');
-        const hashed = await db.get('SELECT COUNT(*) as count FROM audit_log WHERE entry_hash IS NOT NULL');
-        const recent = await db.all('SELECT action, COUNT(*) as count FROM audit_log GROUP BY action ORDER BY count DESC LIMIT 20');
+        const total = await db.get('SELECT COUNT(*) as count FROM audit_log' + (req.orgId ? ' WHERE org_id = ?' : ''), req.orgId ? [req.orgId] : []);
+        const hashed = await db.get('SELECT COUNT(*) as count FROM audit_log WHERE entry_hash IS NOT NULL' + (req.orgId ? ' AND org_id = ?' : ''), req.orgId ? [req.orgId] : []);
+        const recent = await db.all('SELECT action, COUNT(*) as count FROM audit_log' + (req.orgId ? ' WHERE org_id = ?' : '') + ' GROUP BY action ORDER BY count DESC LIMIT 20', req.orgId ? [req.orgId] : []);
 
         res.json({
             total_entries: total?.count || 0,

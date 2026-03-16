@@ -232,7 +232,7 @@ function formatMonth(m) {
 
 async function loadData() {
   try {
-    const r = await api.get('/tenant/owner/ccs/geo-detail');
+    const r = await api.get('/org-admin/owner/ccs/geo-detail');
     _data = r;
     rerender();
   } catch (e) { console.error('[Heatmap]', e); }

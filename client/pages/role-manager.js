@@ -321,9 +321,9 @@ function renderAuditTab() {
 export async function loadRoleManager() {
   try {
     const [rolesRes, usersRes, permsRes] = await Promise.all([
-      API.get('/tenant/roles'),
-      API.get('/tenant/users'),
-      API.get('/tenant/permissions'),
+      API.get('/org-admin/roles'),
+      API.get('/org-admin/users'),
+      API.get('/org-admin/permissions'),
     ]);
     _roles = rolesRes.roles || [];
     _users = usersRes.users || [];
@@ -379,7 +379,7 @@ async function savePermissions() {
   if (!_editingRole) return;
   const perms = Object.entries(_editPerms).filter(([_, v]) => v).map(([k]) => k);
   try {
-    await API.put(`/tenant/roles/${_editingRole.id}`, { permissions: perms });
+    await API.put(`/org-admin/roles/${_editingRole.id}`, { permissions: perms });
     showToast(`✓ Saved ${perms.length} permissions for ${_editingRole.display_name}`, 'success');
     await loadRoleManager();
     editRole(_editingRole.id);
@@ -415,7 +415,7 @@ async function doCreateRole() {
     return;
   }
   try {
-    await API.post('/tenant/roles', { name, display_name, description, permissions: [] });
+    await API.post('/org-admin/roles', { name, display_name, description, permissions: [] });
     showToast(`<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Role "${display_name}" created`, 'success');
     _showCreateModal = false;
     await loadRoleManager();
@@ -427,7 +427,7 @@ async function doCreateRole() {
 async function deleteRole(roleId, roleName) {
   if (!confirm(`Delete role "${roleName}"? This cannot be undone.`)) return;
   try {
-    await API.delete(`/tenant/roles/${roleId}`);
+    await API.delete(`/org-admin/roles/${roleId}`);
     showToast(`<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Role "${roleName}" deleted`, 'success');
     await loadRoleManager();
   } catch (err) {
@@ -464,7 +464,7 @@ async function doAssign(userId) {
   const checkboxes = document.querySelectorAll('.rbac-assign-cb:checked');
   const roleIds = Array.from(checkboxes).map(cb => cb.value);
   try {
-    const res = await API.put(`/tenant/users/${userId}/roles`, { role_ids: roleIds });
+    const res = await API.put(`/org-admin/users/${userId}/roles`, { role_ids: roleIds });
     // Handle dual-control pending response (HTTP 202)
     if (res.code === 'DUAL_CONTROL_PENDING') {
       showToast(`⏳ ${res.pending_role} requires approval from ${res.requires_approval_from}`, 'warning');
@@ -487,7 +487,7 @@ async function doAssign(userId) {
 
 async function loadAudit() {
   try {
-    const res = await API.get('/tenant/audit?limit=50');
+    const res = await API.get('/org-admin/audit?limit=50');
     _auditLogs = res.logs || [];
     refreshContent();
   } catch (err) {

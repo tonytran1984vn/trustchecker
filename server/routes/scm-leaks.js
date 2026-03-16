@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { eventBus } = require('../events');
+const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();
 
@@ -36,10 +37,10 @@ router.post('/scan', authMiddleware, requirePermission('leak_monitor:create'), a
                 const detected = _simulateMarketplaceScan(p, platform, authorizedRegions);
                 for (const leak of detected) {
                     const id = uuidv4();
-                    await db.prepare(`
-            INSERT INTO leak_alerts (id, product_id, platform, url, listing_title, listing_price, authorized_price, region_detected, authorized_regions, leak_type, risk_score)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(id, p.id, platform, leak.url, leak.listing_title, leak.listing_price, leak.authorized_price, leak.region, JSON.stringify(authorizedRegions), leak.type, leak.risk_score);
+                    await db.run(`
+            INSERT INTO leak_alerts (id, product_id, platform, url, listing_title, listing_price, authorized_price, region_detected, authorized_regions, leak_type, risk_score, org_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [id, p.id, platform, leak.url, leak.listing_title, leak.listing_price, leak.authorized_price, leak.region, JSON.stringify(authorizedRegions), leak.type, leak.risk_score, orgId]);
                     results.push({ id, ...leak, product_name: p.name });
                 }
             }
@@ -106,24 +107,44 @@ router.get('/stats', async (req, res) => {
         const open = (await db.prepare("SELECT COUNT(*) as c FROM leak_alerts la" + (orgId ? " LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? AND la.status = 'open'" : " WHERE la.status = 'open'")).get(...(orgId ? [orgId] : [])))?.c || 0;
         const resolved = (await db.prepare("SELECT COUNT(*) as c FROM leak_alerts la" + (orgId ? " LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? AND la.status = 'resolved'" : " WHERE la.status = 'resolved'")).get(...(orgId ? [orgId] : [])))?.c || 0;
 
-        const byPlatform = await db.prepare('SELECT platform, COUNT(*) as count, AVG(risk_score) as avg_risk FROM leak_alerts GROUP BY platform ORDER BY count DESC').all();
-        const byType = await db.prepare('SELECT leak_type, COUNT(*) as count FROM leak_alerts GROUP BY leak_type').all();
-        const topProducts = await db.prepare(`
+        const byPlatform = orgId
+          ? await db.all('SELECT la.platform, COUNT(*) as count, AVG(la.risk_score) as avg_risk FROM leak_alerts la LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? GROUP BY la.platform ORDER BY count DESC LIMIT 1000', [orgId])
+          : await db.all('SELECT platform, COUNT(*) as count, AVG(risk_score) as avg_risk FROM leak_alerts GROUP BY platform ORDER BY count DESC LIMIT 1000');
+        const byType = orgId
+          ? await db.all('SELECT la.leak_type, COUNT(*) as count FROM leak_alerts la LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? GROUP BY la.leak_type', [orgId])
+          : await db.all('SELECT leak_type, COUNT(*) as count FROM leak_alerts GROUP BY leak_type');
+        const topProducts = orgId
+          ? await db.all(`
+      SELECT la.product_id, p.name as product_name, COUNT(*) as leak_count, AVG(la.risk_score) as avg_risk
+      FROM leak_alerts la LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ?
+      GROUP BY la.product_id, p.name ORDER BY leak_count DESC LIMIT 10
+    `, [orgId])
+          : await db.all(`
       SELECT la.product_id, p.name as product_name, COUNT(*) as leak_count, AVG(la.risk_score) as avg_risk
       FROM leak_alerts la LEFT JOIN products p ON la.product_id = p.id
-      GROUP BY la.product_id ORDER BY leak_count DESC LIMIT 10
-    `).all();
+      GROUP BY la.product_id, p.name ORDER BY leak_count DESC LIMIT 10
+    `);
 
         // Distributor risk scoring based on leaks
-        const distributorRisk = await db.prepare(`
+        const distributorRisk = orgId
+          ? await db.all(`
+      SELECT pt.id, pt.name, COUNT(la.id) as leak_count, AVG(la.risk_score) as avg_risk
+      FROM partners pt
+      LEFT JOIN supply_chain_events sce ON pt.id = sce.partner_id
+      LEFT JOIN leak_alerts la ON sce.product_id = la.product_id
+      WHERE la.id IS NOT NULL AND pt.org_id = ?
+      GROUP BY pt.id, pt.name
+      ORDER BY leak_count DESC
+     LIMIT 1000`, [orgId])
+          : await db.all(`
       SELECT pt.id, pt.name, COUNT(la.id) as leak_count, AVG(la.risk_score) as avg_risk
       FROM partners pt
       LEFT JOIN supply_chain_events sce ON pt.id = sce.partner_id
       LEFT JOIN leak_alerts la ON sce.product_id = la.product_id
       WHERE la.id IS NOT NULL
-      GROUP BY pt.id
+      GROUP BY pt.id, pt.name
       ORDER BY leak_count DESC
-    `).all();
+     LIMIT 1000`);
 
         res.json({
             total, open, resolved,
@@ -178,7 +199,7 @@ router.put('/alerts/:id/resolve', authMiddleware, requirePermission('fraud_case:
         const alert = await db.get('SELECT * FROM leak_alerts WHERE id = ?', [req.params.id]);
         if (!alert) return res.status(404).json({ error: 'Leak alert not found' });
 
-        await db.prepare(`UPDATE leak_alerts SET status = 'resolved' WHERE id = ?`).run(req.params.id);
+        await db.run(`UPDATE leak_alerts SET status = 'resolved' WHERE id = ?`, [req.params.id]);
 
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
             .run(uuidv4(), req.user.id, 'LEAK_RESOLVED', 'leak_alert', req.params.id,
@@ -230,32 +251,31 @@ router.get('/trends', async (req, res) => {
     try {
         const { weeks = 12 } = req.query;
         const safeWeeks = Math.max(1, Math.min(52, Math.floor(Number(weeks)) || 12));
-        const weeksDaysModifier = `-${safeWeeks * 7} days`;
+        const cutoff = new Date(Date.now() - safeWeeks * 7 * 86400000).toISOString();
 
         const weeklyTrend = await db.all(`
-      SELECT strftime('%Y-W%W', created_at) as week, COUNT(*) as count, AVG(risk_score) as avg_risk
-      FROM leak_alerts
-      WHERE created_at > datetime('now', ?)
-      GROUP BY week ORDER BY week ASC
-    `, [weeksDaysModifier]);
+            SELECT to_char(created_at, 'IYYY-"W"IW') as week, COUNT(*) as count, AVG(risk_score) as avg_risk
+            FROM leak_alerts WHERE created_at > $1
+            GROUP BY week ORDER BY week ASC
+         LIMIT 1000`, [cutoff]);
 
         const platformTrend = await db.all(`
-      SELECT platform, strftime('%Y-%m', created_at) as month, COUNT(*) as count
-      FROM leak_alerts GROUP BY platform, month ORDER BY month ASC
-    `);
+            SELECT platform, to_char(created_at, 'YYYY-MM') as month, COUNT(*) as count
+            FROM leak_alerts GROUP BY platform, month ORDER BY month ASC
+         LIMIT 1000`);
 
         const typeTrend = await db.all(`
-      SELECT leak_type, strftime('%Y-%m', created_at) as month, COUNT(*) as count
-      FROM leak_alerts GROUP BY leak_type, month ORDER BY month ASC
-    `);
+            SELECT leak_type, to_char(created_at, 'YYYY-MM') as month, COUNT(*) as count
+            FROM leak_alerts GROUP BY leak_type, month ORDER BY month ASC
+         LIMIT 1000`);
 
         const resolutionRate = await db.get(`
-      SELECT 
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved,
-        ROUND(SUM(CASE WHEN status = 'resolved' THEN 1.0 ELSE 0 END) / MAX(COUNT(*), 1) * 100, 1) as rate
-      FROM leak_alerts
-    `);
+          SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) as resolved,
+            ROUND(SUM(CASE WHEN status = 'resolved' THEN 1.0 ELSE 0 END) / GREATEST(COUNT(*), 1) * 100, 1) as rate
+          FROM leak_alerts
+        `);
 
         res.json({
             weekly_trend: weeklyTrend,

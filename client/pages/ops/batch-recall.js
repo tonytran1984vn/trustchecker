@@ -20,6 +20,7 @@ async function load() {
       date: r.created_at ? new Date(r.created_at).toLocaleDateString() : '—',
     }));
   } catch (e) { _recalls = []; }
+  if (typeof window.render === 'function') window.render();
 }
 load();
 
@@ -44,7 +45,7 @@ export function renderPage() {
                 </div>
             </div>
             <div style="margin-top:1rem;display:flex;gap:0.75rem">
-                <button class="btn btn-primary btn-sm" style="background:#ef4444;border-color:#ef4444" onclick="showToast('🚨 Recall initiated — incident ticket created','warning')">Initiate Recall</button>
+                <button class="btn btn-primary btn-sm" style="background:#ef4444;border-color:#ef4444" onclick="if(confirm('⚠️ RECALL CONFIRMATION\\n\\nThis will:\\n• Create an incident ticket\\n• Notify all downstream partners\\n• Freeze affected inventory\\n\\nProceed with recall?')){showToast('🚨 Recall initiated — incident ticket created','warning')}">Initiate Recall</button>
             </div>
         </div>
 

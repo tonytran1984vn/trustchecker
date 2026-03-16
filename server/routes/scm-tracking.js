@@ -29,10 +29,10 @@ router.post('/events', authMiddleware, requirePermission('supply_chain:create'),
         // Seal to blockchain
         const seal = await blockchainEngine.seal('SCMEvent', id, { event_type, product_id, batch_id, location, actor });
 
-        await db.prepare(`
+        await db.run(`
       INSERT INTO supply_chain_events (id, event_type, product_id, batch_id, uid, location, actor, partner_id, details, blockchain_seal_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, event_type, product_id || null, batch_id || null, uid || '', location || '', actor || req.user.username, partner_id || null, JSON.stringify(details || {}), seal.seal_id);
+    `, [id, event_type, product_id || null, batch_id || null, uid || '', location || '', actor || req.user.username, partner_id || null, JSON.stringify(details || {}), seal.seal_id]);
 
         eventBus.emitEvent('SCMEvent', { id, event_type, product_id, batch_id, location });
 
@@ -40,6 +40,7 @@ router.post('/events', authMiddleware, requirePermission('supply_chain:create'),
         let governance = null;
         try {
             const lrgf = require('../engines/lrgf-engine');
+const { withTransaction } = require('../middleware/transaction');
             governance = lrgf.processEvent(
                 { event_type, product_id, batch_id, org_id: req.user.orgId, idempotency_key: `scm-${id}` },
                 { source: 'scm-tracking', ip: req.ip, user_agent: req.headers['user-agent'], latitude: details?.latitude, longitude: details?.longitude },
@@ -59,15 +60,15 @@ router.post('/events', authMiddleware, requirePermission('supply_chain:create'),
 // ─── GET /api/scm/events/:productId/journey – Product journey ────────────────
 router.get('/events/:productId/journey', authMiddleware, async (req, res) => {
     try {
-        const events = await db.prepare(`
+        const events = await db.all(`
       SELECT sce.*, p.name as partner_name
       FROM supply_chain_events sce
       LEFT JOIN partners p ON sce.partner_id = p.id
       WHERE sce.product_id = ?
       ORDER BY sce.created_at ASC
-    `).all(req.params.productId);
+    `, [req.params.productId]);
 
-        const product = await db.prepare('SELECT name, sku FROM products WHERE id = ?').get(req.params.productId);
+        const product = await db.get('SELECT name, sku FROM products WHERE id = ?', [req.params.productId]);
 
         res.json({
             product: product || { name: 'Unknown', sku: '' },
@@ -113,18 +114,18 @@ router.post('/batches', authMiddleware, requireRole('operator', 'admin', 'compan
 
         const id = uuidv4();
         const orgId = req.user?.org_id || null;
-        await db.prepare(`
+        await db.run(`
       INSERT INTO batches (id, batch_number, product_id, quantity, manufactured_date, expiry_date, origin_facility, org_id, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'created', NOW())
-    `).run(id, batch_number, product_id, quantity || 0, manufactured_date || null, expiry_date || null, origin_facility || '', orgId);
+    `, [id, batch_number, product_id, quantity || 0, manufactured_date || null, expiry_date || null, origin_facility || '', orgId]);
 
         // Auto-create commission event
         const eventId = uuidv4();
         const seal = await blockchainEngine.seal('BatchCreated', eventId, { batch_number, product_id, quantity });
-        await db.prepare(`
+        await db.run(`
       INSERT INTO supply_chain_events (id, event_type, product_id, batch_id, location, actor, details, blockchain_seal_id, org_id)
       VALUES (?, 'commission', ?, ?, ?, ?, ?, ?, ?)
-    `).run(eventId, product_id, id, origin_facility || '', req.user.username, JSON.stringify({ quantity, batch_number }), seal.seal_id, orgId);
+    `, [eventId, product_id, id, origin_facility || '', req.user.username, JSON.stringify({ quantity, batch_number }), seal.seal_id, orgId]);
 
         res.status(201).json({ id, batch_number, blockchain_seal: seal });
     } catch (err) {
@@ -160,24 +161,24 @@ router.get('/batches', authMiddleware, async (req, res) => {
 // ─── GET /api/scm/batches/:id/trace – Trace batch through chain ──────────────
 router.get('/batches/:id/trace', authMiddleware, async (req, res) => {
     try {
-        const batch = await db.prepare('SELECT b.*, p.name as product_name FROM batches b LEFT JOIN products p ON b.product_id = p.id WHERE b.id = ?').get(req.params.id);
+        const batch = await db.get('SELECT b.*, p.name as product_name FROM batches b LEFT JOIN products p ON b.product_id = p.id WHERE b.id = ?', [req.params.id]);
         if (!batch) return res.status(404).json({ error: 'Batch not found' });
 
-        const events = await db.prepare(`
+        const events = await db.all(`
       SELECT sce.*, p.name as partner_name
       FROM supply_chain_events sce
       LEFT JOIN partners p ON sce.partner_id = p.id
       WHERE sce.batch_id = ?
       ORDER BY sce.created_at ASC
-    `).all(req.params.id);
+    `, [req.params.id]);
 
-        const shipments = await db.prepare(`
+        const shipments = await db.all(`
       SELECT s.*, fp.name as from_name, tp.name as to_name
       FROM shipments s
       LEFT JOIN partners fp ON s.from_partner_id = fp.id
       LEFT JOIN partners tp ON s.to_partner_id = tp.id
       WHERE s.batch_id = ?
-    `).all(req.params.id);
+    `, [req.params.id]);
 
         res.json({ batch, events, shipments });
     } catch (err) {
@@ -230,8 +231,8 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
 
         // Events by type — filtered
         const eventsByType = orgId
-            ? await db.all('SELECT sce.event_type, COUNT(*) as count FROM supply_chain_events sce JOIN products p ON sce.product_id = p.id WHERE p.org_id = ? GROUP BY sce.event_type ORDER BY count DESC', [orgId])
-            : await db.all('SELECT event_type, COUNT(*) as count FROM supply_chain_events GROUP BY event_type ORDER BY count DESC');
+            ? await db.all('SELECT sce.event_type, COUNT(*) as count FROM supply_chain_events sce JOIN products p ON sce.product_id = p.id WHERE p.org_id = ? GROUP BY sce.event_type ORDER BY count DESC LIMIT 1000', [orgId])
+            : await db.all('SELECT event_type, COUNT(*) as count FROM supply_chain_events GROUP BY event_type ORDER BY count DESC LIMIT 1000');
 
         // Recent events — filtered
         const recentEvents = orgId
@@ -282,11 +283,11 @@ router.post('/batches/:id/recall', authMiddleware, requirePermission('batch:mana
         // Create recall event
         const recallEventId = uuidv4();
         const seal = await blockchainEngine.seal('BatchRecall', recallEventId, { batch_id: req.params.id, reason, severity });
-        await db.prepare(`
+        await db.run(`
       INSERT INTO supply_chain_events (id, event_type, product_id, batch_id, actor, details, blockchain_seal_id)
       VALUES (?, 'return', ?, ?, ?, ?, ?)
-    `).run(recallEventId, batch.product_id, req.params.id, req.user.username,
-            JSON.stringify({ action: 'recall', reason: reason || 'Quality issue', severity: severity || 'high' }), seal.seal_id);
+    `, [recallEventId, batch.product_id, req.params.id, req.user.username,
+            JSON.stringify({ action: 'recall', reason: reason || 'Quality issue', severity: severity || 'high' }), seal.seal_id]);
 
         // Find affected shipments
         const affectedShipments = await db.all("SELECT * FROM shipments WHERE batch_id = ? AND status != 'delivered'", [req.params.id]);

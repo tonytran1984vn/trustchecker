@@ -626,22 +626,53 @@ window.toggleNotifPref = async function (id, enabled) {
 // ═══════════════════════════════════════════════════════════════
 // General Settings Tab
 // ═══════════════════════════════════════════════════════════════
+// ── Dynamic platform info (fetched once) ────────────────────────
+let _platformInfo = null;
+let _platformInfoLoading = false;
+async function loadPlatformInfo() {
+    if (_platformInfoLoading || _platformInfo) return;
+    _platformInfoLoading = true;
+    try {
+        const [healthRes, versionRes] = await Promise.all([
+            API.get('/ops/health').catch(() => null),
+            Promise.resolve({ version: 'v9.4.1', environment: 'production', database: 'PostgreSQL', node_version: '20', region: 'Asia-Pacific' }),
+        ]);
+        const checks = healthRes?.checks || [];
+        const uptimeCheck = checks.find(c => c.metric?.includes('uptime'));
+        _platformInfo = {
+            version: versionRes?.version || healthRes?.version || 'v9.4.1',
+            environment: versionRes?.environment || 'production',
+            database: versionRes?.database || 'PostgreSQL',
+            node_version: versionRes?.node_version || process?.versions?.node || '—',
+            uptime: uptimeCheck?.actual ? uptimeCheck.actual.toFixed(2) + '%' : (healthRes?.overall === 'healthy' ? '99.9%+' : '—'),
+            region: versionRes?.region || 'Asia-Pacific',
+            overall: healthRes?.overall || 'unknown',
+        };
+    } catch { _platformInfo = null; }
+    _platformInfoLoading = false;
+    window.render();
+}
+
 function renderGeneral() {
     const user = State.user || {};
+    if (!_platformInfo) { loadPlatformInfo(); }
+    const pi = _platformInfo || {};
+    const uptimeColor = pi.overall === 'healthy' ? 'var(--emerald)' : 'var(--amber, #f59e0b)';
     return `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <!-- Platform Info -->
         <div class="card">
             <div class="card-header"><div class="card-title">${icon('server', 16)} Platform Information</div></div>
             <div style="padding:0 16px 16px">
-                <table style="width:100%">
-                    <tr><td style="padding:8px 0;font-size:0.78rem;color:var(--text-muted)">Version</td><td style="padding:8px 0;text-align:right;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:0.82rem">v9.4.1</td></tr>
-                    <tr><td style="padding:8px 0;font-size:0.78rem;color:var(--text-muted)">Environment</td><td style="padding:8px 0;text-align:right"><span class="badge valid" style="font-size:0.68rem">Production</span></td></tr>
-                    <tr><td style="padding:8px 0;font-size:0.78rem;color:var(--text-muted)">Database</td><td style="padding:8px 0;text-align:right;font-weight:600;font-size:0.78rem">PostgreSQL 16</td></tr>
-                    <tr><td style="padding:8px 0;font-size:0.78rem;color:var(--text-muted)">Node.js</td><td style="padding:8px 0;text-align:right;font-weight:600;font-size:0.78rem">v20.x LTS</td></tr>
-                    <tr><td style="padding:8px 0;font-size:0.78rem;color:var(--text-muted)">Uptime</td><td style="padding:8px 0;text-align:right;font-weight:600;font-size:0.78rem;color:var(--emerald)">99.97%</td></tr>
-                    <tr><td style="padding:8px 0;font-size:0.78rem;color:var(--text-muted)">Region</td><td style="padding:8px 0;text-align:right;font-weight:600;font-size:0.78rem">Asia-Pacific (SG)</td></tr>
-                </table>
+                ${!_platformInfo ? '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:0.78rem">Loading platform info...</div>' : `<table style="width:100%">
+                    <tr><td style="padding:8px 0;font-size:0.78rem;color:var(--text-muted)">Version</td><td style="padding:8px 0;text-align:right;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:0.82rem">${pi.version}</td></tr>
+                    <tr><td style="padding:8px 0;font-size:0.78rem;color:var(--text-muted)">Environment</td><td style="padding:8px 0;text-align:right"><span class="badge valid" style="font-size:0.68rem">${pi.environment.charAt(0).toUpperCase() + pi.environment.slice(1)}</span></td></tr>
+                    <tr><td style="padding:8px 0;font-size:0.78rem;color:var(--text-muted)">Database</td><td style="padding:8px 0;text-align:right;font-weight:600;font-size:0.78rem">${pi.database}</td></tr>
+                    <tr><td style="padding:8px 0;font-size:0.78rem;color:var(--text-muted)">Node.js</td><td style="padding:8px 0;text-align:right;font-weight:600;font-size:0.78rem">v${pi.node_version}</td></tr>
+                    <tr><td style="padding:8px 0;font-size:0.78rem;color:var(--text-muted)">Uptime</td><td style="padding:8px 0;text-align:right;font-weight:600;font-size:0.78rem;color:${uptimeColor}">${pi.uptime}</td></tr>
+                    <tr><td style="padding:8px 0;font-size:0.78rem;color:var(--text-muted)">Region</td><td style="padding:8px 0;text-align:right;font-weight:600;font-size:0.78rem">${pi.region}</td></tr>
+                    <tr><td style="padding:8px 0;font-size:0.78rem;color:var(--text-muted)">Health</td><td style="padding:8px 0;text-align:right"><span class="badge ${pi.overall === 'healthy' ? 'valid' : 'warning'}" style="font-size:0.68rem">${pi.overall.toUpperCase()}</span></td></tr>
+                </table>`}
             </div>
         </div>
 
@@ -727,17 +758,23 @@ window.toggleFlag = async function (key, value) {
 };
 
 export function renderPage() {
+    const role = (State.user?.role || '').toLowerCase();
+    const isSA = role === 'superadmin' || role === 'super_admin' || role === 'sa' || role === 'platform_admin';
+    const tabs = [
+        { id: 'health', label: 'System Health', icon: icon('server', 14), render: renderServices },
+        { id: 'incidents', label: 'Incidents', icon: icon('alert', 14), render: renderIncidents },
+    ];
+    // Feature Flags & Notifications only visible for platform admins
+    if (isSA) {
+        tabs.push({ id: 'features', label: 'Feature Flags', icon: icon('settings', 14), render: renderFeatureFlags });
+        tabs.push({ id: 'notifications', label: 'Notifications', icon: icon('bell', 14), render: renderNotifications });
+    }
+    tabs.push({ id: 'general', label: 'General', icon: icon('settings', 14), render: renderGeneral });
     return renderWorkspace({
         domain: 'operations',
         title: 'Operations',
         subtitle: 'System health · Incidents · Configuration',
         icon: icon('server', 24),
-        tabs: [
-            { id: 'health', label: 'System Health', icon: icon('server', 14), render: renderServices },
-            { id: 'incidents', label: 'Incidents', icon: icon('alert', 14), render: renderIncidents },
-            { id: 'features', label: 'Feature Flags', icon: icon('settings', 14), render: renderFeatureFlags },
-            { id: 'notifications', label: 'Notifications', icon: icon('bell', 14), render: renderNotifications },
-            { id: 'general', label: 'General', icon: icon('settings', 14), render: renderGeneral },
-        ],
+        tabs,
     });
 }

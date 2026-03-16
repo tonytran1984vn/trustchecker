@@ -8,8 +8,10 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── POST /assess — Assess product sustainability ──────────
 router.post('/assess', requirePermission('sustainability:create'), async (req, res) => {
@@ -17,7 +19,10 @@ router.post('/assess', requirePermission('sustainability:create'), async (req, r
         const { product_id, carbon_footprint, water_usage, recyclability, ethical_sourcing, packaging_score, transport_score } = req.body;
         if (!product_id) return res.status(400).json({ error: 'product_id required' });
 
-        const product = await db.get('SELECT * FROM products WHERE id = ?', [product_id]);
+        let pSql = 'SELECT * FROM products WHERE id = ?';
+        const pParams = [product_id];
+        if (req.orgId) { pSql += ' AND org_id = ?'; pParams.push(req.orgId); }
+        const product = await db.get(pSql, pParams);
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
         // Normalize scores (0-100)
@@ -39,11 +44,11 @@ router.post('/assess', requirePermission('sustainability:create'), async (req, r
             overall >= 60 ? 'C' : overall >= 50 ? 'D' : 'F';
 
         const id = uuidv4();
-        await db.prepare(`
+        await db.run(`
       INSERT INTO sustainability_scores (id, product_id, carbon_footprint, water_usage, recyclability, ethical_sourcing, packaging_score, transport_score, overall_score, grade, assessed_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, product_id, scores.carbon, scores.water, scores.recycle, scores.ethical,
-            scores.packaging, scores.transport, Math.round(overall * 10) / 10, grade, req.user.id);
+    `, [id, product_id, scores.carbon, scores.water, scores.recycle, scores.ethical,
+            scores.packaging, scores.transport, Math.round(overall * 10) / 10, grade, req.user.id]);
 
         res.status(201).json({
             id, product_id, product_name: product.name,
@@ -59,7 +64,7 @@ router.post('/assess', requirePermission('sustainability:create'), async (req, r
 router.get('/products/:id', async (req, res) => {
     try {
         const scores = await db.all(
-            'SELECT ss.*, p.name as product_name FROM sustainability_scores ss LEFT JOIN products p ON ss.product_id = p.id WHERE ss.product_id = ? ORDER BY ss.assessed_at DESC',
+            'SELECT ss.*, p.name as product_name FROM sustainability_scores ss LEFT JOIN products p ON ss.product_id = p.id WHERE ss.product_id = ? ORDER BY ss.assessed_at DESC LIMIT 1000',
             [req.params.id]
         );
 
@@ -113,17 +118,18 @@ router.post('/green-cert', requirePermission('sustainability:manage'), async (re
         // Insert into existing certifications table
         const crypto = require('crypto');
         const { safeParse } = require('../utils/safe-json');
+const { withTransaction } = require('../middleware/transaction');
         const certHash = crypto.createHash('sha256').update(JSON.stringify({ product_id, certification_name, standard, issued: new Date().toISOString() })).digest('hex');
 
-        await db.prepare(`
+        await db.run(`
       INSERT INTO certifications (id, entity_type, entity_id, certification_name, certifying_body, status, issued_date, expiry_date, verification_hash)
-      VALUES (?, 'product', ?, ?, ?, 'active', datetime('now'), ?, ?)
-    `).run(id, product_id, certification_name, standard || 'Custom Green Standard', expiresAt, certHash);
+      VALUES (?, 'product', ?, ?, ?, 'active', NOW(), ?, ?)
+    `, [id, product_id, certification_name, standard || 'Custom Green Standard', expiresAt, certHash]);
 
         // Update sustainability score with certification
         const certs = safeParse(score.certifications, []);
         certs.push({ cert_id: id, name: certification_name, standard: standard || 'Custom', issued: new Date().toISOString() });
-        await db.prepare('UPDATE sustainability_scores SET certifications = ? WHERE id = ?').run(JSON.stringify(certs), score.id);
+        await db.run('UPDATE sustainability_scores SET certifications = ? WHERE id = ?', [JSON.stringify(certs), score.id]);
 
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
             .run(uuidv4(), req.user.id, 'GREEN_CERT_ISSUED', 'certification', id, JSON.stringify({ product_id, certification_name, standard }));
@@ -152,10 +158,10 @@ router.get('/stats', async (req, res) => {
 
         let byGrade = [];
         try {
-            byGrade = await db.all("SELECT grade, COUNT(*)::int as count FROM (SELECT DISTINCT ON (product_id) product_id, grade FROM sustainability_scores ORDER BY product_id, overall_score DESC) sub GROUP BY grade ORDER BY grade");
+            byGrade = await db.all("SELECT grade, COUNT(*)::int as count FROM (SELECT DISTINCT ON (product_id) product_id, grade FROM sustainability_scores ORDER BY product_id, overall_score DESC) sub GROUP BY grade ORDER BY grade LIMIT 1000");
         } catch (e) {
             // Fallback: simple grade distribution without dedup
-            try { byGrade = await db.all("SELECT grade, COUNT(*)::int as count FROM sustainability_scores GROUP BY grade ORDER BY grade"); } catch (e2) { /* skip */ }
+            try { byGrade = await db.all("SELECT grade, COUNT(*)::int as count FROM sustainability_scores GROUP BY grade ORDER BY grade LIMIT 1000"); } catch (e2) { /* skip */ }
         }
 
         let greenCerts = 0;

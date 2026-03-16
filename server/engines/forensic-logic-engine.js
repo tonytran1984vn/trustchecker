@@ -8,6 +8,12 @@
  * This engine provides: evidence chain, investigation protocol, 
  * tamper detection, regulatory evidence packaging, dispute forensics.
  */
+/**
+ * ⚠️ TENANT ISOLATION: This engine relies on PostgreSQL RLS for data isolation.
+ * The calling route must set db.setOrgContext(orgId) before invoking engine methods.
+ * All SQL queries in this file are filtered at the database level by RLS policies.
+ */
+
 
 // ═══════════════════════════════════════════════════════════════════
 // 1. EVIDENCE CHAIN MODEL

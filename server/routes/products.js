@@ -1,3 +1,10 @@
+const { cacheInvalidate } = require('../middleware/cache-invalidate');
+
+function _safeId(name) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error("Invalid identifier: " + name);
+  return name;
+}
+
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
@@ -41,7 +48,7 @@ router.get('/', async (req, res) => {
         params.push(Number(limit), Math.max(Number(offset) || 0, 0));
 
         const products = await db.prepare(query).all(...params);
-        const total = await db.prepare('SELECT COUNT(*) as count FROM products').get();
+        const total = await db.get('SELECT COUNT(*) as count FROM products');
 
         res.json({ products, total: total.count });
     } catch (err) {
@@ -85,16 +92,16 @@ router.get('/generation-history', authMiddleware, async (req, res) => {
 // ─── GET /api/products/:id ───────────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
     try {
-        const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+        const product = await db.get('SELECT * FROM products WHERE id = ?', [req.params.id]);
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
-        const qrCodes = await db.prepare('SELECT * FROM qr_codes WHERE product_id = ?').all(req.params.id);
-        const recentScans = await db.prepare(`
+        const qrCodes = await db.all('SELECT * FROM qr_codes WHERE product_id = ?', [req.params.id]);
+        const recentScans = await db.all(`
       SELECT * FROM scan_events WHERE product_id = ? ORDER BY scanned_at DESC LIMIT 10
-    `).all(req.params.id);
-        const trustHistory = await db.prepare(`
+    `, [req.params.id]);
+        const trustHistory = await db.all(`
       SELECT * FROM trust_scores WHERE product_id = ? ORDER BY calculated_at DESC LIMIT 10
-    `).all(req.params.id);
+    `, [req.params.id]);
 
         res.json({ product, qr_codes: qrCodes, recent_scans: recentScans, trust_history: trustHistory });
     } catch (err) {
@@ -107,7 +114,7 @@ router.get('/:id', async (req, res) => {
 (async () => {
     const carbonCols = ['weight_kg', 'quantity', 'price'];
     for (const col of carbonCols) {
-        try { await db.exec(`ALTER TABLE products ADD COLUMN ${col} REAL DEFAULT 0`); } catch (_) { /* already exists */ }
+        try { await db.exec(`ALTER TABLE products ADD COLUMN ${_safeId(col)} REAL DEFAULT 0`); } catch (_) { /* already exists */ }
     }
 })();
 
@@ -120,7 +127,19 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
             return res.status(400).json({ error: 'Name and SKU are required' });
         }
 
-        const existing = await db.prepare('SELECT id FROM products WHERE sku = ?').get(sku);
+        // v9.5.0: Anti-gaming — validate product metadata quality
+        const ISO_COUNTRIES = new Set(['AF','AL','DZ','AS','AD','AO','AG','AR','AM','AU','AT','AZ','BS','BH','BD','BB','BY','BE','BZ','BJ','BT','BO','BA','BW','BR','BN','BG','BF','BI','KH','CM','CA','CV','CF','TD','CL','CN','CO','KM','CG','CD','CR','CI','HR','CU','CY','CZ','DK','DJ','DM','DO','EC','EG','SV','GQ','ER','EE','SZ','ET','FJ','FI','FR','GA','GM','GE','DE','GH','GR','GD','GT','GN','GW','GY','HT','HN','HU','IS','IN','ID','IR','IQ','IE','IL','IT','JM','JP','JO','KZ','KE','KI','KP','KR','KW','KG','LA','LV','LB','LS','LR','LY','LI','LT','LU','MG','MW','MY','MV','ML','MT','MH','MR','MU','MX','FM','MD','MC','MN','ME','MA','MZ','MM','NA','NR','NP','NL','NZ','NI','NE','NG','MK','NO','OM','PK','PW','PA','PG','PY','PE','PH','PL','PT','QA','RO','RU','RW','KN','LC','VC','WS','SM','ST','SA','SN','RS','SC','SL','SG','SK','SI','SB','SO','ZA','SS','ES','LK','SD','SR','SE','CH','SY','TW','TJ','TZ','TH','TL','TG','TO','TT','TN','TR','TM','TV','UG','UA','AE','GB','US','UY','UZ','VU','VE','VN','YE','ZM','ZW']);
+        if (origin_country && origin_country.trim() !== '' && !ISO_COUNTRIES.has(origin_country.toUpperCase().trim())) {
+            return res.status(400).json({ error: `Invalid country code: ${origin_country}. Use ISO 3166-1 alpha-2 (e.g., US, VN, SG)` });
+        }
+        if (manufacturer && manufacturer.trim().length < 3) {
+            return res.status(400).json({ error: 'Manufacturer name must be at least 3 characters' });
+        }
+        if (name.trim().length < 3) {
+            return res.status(400).json({ error: 'Product name must be at least 3 characters' });
+        }
+
+        const existing = await db.get('SELECT id FROM products WHERE sku = ?', [sku]);
         if (existing) {
             return res.status(409).json({ error: 'Product with this SKU already exists' });
         }
@@ -137,17 +156,17 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
         });
 
         // Insert product (with carbon fields)
-        await db.prepare(`
+        await db.run(`
       INSERT INTO products (id, name, sku, description, category, manufacturer, batch_number, origin_country, registered_by, org_id, weight_kg, quantity, price)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(productId, name, sku, description || '', category || '', manufacturer || '', batch_number || '', origin_country || '', req.user.id, req.user.orgId || null,
-            parseFloat(weight_kg) || 0, parseInt(quantity) || 1, parseFloat(price) || 0);
+    `, [productId, name, sku, description || '', category || '', manufacturer || '', batch_number || '', origin_country || '', req.user.id, req.user.orgId || null,
+            parseFloat(weight_kg) || 0, parseInt(quantity) || 1, parseFloat(price) || 0]);
 
         // Insert QR code
-        await db.prepare(`
+        await db.run(`
       INSERT INTO qr_codes (id, product_id, qr_data, qr_image_base64)
       VALUES (?, ?, ?, ?)
-    `).run(qrCodeId, productId, qrData, qrImageBase64);
+    `, [qrCodeId, productId, qrData, qrImageBase64]);
 
         // Audit log
         await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
@@ -173,12 +192,12 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
 // ─── PUT /api/products/:id ───────────────────────────────────────────────────
 router.put('/:id', authMiddleware, requirePermission('product:update'), async (req, res) => {
     try {
-        const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+        const product = await db.get('SELECT * FROM products WHERE id = ?', [req.params.id]);
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
         const { name, description, category, manufacturer, batch_number, origin_country, status } = req.body;
 
-        await db.prepare(`
+        await db.run(`
       UPDATE products SET 
         name = COALESCE(?, name),
         description = COALESCE(?, description),
@@ -187,9 +206,9 @@ router.put('/:id', authMiddleware, requirePermission('product:update'), async (r
         batch_number = COALESCE(?, batch_number),
         origin_country = COALESCE(?, origin_country),
         status = COALESCE(?, status),
-        updated_at = datetime('now')
+        updated_at = NOW()
       WHERE id = ?
-    `).run(name, description, category, manufacturer, batch_number, origin_country, status, req.params.id);
+    `, [name, description, category, manufacturer, batch_number, origin_country, status, req.params.id]);
 
         res.json({ message: 'Product updated', id: req.params.id });
     } catch (err) {
@@ -211,7 +230,7 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
             return res.status(400).json({ error: 'Số lượng phải từ 1 đến 100' });
         }
 
-        const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(product_id);
+        const product = await db.get('SELECT * FROM products WHERE id = ?', [product_id]);
         if (!product) {
             return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
         }
@@ -257,10 +276,10 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
             });
 
             const qrId = uuidv4();
-            await db.prepare(`
+            await db.run(`
                 INSERT INTO qr_codes (id, product_id, qr_data, qr_image_base64, org_id, generated_by)
                 VALUES (?, ?, ?, ?, ?, ?)
-            `).run(qrId, product_id, code, qrImageBase64, req.user.orgId || null, req.user.id);
+            `, [qrId, product_id, code, qrImageBase64, req.user.orgId || null, req.user.id]);
 
             generatedCodes.push({
                 id: qrId,
@@ -297,7 +316,7 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
 // ─── GET /api/products/:id/codes — List codes for a product (paginated) ──────
 router.get('/:id/codes', authMiddleware, async (req, res) => {
     try {
-        const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+        const product = await db.get('SELECT * FROM products WHERE id = ?', [req.params.id]);
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
         // Pagination params
@@ -346,7 +365,7 @@ router.delete('/codes/:codeId', authMiddleware, requirePermission('product:delet
         const codeId = req.params.codeId;
 
         // Find the code
-        const code = await db.prepare('SELECT * FROM qr_codes WHERE id = ?').get(codeId);
+        const code = await db.get('SELECT * FROM qr_codes WHERE id = ?', [codeId]);
         if (!code) {
             return res.status(404).json({ error: 'Code not found' });
         }
@@ -362,7 +381,7 @@ router.delete('/codes/:codeId', authMiddleware, requirePermission('product:delet
         }
 
         // Check if code has been scanned
-        const scanCount = await db.prepare('SELECT COUNT(*) as count FROM scan_events WHERE qr_code_id = ?').get(codeId);
+        const scanCount = await db.get('SELECT COUNT(*) as count FROM scan_events WHERE qr_code_id = ?', [codeId]);
         if (scanCount && scanCount.count > 0) {
             return res.status(409).json({
                 error: 'Cannot delete scanned codes',
@@ -373,7 +392,7 @@ router.delete('/codes/:codeId', authMiddleware, requirePermission('product:delet
 
         // Soft-delete
         await db.prepare(
-            "UPDATE qr_codes SET status = 'deleted', deleted_at = datetime('now'), deleted_by = ? WHERE id = ?"
+            "UPDATE qr_codes SET status = 'deleted', deleted_at = NOW(), deleted_by = ? WHERE id = ?"
         ).run(req.user.id, codeId);
 
         // Audit log
@@ -426,7 +445,7 @@ router.get('/codes/deletion-history', authMiddleware, requirePermission('product
 router.get('/:id/codes/export', authMiddleware, async (req, res) => {
     try {
         const { format = 'csv' } = req.query;
-        const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+        const product = await db.get('SELECT * FROM products WHERE id = ?', [req.params.id]);
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
         // Tenant scoping
@@ -478,6 +497,8 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
         // ── PDF Format (Clean text code list for printing — NO QR images) ──
         if (format === 'pdf') {
             const PDFDocument = require('pdfkit');
+const { withTransaction } = require('../middleware/transaction');
+const { checkAbuse } = require('../middleware/abuse-detection');
             const doc = new PDFDocument({ size: 'A4', margin: 40 });
             const buffers = [];
 

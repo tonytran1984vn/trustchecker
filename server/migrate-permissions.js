@@ -19,7 +19,7 @@ const FILE_RULES = {
     // ─── admin.js ─────────────────────────────────────────────
     'admin.js': {
         importReplace: true, // replace requireRole import with requirePermission
-        globalGuard: 'requirePermission(\'tenant:user_create\')', // router.use() guard
+        globalGuard: 'requirePermission(\'org:user_create\')', // router.use() guard
         lineRules: [], // all routes already guarded by router.use
     },
 
@@ -62,10 +62,10 @@ const FILE_RULES = {
     'organizations.js': {
         importReplace: true,
         lineRules: [
-            { from: "requireRole('admin')", to: "requirePermission('tenant:settings_update')", context: "router.put('/'," },
-            { from: "requireRole('admin')", to: "requirePermission('tenant:user_create')", context: "/invite" },
-            { from: "requireRole('admin')", to: "requirePermission('tenant:user_delete')", context: "router.delete" },
-            { from: "requireRole('admin')", to: "requirePermission('tenant:settings_update')", context: "/provision" },
+            { from: "requireRole('admin')", to: "requirePermission('org:settings_update')", context: "router.put('/'," },
+            { from: "requireRole('admin')", to: "requirePermission('org:user_create')", context: "/invite" },
+            { from: "requireRole('admin')", to: "requirePermission('org:user_delete')", context: "router.delete" },
+            { from: "requireRole('admin')", to: "requirePermission('org:settings_update')", context: "/provision" },
         ],
     },
 
@@ -251,7 +251,7 @@ const FILE_RULES = {
     'support.js': {
         importReplace: true,
         lineRules: [
-            { from: "requireRole('admin')", to: "requirePermission('tenant:user_create')" },
+            { from: "requireRole('admin')", to: "requirePermission('org:user_create')" },
         ],
     },
 

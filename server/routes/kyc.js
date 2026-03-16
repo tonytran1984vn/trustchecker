@@ -4,6 +4,8 @@ const { safeError } = require('../utils/safe-error');
  * Business verification, sanction screening, GDPR compliance
  */
 
+const { withTransaction } = require('../middleware/transaction');
+const { cacheInvalidate } = require('../middleware/cache-invalidate');
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
@@ -50,7 +52,7 @@ router.get('/businesses', async (req, res) => {
         (SELECT COUNT(*) FROM sanction_hits WHERE business_id = b.id AND status = 'pending_review') as pending_sanctions
       FROM kyc_businesses b
       ORDER BY b.created_at DESC
-    `);
+     LIMIT 1000`);
         res.json({ businesses });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -63,8 +65,8 @@ router.get('/businesses/:id', async (req, res) => {
         const biz = await db.get('SELECT * FROM kyc_businesses WHERE id = ?', [req.params.id]);
         if (!biz) return res.status(404).json({ error: 'Business not found' });
 
-        const checks = await db.all('SELECT * FROM kyc_checks WHERE business_id = ? ORDER BY created_at DESC', [req.params.id]);
-        const sanctions = await db.all('SELECT * FROM sanction_hits WHERE business_id = ? ORDER BY created_at DESC', [req.params.id]);
+        const checks = await db.all('SELECT * FROM kyc_checks WHERE business_id = ? ORDER BY created_at DESC LIMIT 1000', [req.params.id]);
+        const sanctions = await db.all('SELECT * FROM sanction_hits WHERE business_id = ? ORDER BY created_at DESC LIMIT 1000', [req.params.id]);
 
         res.json({ business: biz, checks, sanctions });
     } catch (e) {
@@ -79,39 +81,39 @@ router.post('/verify', requirePermission('kyc:create'), async (req, res) => {
         if (!name) return res.status(400).json({ error: 'Business name required' });
 
         const id = uuidv4();
-        await db.prepare(`
+        await db.run(`
       INSERT INTO kyc_businesses (id, name, registration_number, country, address, industry, contact_email, contact_phone)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, name, registration_number || null, country || '', address || '', industry || '', contact_email || '', contact_phone || '');
+    `, [id, name, registration_number || null, country || '', address || '', industry || '', contact_email || '', contact_phone || '']);
 
         // Auto-run registry check
         const checkId = uuidv4();
         const regScore = Math.random() * 40 + 60; // 60-100
-        await db.prepare(`
+        await db.run(`
       INSERT INTO kyc_checks (id, business_id, check_type, provider, status, result, score, checked_by)
       VALUES (?, ?, 'registry', 'gov_registry_api', 'completed', ?, ?, ?)
-    `).run(checkId, id, JSON.stringify({
+    `, [checkId, id, JSON.stringify({
             registry_found: regScore > 70,
             company_age_years: Math.floor(Math.random() * 20) + 1,
             active_status: regScore > 65
-        }), regScore, req.user.id);
+        }), regScore, req.user.id]);
 
         // Auto-run identity check
         const idCheckId = uuidv4();
         const idScore = Math.random() * 30 + 70;
-        await db.prepare(`
+        await db.run(`
       INSERT INTO kyc_checks (id, business_id, check_type, provider, status, result, score, checked_by)
       VALUES (?, ?, 'identity', 'veriff_sim', 'completed', ?, ?, ?)
-    `).run(idCheckId, id, JSON.stringify({
+    `, [idCheckId, id, JSON.stringify({
             document_verified: idScore > 80,
             face_match: idScore > 75,
             liveness_check: true
-        }), idScore, req.user.id);
+        }), idScore, req.user.id]);
 
         // Set risk level based on scores
         const avgScore = (regScore + idScore) / 2;
         const risk = avgScore > 85 ? 'low' : avgScore > 70 ? 'medium' : 'high';
-        await db.prepare('UPDATE kyc_businesses SET risk_level = ? WHERE id = ?').run(risk, id);
+        await db.run('UPDATE kyc_businesses SET risk_level = ? WHERE id = ?', [risk, id]);
 
         res.json({
             business_id: id,
@@ -131,10 +133,10 @@ router.post('/businesses/submit', async (req, res) => {
         if (!name) return res.status(400).json({ error: 'Tên doanh nghiệp là bắt buộc' });
 
         const id = uuidv4();
-        await db.prepare(`
+        await db.run(`
           INSERT INTO kyc_businesses (id, name, registration_number, country, address, industry, contact_email, contact_phone, org_id, submitted_by, verification_status)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-        `).run(id, name, registration_number || '', country || '', address || '', industry || '', contact_email || '', contact_phone || '', req.user.orgId || null, req.user.id);
+        `, [id, name, registration_number || '', country || '', address || '', industry || '', contact_email || '', contact_phone || '', req.user.orgId || null, req.user.id]);
 
         // Audit
         await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
@@ -168,23 +170,23 @@ router.post('/sanction-check', requirePermission('kyc:verify'), async (req, res)
             if (Math.random() < 0.1) {
                 const hitId = uuidv4();
                 const matchScore = Math.random() * 40 + 60;
-                await db.prepare(`
+                await db.run(`
           INSERT INTO sanction_hits (id, business_id, list_name, match_score, matched_entity, details)
           VALUES (?, ?, ?, ?, ?, ?)
-        `).run(hitId, business_id, list, matchScore,
+        `, [hitId, business_id, list, matchScore,
                     `${biz.name} (partial match)`,
                     JSON.stringify({ list, score: matchScore, reason: 'Name similarity' })
-                );
+                ]);
                 hits.push({ id: hitId, list, score: matchScore });
             }
         }
 
         // Add sanction check record
         const checkId = uuidv4();
-        await db.prepare(`
+        await db.run(`
       INSERT INTO kyc_checks (id, business_id, check_type, provider, status, result, score, checked_by)
       VALUES (?, ?, 'sanctions', 'multi_list_scan', 'completed', ?, ?, ?)
-    `).run(checkId, business_id, JSON.stringify({ lists_checked: lists, hits: hits.length }), hits.length > 0 ? 30 : 100, req.user.id);
+    `, [checkId, business_id, JSON.stringify({ lists_checked: lists, hits: hits.length }), hits.length > 0 ? 30 : 100, req.user.id]);
 
         if (hits.length > 0) {
             await db.prepare("UPDATE kyc_businesses SET risk_level = 'critical' WHERE id = ?").run(business_id);
@@ -208,9 +210,9 @@ router.post('/businesses/:id/approve', async (req, res) => {
         const biz = await db.get('SELECT * FROM kyc_businesses WHERE id = ?', [req.params.id]);
         if (!biz) return res.status(404).json({ error: 'Business not found' });
 
-        await db.prepare(`
-          UPDATE kyc_businesses SET verification_status = 'verified', verified_at = datetime('now'), verified_by = ? WHERE id = ?
-        `).run(req.user.id, req.params.id);
+        await db.run(`
+          UPDATE kyc_businesses SET verification_status = 'verified', verified_at = NOW(), verified_by = ? WHERE id = ?
+        `, [req.user.id, req.params.id]);
 
         // Audit
         await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
@@ -232,9 +234,9 @@ router.post('/businesses/:id/reject', async (req, res) => {
         }
 
         const { reason } = req.body;
-        await db.prepare(`
-          UPDATE kyc_businesses SET verification_status = 'rejected', verified_at = datetime('now'), verified_by = ?, notes = ? WHERE id = ?
-        `).run(req.user.id, reason || '', req.params.id);
+        await db.run(`
+          UPDATE kyc_businesses SET verification_status = 'rejected', verified_at = NOW(), verified_by = ?, notes = ? WHERE id = ?
+        `, [req.user.id, reason || '', req.params.id]);
 
         // Audit
         await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
@@ -264,15 +266,15 @@ router.get('/gdpr/export/:userId', requireRole('operator'), async (req, res) => 
 });
 
 // ─── GDPR: Delete User Data ────────────────────────────────
-router.delete('/gdpr/delete/:userId', requirePermission('gdpr_masking:execute'), async (req, res) => {
+router.delete('/gdpr/delete/:userId', requirePermission('gdpr_masking:execute LIMIT 1000'), async (req, res) => {
     try {
         const userId = req.params.userId;
         if (userId === req.user.id) return res.status(400).json({ error: 'Cannot delete own data' });
 
-        await db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
-        await db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').run(userId);
-        await db.prepare('DELETE FROM audit_log WHERE actor_id = ?').run(userId);
-        await db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+        await db.run('DELETE FROM sessions WHERE user_id = ?', [userId]);
+        await db.run('DELETE FROM refresh_tokens WHERE user_id = ?', [userId]);
+        await db.run('DELETE FROM audit_log WHERE actor_id = ?', [userId]);
+        await db.run('DELETE FROM users WHERE id = ?', [userId]);
 
         res.json({ deleted: true, user_id: userId });
     } catch (e) {
@@ -307,12 +309,12 @@ router.post('/verify-document', requireRole('operator'), async (req, res) => {
         const checkId = uuidv4();
         const docHash = crypto.createHash('sha256').update(`${document_type}|${document_number || ''}|${business_id}|${Date.now()}`).digest('hex');
 
-        await db.prepare(`
+        await db.run(`
       INSERT INTO kyc_checks (id, business_id, check_type, provider, status, result, score, checked_by)
       VALUES (?, ?, ?, 'document_ocr_sim', 'completed', ?, ?, ?)
-    `).run(checkId, business_id, `document_${document_type}`,
+    `, [checkId, business_id, `document_${document_type}`,
             JSON.stringify({ document_type, ocr_fields: ocrResult, document_hash: docHash, tamper_check: confidence > 0.9 ? 'pass' : 'review_needed' }),
-            Math.round(confidence * 100), req.user.id);
+            Math.round(confidence * 100), req.user.id]);
 
         res.json({
             check_id: checkId,
@@ -334,7 +336,7 @@ router.get('/businesses/:id/risk-report', async (req, res) => {
         const biz = await db.get('SELECT * FROM kyc_businesses WHERE id = ?', [req.params.id]);
         if (!biz) return res.status(404).json({ error: 'Business not found' });
 
-        const checks = await db.all('SELECT * FROM kyc_checks WHERE business_id = ? ORDER BY created_at DESC', [req.params.id]);
+        const checks = await db.all('SELECT * FROM kyc_checks WHERE business_id = ? ORDER BY created_at DESC LIMIT 1000', [req.params.id]);
         const sanctions = await db.all('SELECT * FROM sanction_hits WHERE business_id = ?', [req.params.id]);
 
         const avgScore = checks.length > 0 ? checks.reduce((s, c) => s + (c.score || 0), 0) / checks.length : 0;
@@ -378,9 +380,9 @@ router.get('/businesses/:id/audit', async (req, res) => {
       SELECT kc.*, u.username as checker_name
       FROM kyc_checks kc LEFT JOIN users u ON kc.checked_by = u.id
       WHERE kc.business_id = ? ORDER BY kc.created_at ASC
-    `, [req.params.id]);
+     LIMIT 1000`, [req.params.id]);
 
-        const sanctions = await db.all('SELECT * FROM sanction_hits WHERE business_id = ? ORDER BY created_at ASC', [req.params.id]);
+        const sanctions = await db.all('SELECT * FROM sanction_hits WHERE business_id = ? ORDER BY created_at ASC LIMIT 1000', [req.params.id]);
 
         const timeline = [
             { event: 'business_registered', timestamp: biz.created_at, details: { name: biz.name, country: biz.country } },
@@ -430,7 +432,7 @@ router.post('/approvers', requireSuperAdmin(), async (req, res) => {
         const { user_id } = req.body;
         if (!user_id) return res.status(400).json({ error: 'user_id is required' });
 
-        const user = await db.prepare('SELECT id, username, email FROM users WHERE id = ?').get(user_id);
+        const user = await db.get('SELECT id, username, email FROM users WHERE id = ?', [user_id]);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         // Get current approvers
@@ -447,7 +449,7 @@ router.post('/approvers', requireSuperAdmin(), async (req, res) => {
 
         if (setting) {
             await db.prepare(
-                "UPDATE system_settings SET setting_value = ?, updated_by = ?, updated_at = datetime('now') WHERE category = 'kyc' AND setting_key = 'approvers'"
+                "UPDATE system_settings SET setting_value = ?, updated_by = ?, updated_at = NOW() WHERE category = 'kyc' AND setting_key = 'approvers'"
             ).run(JSON.stringify(approvers), req.user.id);
         } else {
             await db.prepare(
@@ -477,7 +479,7 @@ router.get('/approvers', requireSuperAdmin(), async (req, res) => {
         const approvers = [];
 
         for (const id of approverIds) {
-            const user = await db.prepare('SELECT id, username, email, role FROM users WHERE id = ?').get(id);
+            const user = await db.get('SELECT id, username, email, role FROM users WHERE id = ?', [id]);
             if (user) approvers.push(user);
         }
 
@@ -502,7 +504,7 @@ router.delete('/approvers/:userId', requireSuperAdmin(), async (req, res) => {
 
         approvers.splice(idx, 1);
         await db.prepare(
-            "UPDATE system_settings SET setting_value = ?, updated_by = ?, updated_at = datetime('now') WHERE category = 'kyc' AND setting_key = 'approvers'"
+            "UPDATE system_settings SET setting_value = ?, updated_by = ?, updated_at = NOW() WHERE category = 'kyc' AND setting_key = 'approvers'"
         ).run(JSON.stringify(approvers), req.user.id);
 
         // Audit

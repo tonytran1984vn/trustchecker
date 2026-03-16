@@ -8,6 +8,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);
 
@@ -103,7 +104,7 @@ router.put('/', requirePermission('settings:update'), async (req, res) => {
 });
 
 // ─── POST /reset — Reset to default branding ────────────────
-router.post('/reset', requirePermission('tenant:settings_update'), async (req, res) => {
+router.post('/reset', requirePermission('org:settings_update'), async (req, res) => {
     try {
         await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
             .run(uuidv4(), req.user.company || req.user.id, 'BRAND_CONFIG', 'branding', req.user.id, JSON.stringify(DEFAULT_THEME));

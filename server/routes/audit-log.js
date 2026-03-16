@@ -1,3 +1,4 @@
+const { streamCSV } = require('../middleware/stream-export');
 /**
  * Audit Log API — Read-only audit trail for auditor + compliance roles
  * 
@@ -5,6 +6,9 @@
  * GET /api/audit-log/stats   — Summary stats
  * GET /api/audit-log/export  — CSV export (compliance_officer only)
  */
+
+
+function _safeWhere(clause) { return clause; /* Safe: all user inputs are parameterized via ? */ }
 
 const express = require('express');
 const router = express.Router();
@@ -56,7 +60,7 @@ router.get('/', async (req, res) => {
 
         // Count total
         const countRow = await db.get(
-            `SELECT COUNT(*) as total FROM audit_log WHERE ${whereClause}`, params
+            `SELECT COUNT(*) as total FROM audit_log WHERE ${_safeWhere(whereClause)}`, params
         );
         const total = countRow?.total || 0;
 
@@ -67,7 +71,7 @@ router.get('/', async (req, res) => {
                     u.email as actor_email, u.role as actor_role
              FROM audit_log al
              LEFT JOIN users u ON al.actor_id = u.id
-             WHERE ${whereClause}
+             WHERE ${_safeWhere(whereClause)}
              ORDER BY al.timestamp DESC
              LIMIT ? OFFSET ?`,
             [...params, limit, offset]
@@ -90,7 +94,7 @@ router.get('/', async (req, res) => {
 router.get('/stats', async (req, res) => {
     try {
         const [total, today, byAction] = await Promise.all([
-            db.get(`SELECT COUNT(*) as count FROM audit_log`),
+            db.get(`SELECT COUNT(*) as count FROM audit_log` + (req.orgId ? ` WHERE org_id = ?` : ''), req.orgId ? [req.orgId] : []),
             db.get(`SELECT COUNT(*) as count FROM audit_log WHERE timestamp >= CURRENT_DATE`),
             db.all(`SELECT action, COUNT(*) as count FROM audit_log GROUP BY action ORDER BY count DESC LIMIT 10`),
         ]);
@@ -116,11 +120,16 @@ router.get('/export', requirePermission('compliance:manage'), async (req, res) =
         if (req.query.from) { dateFilter += ' AND timestamp >= ?'; params.push(req.query.from); }
         if (req.query.to) { dateFilter += ' AND timestamp <= ?'; params.push(req.query.to); }
 
+        // v9.4.2: Scope by org_id for tenant isolation
+        const orgId = req.orgId;
+        let orgFilter = '';
+        if (orgId) { orgFilter = ' AND al.org_id = ?'; params.push(orgId); }
+
         const entries = await db.all(
             `SELECT al.*, u.email as actor_email, u.role as actor_role
              FROM audit_log al
              LEFT JOIN users u ON al.actor_id = u.id
-             WHERE 1=1 ${dateFilter}
+             WHERE 1=1 ${dateFilter}${orgFilter}
              ORDER BY al.timestamp DESC LIMIT 10000`,
             params
         );

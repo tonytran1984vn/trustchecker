@@ -1,28 +1,50 @@
 /**
  * Digital Twin Routes — Virtual Supply Chain Model API
  * Real-time twin state, KPIs, anomaly detection, simulation
+ *
+ * SEC: All queries org-scoped via req.orgId (tenant isolation)
  */
+
+function _safeId(name) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error("Invalid identifier: " + name);
+  return name;
+}
+
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/engine-client');
 const { cacheMiddleware } = require('../cache');
+const { orgGuard } = require('../middleware/org-middleware');
+const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);
+router.use(orgGuard());
+
+// Helper: org-scoped table query (platform admin sees all if no orgId)
+function orgAll(table, orgId, extra = '', limit = null) {
+    let sql = `SELECT * FROM ${_safeId(table)}`;
+    const params = [];
+    if (orgId) { sql += ' WHERE org_id = ?'; params.push(orgId); }
+    if (extra) sql += (orgId ? ' AND ' : ' WHERE ') + extra;
+    if (limit) sql += ` LIMIT ${parseInt(limit)}`;
+    return db.prepare(sql).all(...params);
+}
 
 // ─── GET /api/scm/twin/model — Current digital twin state ───────────────────
 // Cache 30s — queries 7 tables in parallel
 router.get('/model', cacheMiddleware(30), async (req, res) => {
     try {
+        const oid = req.orgId;
         const [partners, products, batches, shipments, inventory, events, seals] = await Promise.all([
-            db.prepare('SELECT * FROM partners').all(),
-            db.prepare('SELECT * FROM products').all(),
-            db.prepare('SELECT * FROM batches').all(),
-            db.prepare('SELECT * FROM shipments').all(),
-            db.prepare('SELECT * FROM inventory').all(),
-            db.prepare('SELECT * FROM supply_chain_events ORDER BY created_at DESC LIMIT 500').all(),
-            db.prepare('SELECT * FROM blockchain_seals ORDER BY block_index DESC LIMIT 200').all()
+            orgAll('partners', oid),
+            orgAll('products', oid),
+            orgAll('batches', oid),
+            orgAll('shipments', oid),
+            orgAll('inventory', oid),
+            orgAll('supply_chain_events', oid, 'created_at IS NOT NULL ORDER BY created_at DESC LIMIT 1000', 500),
+            orgAll('blockchain_seals', oid, 'block_index IS NOT NULL ORDER BY block_index DESC LIMIT 1000', 200),
         ]);
 
         const model = await engineClient.digitalTwinBuild({ partners, products, batches, shipments, inventory, events, seals });
@@ -38,11 +60,12 @@ router.get('/model', cacheMiddleware(30), async (req, res) => {
 // Cache 60s — aggregated metrics
 router.get('/kpis', cacheMiddleware(60), async (req, res) => {
     try {
+        const oid = req.orgId;
         const [shipments, inventory, events, batches] = await Promise.all([
-            db.prepare('SELECT * FROM shipments').all(),
-            db.prepare('SELECT * FROM inventory').all(),
-            db.prepare('SELECT * FROM supply_chain_events').all(),
-            db.prepare('SELECT * FROM batches').all()
+            orgAll('shipments', oid),
+            orgAll('inventory', oid),
+            orgAll('supply_chain_events', oid),
+            orgAll('batches', oid),
         ]);
 
         const kpis = await engineClient.digitalTwinKPIs({ shipments, inventory, events, batches });
@@ -58,10 +81,11 @@ router.get('/kpis', cacheMiddleware(60), async (req, res) => {
 // Cache 60s — detection results don't change rapidly  
 router.get('/anomalies', cacheMiddleware(60), async (req, res) => {
     try {
+        const oid = req.orgId;
         const [inventory, shipments, events] = await Promise.all([
-            db.prepare('SELECT * FROM inventory').all(),
-            db.prepare('SELECT * FROM shipments').all(),
-            db.prepare('SELECT * FROM supply_chain_events ORDER BY created_at DESC LIMIT 500').all()
+            orgAll('inventory', oid),
+            orgAll('shipments', oid),
+            orgAll('supply_chain_events', oid, 'created_at IS NOT NULL ORDER BY created_at DESC LIMIT 1000', 500),
         ]);
 
         const anomalies = await engineClient.digitalTwinAnomalies({ inventory, shipments, events });
@@ -79,14 +103,15 @@ router.post('/simulate', requirePermission('digital_twin:simulate'), async (req,
         const scenario = req.body;
         if (!scenario.type) return res.status(400).json({ error: 'Scenario type required (node_offline, capacity_reduction)' });
 
+        const oid = req.orgId;
         const [partners, products, batches, shipments, inventory, events, seals] = await Promise.all([
-            db.prepare('SELECT * FROM partners').all(),
-            db.prepare('SELECT * FROM products').all(),
-            db.prepare('SELECT * FROM batches').all(),
-            db.prepare('SELECT * FROM shipments').all(),
-            db.prepare('SELECT * FROM inventory').all(),
-            db.prepare('SELECT * FROM supply_chain_events ORDER BY created_at DESC LIMIT 500').all(),
-            db.prepare('SELECT * FROM blockchain_seals ORDER BY block_index DESC LIMIT 200').all()
+            orgAll('partners', oid),
+            orgAll('products', oid),
+            orgAll('batches', oid),
+            orgAll('shipments', oid),
+            orgAll('inventory', oid),
+            orgAll('supply_chain_events', oid, 'created_at IS NOT NULL ORDER BY created_at DESC LIMIT 1000', 500),
+            orgAll('blockchain_seals', oid, 'block_index IS NOT NULL ORDER BY block_index DESC LIMIT 1000', 200),
         ]);
 
         const model = await engineClient.digitalTwinBuild({ partners, products, batches, shipments, inventory, events, seals });

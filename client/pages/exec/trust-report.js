@@ -81,7 +81,7 @@ export function renderPage() {
 
 async function loadData() {
   try {
-    const r = await api.get('/tenant/owner/ccs/trust-report');
+    const r = await api.get('/org-admin/owner/ccs/trust-report');
     _data = r;
     const el = document.getElementById('main-content');
     if (el) el.innerHTML = renderPage();

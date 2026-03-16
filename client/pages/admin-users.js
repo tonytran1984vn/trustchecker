@@ -246,7 +246,7 @@ window._umDoAppoint = async function () {
   const name = document.getElementById('appoint-name')?.value;
   if (!email) { showToast('Email is required', 'error'); return; }
   try {
-    const res = await API.post('/tenant/appoint-admin', { email, name });
+    const res = await API.post('/org-admin/appoint-admin', { email, name });
     let msg = `✓ ${res.message}`;
     if (res.temp_password) {
       msg += ` — Temp password: ${res.temp_password}`;

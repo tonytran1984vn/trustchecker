@@ -28,7 +28,7 @@ export function renderPage() {
 
   return `
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('clipboard', 28)} Procurement</h1><div class="sa-title-actions"><button class="btn btn-primary btn-sm" onclick="window._showNewPOModal()">+ New Purchase Order</button></div></div>
+      <div class="sa-page-title"><h1>${icon('clipboard', 28)} Procurement</h1><div class="sa-title-actions"><button style="padding:6px 16px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-size:0.78rem;font-weight:600;cursor:pointer" onclick="window._showNewPOModal()">+ New Purchase Order</button></div></div>
 
       <div class="sa-metrics-row" style="margin-bottom:1.5rem">
         ${m('Active POs', orders.length.toString(), `${pending} pending approval`, 'blue', 'clipboard')}
@@ -40,7 +40,7 @@ export function renderPage() {
       <div class="sa-card" style="margin-bottom:1.5rem">
         <h3>📋 Purchase Orders</h3>
         <table class="sa-table"><thead><tr><th>PO #</th><th>Supplier</th><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th><th>Delivery</th><th>Payment</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-          ${orders.map(p => {
+          ${orders.map((p, _poIdx) => {
     const color = p.status === 'delivered' ? 'green' : p.status === 'approved' ? 'blue' : p.status === 'in_transit' ? 'orange' : 'red';
     const qty = typeof p.quantity === 'number' ? p.quantity.toLocaleString() + ' ' + (p.unit || 'pcs') : (p.qty || '—');
     const price = typeof p.unit_price === 'number' ? '$' + p.unit_price.toFixed(2) + '/' + (p.unit || 'pcs') : (p.unitPrice || '—');
@@ -57,7 +57,7 @@ export function renderPage() {
               <td class="sa-code" style="font-size:0.78rem">${delivery}</td>
               <td style="font-size:0.72rem">${p.payment_terms || p.payment || ''}</td>
               <td><span class="sa-status-pill sa-pill-${color}">${(p.status || '').replace(/_/g, ' ')}</span></td>
-              <td>${p.status === 'pending_approval' ? `<button class="btn btn-xs btn-primary" onclick="window._approvePO('${p.id}')">Approve</button>` : `<button class="btn btn-xs btn-ghost" onclick="showToast('PO ${poNum}: ${p.product}','info')">View</button>`}</td>
+              <td>${p.status === 'pending_approval' ? `<button style="padding:3px 10px;border:none;border-radius:6px;background:#0d9488;color:#fff;font-size:0.72rem;font-weight:600;cursor:pointer" onclick="window._approvePO('${p.id}')">Approve</button>` : `<button class="btn btn-xs btn-ghost" onclick="window._viewPO(${_poIdx})">View</button>`}</td>
             </tr>`;
   }).join('')}
         </tbody></table>
@@ -139,7 +139,7 @@ export function renderPage() {
           </div>
         </div>
         <div style="display:flex;gap:10px;margin-top:20px">
-          <button onclick="window._submitNewPO()" style="flex:1;padding:11px;background:#3b82f6;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.9rem;transition:background 0.2s" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">Create PO</button>
+          <button onclick="window._submitNewPO()" style="flex:1;padding:11px;background:#0d9488;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.9rem;transition:background 0.2s" onmouseover="this.style.background='#0f766e'" onmouseout="this.style.background='#0d9488'">Create PO</button>
           <button onclick="window._closePOModal()" style="flex:0.6;padding:11px;background:var(--bg-secondary, #f1f5f9);color:var(--text-primary, #1e293b);border:1px solid var(--border, #e2e8f0);border-radius:8px;cursor:pointer;font-weight:500;font-size:0.9rem;transition:background 0.2s" onmouseover="this.style.background='var(--border, #e2e8f0)'" onmouseout="this.style.background='var(--bg-secondary, #f1f5f9)'">Cancel</button>
         </div>
       </div>
@@ -220,3 +220,65 @@ window._approvePO = async (id) => {
 
 // Auto-load when page renders
 if (!State._poOrders) loadPOData();
+
+window._viewPO = function(idx) {
+  const p = (State._poOrders || [])[idx];
+  if (!p) return;
+  const poNum = p.po_number || p.id;
+  const qty = typeof p.quantity === 'number' ? p.quantity.toLocaleString() + ' ' + (p.unit || 'pcs') : (p.qty || '—');
+  const price = typeof p.unit_price === 'number' ? '$' + p.unit_price.toFixed(2) + '/' + (p.unit || 'pcs') : (p.unitPrice || '—');
+  const total = typeof p.total_amount === 'number' ? '$' + p.total_amount.toLocaleString() : (p.total || '—');
+  const delivery = p.delivery_date ? new Date(p.delivery_date).toISOString().split('T')[0] : (p.delivery || '—');
+  const stColor = p.status === 'delivered' ? '#22c55e' : p.status === 'approved' ? '#3b82f6' : p.status === 'in_transit' ? '#f59e0b' : '#ef4444';
+  const modal = document.createElement('div');
+  modal.id = '_po_detail_modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center';
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = `
+    <div style="background:var(--card-bg,#fff);border-radius:14px;padding:28px 24px;width:520px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,0.25);border:1px solid var(--border-color,#e2e8f0)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <h3 style="margin:0;font-size:1.1rem;color:var(--text-primary)">📋 Purchase Order Detail</h3>
+        <button onclick="document.getElementById('_po_detail_modal')?.remove()" style="background:none;border:none;cursor:pointer;font-size:1.2rem;color:var(--text-secondary);padding:4px 8px;border-radius:6px">✕</button>
+      </div>
+      <div style="display:grid;gap:14px">
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-radius:10px;background:${stColor}08;border:1px solid ${stColor}20">
+          <span style="font-weight:700;font-size:0.92rem;color:var(--text-primary);font-family:monospace">${poNum}</span>
+          <span style="font-size:0.62rem;padding:2px 8px;border-radius:12px;font-weight:600;background:${stColor}12;color:${stColor}">${(p.status || '').replace(/_/g, ' ')}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);font-weight:600;margin-bottom:4px">Supplier</div>
+            <div style="font-size:0.92rem;font-weight:600;color:var(--text-primary)">${p.supplier}</div>
+          </div>
+          <div>
+            <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);font-weight:600;margin-bottom:4px">Product</div>
+            <div style="font-size:0.85rem;color:var(--text-primary)">${p.product}</div>
+          </div>
+          <div>
+            <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);font-weight:600;margin-bottom:4px">Quantity</div>
+            <div style="font-size:0.85rem;color:var(--text-primary)">${qty}</div>
+          </div>
+          <div>
+            <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);font-weight:600;margin-bottom:4px">Unit Price</div>
+            <div style="font-size:0.85rem;font-family:monospace;color:var(--text-primary)">${price}</div>
+          </div>
+          <div>
+            <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);font-weight:600;margin-bottom:4px">Total Amount</div>
+            <div style="font-size:1rem;font-weight:700;color:var(--text-primary)">${total}</div>
+          </div>
+          <div>
+            <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);font-weight:600;margin-bottom:4px">Delivery Date</div>
+            <div style="font-size:0.85rem;color:var(--text-primary)">${delivery}</div>
+          </div>
+          <div>
+            <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);font-weight:600;margin-bottom:4px">Payment Terms</div>
+            <div style="font-size:0.85rem;color:var(--text-primary)">${p.payment_terms || p.payment || '—'}</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:20px">
+        <button onclick="document.getElementById('_po_detail_modal')?.remove()" style="flex:1;padding:10px;background:var(--bg-secondary,#f1f5f9);color:var(--text-primary);border:1px solid var(--border-color,#e2e8f0);border-radius:8px;cursor:pointer;font-weight:500;font-size:0.85rem">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+};

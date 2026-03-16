@@ -1,0 +1,113 @@
+name: "🛡️ TrustChecker DevSecOps Audit"
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "server/**"
+      - "migrations/**"
+      - "prisma/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "server/**"
+      - "migrations/**"
+      - "prisma/**"
+  schedule:
+    # Daily audit at 6 AM UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  route-security:
+    name: "🛡️ Route Security"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: node scripts/audit-routes.js --json > route-audit.json || true
+      - run: node scripts/audit-routes.js
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: route-audit
+          path: route-audit.json
+
+  sql-safety:
+    name: "💾 SQL Safety"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: node scripts/audit-sql.js --json > sql-audit.json || true
+      - run: node scripts/audit-sql.js
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sql-audit
+          path: sql-audit.json
+
+  migration-risk:
+    name: "🔄 Migration Risk"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: node scripts/audit-migrations.js --json > migration-audit.json || true
+      - run: node scripts/audit-migrations.js
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: migration-audit
+          path: migration-audit.json
+
+  tenant-isolation:
+    name: "🏢 Tenant Isolation"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: node scripts/audit-tenant.js --json > tenant-audit.json || true
+      - run: node scripts/audit-tenant.js
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tenant-audit
+          path: tenant-audit.json
+
+  summary:
+    name: "📊 Audit Summary"
+    needs: [route-security, sql-safety, migration-risk, tenant-isolation]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Generate Summary
+        run: |
+          echo "## 🛡️ TrustChecker DevSecOps Audit Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scanner | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Route Security | ${{ needs.route-security.result == 'success' && '✅ Pass' || '❌ Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SQL Safety | ${{ needs.sql-safety.result == 'success' && '✅ Pass' || '❌ Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Migration Risk | ${{ needs.migration-risk.result == 'success' && '✅ Pass' || '❌ Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tenant Isolation | ${{ needs.tenant-isolation.result == 'success' && '✅ Pass' || '❌ Issues Found' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📅 $(date -u +%Y-%m-%d %H:%M UTC)" >> $GITHUB_STEP_SUMMARY

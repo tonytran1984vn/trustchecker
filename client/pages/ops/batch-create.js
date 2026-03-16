@@ -57,8 +57,8 @@ export function renderPage() {
       </div>
 
       <div style="display:flex;gap:1rem;justify-content:flex-end;margin-top:1.5rem">
-        <button class="btn btn-outline" onclick="showToast('💾 Batch draft saved','success')">Save Draft</button>
-        <button class="btn btn-primary" onclick="window._opsSubmitBatch()">Create Batch & Generate QR</button>
+        <button class="btn btn-outline" onclick="if(confirm('Save current form as draft?')){showToast('💾 Batch draft saved locally','success')}">Save Draft</button>
+        <button style="padding:9px 22px;border:none;border-radius:8px;background:#0d9488;color:#fff;font-size:0.85rem;font-weight:600;cursor:pointer" onclick="window._opsSubmitBatch()">Create Batch & Generate QR</button>
       </div>
     </div>
   `;

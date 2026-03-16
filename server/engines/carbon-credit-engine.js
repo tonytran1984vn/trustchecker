@@ -847,7 +847,7 @@ class CarbonCreditMintingEngine {
         // L5: Mint
         const mintResult = this.mintCredit({
             event: ingestion.event, counterfactual, mrvResult: mrv, additionalityResult: additionality,
-            issuer_id: rawEvent.issuer_id || 'system', org_id: rawEvent.org_id || 'default',
+            issuer_id: rawEvent.issuer_id || 'system', org_id: rawEvent.org_id,
             beneficiary_id: rawEvent.beneficiary_id, fractional_policy
         });
 

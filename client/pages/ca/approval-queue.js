@@ -1,7 +1,7 @@
 /**
  * Approval Queue — Dual-Control for High-Risk Role Assignments
- * Calls: GET /api/tenant/approvals
- * Actions: POST /api/tenant/approvals/:id/approve | reject
+ * Calls: GET /api/org-admin/approvals
+ * Actions: POST /api/org-admin/approvals/:id/approve | reject
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
@@ -21,7 +21,7 @@ async function _load() {
     const gc = window._caGovCache;
     let res;
     if (gc?.approvals && gc._loadedAt && !_approvals) { res = gc.approvals; }
-    else { res = await API.get('/tenant/approvals'); }
+    else { res = await API.get('/org-admin/approvals'); }
     _approvals = res.approvals || [];
   } catch (e) { _approvals = []; }
   _loading = false;
@@ -125,7 +125,7 @@ window._aqRefresh = () => { _approvals = null; _loading = false; _load(); };
 
 window._aqApprove = async (id) => {
   try {
-    const res = await API.post(`/tenant/approvals/${id}/approve`);
+    const res = await API.post(`/org-admin/approvals/${id}/approve`);
     showToast(`✅ Role approved: ${res.role || 'Unknown'}`, 'success');
     _load();
   } catch (e) {
@@ -138,7 +138,7 @@ window._aqReject = async (id) => {
   const reason = prompt('Rejection reason (required):');
   if (!reason) return;
   try {
-    await API.post(`/tenant/approvals/${id}/reject`, { reason });
+    await API.post(`/org-admin/approvals/${id}/reject`, { reason });
     showToast('❌ Role assignment rejected', 'warning');
     _load();
   } catch (e) {

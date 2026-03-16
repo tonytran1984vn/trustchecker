@@ -116,7 +116,7 @@ export function renderPage() {
 
 async function loadData() {
   try {
-    const r = await api.get('/tenant/owner/ccs/scm-summary');
+    const r = await api.get('/org-admin/owner/ccs/scm-summary');
     _data = r;
     const el = document.getElementById('main-content');
     if (el) el.innerHTML = renderPage();

@@ -39,12 +39,12 @@ router.get('/forecast-demand', cacheMiddleware(60), async (req, res) => {
         let data;
         if (history.length < parseInt(season_length) * 2) {
             // Fallback: use scan events as demand proxy
-            const scans = await db.prepare(`
+            const scans = await db.all(`
         SELECT COUNT(*) as count, DATE(scanned_at) as day
         FROM scan_events
         GROUP BY DATE(scanned_at)
         ORDER BY day ASC LIMIT 100
-      `).all();
+      `);
             data = scans.map(s => s.count);
 
             if (data.length < parseInt(season_length) * 2) {
@@ -86,14 +86,14 @@ router.post('/monte-carlo', async (req, res) => {
 
         // Auto-populate from DB if no params provided
         if (!params.shipments_per_month) {
-            const shipCount = (await db.prepare('SELECT COUNT(*) as c FROM shipments').get())?.c || 10;
+            const shipCount = (await db.get('SELECT COUNT(*) as c FROM shipments'))?.c || 10;
             params.shipments_per_month = Math.max(10, shipCount);
         }
         if (!params.avg_delay) {
-            const shipments = await db.prepare(`
+            const shipments = await db.all(`
         SELECT estimated_delivery, actual_delivery FROM shipments
         WHERE actual_delivery IS NOT NULL AND estimated_delivery IS NOT NULL
-      `).all();
+      `);
             if (shipments.length > 0) {
                 const delays = shipments.map(s =>
                     (new Date(s.actual_delivery) - new Date(s.estimated_delivery)) / 3600000
@@ -112,6 +112,7 @@ router.post('/monte-carlo', async (req, res) => {
         } catch (workerErr) {
             console.warn('Python engine failed, falling back to JS:', workerErr.message);
             const advancedAI = require('../engines/advanced-scm-ai');
+const { withTransaction } = require('../middleware/transaction');
             result = advancedAI.monteCarloRisk(params, simCount);
         }
 
@@ -130,19 +131,19 @@ router.post('/monte-carlo', async (req, res) => {
 // Cache 120s — queries 700+ rows across 3 tables
 router.get('/delay-root-cause', cacheMiddleware(120), async (req, res) => {
     try {
-        const shipments = await db.prepare(`
+        const shipments = await db.all(`
       SELECT s.*, fp.name as from_name, tp.name as to_name
       FROM shipments s
       LEFT JOIN partners fp ON s.from_partner_id = fp.id
       LEFT JOIN partners tp ON s.to_partner_id = tp.id
       ORDER BY s.created_at DESC LIMIT 200
-    `).all();
+    `);
 
-        const events = await db.prepare(`
+        const events = await db.all(`
       SELECT * FROM supply_chain_events ORDER BY created_at DESC LIMIT 500
-    `).all();
+    `);
 
-        const partners = await db.prepare('SELECT * FROM partners').all();
+        const partners = await db.all('SELECT * FROM partners');
 
         const analysis = await engineClient.scmBottlenecks(events, partners);
 
@@ -162,18 +163,18 @@ router.get('/demand-sensing', async (req, res) => {
         const { threshold = 2.0 } = req.query;
 
         // Use scan events as demand proxy
-        const scans = await db.prepare(`
+        const scans = await db.all(`
       SELECT COUNT(*) as count, DATE(scanned_at) as day
       FROM scan_events
       GROUP BY DATE(scanned_at)
       ORDER BY day ASC
-    `).all();
+     LIMIT 1000`);
 
         let salesData = scans.map(s => s.count);
 
         // If insufficient data, use inventory changes
         if (salesData.length < 5) {
-            const invHistory = await db.prepare('SELECT quantity FROM inventory ORDER BY updated_at ASC LIMIT 50').all();
+            const invHistory = await db.all('SELECT quantity FROM inventory ORDER BY updated_at ASC LIMIT 50');
             salesData = invHistory.map(i => i.quantity);
         }
 
@@ -201,9 +202,9 @@ router.post('/what-if', async (req, res) => {
         const scenario = req.body;
 
         // Auto-populate current state from DB
-        const totalPartners = (await db.prepare('SELECT COUNT(*) as c FROM partners').get())?.c || 6;
-        const totalShipments = (await db.prepare('SELECT COUNT(*) as c FROM shipments').get())?.c || 100;
-        const avgInventory = (await db.prepare('SELECT AVG(quantity) as avg FROM inventory').get())?.avg || 200;
+        const totalPartners = (await db.get('SELECT COUNT(*) as c FROM partners'))?.c || 6;
+        const totalShipments = (await db.get('SELECT COUNT(*) as c FROM shipments'))?.c || 100;
+        const avgInventory = (await db.get('SELECT AVG(quantity) as avg FROM inventory'))?.avg || 200;
 
         const currentState = {
             total_partners: totalPartners,

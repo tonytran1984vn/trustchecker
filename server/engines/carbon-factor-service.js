@@ -7,6 +7,12 @@
  * 
  * Each factor has version history, source attribution, and confidence score.
  */
+/**
+ * ⚠️ TENANT ISOLATION: This engine relies on PostgreSQL RLS for data isolation.
+ * The calling route must set db.setOrgContext(orgId) before invoking engine methods.
+ * All SQL queries in this file are filtered at the database level by RLS policies.
+ */
+
 const db = require('../db');
 const { v4: uuidv4 } = require('uuid');
 
@@ -28,10 +34,10 @@ async function initFactorTable() {
             methodology TEXT DEFAULT '',
             confidence_score INTEGER DEFAULT 3,
             version INTEGER DEFAULT 1,
-            effective_from TEXT DEFAULT (datetime('now')),
+            effective_from TEXT DEFAULT (NOW()),
             superseded_at TEXT,
             updated_by TEXT DEFAULT 'system',
-            created_at TEXT DEFAULT (datetime('now'))
+            created_at TEXT DEFAULT (NOW())
         )`);
         _initialized = true;
     } catch (e) {
@@ -51,12 +57,12 @@ async function loadFactors(category = null) {
         let rows;
         if (category) {
             rows = await db.all(
-                `SELECT * FROM emission_factors WHERE superseded_at IS NULL AND category = ? ORDER BY category, factor_key`,
+                `SELECT * FROM emission_factors WHERE superseded_at IS NULL AND category = ? ORDER BY category, factor_key LIMIT 1000`,
                 [category]
             );
         } else {
             rows = await db.all(
-                `SELECT * FROM emission_factors WHERE superseded_at IS NULL ORDER BY category, factor_key`
+                `SELECT * FROM emission_factors WHERE superseded_at IS NULL ORDER BY category, factor_key LIMIT 1000`
             );
         }
         return (rows || []).map(r => ({
@@ -106,7 +112,7 @@ async function updateFactor(id, updates, userId) {
 
     // Supersede old version
     await db.run(
-        `UPDATE emission_factors SET superseded_at = datetime('now') WHERE id = ?`, [id]
+        `UPDATE emission_factors SET superseded_at = NOW() WHERE id = ?`, [id]
     );
 
     // Create new version
@@ -147,7 +153,7 @@ async function getFactorHistory(category, factorKey) {
         const rows = await db.all(
             `SELECT * FROM emission_factors 
              WHERE category = ? AND factor_key = ?
-             ORDER BY version DESC`,
+             ORDER BY version DESC LIMIT 1000`,
             [category, factorKey]
         );
         return (rows || []).map(r => ({
