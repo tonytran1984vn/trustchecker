@@ -104,10 +104,8 @@ async function loadData() {
             if (id === 'channel_email') _data.channels.email = !_data.channels.email;
             else if (id === 'channel_inapp') _data.channels.in_app = !_data.channels.in_app;
             // Re-render with updated _data
-            const el = document.getElementById('main-content');
-            if (el) el.innerHTML = renderPage();
-            // Auto-save after toggle
-            window.__saveNotifSettings?.();
+            const mc = document.getElementById('main-content');
+            if (mc) mc.innerHTML = renderPage();
         };
         window.__toggleSev = (sev) => {
             const idx = _data.severity_filter.indexOf(sev);
@@ -129,9 +127,10 @@ async function loadData() {
                     severity_filter: _data.severity_filter,
                 };
                 const result = await api.post('/org-admin/governance/notifications', body);
-                _data = result.notifications || _data;
+                if (result.notifications) _data = result.notifications;
                 _saving = false;
-                if (el) el.innerHTML = renderPage();
+                const mc2 = document.getElementById('main-content');
+                if (mc2) mc2.innerHTML = renderPage();
                 // Show success toast
                 const toast = document.createElement('div');
                 toast.style.cssText = 'position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:10px;background:#22c55e;color:#fff;font-weight:600;font-size:0.82rem;z-index:9999;animation:fadeIn 0.3s';
@@ -141,7 +140,8 @@ async function loadData() {
             } catch (e) {
                 _saving = false;
                 console.error('[Notif] Save error:', e);
-                if (el) el.innerHTML = renderPage();
+                const mc3 = document.getElementById('main-content');
+                if (mc3) mc3.innerHTML = renderPage();
             }
         };
         const el = document.getElementById('main-content');
