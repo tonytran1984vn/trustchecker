@@ -100,13 +100,12 @@ async function loadData() {
     try {
         _data = await api.get('/org-admin/governance/notifications');
         window.__toggleChannel = (id) => {
-            const cb = document.getElementById(id);
-            if (!cb) return;
-            cb.checked = !cb.checked;
-            const track = document.getElementById(id + '_track');
-            const thumb = document.getElementById(id + '_thumb');
-            if (track) track.style.background = cb.checked ? '#22c55e' : '#cbd5e1';
-            if (thumb) thumb.style.left = cb.checked ? '22px' : '2px';
+            // Update _data directly (so renderPage uses new state)
+            if (id === 'channel_email') _data.channels.email = !_data.channels.email;
+            else if (id === 'channel_inapp') _data.channels.in_app = !_data.channels.in_app;
+            // Re-render with updated _data
+            const el = document.getElementById('main-content');
+            if (el) el.innerHTML = renderPage();
             // Auto-save after toggle
             window.__saveNotifSettings?.();
         };
@@ -117,16 +116,15 @@ async function loadData() {
         };
         window.__saveNotifSettings = async () => {
             _saving = true;
-            const el = document.getElementById('main-content');
-            if (el) el.innerHTML = renderPage();
             try {
+                // Read values from _data (already updated by toggle handlers)
                 const body = {
-                    fraud_rate_threshold: parseInt(document.getElementById('inp_fraud_rate_threshold')?.value) || 5,
-                    trust_drop_threshold: parseInt(document.getElementById('inp_trust_drop_threshold')?.value) || 15,
-                    anomaly_multiplier: parseInt(document.getElementById('inp_anomaly_multiplier')?.value) || 2,
+                    fraud_rate_threshold: parseInt(document.getElementById('inp_fraud_rate_threshold')?.value) || _data.fraud_rate_threshold || 5,
+                    trust_drop_threshold: parseInt(document.getElementById('inp_trust_drop_threshold')?.value) || _data.trust_drop_threshold || 15,
+                    anomaly_multiplier: parseInt(document.getElementById('inp_anomaly_multiplier')?.value) || _data.anomaly_multiplier || 2,
                     channels: {
-                        email: document.getElementById('channel_email')?.checked || false,
-                        in_app: document.getElementById('channel_inapp')?.checked !== false,
+                        email: _data.channels?.email || false,
+                        in_app: _data.channels?.in_app !== false,
                     },
                     severity_filter: _data.severity_filter,
                 };
