@@ -20,7 +20,7 @@ router.use(authMiddleware);
 const revGov = require('../engines/revenue-governance-engine');
 const jurisdiction = require('../engines/jurisdictional-risk-engine');
 const killSwitch = require('../engines/kill-switch-engine');
-const superAdmin = require('../engines/super-admin-boundaries-engine');
+const superAdmin = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was super-admin-boundaries-engine
 const modelRisk = require('../engines/model-risk-tiering-engine');
 
 // ═══════════════════════════════════════════════════════════════════

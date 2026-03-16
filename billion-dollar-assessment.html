@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TrustChecker — Billion-Dollar SaaS Potential Assessment</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0f;
+  --surface: #111118;
+  --surface2: #1a1a24;
+  --border: #2a2a3a;
+  --text: #e8e8f0;
+  --text-dim: #8888a0;
+  --accent: #6366f1;
+  --accent-light: #818cf8;
+  --green: #22c55e;
+  --yellow: #eab308;
+  --red: #ef4444;
+  --orange: #f97316;
+  --blue: #3b82f6;
+  --cyan: #06b6d4;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+/* Header */
+.hero {
+  text-align: center;
+  padding: 80px 0 60px;
+  position: relative;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -100px; left: 50%; transform: translateX(-50%);
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+.hero-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(129,140,248,0.08));
+  border: 1px solid rgba(99,102,241,0.3);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--accent-light);
+  margin-bottom: 24px;
+}
+.hero h1 {
+  font-size: 42px;
+  font-weight: 900;
+  line-height: 1.15;
+  letter-spacing: -1.5px;
+  background: linear-gradient(135deg, #fff 30%, var(--accent-light) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 16px;
+}
+.hero .subtitle {
+  color: var(--text-dim);
+  font-size: 16px;
+  font-weight: 400;
+}
+.hero .date {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin-top: 8px;
+  opacity: 0.7;
+}
+
+/* Score Card Hero */
+.score-hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  padding: 40px;
+  background: linear-gradient(135deg, var(--surface), var(--surface2));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  margin: 40px 0;
+}
+.score-circle {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 4px solid var(--accent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(99,102,241,0.08);
+  flex-shrink: 0;
+}
+.score-circle .number {
+  font-size: 48px;
+  font-weight: 900;
+  color: var(--accent-light);
+  line-height: 1;
+}
+.score-circle .label {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+.score-summary {
+  flex: 1;
+}
+.score-summary .quote {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.score-summary .sub {
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+/* Sections */
+.section {
+  margin: 60px 0;
+}
+.section-number {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  text-align: center;
+  line-height: 32px;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+h2 {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  margin-bottom: 20px;
+  color: #fff;
+}
+h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 28px 0 12px;
+  color: var(--text);
+}
+p {
+  margin-bottom: 16px;
+  color: var(--text);
+}
+strong { color: #fff; font-weight: 600; }
+
+/* Dividers */
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+  margin: 60px 0;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  font-size: 14px;
+}
+thead th {
+  background: var(--surface2);
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+  border-bottom: 2px solid var(--border);
+}
+tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+tbody tr:hover { background: rgba(99,102,241,0.04); }
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  margin: 20px 0;
+}
+.card.highlight {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(99,102,241,0.06), rgba(99,102,241,0.02));
+}
+.card.warning {
+  border-color: var(--orange);
+  background: rgba(249,115,22,0.04);
+}
+.card.danger {
+  border-color: var(--red);
+  background: rgba(239,68,68,0.04);
+}
+
+/* Blockquotes */
+blockquote {
+  border-left: 3px solid var(--accent);
+  padding: 16px 20px;
+  margin: 20px 0;
+  background: rgba(99,102,241,0.05);
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+  color: var(--text);
+}
+blockquote strong { color: var(--accent-light); font-style: normal; }
+
+/* Lists */
+ul, ol {
+  padding-left: 24px;
+  margin: 12px 0;
+}
+li { margin: 8px 0; }
+
+/* Code blocks */
+.code-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+  margin: 20px 0;
+  color: var(--text-dim);
+  white-space: pre;
+}
+
+/* Emoji indicators */
+.status-green { color: var(--green); }
+.status-yellow { color: var(--yellow); }
+.status-red { color: var(--red); }
+
+/* Mermaid diagram as styled div */
+.diagram {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  margin: 20px 0;
+  text-align: center;
+}
+.diagram .node {
+  display: inline-block;
+  padding: 10px 20px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  margin: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  background: rgba(99,102,241,0.08);
+}
+.diagram .center-node {
+  display: block;
+  width: fit-content;
+  margin: 16px auto;
+  padding: 12px 28px;
+  border: 2px solid var(--cyan);
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  background: rgba(6,182,212,0.1);
+  color: var(--cyan);
+}
+.diagram .arrow {
+  display: block;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 20px;
+  margin: 4px 0;
+}
+.diagram .outputs {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.diagram .out-node {
+  padding: 10px 20px;
+  border: 2px solid var(--green);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  background: rgba(34,197,94,0.08);
+  color: var(--green);
+}
+
+/* Final score bars */
+.score-bar-container {
+  margin: 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.score-bar-label {
+  width: 220px;
+  font-size: 14px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.score-bar {
+  flex: 1;
+  height: 24px;
+  background: var(--surface2);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+.score-bar-fill {
+  height: 100%;
+  border-radius: 12px;
+  transition: width 1s ease;
+}
+.score-bar-value {
+  width: 50px;
+  text-align: right;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* Bottom line */
+.bottom-line {
+  text-align: center;
+  padding: 48px 32px;
+  background: linear-gradient(135deg, var(--surface), var(--surface2));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  margin-top: 60px;
+}
+.bottom-line p {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text);
+}
+.bottom-line .highlight-text {
+  color: var(--accent-light);
+}
+
+/* Platform DNA grid */
+.dna-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 20px 0;
+}
+.dna-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.dna-item .dna-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.dna-item .dna-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+.dna-item .dna-detail {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* Timeline */
+.timeline {
+  position: relative;
+  margin: 24px 0;
+  padding-left: 32px;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+.timeline-item {
+  position: relative;
+  margin: 20px 0;
+}
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -26px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+}
+.timeline-item .tl-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: #fff;
+  margin-bottom: 4px;
+}
+.timeline-item .tl-content {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+@media (max-width: 640px) {
+  .hero h1 { font-size: 28px; }
+  .score-hero { flex-direction: column; gap: 20px; padding: 24px; }
+  .dna-grid { grid-template-columns: 1fr; }
+  .score-bar-label { width: 140px; font-size: 12px; }
+}
+
+@media print {
+  body { background: #fff; color: #111; }
+  .hero h1 { -webkit-text-fill-color: #111; background: none; }
+  .card, .code-block, .diagram, .score-hero { border-color: #ddd; background: #f8f8f8; }
+  var(--text-dim) { color: #666; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">Strategic Assessment</div>
+  <h1>TrustChecker<br>Billion-Dollar SaaS Potential</h1>
+  <div class="subtitle">SaaS Strategy Architect & Venture-Scale CTO Analysis</div>
+  <div class="date">March 14, 2026</div>
+</div>
+
+<!-- OVERALL SCORE -->
+<div class="score-hero">
+  <div class="score-circle">
+    <div class="number">5.2</div>
+    <div class="label">out of 10</div>
+  </div>
+  <div class="score-summary">
+    <div class="quote">TrustChecker is a $100M idea trapped in a $1B architecture.</div>
+    <div class="sub">The path from $100M to $1B runs through network effects and data monetization — and it starts with making the core product flawless.</div>
+  </div>
+</div>
+
+<!-- PLATFORM DNA -->
+<div class="section">
+  <div class="section-number">0</div>
+  <h2>Platform DNA</h2>
+  <div class="dna-grid">
+    <div class="dna-item">
+      <div class="dna-label">Domain</div>
+      <div class="dna-value">Supply Chain Trust</div>
+      <div class="dna-detail">Risk scoring, compliance, carbon tracking</div>
+    </div>
+    <div class="dna-item">
+      <div class="dna-label">Surface Area</div>
+      <div class="dna-value">1,009 Endpoints</div>
+      <div class="dna-detail">86 engines, 130 tables, 80 route modules</div>
+    </div>
+    <div class="dna-item">
+      <div class="dna-label">Multi-Tenancy</div>
+      <div class="dna-value">RLS 130/130</div>
+      <div class="dna-detail">Row-level security, org-isolated</div>
+    </div>
+    <div class="dna-item">
+      <div class="dna-label">Current Scale</div>
+      <div class="dna-value">~12 Orgs</div>
+      <div class="dna-detail">~200 users (early stage)</div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- PHASE 1 -->
+<div class="section">
+  <div class="section-number">1</div>
+  <h2>Product Core Value</h2>
+  <h3>What problem does TrustChecker solve?</h3>
+  <p><strong>TrustChecker makes supply chain trust measurable, auditable, and automated.</strong></p>
+  <p>In a world where:</p>
+  <ul>
+    <li>Supply chains span 15+ countries</li>
+    <li>ESG compliance is mandatory (EU CSRD, US SEC climate rules)</li>
+    <li>Counterfeiting costs <strong>$4.2T/year</strong> globally</li>
+    <li>A single Bad Supplier can destroy <strong>$500M+</strong> in brand value</li>
+  </ul>
+  <p>TrustChecker answers: <strong>"Can I trust this supplier? This product? This claim?"</strong> — backed by data, not relationships.</p>
+
+  <h3>Is the value mission-critical?</h3>
+  <p><strong>Yes — but conditionally.</strong> Trust scoring is mission-critical only when:</p>
+  <ol>
+    <li><span class="status-green">✅</span> Procurement teams use it to approve/reject suppliers</li>
+    <li><span class="status-green">✅</span> Compliance teams use it for regulatory reporting</li>
+    <li><span class="status-green">✅</span> Operations teams use it for incident response</li>
+    <li><span class="status-yellow">⚠️</span> The scores are accurate (fixed today — was broken)</li>
+    <li><span class="status-yellow">⚠️</span> The methodology is transparent and auditable</li>
+  </ol>
+
+  <blockquote><strong>Verdict:</strong> The core value proposition is <strong>strong</strong> — but TrustChecker must position itself as <em>infrastructure for trust decisions</em>, not just another dashboard.</blockquote>
+</div>
+
+<div class="divider"></div>
+
+<!-- PHASE 2 -->
+<div class="section">
+  <div class="section-number">2</div>
+  <h2>Data Moat Potential</h2>
+  <h3>Does TrustChecker accumulate unique data?</h3>
+  <table>
+    <thead><tr><th>Data Type</th><th>Accumulates?</th><th>Unique?</th><th>Moat Strength</th></tr></thead>
+    <tbody>
+      <tr><td>Supplier trust scores across orgs</td><td class="status-green">✅</td><td class="status-green">✅</td><td><span class="status-green">🟢 Strong</span></td></tr>
+      <tr><td>Incident history by product/supplier</td><td class="status-green">✅</td><td class="status-green">✅</td><td><span class="status-green">🟢 Strong</span></td></tr>
+      <tr><td>Fraud detection patterns</td><td class="status-green">✅</td><td class="status-yellow">⚠️</td><td><span class="status-yellow">🟡 Medium</span></td></tr>
+      <tr><td>Carbon emissions per product</td><td class="status-green">✅</td><td class="status-green">✅</td><td><span class="status-green">🟢 Strong</span></td></tr>
+      <tr><td>Supply route risk mapping</td><td class="status-green">✅</td><td class="status-green">✅</td><td><span class="status-green">🟢 Strong</span></td></tr>
+      <tr><td>QR scan geolocation data</td><td class="status-green">✅</td><td class="status-green">✅</td><td><span class="status-green">🟢 Strong</span></td></tr>
+      <tr><td>Certification verification records</td><td class="status-green">✅</td><td class="status-yellow">⚠️</td><td><span class="status-yellow">🟡 Medium</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Does more usage improve the product?</h3>
+  <p><strong>Yes — with cross-org intelligence.</strong> When Org A rates Supplier X poorly, and Org B also uses Supplier X, the platform could surface:</p>
+  <ul>
+    <li><em>"3 other organizations flagged this supplier in the last 90 days"</em></li>
+    <li><em>"Industry average trust score for this supplier: 0.42"</em></li>
+    <li><em>"This supplier's carbon claims are disputed by 2 auditors"</em></li>
+  </ul>
+  <p>This is the difference between a <strong>tool</strong> and a <strong>network</strong>.</p>
+  <blockquote><strong>Data moat score: 7/10.</strong> TrustChecker collects data but keeps it siloed per org. If cross-org intelligence is unlocked, the data moat becomes extremely difficult to replicate.</blockquote>
+</div>
+
+<div class="divider"></div>
+
+<!-- PHASE 3 -->
+<div class="section">
+  <div class="section-number">3</div>
+  <h2>Network Effects</h2>
+  <h3>Current state: No network effects</h3>
+  <p>Each organization uses TrustChecker in isolation. Supplier X's trust score in Org A has no relationship to its score in Org B.</p>
+
+  <h3>Potential network effects:</h3>
+  <div class="diagram">
+    <div style="display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
+      <div class="node">Org A rates Supplier X</div>
+      <div class="node">Org B rates Supplier X</div>
+      <div class="node">Org C reports incident</div>
+    </div>
+    <div class="arrow">↓ ↓ ↓</div>
+    <div class="center-node">Network Intelligence Layer</div>
+    <div class="arrow">↓ ↓ ↓</div>
+    <div class="outputs">
+      <div class="out-node">All orgs see aggregate risk</div>
+      <div class="out-node">Supplier sees reputation</div>
+      <div class="out-node">Regulators get risk data</div>
+    </div>
+  </div>
+  <p><strong>Three tiers of network value:</strong></p>
+  <ol>
+    <li><strong>Cross-org supplier scoring</strong> — "Industry consensus" on supplier reliability</li>
+    <li><strong>Threat intelligence sharing</strong> — Anonymized incident/fraud signals across supply chains</li>
+    <li><strong>Supplier self-service</strong> — Suppliers see their own reputation and improve it</li>
+  </ol>
+  <blockquote><strong>Verdict:</strong> The architecture has the <em>tables</em> for this, but <strong>zero cross-org logic exists today.</strong> This is the single most important strategic feature to build.</blockquote>
+</div>
+
+<div class="divider"></div>
+
+<!-- PHASE 4 -->
+<div class="section">
+  <div class="section-number">4</div>
+  <h2>Platform Expansion Potential</h2>
+  <h3>Current coverage is remarkably broad:</h3>
+  <div class="code-block">Core Platform:
+├── Trust Scoring Engine          ← product differentiation
+├── Supply Chain Operations       ← operational value
+│   ├── SCM Partners, Inventory, Logistics, Tracking
+│   ├── Digital Twin, EPCIS, Advanced AI
+│   ├── Risk Radar, Risk Models, Trust Graph
+│   └── Carbon Credits, ESG, Green Finance
+├── Compliance & Governance       ← regulatory value
+│   ├── KYC, Sanctions, GDPR
+│   ├── Evidence Management
+│   ├── Audit Logging (partitioned)
+│   └── IPO-Grade Governance
+├── Security Infrastructure       ← enterprise credibility
+│   ├── Blockchain Seals, NFT Certificates
+│   ├── Cryptographic Governance
+│   └── Anomaly Detection, Fraud Engine
+└── Platform Services             ← SaaS foundation
+    ├── Multi-tenant RBAC (136 RLS policies)
+    ├── API Economy, Webhooks
+    ├── Billing, Wallet/Payments
+    └── AI Chat, Support</div>
+
+  <h3>Viable expansion paths:</h3>
+  <table>
+    <thead><tr><th>Direction</th><th>Market Size</th><th>Readiness</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Risk Intelligence API</strong> (data-as-a-service)</td><td>$12B</td><td>60%</td></tr>
+      <tr><td><strong>Compliance Automation</strong> (RegTech)</td><td>$19B</td><td>50%</td></tr>
+      <tr><td><strong>Carbon Trading Platform</strong></td><td>$2B</td><td>70%</td></tr>
+      <tr><td><strong>Supply Chain Analytics</strong> (telemetry)</td><td>$8B</td><td>40%</td></tr>
+      <tr><td><strong>Developer Marketplace</strong></td><td>$5B</td><td>20%</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="divider"></div>
+
+<!-- PHASE 5 -->
+<div class="section">
+  <div class="section-number">5</div>
+  <h2>Market Positioning</h2>
+  <h3>Current positioning: Unclear</h3>
+  <p>TrustChecker tries to be a trust scoring platform, supply chain management tool, compliance system, carbon tracking platform, governance framework, and blockchain verification system — all at once.</p>
+  <p><strong>This is both a strength and a weakness.</strong> The breadth shows ambition; the lack of focus dilutes messaging.</p>
+
+  <div class="card highlight">
+    <h3 style="margin-top:0;">Category definition opportunity:</h3>
+    <p style="font-size: 24px; font-weight: 800; color: var(--accent-light); margin-bottom: 8px;">"Supply Chain Trust Intelligence"</p>
+    <p style="margin-bottom:0;">No major player owns this category. Competitors exist in supply chain management (SAP Ariba, Oracle), risk intelligence (Moody's, D&B), compliance (SAI360), and ESG reporting (Persefoni) — but <strong>none combine trust scoring + supply chain ops + compliance + carbon in one platform.</strong></p>
+  </div>
+  <p>TrustChecker can own: <em>"The system of record for supply chain trust"</em></p>
+</div>
+
+<div class="divider"></div>
+
+<!-- PHASE 6 -->
+<div class="section">
+  <div class="section-number">6</div>
+  <h2>Customer Dependency & Switching Costs</h2>
+  <table>
+    <thead><tr><th>Factor</th><th>Lock-in Strength</th></tr></thead>
+    <tbody>
+      <tr><td>Historical trust scores (years of data)</td><td><span class="status-green">🟢 Very High</span></td></tr>
+      <tr><td>Operational workflows (incident response)</td><td><span class="status-green">🟢 Very High</span></td></tr>
+      <tr><td>Compliance report history</td><td><span class="status-green">🟢 Very High</span></td></tr>
+      <tr><td><strong>QR codes on physical products</strong></td><td><span class="status-green">🟢 Extremely High</span></td></tr>
+      <tr><td>Carbon credit records</td><td><span class="status-green">🟢 Very High</span></td></tr>
+      <tr><td>API integrations</td><td><span class="status-yellow">🟡 Medium</span></td></tr>
+      <tr><td>User training</td><td><span class="status-yellow">🟡 Medium</span></td></tr>
+    </tbody>
+  </table>
+  <div class="card highlight">
+    <p style="margin-bottom:0;"><strong>QR codes on physical products are the ultimate lock-in.</strong> Once a manufacturer prints TrustChecker QR codes on millions of product labels, migration is physically impossible without recalling products. <strong>Switching cost score: 9/10</strong> — among the highest in SaaS.</p>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- PHASE 7 -->
+<div class="section">
+  <div class="section-number">7</div>
+  <h2>Business Model Scalability</h2>
+  <h3>Pricing tiers (recommended):</h3>
+  <table>
+    <thead><tr><th>Tier</th><th>Target</th><th>Price</th><th>Basis</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Starter</strong></td><td>SMB (1-50 products)</td><td>$299/mo</td><td>Flat</td></tr>
+      <tr><td><strong>Professional</strong></td><td>Mid-market (50-500)</td><td>$999/mo</td><td>Per-product</td></tr>
+      <tr><td><strong>Enterprise</strong></td><td>Large corp (500+)</td><td>$5,000-50,000/mo</td><td>Per-org + usage</td></tr>
+      <tr><td><strong>Platform</strong></td><td>Supply chain networks</td><td>Custom</td><td>Per-query API</td></tr>
+    </tbody>
+  </table>
+  <div class="card">
+    <p><strong>Revenue ceiling:</strong></p>
+    <p>10,000 enterprise orgs × $25K ACV = <strong>$250M ARR</strong></p>
+    <p style="margin-bottom:0;">100,000 orgs with network pricing = <strong>$500M–1B ARR</strong></p>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- PHASE 8 -->
+<div class="section">
+  <div class="section-number">8</div>
+  <h2>Product Complexity Risk</h2>
+  <div class="card danger">
+    <h3 style="margin-top:0;">Current risk: HIGH</h3>
+    <p>86 engines, 1,009 endpoints, 80 route files — this is one of the broadest product surfaces I've ever seen for a startup.</p>
+    <table>
+      <thead><tr><th>Risk</th><th>Assessment</th></tr></thead>
+      <tbody>
+        <tr><td>Feature sprawl</td><td><span class="status-red">🔴 Critical</span> — 86 engines is 80 too many</td></tr>
+        <tr><td>Onboarding complexity</td><td><span class="status-red">🔴 High</span> — overwhelming dashboard</td></tr>
+        <tr><td>Support burden</td><td><span class="status-yellow">🟡 Medium</span> — broad surface = more tickets</td></tr>
+        <tr><td>Quality control</td><td><span class="status-red">🔴 Critical</span> — 0 tests = no guarantee</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-bottom:0;"><strong>Recommendation: Ruthless prioritization.</strong> Core (must be excellent): Trust, SCM, Compliance, Carbon. Deprioritize: NFT, blockchain, digital twins. Remove: 0 usage engines.</p>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- PHASE 9-13 combined -->
+<div class="section">
+  <div class="section-number">9</div>
+  <h2>Architecture & Global Readiness</h2>
+  <table>
+    <thead><tr><th>Capability</th><th>Status</th><th>Enterprise Need</th></tr></thead>
+    <tbody>
+      <tr><td>REST API (1,009 endpoints)</td><td class="status-green">✅</td><td class="status-green">✅</td></tr>
+      <tr><td>API documentation</td><td class="status-yellow">⚠️ Partial</td><td>Needs OpenAPI 3.0</td></tr>
+      <tr><td>Webhooks</td><td class="status-green">✅ Built</td><td class="status-green">✅</td></tr>
+      <tr><td>SDK (Python/Node)</td><td class="status-red">❌ None</td><td class="status-red">❌ Required</td></tr>
+      <tr><td>API versioning</td><td class="status-green">✅ v1</td><td class="status-green">✅</td></tr>
+      <tr><td>SSO/SAML</td><td class="status-red">❌ None</td><td class="status-red">❌ Required</td></tr>
+      <tr><td>Multi-region</td><td class="status-red">❌ Single VPS</td><td>Needed for EU/APAC</td></tr>
+      <tr><td>Multi-language</td><td class="status-red">❌ English only</td><td>Required</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="divider"></div>
+
+<!-- PHASE 10 -->
+<div class="section">
+  <div class="section-number">10</div>
+  <h2>Competitive Defensibility</h2>
+  <table>
+    <thead><tr><th>Moat Type</th><th>Strength</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Data accumulation</strong></td><td><span class="status-green">🟢 Strong</span></td><td>Hard to replicate years of trust data</td></tr>
+      <tr><td><strong>Physical lock-in (QR)</strong></td><td><span class="status-green">🟢 Very Strong</span></td><td>Impossible to compete once printed</td></tr>
+      <tr><td><strong>Network effects</strong></td><td><span class="status-red">🔴 None (yet)</span></td><td>Competitors could build first</td></tr>
+      <tr><td><strong>Regulatory compliance</strong></td><td><span class="status-yellow">🟡 Medium</span></td><td>Easy to replicate</td></tr>
+      <tr><td><strong>Brand trust</strong></td><td><span class="status-red">🔴 Low</span></td><td>Startup vs. large players</td></tr>
+      <tr><td><strong>Technology</strong></td><td><span class="status-yellow">🟡 Medium</span></td><td>Code can be replicated</td></tr>
+    </tbody>
+  </table>
+  <div class="card warning">
+    <p><strong>Biggest competitive threat:</strong> A large payments/supply chain company (SAP, Oracle, Stripe) building trust scoring as a feature.</p>
+    <p style="margin-bottom:0;"><strong>Defense:</strong> 1) Build network effects FAST  2) Own the QR code  3) Get regulatory endorsement</p>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- PHASE 14 -->
+<div class="section">
+  <div class="section-number">14</div>
+  <h2>Top 5 Strategic Risks</h2>
+  <table>
+    <thead><tr><th>#</th><th>Risk</th><th>Prob.</th><th>Impact</th><th>Mitigation</th></tr></thead>
+    <tbody>
+      <tr><td><strong>1</strong></td><td>Trust score credibility — enterprise discovers wrong scores</td><td class="status-red">HIGH</td><td class="status-red">CATASTROPHIC</td><td>Validation framework + accuracy tracking</td></tr>
+      <tr><td><strong>2</strong></td><td>Feature sprawl — 86 engines dilute focus</td><td class="status-red">HIGH</td><td class="status-red">HIGH</td><td>Ruthless prioritization, deprecate 50+</td></tr>
+      <tr><td><strong>3</strong></td><td>No network effects — competitors build first</td><td class="status-yellow">MED</td><td class="status-red">CATASTROPHIC</td><td>Cross-org intelligence in 6 months</td></tr>
+      <tr><td><strong>4</strong></td><td>Single-developer dependency</td><td class="status-red">HIGH</td><td class="status-red">HIGH</td><td>Documentation + team building</td></tr>
+      <tr><td><strong>5</strong></td><td>Positioning ambiguity</td><td class="status-yellow">MED</td><td class="status-red">HIGH</td><td>"Supply Chain Trust Intelligence"</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="divider"></div>
+
+<!-- PHASE 15 -->
+<div class="section">
+  <div class="section-number">15</div>
+  <h2>Billion-Dollar Potential</h2>
+
+  <h3>Could TrustChecker become a billion-dollar SaaS company?</h3>
+  <p><strong>Yes — with a specific and narrow path.</strong> The ingredients exist:</p>
+  <ul>
+    <li><span class="status-green">✅</span> Large addressable market ($40B+ across supply chain risk, RegTech, ESG)</li>
+    <li><span class="status-green">✅</span> Physical lock-in moat (QR codes on products)</li>
+    <li><span class="status-green">✅</span> High switching costs (years of trust data)</li>
+    <li><span class="status-green">✅</span> Usage-based expansion (more products = more revenue)</li>
+    <li><span class="status-green">✅</span> Regulatory tailwinds (ESG mandates, supply chain due diligence laws)</li>
+  </ul>
+  <p>But the path requires <strong>discipline</strong>, not breadth.</p>
+
+  <h3>24-Month Roadmap</h3>
+  
+  <div class="card" style="padding: 32px;">
+    <p style="font-weight: 800; font-size: 16px; color: var(--accent-light); margin-bottom: 16px;">Year 1: Foundation → Enterprise</p>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="tl-title">Q1: Focus + Credibility</div>
+        <div class="tl-content">Category definition • Kill non-core engines (50+) • Score validation framework • 80% test coverage</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-title">Q2: Enterprise Readiness</div>
+        <div class="tl-content">SSO/SAML • SOC2 Type II • OpenAPI 3.0 documentation • Python + Node SDK</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-title">Q3: Network Intelligence</div>
+        <div class="tl-content">Anonymous cross-org supplier scores • Industry benchmarks • Threat intelligence sharing</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-title">Q4: First Enterprise Customers</div>
+        <div class="tl-content">10 paying enterprise accounts • $500K ARR milestone</div>
+      </div>
+    </div>
+    
+    <p style="font-weight: 800; font-size: 16px; color: var(--cyan); margin-bottom: 16px; margin-top: 32px;">Year 2: Network → Platform</p>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="tl-title">Q5–Q6: Supplier Self-Service</div>
+        <div class="tl-content">Supplier portal (manage reputation) • Verification workflow • Industry certification partnerships</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-title">Q7–Q8: Platform</div>
+        <div class="tl-content">Risk Intelligence API (monetize data) • Developer marketplace • Regional deployment (EU + APAC) • $5M ARR milestone</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- FINAL SCORE CARD -->
+<div class="section">
+  <h2>Final Score Card</h2>
+
+  <div class="score-bar-container">
+    <div class="score-bar-label">Product core value</div>
+    <div class="score-bar"><div class="score-bar-fill" style="width:80%;background:linear-gradient(90deg,var(--green),var(--cyan));"></div></div>
+    <div class="score-bar-value" style="color:var(--green);">8/10</div>
+  </div>
+  <div class="score-bar-container">
+    <div class="score-bar-label">Customer dependency</div>
+    <div class="score-bar"><div class="score-bar-fill" style="width:90%;background:linear-gradient(90deg,var(--green),var(--cyan));"></div></div>
+    <div class="score-bar-value" style="color:var(--green);">9/10</div>
+  </div>
+  <div class="score-bar-container">
+    <div class="score-bar-label">Business model</div>
+    <div class="score-bar"><div class="score-bar-fill" style="width:80%;background:linear-gradient(90deg,var(--green),var(--cyan));"></div></div>
+    <div class="score-bar-value" style="color:var(--green);">8/10</div>
+  </div>
+  <div class="score-bar-container">
+    <div class="score-bar-label">Data moat potential</div>
+    <div class="score-bar"><div class="score-bar-fill" style="width:70%;background:linear-gradient(90deg,var(--yellow),var(--green));"></div></div>
+    <div class="score-bar-value" style="color:var(--green);">7/10</div>
+  </div>
+  <div class="score-bar-container">
+    <div class="score-bar-label">Platform expansion</div>
+    <div class="score-bar"><div class="score-bar-fill" style="width:60%;background:linear-gradient(90deg,var(--yellow),var(--green));"></div></div>
+    <div class="score-bar-value" style="color:var(--yellow);">6/10</div>
+  </div>
+  <div class="score-bar-container">
+    <div class="score-bar-label">Competitive defensibility</div>
+    <div class="score-bar"><div class="score-bar-fill" style="width:60%;background:linear-gradient(90deg,var(--yellow),var(--green));"></div></div>
+    <div class="score-bar-value" style="color:var(--yellow);">6/10</div>
+  </div>
+  <div class="score-bar-container">
+    <div class="score-bar-label">Market positioning</div>
+    <div class="score-bar"><div class="score-bar-fill" style="width:50%;background:linear-gradient(90deg,var(--orange),var(--yellow));"></div></div>
+    <div class="score-bar-value" style="color:var(--yellow);">5/10</div>
+  </div>
+  <div class="score-bar-container">
+    <div class="score-bar-label">Architecture readiness</div>
+    <div class="score-bar"><div class="score-bar-fill" style="width:50%;background:linear-gradient(90deg,var(--orange),var(--yellow));"></div></div>
+    <div class="score-bar-value" style="color:var(--yellow);">5/10</div>
+  </div>
+  <div class="score-bar-container">
+    <div class="score-bar-label">Data credibility</div>
+    <div class="score-bar"><div class="score-bar-fill" style="width:40%;background:linear-gradient(90deg,var(--red),var(--orange));"></div></div>
+    <div class="score-bar-value" style="color:var(--orange);">4/10</div>
+  </div>
+  <div class="score-bar-container">
+    <div class="score-bar-label">Product complexity</div>
+    <div class="score-bar"><div class="score-bar-fill" style="width:30%;background:linear-gradient(90deg,var(--red),var(--orange));"></div></div>
+    <div class="score-bar-value" style="color:var(--red);">3/10</div>
+  </div>
+  <div class="score-bar-container">
+    <div class="score-bar-label">Engineering scalability</div>
+    <div class="score-bar"><div class="score-bar-fill" style="width:30%;background:linear-gradient(90deg,var(--red),var(--orange));"></div></div>
+    <div class="score-bar-value" style="color:var(--red);">3/10</div>
+  </div>
+  <div class="score-bar-container">
+    <div class="score-bar-label">Network effects</div>
+    <div class="score-bar"><div class="score-bar-fill" style="width:20%;background:var(--red);"></div></div>
+    <div class="score-bar-value" style="color:var(--red);">2/10</div>
+  </div>
+  <div class="score-bar-container">
+    <div class="score-bar-label">Global readiness</div>
+    <div class="score-bar"><div class="score-bar-fill" style="width:20%;background:var(--red);"></div></div>
+    <div class="score-bar-value" style="color:var(--red);">2/10</div>
+  </div>
+
+  <div class="score-hero" style="margin-top:32px;">
+    <div class="score-circle">
+      <div class="number">5.2</div>
+      <div class="label">overall</div>
+    </div>
+    <div class="score-summary">
+      <div class="quote">Strong foundation with clear path to 8+/10</div>
+      <div class="sub">if focus + network effects are prioritized</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM LINE -->
+<div class="bottom-line">
+  <p>TrustChecker is a <span class="highlight-text">$100M idea</span> trapped in a <span class="highlight-text">$1B architecture.</span></p>
+  <p style="margin-top: 16px; font-size: 16px; font-weight: 400; color: var(--text-dim);">The path from $100M to $1B runs through network effects and data monetization — and it starts with making the core product flawless.</p>
+  <p style="margin-top: 24px; font-size: 14px; font-weight: 600; color: var(--accent-light);">Cut to 4 core domains. Make them perfect. Build network effects.<br>The $1B path is narrow but real.</p>
+</div>
+
+</div>
+</body>
+</html>

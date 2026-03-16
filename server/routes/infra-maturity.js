@@ -211,7 +211,7 @@ router.get('/reserves/claims', (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 // DATA SOVEREIGNTY — /sovereignty (read-heavy, routing is auto)
 // ═══════════════════════════════════════════════════════════════════
-const sovereignty = require('../engines/data-sovereignty-engine');
+const sovereignty = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was data-sovereignty-engine
 
 router.get('/sovereignty/zones', (req, res) => {
     res.json(sovereignty.getZones());
@@ -264,7 +264,7 @@ router.get('/regulatory/sanctions/:country', (req, res) => {
 // ENTERPRISE SLA — /sla
 // MUTATION: contracts, credit → Constitutional
 // ═══════════════════════════════════════════════════════════════════
-const sla = require('../engines/enterprise-sla-engine');
+const sla = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was enterprise-sla-engine
 const { withTransaction } = require('../middleware/transaction');
 
 router.get('/sla/tiers', (req, res) => {

@@ -48,7 +48,7 @@ function setupRoutes(app) {
     const scmRiskRadarRoutes = require('../routes/scm-risk-radar');
     const scmCarbonRoutes = require('../routes/scm-carbon');
     const scmCarbonCreditRoutes = require('../routes/scm-carbon-credit');
-    const scmDigitalTwinRoutes = require('../routes/scm-digital-twin');
+    // ARCHIVED: const scmDigitalTwinRoutes = require('../routes/scm-digital-twin');
     const scmSupplyRoutes = require('../routes/scm-supply-routes');
     const scmRiskModelRoutes = require('../routes/scm-risk-model');
     const scmForensicRoutes = require('../routes/scm-forensic');
@@ -61,8 +61,8 @@ function setupRoutes(app) {
     const identityRoutes = require('../routes/identity');
     const riskGraphRoutes = require('../routes/risk-graph');
     const complianceRegtechRoutes = require('../routes/compliance-regtech');
-    const apiEconomyRoutes = require('../routes/api-economy');
-    const greenFinanceRoutes = require('../routes/green-finance');
+    // ARCHIVED: const apiEconomyRoutes = require('../routes/api-economy');
+    // ARCHIVED: const greenFinanceRoutes = require('../routes/green-finance');
     const reputationRoutes = require('../routes/reputation');
     const governanceRoutes = require('../routes/governance');
     const opsMonitoringRoutes = require('../routes/ops-monitoring');
@@ -75,12 +75,12 @@ function setupRoutes(app) {
     const networkTopologyRoutes = require('../routes/network-topology');
     const feeDistributionRoutes = require('../routes/fee-distribution');
     const infraMaturityRoutes = require('../routes/infra-maturity');
-    const charterRoutes = require('../routes/charter');
-    const marketInfraRoutes = require('../routes/market-infra');
+    // ARCHIVED: const charterRoutes = require('../routes/charter');
+    // ARCHIVED: const marketInfraRoutes = require('../routes/market-infra');
     const ipoGradeRoutes = require('../routes/ipo-grade');
     const criticalInfraRoutes = require('../routes/critical-infra');
     const legitimacyRoutes = require('../routes/legitimacy');
-    const coherenceRoutes = require('../routes/coherence');
+    // ARCHIVED: const coherenceRoutes = require('../routes/coherence');
     const infrastructureRoutes = require('../routes/infrastructure');
     const gapCoverageRoutes = require('../routes/gap-coverage');
     const cieRoutes = require('../routes/cie');
@@ -126,7 +126,7 @@ function setupRoutes(app) {
         ['/scm/risk', scmRiskRadarRoutes],
         ['/scm/carbon', scmCarbonRoutes],
         ['/scm/carbon-credit', scmCarbonCreditRoutes],
-        ['/scm/twin', scmDigitalTwinRoutes],
+        // ARCHIVED: ['/scm/twin', scmDigitalTwinRoutes],
         ['/scm/supply', scmSupplyRoutes],
         ['/scm/risk-model', scmRiskModelRoutes],
         ['/scm/forensic', scmForensicRoutes],
@@ -139,8 +139,8 @@ function setupRoutes(app) {
         ['/identity', identityRoutes],
         ['/risk-graph', riskGraphRoutes],
         ['/compliance-regtech', complianceRegtechRoutes],
-        ['/api-economy', apiEconomyRoutes],
-        ['/green-finance', greenFinanceRoutes],
+        // ARCHIVED: ['/api-economy', apiEconomyRoutes],
+        // ARCHIVED: ['/green-finance', greenFinanceRoutes],
         ['/reputation', reputationRoutes],
         ['/governance', governanceRoutes],
         ['/ops', opsMonitoringRoutes],
@@ -153,12 +153,12 @@ function setupRoutes(app) {
         ['/network', networkTopologyRoutes],
         ['/distribution', feeDistributionRoutes],
         ['', infraMaturityRoutes],   // mounts /economics, /reserves, /sovereignty, /regulatory, /sla
-        ['/charter', charterRoutes],
-        ['', marketInfraRoutes],    // mounts /capital, /incentive, /risklab
+        // ARCHIVED: ['/charter', charterRoutes],
+        // ARCHIVED: ['', marketInfraRoutes],    // mounts /capital, /incentive, /risklab
         ['', ipoGradeRoutes],       // mounts /oversight, /car, /decentralization, /legal, /finance, /treasury, /regscenario, /narrative
         ['', apiLimit, criticalInfraRoutes],  // mounts /revenue-gov, /jurisdiction, /killswitch, /superadmin, /model-risk, /integration, /stress, /econrisk, /contagion
         ['', apiLimit, legitimacyRoutes],     // mounts /economic-logic, /forensic, /jurisdiction-logic
-        ['', apiLimit, coherenceRoutes],       // mounts /coherence, /playbook, /human-gov
+        // ARCHIVED: ['', apiLimit, coherenceRoutes],       // mounts /coherence, /playbook, /human-gov
         ['', apiLimit, infrastructureRoutes],  // mounts /incentive-arch, /entity, /crypto-gov
         ['', apiLimit, gapCoverageRoutes],     // mounts /data-ownership, /infra-metrics, /upgrade-gov
         ['/cie', cieRoutes],                     // CIE v2.0 — Carbon Integrity Engine API

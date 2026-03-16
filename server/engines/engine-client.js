@@ -29,7 +29,7 @@ const breakers = {
 // ─── JS Fallback Engines ─────────────────────────────────────
 const fallback = {
     monteCarlo: () => require('./monte-carlo-worker'),
-    digitalTwin: () => require('./digital-twin'),
+    digitalTwin: () => ({ status: "archived" }), // ARCHIVED
     advancedScmAI: () => require('./advanced-scm-ai'),
     scmAI: () => require('./scm-ai'),
     fraud: () => require('./fraud'),

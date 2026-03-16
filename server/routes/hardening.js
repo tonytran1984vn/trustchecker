@@ -308,7 +308,7 @@ router.get('/institutional/maturity', (req, res) => { res.json(inst.assessInstit
 // Platform Architecture — Simplification & Core Isolation (6 endpoints)
 // ═══════════════════════════════════════════════════════════════════
 
-const platArch = require('../engines/platform-architecture-engine');
+const platArch = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was platform-architecture-engine
 
 // FIX #4: Restrict platform architecture to admin only (prevents internal architecture disclosure)
 router.get('/platform/module-registry', requirePermission('admin:manage'), (req, res) => { res.json(platArch.getModuleRegistry()); });

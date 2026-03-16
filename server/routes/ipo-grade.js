@@ -11,7 +11,7 @@ router.use(authMiddleware);
 
 const oversight = require('../engines/external-oversight-engine');
 const car = require('../engines/realtime-car-engine');
-const decentral = require('../engines/decentralization-kpi-engine');
+const decentral = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was decentralization-kpi-engine
 const legal = require('../engines/legal-entity-engine');
 
 // ═══════════════════════════════════════════════════════════════════
@@ -161,7 +161,7 @@ router.post('/regscenario/simulate', (req, res) => {
 // MARKET NARRATIVE — /narrative
 // ═══════════════════════════════════════════════════════════════════
 
-const narrative = require('../engines/market-narrative-engine');
+const narrative = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was market-narrative-engine
 const { withTransaction } = require('../middleware/transaction');
 
 router.get('/narrative/full', (req, res) => { res.json(narrative.getFullNarrative()); });
