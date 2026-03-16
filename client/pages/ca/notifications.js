@@ -88,10 +88,10 @@ function toggleField(id, label, checked, desc) {
         <div style="font-weight:600;font-size:0.85rem">${label}</div>
         <div style="font-size:0.68rem;color:var(--text-muted);margin-top:2px">${desc}</div>
       </div>
-      <span onclick="document.getElementById('${id}').checked=!document.getElementById('${id}').checked" style="position:relative;width:44px;height:24px;display:inline-block;cursor:pointer">
+      <span onclick="window.__toggleChannel('${id}')" style="position:relative;width:44px;height:24px;display:inline-block;cursor:pointer" id="${id}_wrap">
         <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} style="display:none">
-        <span style="position:absolute;inset:0;background:${checked ? '#22c55e' : '#cbd5e1'};border-radius:12px;transition:0.3s"></span>
-        <span style="position:absolute;top:2px;left:${checked ? '22px' : '2px'};width:20px;height:20px;background:#fff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.25)"></span>
+        <span id="${id}_track" style="position:absolute;inset:0;background:${checked ? '#22c55e' : '#cbd5e1'};border-radius:12px;transition:0.3s"></span>
+        <span id="${id}_thumb" style="position:absolute;top:2px;left:${checked ? '22px' : '2px'};width:20px;height:20px;background:#fff;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.25)"></span>
       </span>
     </div>`;
 }
@@ -99,6 +99,17 @@ function toggleField(id, label, checked, desc) {
 async function loadData() {
     try {
         _data = await api.get('/org-admin/governance/notifications');
+        window.__toggleChannel = (id) => {
+            const cb = document.getElementById(id);
+            if (!cb) return;
+            cb.checked = !cb.checked;
+            const track = document.getElementById(id + '_track');
+            const thumb = document.getElementById(id + '_thumb');
+            if (track) track.style.background = cb.checked ? '#22c55e' : '#cbd5e1';
+            if (thumb) thumb.style.left = cb.checked ? '22px' : '2px';
+            // Auto-save after toggle
+            window.__saveNotifSettings?.();
+        };
         window.__toggleSev = (sev) => {
             const idx = _data.severity_filter.indexOf(sev);
             if (idx >= 0) _data.severity_filter.splice(idx, 1);
