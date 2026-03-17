@@ -157,8 +157,8 @@ class UnitEconomicsEngine {
         } = params;
 
         // Revenue side
-        const txFees = require('./transaction-fee-engine');
-        const pricingEngine = require('./pricing-engine');
+        const txFees = require('./transaction-fee');
+        const pricingEngine = require('../pricing-engine');
         const planDef = pricingEngine.PLANS?.[plan];
         const subscriptionRev = planDef ? (billing_cycle === 'annual' ? (planDef.price_annual || 0) / 12 : (planDef.price_monthly || 0)) : 0;
 

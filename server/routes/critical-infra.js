@@ -17,11 +17,11 @@ const { asyncHandler: h } = require('../middleware/asyncHandler');
 
 router.use(authMiddleware);
 
-const revGov = require('../engines/revenue-governance-engine');
-const jurisdiction = require('../engines/jurisdictional-risk-engine');
+const revGov = require('../engines/economics-engine').revenueGovernance;
+const jurisdiction = require('../engines/regulatory-engine').jurisdictionalRisk;
 const killSwitch = require('../engines/kill-switch-engine');
 const superAdmin = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was super-admin-boundaries-engine
-const modelRisk = require('../engines/model-risk-tiering-engine');
+const modelRisk = require('../engines/risk-model-engine').tiering;
 
 // ═══════════════════════════════════════════════════════════════════
 // REVENUE GOVERNANCE — /revenue-gov [L3+ admin]
@@ -113,7 +113,7 @@ router.post('/integration/evaluate', requireRole('super_admin'), (req, res) => {
 // SYSTEMIC STRESS & SIMULATION — /stress [L4+ risk_committee read, L5 run]
 // ═══════════════════════════════════════════════════════════════════
 
-const stress = require('../engines/systemic-stress-engine');
+const stress = require('../engines/crisis-module').systemicStress;
 
 router.get('/stress/framework', requireRole('risk_committee'), (req, res) => { res.json(stress.getFullFramework()); });
 router.get('/stress/scenarios', requireRole('risk_committee'), (req, res) => { res.json(stress.getScenarios()); });
@@ -129,7 +129,7 @@ router.post('/stress/run', requireRole('super_admin'), (req, res) => {
 // ECONOMIC & CAPITAL RISK — /econrisk [L3+ admin]
 // ═══════════════════════════════════════════════════════════════════
 
-const econRisk = require('../engines/economic-risk-engine');
+const econRisk = require('../engines/economics-engine').economicRisk;
 
 router.get('/econrisk/framework', requireTenantAdmin(), (req, res) => { res.json(econRisk.getFullFramework()); });
 router.get('/econrisk/revenue-risk', requireTenantAdmin(), (req, res) => { res.json(econRisk.getRevenueRisk()); });

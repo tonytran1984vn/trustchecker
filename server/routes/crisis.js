@@ -7,7 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware, requirePermission } = require('../auth');
-const crisis = require('../engines/crisis-engine');
+const crisis = require('../engines/crisis-module').crisis;
 const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);

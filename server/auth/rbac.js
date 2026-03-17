@@ -351,7 +351,7 @@ function requireConstitutional(action) {
             return res.status(401).json({ error: 'Authentication required' });
         }
 
-        const constitutionalRBAC = require('../engines/constitutional-rbac-engine');
+        const constitutionalRBAC = require('../engines/governance-module').constitutionalRbac;
         const role = req.user.role;
         const result = constitutionalRBAC.enforce(role, action);
 

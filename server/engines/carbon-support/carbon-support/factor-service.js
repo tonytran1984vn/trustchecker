@@ -13,7 +13,7 @@
  * All SQL queries in this file are filtered at the database level by RLS policies.
  */
 
-const db = require('../db');
+const db = require('../../db');
 const { v4: uuidv4 } = require('uuid');
 
 // ─── Table creation (idempotent) ─────────────────────────────────────────────

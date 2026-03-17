@@ -39,7 +39,7 @@ router.post('/events', authMiddleware, requirePermission('supply_chain:create'),
         // L-RGF: Process through governance flow (Steps 1-5)
         let governance = null;
         try {
-            const lrgf = require('../engines/lrgf-engine');
+            const lrgf = require('../engines/regulatory-engine').lrgf;
 const { withTransaction } = require('../middleware/transaction');
             governance = lrgf.processEvent(
                 { event_type, product_id, batch_id, org_id: req.user.orgId, idempotency_key: `scm-${id}` },

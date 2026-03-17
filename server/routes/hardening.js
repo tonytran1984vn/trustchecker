@@ -6,9 +6,9 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware, requirePermission } = require('../auth');
-const riskGov = require('../engines/risk-model-governance');
+const riskGov = require('../engines/risk-model-engine').governance;
 const saConstraints = require('../engines/sa-constraints');
-const observability = require('../engines/observability-engine');
+const observability = require('../engines/platform-ops-engine').observability;
 router.use(authMiddleware);
 
 // ═══════════════════════════════════════════════════════════════════
@@ -174,7 +174,7 @@ router.post('/risk-intelligence/bias', requirePermission('risk:view'), async (re
 // MRMF v2.0 — Enterprise-Native Model Risk Management (18 endpoints)
 // ═══════════════════════════════════════════════════════════════════
 
-const mrmf = require('../engines/mrmf-engine');
+const mrmf = require('../engines/risk-model-engine').mrmf;
 
 // P1: Model Inventory
 router.get('/mrmf/inventory', (req, res) => { res.json(mrmf.getInventory()); });
@@ -237,7 +237,7 @@ router.get('/mrmf/decision-audit', (req, res) => { res.json(mrmf.getDecisionAudi
 // COSO ERM + Three Lines + IPO-Grade
 // ═══════════════════════════════════════════════════════════════════
 
-const ercm = require('../engines/ercm-engine');
+const ercm = require('../engines/regulatory-engine').ercm;
 
 router.get('/ercm/three-lines', (req, res) => { res.json(ercm.getThreeLines()); });
 router.get('/ercm/governance-bodies', (req, res) => { res.json(ercm.getGovernanceBodies()); });
@@ -322,7 +322,7 @@ router.get('/platform/isolation', requirePermission('admin:manage'), (req, res) 
 // Carbon Registry — Cross-Jurisdiction Legitimacy (10 endpoints)
 // ═══════════════════════════════════════════════════════════════════
 
-const carbonReg = require('../engines/carbon-registry-engine');
+const carbonReg = require('../engines/carbon-support').registry;
 const { withTransaction } = require('../middleware/transaction');
 
 router.get('/carbon-registry/jurisdictions', (req, res) => { res.json(carbonReg.getJurisdictions()); });

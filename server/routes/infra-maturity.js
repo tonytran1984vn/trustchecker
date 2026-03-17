@@ -56,7 +56,7 @@ function requireConstitutionalWithAudit(action) {
     return (req, res, next) => {
         if (!req.user) return res.status(401).json({ error: 'Authentication required' });
 
-        const constitutionalRBAC = require('../engines/constitutional-rbac-engine');
+        const constitutionalRBAC = require('../engines/governance-module').constitutionalRbac;
         const result = constitutionalRBAC.enforce(req.user.role, action);
 
         // ALWAYS log — both allowed and denied
@@ -130,7 +130,7 @@ function requireDualKey(action, requiredRoles) {
 // ═══════════════════════════════════════════════════════════════════
 // UNIT ECONOMICS — /economics (READ-ONLY — no constitutional enforcement needed)
 // ═══════════════════════════════════════════════════════════════════
-const economics = require('../engines/unit-economics-engine');
+const economics = require('../engines/economics-engine').unitEconomics;
 
 router.get('/economics/cost-structure', (req, res) => {
     res.json(economics.getCostStructure());
@@ -157,7 +157,7 @@ router.get('/economics/chain-comparison', (req, res) => {
 // RISK RESERVE — /reserves
 // MUTATION: contribute, claim, resolve → Constitutional + Dual-Key
 // ═══════════════════════════════════════════════════════════════════
-const reserves = require('../engines/risk-reserve-engine');
+const reserves = require('../engines/risk-model-engine').reserve;
 
 router.get('/reserves/health', (req, res) => {
     res.json(reserves.getReserveHealth());
@@ -240,7 +240,7 @@ router.get('/sovereignty/compliance/:country', (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 // REGULATORY MAP — /regulatory (read-only)
 // ═══════════════════════════════════════════════════════════════════
-const regulatory = require('../engines/regulatory-map-engine');
+const regulatory = require('../engines/regulatory-engine').regulatoryMap;
 
 router.get('/regulatory/licenses/:jurisdiction', (req, res) => {
     res.json(regulatory.getLicenseRequirements(req.params.jurisdiction));

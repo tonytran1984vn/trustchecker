@@ -18,8 +18,8 @@ const { asyncHandler: h } = require('../middleware/asyncHandler');
 router.use(authMiddleware);
 
 const dataOwn = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was data-ownership-engine
-const metrics = require('../engines/infrastructure-metrics-engine');
-const upgrade = require('../engines/upgrade-governance-engine');
+const metrics = require('../engines/platform-ops-engine').infrastructureMetrics;
+const upgrade = require('../engines/governance-module').upgradeGovernance;
 const { withTransaction } = require('../middleware/transaction');
 
 // ═══════════════════════════════════════════════════════════════════

@@ -9,10 +9,10 @@ const { authMiddleware } = require('../auth');
 
 router.use(authMiddleware);
 
-const oversight = require('../engines/external-oversight-engine');
+const oversight = require('../engines/governance-module').externalOversight;
 const car = require('../engines/realtime-car-engine');
 const decentral = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was decentralization-kpi-engine
-const legal = require('../engines/legal-entity-engine');
+const legal = require('../engines/legal-entity-module').legalEntity;
 
 // ═══════════════════════════════════════════════════════════════════
 // EXTERNAL OVERSIGHT — /oversight
@@ -124,7 +124,7 @@ router.post('/finance/consolidated-pl', (req, res) => {
 // TREASURY & LIQUIDITY — /treasury
 // ═══════════════════════════════════════════════════════════════════
 
-const treasury = require('../engines/treasury-liquidity-engine');
+const treasury = require('../engines/economics-engine').treasuryLiquidity;
 
 router.get('/treasury/framework', (req, res) => { res.json(treasury.getFullFramework()); });
 router.get('/treasury/lcr-model', (req, res) => { res.json(treasury.getLCRModel()); });
@@ -146,7 +146,7 @@ router.post('/treasury/run-waterfall', (req, res) => {
 // REGULATORY SCENARIOS — /regscenario
 // ═══════════════════════════════════════════════════════════════════
 
-const regscenario = require('../engines/regulatory-scenario-engine');
+const regscenario = require('../engines/regulatory-engine').regulatoryScenario;
 
 router.get('/regscenario/framework', (req, res) => { res.json(regscenario.getFullFramework()); });
 router.get('/regscenario/scenarios', (req, res) => { res.json(regscenario.getScenarios()); });

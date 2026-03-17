@@ -2,7 +2,7 @@
  * Observability Middleware — records actual request metrics
  * Plugs into Express to track real response times and error rates
  */
-const observability = require('../engines/observability-engine');
+const observability = require('../engines/platform-ops-engine').observability;
 
 function observabilityMiddleware(req, res, next) {
     const start = Date.now();

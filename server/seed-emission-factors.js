@@ -6,7 +6,7 @@
  * Run: node server/seed-emission-factors.js
  */
 const db = require('./db');
-const factorService = require('./engines/carbon-factor-service');
+const factorService = require('./engines/carbon-support').factorService;
 
 // Import the hardcoded constants (same values as in carbon-engine.js)
 const TRANSPORT_EMISSION_FACTORS = {

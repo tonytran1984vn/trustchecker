@@ -17,9 +17,9 @@ const { asyncHandler: h } = require('../middleware/asyncHandler');
 
 router.use(authMiddleware);
 
-const incentive = require('../engines/incentive-architecture-engine');
-const entity = require('../engines/entity-structuring-engine');
-const crypto = require('../engines/cryptographic-governance-engine');
+const incentive = require('../engines/economics-engine').incentiveArchitecture;
+const entity = require('../engines/legal-entity-module').entityStructuring;
+const crypto = require('../engines/governance-module').cryptographicGovernance;
 const { withTransaction } = require('../middleware/transaction');
 
 // ═══════════════════════════════════════════════════════════════════

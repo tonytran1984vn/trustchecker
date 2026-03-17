@@ -7,7 +7,7 @@ const router = express.Router();
 const { parsePagination } = require('../middleware/pagination');
 
 const { authMiddleware, requirePermission } = require('../auth');
-const custodyEngine = require('../engines/infrastructure-custody-engine');
+const custodyEngine = require('../engines/platform-ops-engine').infrastructureCustody;
 const { cacheMiddleware } = require('../cache');
 router.use(authMiddleware);
 

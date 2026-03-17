@@ -6,7 +6,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
-const governance = require('../engines/governance-engine');
+const governance = require('../engines/governance-module').governance;
 const { v4: uuidv4 } = require('uuid');
 const { withTransaction } = require('../middleware/transaction');
 router.use(authMiddleware);

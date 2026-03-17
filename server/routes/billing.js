@@ -619,7 +619,7 @@ router.post('/pricing/reset', requireSuperAdmin(), async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 // TRANSACTION FEE INFRASTRUCTURE (per-transaction pricing)
 // ═══════════════════════════════════════════════════════════════════
-const txFeeEngine = require('../engines/transaction-fee-engine');
+const txFeeEngine = require('../engines/economics-engine').transactionFee;
 
 // ─── GET /transaction-fees — Fee schedule ────────────────────────────
 router.get('/transaction-fees', (req, res) => {

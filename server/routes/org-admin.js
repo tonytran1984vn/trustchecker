@@ -1780,10 +1780,10 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         require('bytenode');
         const fs = require('fs');
         const path = require('path');
-        const jscPath = path.join(__dirname, '..', 'engines', 'erqf-engine.jsc');
+        const jscPath = path.join(__dirname, '..', 'engines', 'regulatory-engine', 'erqf.jsc');
         const { computeRisk } = fs.existsSync(jscPath)
-            ? require('../engines/erqf-engine.jsc')
-            : require('../engines/erqf-engine');
+            ? require('../engines/regulatory-engine/erqf.jsc')
+            : require('../engines/regulatory-engine/erqf');
         const erqf = computeRisk({
             scanStats30d, scanStatsPrev, fraudAlerts, compRecords,
             geoBreakdown, categoryBreakdown, dailyScanBreakdown,

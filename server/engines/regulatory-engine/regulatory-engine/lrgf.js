@@ -18,8 +18,8 @@
 
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
-const db = require('../db');
-const { safeParse } = require('../utils/safe-json');
+const db = require('../../db');
+const { safeParse } = require('../../utils/safe-json');
 
 // ─── MODEL VERSION REGISTRY ─────────────────────────────────────────────────
 const MODEL_REGISTRY = {
@@ -515,7 +515,7 @@ function freezeEvidence(caseId) {
     // Trust Graph: Create snapshot at evidence freeze
     let graphSnapshot = null;
     try {
-        const trustGraph = require('./trust-graph-engine');
+        const trustGraph = require('../trust-graph-engine');
         const tenantId = eventData?.org_id || null;
         if (tenantId) {
             graphSnapshot = trustGraph.createSnapshot(tenantId, `case_confirmed:${caseId}`);
@@ -682,7 +682,7 @@ function processEvent(eventData, sourceMetadata = {}, riskFactors = {}) {
     // Data Lineage: Record full 5-layer GDLI chain
     let gdli = null;
     try {
-        const lineage = require('./data-lineage-engine');
+        const lineage = require('../data-lineage-engine');
         const lineageResult = lineage.recordFullLineage({
             event_id: ingestion.event_id,
             event_hash: ingestion.event_hash,
