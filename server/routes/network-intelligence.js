@@ -8,7 +8,7 @@
 const express = require("express");
 const router = express.Router();
 const { authMiddleware } = require("../auth");
-const engine = require("../engines/network-intelligence-engine");
+const engine = require("../engines/core/network-intelligence-engine");
 
 router.use(authMiddleware);
 

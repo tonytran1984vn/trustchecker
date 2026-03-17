@@ -10,7 +10,7 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { orgGuard } = require('../middleware/org-middleware');
 const { requireScope, scopeFilter } = require('../auth/scope-engine');
-const engineClient = require('../engines/engine-client');
+const engineClient = require('../engines/infrastructure/engine-client');
 const { eventBus } = require('../events');
 
 const router = express.Router();

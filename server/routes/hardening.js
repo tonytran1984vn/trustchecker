@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const { authMiddleware, requirePermission } = require('../auth');
 const riskGov = require('../engines/risk-model-engine').governance;
-const saConstraints = require('../engines/sa-constraints');
+const saConstraints = require('../engines/infrastructure/sa-constraints');
 const observability = require('../engines/platform-ops-engine').observability;
 router.use(authMiddleware);
 
@@ -112,7 +112,7 @@ router.get('/observability/errors', (req, res) => {
 // RISK INTELLIGENCE INFRASTRUCTURE (8 endpoints — core moat)
 // ═══════════════════════════════════════════════════════════════════
 
-const riskInfra = require('../engines/risk-intelligence-infra');
+const riskInfra = require('../engines/intelligence/risk-intelligence-infra');
 
 // GET /risk-intelligence/mrm — Model Risk Management inventory
 router.get('/risk-intelligence/mrm', (req, res) => {
@@ -260,7 +260,7 @@ router.get('/ercm/maturity', (req, res) => { res.json(ercm.assessMaturity()); })
 // Risk Appetite + Board Dashboard + Internal Audit + Risk Capital
 // ═══════════════════════════════════════════════════════════════════
 
-const inst = require('../engines/institutional-engine');
+const inst = require('../engines/intelligence/institutional-engine');
 
 // I. Risk Appetite
 router.get('/institutional/risk-appetite', (req, res) => { res.json(inst.getRiskAppetite()); });

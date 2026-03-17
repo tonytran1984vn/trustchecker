@@ -6,7 +6,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
-const riskGraph = require('../engines/risk-graph-engine');
+const riskGraph = require('../engines/core/risk-graph-engine');
 const { cacheMiddleware } = require('../cache');
 const { withTransaction } = require('../middleware/transaction');
 router.use(authMiddleware);

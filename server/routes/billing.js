@@ -21,7 +21,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const pricing = require('../engines/pricing-engine');
+const pricing = require('../engines/infrastructure/pricing-engine');
 const { getDetailedUsage, getOverageCharges } = require('../middleware/usage-meter');
 
 // ─── POST /webhook — Webhook receiver with signature verification ────

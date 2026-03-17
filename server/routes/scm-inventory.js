@@ -6,7 +6,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const engineClient = require('../engines/engine-client');
+const engineClient = require('../engines/infrastructure/engine-client');
 const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();

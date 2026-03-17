@@ -3392,8 +3392,8 @@ router.get('/owner/ccs/scm-summary', requireExecutiveAccess(), async (req, res) 
 router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, res) => {
     try {
         const tid = req.orgId;
-        const carbonEngine = require('../engines/carbon-engine');
-        const engineClient = require('../engines/engine-client');
+        const carbonEngine = require('../engines/intelligence/carbon-engine');
+        const engineClient = require('../engines/infrastructure/engine-client');
 
         // Fetch org data
         const [products, shipments, events, partners, violations, offsets, finConfig] = await Promise.all([
@@ -3526,8 +3526,8 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
 router.get('/owner/ccs/allocation-baseline', requireExecutiveAccess(), async (req, res) => {
     try {
         const tid = req.orgId;
-        const carbonEngine = require('../engines/carbon-engine');
-        const engineClient = require('../engines/engine-client');
+        const carbonEngine = require('../engines/intelligence/carbon-engine');
+        const engineClient = require('../engines/infrastructure/engine-client');
 
         const [finConfig, products, shipments, events, partners, violations, offsets,
             scmStats, breaches, scanStats] = await Promise.all([

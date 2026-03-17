@@ -10,7 +10,7 @@ const { authMiddleware } = require('../auth');
 router.use(authMiddleware);
 
 const oversight = require('../engines/governance-module').externalOversight;
-const car = require('../engines/realtime-car-engine');
+const car = require('../engines/intelligence/realtime-car-engine');
 const decentral = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was decentralization-kpi-engine
 const legal = require('../engines/legal-entity-module').legalEntity;
 
@@ -102,7 +102,7 @@ router.get('/legal/entity/:name', (req, res) => {
 // FINANCIAL REPORTING — /finance
 // ═══════════════════════════════════════════════════════════════════
 
-const finance = require('../engines/financial-reporting-engine');
+const finance = require('../engines/intelligence/financial-reporting-engine');
 
 router.get('/finance/framework', (req, res) => { res.json(finance.getFullFramework()); });
 router.get('/finance/revenue-streams', (req, res) => { res.json(finance.getRevenueStreams()); });

@@ -7,7 +7,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const epcisEngine = require('../engines/epcis-engine');
+const epcisEngine = require('../engines/core/epcis-engine');
 const { cacheMiddleware } = require('../cache');
 const { withTransaction } = require('../middleware/transaction');
 

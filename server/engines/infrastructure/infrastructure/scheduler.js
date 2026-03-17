@@ -37,7 +37,7 @@ class ScheduledTasks {
     // v9.4.4: Redis distributed lock to prevent job duplication on restart
     async acquireLock(taskName, ttlSeconds = 300) {
         try {
-            const redis = require('../cache').getRedis?.();
+            const redis = require('../../cache').getRedis?.();
             if (!redis) return true; // No Redis = allow (fallback)
             const key = `lock:scheduler:${taskName}`;
             // DEVSECOPS: system-level lock — intentionally not org-scoped (scheduler runs once globally)
@@ -51,7 +51,7 @@ class ScheduledTasks {
 
     async releaseLock(taskName) {
         try {
-            const redis = require('../cache').getRedis?.();
+            const redis = require('../../cache').getRedis?.();
             if (!redis) return;
             await redis.del(`lock:scheduler:${taskName}`);
         } catch (e) { /* ignore */ }

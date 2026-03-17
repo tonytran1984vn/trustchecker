@@ -6,8 +6,8 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const blockchainEngine = require('../engines/blockchain');
-const engineClient = require('../engines/engine-client');
+const blockchainEngine = require('../engines/infrastructure/blockchain');
+const engineClient = require('../engines/infrastructure/engine-client');
 const { eventBus } = require('../events');
 const { withTransaction } = require('../middleware/transaction');
 

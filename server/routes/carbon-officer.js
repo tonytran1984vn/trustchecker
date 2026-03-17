@@ -7,7 +7,7 @@
 const router = require('express').Router();
 const db = require('../db');
 const { authMiddleware, requireRole } = require('../auth');
-const carbonEngine = require('../engines/carbon-engine');
+const carbonEngine = require('../engines/intelligence/carbon-engine');
 const { cacheMiddleware } = require('../cache');
 
 router.use(authMiddleware);

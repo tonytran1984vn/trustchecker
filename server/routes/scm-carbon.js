@@ -10,8 +10,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const engineClient = require('../engines/engine-client');
-const carbonEngine = require('../engines/carbon-engine');
+const engineClient = require('../engines/infrastructure/engine-client');
+const carbonEngine = require('../engines/intelligence/carbon-engine');
 const factorService = require('../engines/carbon-support').factorService;
 const { cacheMiddleware } = require('../cache');
 

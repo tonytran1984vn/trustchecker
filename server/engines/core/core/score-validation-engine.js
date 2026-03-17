@@ -3,7 +3,7 @@
  * Tracks trust score accuracy against real-world outcomes
  * Enables: precision/recall metrics, accuracy tracking, score calibration
  */
-const db = require("../db");
+const db = require("../../db");
 
 class ScoreValidationEngine {
     /**

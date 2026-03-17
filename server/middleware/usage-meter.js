@@ -9,7 +9,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { PLANS, checkLimit, calculateOverageCost } = require('../engines/pricing-engine');
+const { PLANS, checkLimit, calculateOverageCost } = require('../engines/infrastructure/pricing-engine');
 
 // In-memory usage cache to avoid DB reads on every request
 // Refreshed every 60s or after a metering write
@@ -265,7 +265,7 @@ function _invalidateCache(userId) {
 }
 
 function _getUnitCost(type, overagePosition) {
-    const pricing = require('../engines/pricing-engine').USAGE_PRICING[type];
+    const pricing = require('../engines/infrastructure/pricing-engine').USAGE_PRICING[type];
     if (!pricing) return 0;
 
     for (const tier of pricing.tiers) {

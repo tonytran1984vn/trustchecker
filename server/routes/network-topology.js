@@ -9,7 +9,7 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware, requirePermission } = require('../auth');
-const network = require('../engines/network-topology-engine');
+const network = require('../engines/intelligence/network-topology-engine');
 const { v4: uuidv4 } = require('uuid');
 
 router.use(authMiddleware);

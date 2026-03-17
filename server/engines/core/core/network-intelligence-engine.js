@@ -3,7 +3,7 @@
  * Cross-organization supplier intelligence (anonymized)
  * The KEY to network effects and $1B moat
  */
-const db = require("../db");
+const db = require("../../db");
 
 class NetworkIntelligenceEngine {
     /**

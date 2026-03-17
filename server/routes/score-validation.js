@@ -8,7 +8,7 @@
 const express = require("express");
 const router = express.Router();
 const { authMiddleware } = require("../auth");
-const engine = require("../engines/score-validation-engine");
+const engine = require("../engines/core/score-validation-engine");
 
 router.use(authMiddleware);
 

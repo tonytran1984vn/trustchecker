@@ -221,7 +221,7 @@ router.post("/invite", async function (req, res) {
 
         // Send email (use template engine)
         try {
-            const emailTemplates = require("../engines/emailTemplates");
+            const emailTemplates = require("../engines/infrastructure/emailTemplates");
             const html = emailTemplates.supplierInvite(req.user.username, inviterOrg, company_name, joinUrl, message);
             // In production, use real email service
             eventBus.emit("email:send", { to: email, subject: `${inviterOrg} invites you to TrustChecker Network`, html });

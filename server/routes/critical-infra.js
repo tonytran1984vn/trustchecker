@@ -19,7 +19,7 @@ router.use(authMiddleware);
 
 const revGov = require('../engines/economics-engine').revenueGovernance;
 const jurisdiction = require('../engines/regulatory-engine').jurisdictionalRisk;
-const killSwitch = require('../engines/kill-switch-engine');
+const killSwitch = require('../engines/infrastructure/kill-switch-engine');
 const superAdmin = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was super-admin-boundaries-engine
 const modelRisk = require('../engines/risk-model-engine').tiering;
 
@@ -96,7 +96,7 @@ router.get('/model-risk/model/:name', requireRole('risk_committee'), (req, res) 
 // INTEGRATION LOCKING LAYER — /integration [L4+ risk_committee]
 // ═══════════════════════════════════════════════════════════════════
 
-const integration = require('../engines/integration-locking-engine');
+const integration = require('../engines/infrastructure/integration-locking-engine');
 
 router.get('/integration/architecture', requireRole('risk_committee'), (req, res) => { res.json(integration.getFullArchitecture()); });
 router.get('/integration/capital-triggers', requireRole('risk_committee'), (req, res) => { res.json(integration.getCapitalTriggers()); });
@@ -147,7 +147,7 @@ router.post('/econrisk/score-org', requireRole('risk_committee'), (req, res) => 
 // CROSS-TENANT CONTAGION — /contagion [L4+ risk_committee]
 // ═══════════════════════════════════════════════════════════════════
 
-const contagion = require('../engines/cross-tenant-contagion-engine');
+const contagion = require('../engines/core/cross-tenant-contagion-engine');
 const { withTransaction } = require('../middleware/transaction');
 
 router.get('/contagion/framework', requireRole('risk_committee'), (req, res) => { res.json(contagion.getFullFramework()); });

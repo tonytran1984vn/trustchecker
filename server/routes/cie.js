@@ -21,7 +21,7 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const cie = require('../engines/cie-engine');
+const cie = require('../engines/intelligence/cie-engine');
 const { v4: uuidv4 } = require('uuid');
 
 // Lazy DB reference
@@ -305,7 +305,7 @@ router.get('/overview', async (req, res) => {
 // ROLE ARCHITECTURE
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const cieRoles = require('../engines/cie-role-engine');
+const cieRoles = require('../engines/infrastructure/cie-role-engine');
 const { withTransaction } = require('../middleware/transaction');
 
 // GET /api/cie/roles — All roles (platform + company)

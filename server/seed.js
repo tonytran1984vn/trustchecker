@@ -7,7 +7,7 @@ const db = require('./db');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const QRCode = require('qrcode');
-const blockchainEngine = require('./engines/blockchain');
+const blockchainEngine = require('./engines/infrastructure/blockchain');
 
 async function seed() {
     console.log('🌱 Seeding TrustChecker database...\n');

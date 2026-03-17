@@ -11,7 +11,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const engineClient = require('../engines/engine-client');
+const engineClient = require('../engines/infrastructure/engine-client');
 const { cacheMiddleware } = require('../cache');
 
 router.use(authMiddleware);
@@ -111,7 +111,7 @@ router.post('/monte-carlo', async (req, res) => {
             result = await engineClient.monteCarloRun(params, simCount);
         } catch (workerErr) {
             console.warn('Python engine failed, falling back to JS:', workerErr.message);
-            const advancedAI = require('../engines/advanced-scm-ai');
+            const advancedAI = require('../engines/intelligence/advanced-scm-ai');
 const { withTransaction } = require('../middleware/transaction');
             result = advancedAI.monteCarloRisk(params, simCount);
         }

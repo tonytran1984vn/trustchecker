@@ -10,9 +10,9 @@
  */
 
 
-const db = require('../db');
+const db = require('../../db');
 const { v4: uuidv4 } = require('uuid');
-const { eventBus, EVENT_TYPES } = require('../events');
+const { eventBus, EVENT_TYPES } = require('../../events');
 
 class TrustEngine {
     constructor() {

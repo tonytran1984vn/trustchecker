@@ -6,7 +6,7 @@ const { safeError } = require('../utils/safe-error');
 const express = require('express');
 const router = express.Router();
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const webhookEngine = require('../engines/webhookEngine');
+const webhookEngine = require('../engines/infrastructure/webhookEngine');
 const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);

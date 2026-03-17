@@ -7,7 +7,7 @@ const router = express.Router();
 const { parsePagination } = require('../middleware/pagination');
 
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const emailTemplates = require('../engines/emailTemplates');
+const emailTemplates = require('../engines/infrastructure/emailTemplates');
 const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);

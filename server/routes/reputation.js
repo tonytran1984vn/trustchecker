@@ -6,7 +6,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authMiddleware } = require('../auth');
-const reputation = require('../engines/reputation-engine');
+const reputation = require('../engines/intelligence/reputation-engine');
 const { cacheMiddleware } = require('../cache');
 router.use(authMiddleware);
 

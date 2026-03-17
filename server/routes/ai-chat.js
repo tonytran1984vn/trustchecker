@@ -8,7 +8,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware } = require('../auth');
-const aiAssistant = require('../engines/ai-assistant');
+const aiAssistant = require('../engines/infrastructure/ai-assistant');
 const { withTransaction } = require('../middleware/transaction');
 
 router.use(authMiddleware);

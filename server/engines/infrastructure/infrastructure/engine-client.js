@@ -10,7 +10,7 @@
  */
 
 const http = require('http');
-const { getBreaker, getAllBreakerStatus } = require('../middleware/circuit-breaker');
+const { getBreaker, getAllBreakerStatus } = require('../../middleware/circuit-breaker');
 
 // Service URLs (configurable via env)
 const SERVICES = {
@@ -30,12 +30,12 @@ const breakers = {
 const fallback = {
     monteCarlo: () => require('./monte-carlo-worker'),
     digitalTwin: () => ({ status: "archived" }), // ARCHIVED
-    advancedScmAI: () => require('./advanced-scm-ai'),
-    scmAI: () => require('./scm-ai'),
-    fraud: () => require('./fraud'),
-    anomaly: () => require('./anomaly'),
-    riskRadar: () => require('./risk-radar'),
-    carbon: () => require('./carbon-engine'),
+    advancedScmAI: () => require('../intelligence/advanced-scm-ai'),
+    scmAI: () => require('../core/scm-ai'),
+    fraud: () => require('../core/fraud'),
+    anomaly: () => require('../core/anomaly'),
+    riskRadar: () => require('../intelligence/risk-radar'),
+    carbon: () => require('../intelligence/carbon-engine'),
 };
 
 
