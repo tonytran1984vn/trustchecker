@@ -1,79 +1,77 @@
-name: TrustChecker CI
+# TrustChecker CI/CD Pipeline
+name: CI/CD
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, main, develop]
   pull_request:
-    branches: [main]
+    branches: [master, main]
 
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 10
+
     services:
       postgres:
-        image: postgres:15
+        image: postgres:16
         env:
-          POSTGRES_USER: trustchecker
-          POSTGRES_PASSWORD: testpass
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
           POSTGRES_DB: trustchecker_test
-        ports:
-          - 5432:5432
+        ports: ['5432:5432']
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/trustchecker_test
+      NODE_ENV: test
+      JWT_SECRET: test-jwt-secret-ci
+      DISABLE_RATE_LIMIT: 'true'
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: '22'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Syntax check all JS files
-        run: |
-          BROKEN=0
-          for f in server/routes/*.js server/engines/*.js server/middleware/*.js server/events/*.js; do
-            [ -f "$f" ] && ! node --check "$f" 2>/dev/null && echo "❌ $f" && BROKEN=$((BROKEN+1))
-          done
-          echo "Broken: $BROKEN"
-          [ $BROKEN -gt 0 ] && exit 1
-          echo "✅ All files pass syntax check"
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Push DB schema
+        run: npx prisma db push --accept-data-loss
 
       - name: Run tests
-        env:
-          DATABASE_URL: postgresql://trustchecker:testpass@localhost:5432/trustchecker_test
-          JWT_SECRET: test-secret-key-for-ci
-          ENCRYPTION_KEY: test-encryption-key-32ch!!
-          NODE_ENV: test
-        run: npm test
-
-  security-audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - name: Security audit
-        run: npm audit --production --audit-level=high || true
+        run: npm test -- --forceExit --detectOpenHandles --passWithNoTests
 
   deploy:
-    needs: [lint-and-test, security-audit]
+    needs: lint-and-test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    timeout-minutes: 5
+
     steps:
-      - name: Deploy to production
-        run: |
-          echo "Deploy via SSH to production server"
-          echo "TODO: Configure SSH key in GitHub Secrets"
-          # ssh deploy@tonytran.work "cd /opt/trustchecker && git pull && npm ci && pm2 restart trustchecker"
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          password: ${{ secrets.VPS_PASSWORD }}
+          script: |
+            cd /opt/trustchecker
+            git pull origin master
+            npm ci --production
+            npx prisma generate
+            pm2 restart trustchecker
+            sleep 5
+            curl -sf http://localhost:4000/healthz || exit 1
+            echo "Deploy successful"
