@@ -53,7 +53,11 @@ router.get('/hidden-links', cacheMiddleware(120), async (req, res) => {
 });
 
 // GET /cross-org — Cross-org fraud patterns (SA only)
-router.get('/cross-org', requirePermission('admin:manage'), cacheMiddleware(120), async (req, res) => {
+// ATK-21 FIX: Cross-org view restricted to super_admin only
+router.get('/cross-org', (req, res, next) => {
+    if (req.user?.role !== 'super_admin') return res.status(403).json({ error: 'Super admin access required' });
+    next();
+}, cacheMiddleware(120), async (req, res) => {
     try {
         const orgs = await db.all('SELECT * FROM organizations WHERE status = ?', ['active']).catch(() => []);
         const tenants = [];

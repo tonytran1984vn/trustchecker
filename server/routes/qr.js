@@ -62,9 +62,11 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
         }
 
         // Step 2: Get product (org-scoped)
+        // ATK-02 FIX: Always scope product query to org
         let prodSql = 'SELECT * FROM products WHERE id = ?';
         const prodParams = [qrCode.product_id];
-        if (req.orgId) { prodSql += ' AND org_id = ?'; prodParams.push(req.orgId); }
+        const effectiveOrgId = req.orgId || req.user?.orgId || req.user?.org_id;
+        if (effectiveOrgId) { prodSql += ' AND org_id = ?'; prodParams.push(effectiveOrgId); }
         const product = await db.prepare(prodSql).get(...prodParams);
 
         // Step 2.5: Check previous scans — CORE ANTI-COUNTERFEIT LOGIC
@@ -234,9 +236,11 @@ router.post('/generate', async (req, res) => {
         const qty = Math.min(Math.max(1, parseInt(quantity) || 1), 10000);
 
         // Verify product exists (org-scoped)
+        // ATK-02 FIX: Always scope product lookup
         let prodSql = 'SELECT id, name, sku FROM products WHERE id = ?';
         const prodParams = [product_id];
-        if (req.orgId) { prodSql += ' AND org_id = ?'; prodParams.push(req.orgId); }
+        const effectiveOrgId2 = req.orgId || req.user?.orgId || req.user?.org_id;
+        if (effectiveOrgId2) { prodSql += ' AND org_id = ?'; prodParams.push(effectiveOrgId2); }
         const product = await db.prepare(prodSql).get(...prodParams);
         if (!product) {
             return res.status(404).json({ error: 'Product not found' });

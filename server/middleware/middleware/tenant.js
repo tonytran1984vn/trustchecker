@@ -150,3 +150,49 @@ module.exports = {
     applyTenantContext,
     injectTenantFilter,
 };
+
+
+// ═══════════════════════════════════════════════════════════════
+// ATK-01 FIX: Transaction-wrapped tenant context
+// Ensures set_config and query execute on SAME connection
+// ═══════════════════════════════════════════════════════════════
+async function withTenantTransaction(db, req, callback) {
+    const pool = db._pool || db._backend?._pool;
+    if (!pool) {
+        // Fallback: use regular context (non-pool)
+        await applyTenantContext(db, req);
+        return callback(db);
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        if (req.tenantId) {
+            await client.query("SELECT set_config('app.current_tenant', $1, true)", [req.tenantId]);
+        }
+        // Create a scoped db interface using the dedicated client
+        const scopedDb = {
+            async get(sql, params) {
+                const res = await client.query(sql.replace(/\?/g, (_, i) => `$${i+1}`), params);
+                return res.rows[0] || null;
+            },
+            async all(sql, params) {
+                const res = await client.query(sql.replace(/\?/g, (_, i) => `$${i+1}`), params);
+                return res.rows;
+            },
+            async run(sql, params) {
+                await client.query(sql.replace(/\?/g, (_, i) => `$${i+1}`), params);
+            }
+        };
+        const result = await callback(scopedDb);
+        await client.query('COMMIT');
+        return result;
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
+module.exports.withTenantTransaction = withTenantTransaction;

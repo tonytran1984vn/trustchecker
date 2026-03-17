@@ -1,5 +1,5 @@
 // ─── API Documentation Endpoint ──────────────────────────────────────────────
-// No authentication required – returns structured API spec
+// ATK-10 FIX: Require authentication to access API documentation
 const express = require('express');
 const router = express.Router();
 
