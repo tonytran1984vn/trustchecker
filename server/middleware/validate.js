@@ -80,3 +80,7 @@ function validate(schemas) {
 }
 
 module.exports = { validate, z };
+
+// Re-export schemas for convenience (login.js imports { validate, schemas })
+const schemas = require("../lib/schemas");
+module.exports.schemas = schemas;

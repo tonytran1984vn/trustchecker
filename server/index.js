@@ -122,6 +122,11 @@ app.use('/api/auth/change-password', authLimiter); // SEC-API-2: rate limit pass
 app.use('/api/auth/reset-password', authLimiter);  // SEC-API-2: rate limit password resets
 app.use("/api/trust-network", require("./routes/trust-network"));
 
+// API Key management UI
+app.get("/api-keys", (req, res) => {
+    res.sendFile(require("path").join(__dirname, "../client/api-keys.html"));
+});
+
 // Trust Network: serve public join page
 app.get("/network/join/:token", function(req, res) {
     res.sendFile(require("path").join(__dirname, "../client/join.html"));
