@@ -14,7 +14,10 @@
 
 const path = require('path');
 
-if (!process.env.DATABASE_URL) {
+// D-05: PgBouncer integration
+const DB_URL = process.env.PGBOUNCER_URL || process.env.DATABASE_URL;
+
+if (!DB_URL) {
   console.error('\n❌ FATAL: DATABASE_URL is not set!');
   console.error('   Set it in .env or PM2 ecosystem.config.js');
   console.error('   Example: DATABASE_URL=postgresql://user:pass@localhost:5432/trustchecker\n');
@@ -33,7 +36,7 @@ class PrismaBackend {
 
     // Create pg Pool from DATABASE_URL
     this._pool = new Pool({
-            connectionString: process.env.DATABASE_URL,
+            connectionString: DB_URL,
             max: 50,                        // Scale: 50 connections (was default 10)
             idleTimeoutMillis: 30000,        // Close idle after 30s
             connectionTimeoutMillis: 5000,   // Fail fast if pool exhausted

@@ -15,6 +15,20 @@ const { validate, schemas } = require('../middleware/validate');
 
 const router = express.Router();
 
+// ATK-06: Product metadata quality validation
+function validateProductQuality(body) {
+    const warnings = [];
+    if (body.sku && !/^[A-Za-z0-9-_]{3,50}$/.test(body.sku)) warnings.push('SKU format invalid');
+    if (body.origin_country && !/^[A-Z]{2}$/.test(body.origin_country)) warnings.push('origin_country must be ISO 3166-1 alpha-2');
+    if (body.manufacturer && body.manufacturer.length < 2) warnings.push('manufacturer name too short');
+    if (body.name && body.name.length < 3) warnings.push('product name too short');
+    if (body.weight_kg && (body.weight_kg < 0 || body.weight_kg > 100000)) warnings.push('weight_kg out of range');
+    if (body.price && body.price < 0) warnings.push('price cannot be negative');
+    return warnings;
+}
+
+
+
 // ─── Auth: all product routes require authentication ─────────────────────────
 router.use(authMiddleware);
 
@@ -121,7 +135,8 @@ router.get('/:id', async (req, res) => {
 // ─── POST /api/products ─────────────────────────────────────────────────────
 router.post('/', requirePermission('product:create'), validate(schemas.createProduct), async (req, res) => {
     try {
-        const { name, sku, description, category, manufacturer, batch_number, origin_country, weight_kg, quantity, price } = req.body;
+        const qualityWarnings = validateProductQuality(req.body);
+    const { name, sku, description, category, manufacturer, batch_number, origin_country, weight_kg, quantity, price } = req.body;
 
         if (!name || !sku) {
             return res.status(400).json({ error: 'Name and SKU are required' });

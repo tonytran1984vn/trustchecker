@@ -28,6 +28,14 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
     try {
         const { qr_data, device_fingerprint, ip_address, latitude, longitude, user_agent } = req.body;
 
+        // ATK-22: Server-side fingerprint (don't trust client-supplied alone)
+        const serverFingerprint = require('crypto')
+            .createHash('sha256')
+            .update([req.ip || ip_address || '', req.headers['user-agent'] || '', req.headers['accept-language'] || ''].join('|'))
+            .digest('hex')
+            .slice(0, 16);
+        const effectiveFingerprint = serverFingerprint + ':' + (device_fingerprint || 'none').slice(0, 16);
+
         if (!qr_data) {
             return res.status(400).json({ error: 'qr_data is required' });
         }
@@ -41,7 +49,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             await db.run(`
         INSERT INTO scan_events (id, scan_type, device_fingerprint, ip_address, latitude, longitude, user_agent, result, fraud_score, scanned_at)
         VALUES (?, 'validation', ?, ?, ?, ?, ?, 'counterfeit', 1.0, NOW())
-      `, [scanId, device_fingerprint || '', ip_address || '', latitude || null, longitude || null, user_agent || '']);
+      `, [scanId, effectiveFingerprint || '', req.ip || ip_address || '', latitude || null, longitude || null, req.headers['user-agent'] || user_agent || '']);
 
             await blockchainEngine.seal('QRInvalid', scanId, { qr_data, result: 'counterfeit' });
 

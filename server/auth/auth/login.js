@@ -4,6 +4,8 @@
  */
 const express = require('express');
 const bcrypt = require('bcryptjs');
+// ATK-23: Dummy hash for timing-safe user lookup
+const DUMMY_HASH = '$2a$10$abcdefghijklmnopqrstuu/abcdefghijklmnopqrstuvwxyz01234';
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
@@ -18,6 +20,41 @@ const {
 const { validate, schemas } = require('../middleware/validate');
 
 const router = express.Router();
+
+// ATK-18: IP-based progressive lockout to prevent targeted DoS
+const ipFailures = new Map(); // ip → { count, blockUntil }
+const IP_MAX_FAILURES = 20;   // 20 failures per IP (covers multiple accounts)
+const IP_BLOCK_MINUTES = 30;
+
+function checkIpBlock(ip) {
+    const entry = ipFailures.get(ip);
+    if (!entry) return false;
+    if (entry.blockUntil && Date.now() < entry.blockUntil) return true;
+    if (entry.blockUntil && Date.now() >= entry.blockUntil) {
+        ipFailures.delete(ip);
+        return false;
+    }
+    return false;
+}
+
+function recordIpFailure(ip) {
+    const entry = ipFailures.get(ip) || { count: 0 };
+    entry.count++;
+    if (entry.count >= IP_MAX_FAILURES) {
+        entry.blockUntil = Date.now() + IP_BLOCK_MINUTES * 60 * 1000;
+    }
+    ipFailures.set(ip, entry);
+}
+
+// Cleanup stale entries every 10 min
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, entry] of ipFailures) {
+        if (entry.blockUntil && now > entry.blockUntil + 3600000) ipFailures.delete(ip);
+    }
+}, 600000).unref();
+
+
 
 // ─── POST /register ──────────────────────────────────────────────────────────
 
@@ -75,6 +112,15 @@ router.post('/register', validate(schemas.register), async (req, res) => {
 // SEC-12: Apply schema validation middleware
 router.post('/login', validate(schemas.login), async (req, res) => {
     try {
+        // ATK-18: Check IP-level block
+        const clientIp = req.ip || req.connection?.remoteAddress || 'unknown';
+        if (checkIpBlock(clientIp)) {
+            return res.status(429).json({
+                error: 'Too many failed login attempts from this IP',
+                retry_after: IP_BLOCK_MINUTES + ' minutes',
+            });
+        }
+
         const { email, password, mfa_code, mfa_token } = req.body;
 
         // Step 2: MFA verification (if mfa_token provided)
@@ -118,6 +164,7 @@ router.post('/login', validate(schemas.login), async (req, res) => {
 
         const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email);
         if (!user) {
+            await bcrypt.compare(password || 'x', DUMMY_HASH); // ATK-23: timing-safe
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
@@ -152,6 +199,7 @@ router.post('/login', validate(schemas.login), async (req, res) => {
             }
 
             await db.prepare('UPDATE users SET failed_attempts = ? WHERE id = ?').run(attempts, user.id);
+                recordIpFailure(clientIp); // ATK-18
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
