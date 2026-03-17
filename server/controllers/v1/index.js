@@ -15,6 +15,7 @@ const controllers = [
     { path: '/notifications', module: './notifications.controller' },
     { path: '/supply-chain', module: './supply-chain.controller' },
     { path: '/platform', module: './platform.controller' },
+    { path: '/rbac', module: './rbac.controller' },
 ];
 
 for (const ctrl of controllers) {
