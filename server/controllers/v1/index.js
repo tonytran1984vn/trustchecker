@@ -16,6 +16,7 @@ const controllers = [
     { path: '/supply-chain', module: './supply-chain.controller' },
     { path: '/platform', module: './platform.controller' },
     { path: '/rbac', module: './rbac.controller' },
+    { path: '/engines', module: './engines.controller' },
 ];
 
 for (const ctrl of controllers) {
