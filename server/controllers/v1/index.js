@@ -30,6 +30,7 @@ const controllers = [
     { path: "/platform", module: "./platform.controller" },
     { path: "/rbac", module: "./rbac.controller" },
     { path: "/engines", module: "./engines.controller" },
+    { path: "/api-keys", module: "./api-keys.controller" },
 ];
 
 for (const ctrl of controllers) {
