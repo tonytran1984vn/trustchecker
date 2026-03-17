@@ -78,7 +78,25 @@ class RedisEventBus {
     /**
      * Publish a domain event to Redis Stream.
      */
+
+    // A-16: Publisher ACL — restrict who can publish certain events
+    static PUBLISHER_ACL = {
+        'FRAUD_DETECTED': ['fraud-engine', 'anomaly-engine', 'scan-guard'],
+        'TRUST_SCORE_UPDATED': ['trust-engine'],
+        'KILL_SWITCH_ACTIVATED': ['kill-switch-engine', 'platform-admin'],
+        'SCAN_COMPLETED': ['qr-routes', 'mobile-scan'],
+        'CONTAGION_DETECTED': ['contagion-engine'],
+    };
+
     async publish(type, data, context = {}) {
+        // A-16: Check publisher authorization
+        const allowed = SafeEventBus.PUBLISHER_ACL[type];
+        if (allowed && context.publisher && !allowed.includes(context.publisher)) {
+            console.warn(`[EVENT-BUS] Unauthorized publish: ${context.publisher} → ${type}`);
+            this._stats.failed++;
+            return; // Silently reject
+        }
+
         // v9.5.0: Throttle — max 1 event per type per org per 500ms
         const tKey = type + ':' + (data?.org_id || data?.orgId || 'g');
         const now = Date.now();
@@ -265,7 +283,25 @@ class InMemoryEventBus {
         this._throttleMap = new Map(); // v9.5.0: Event throttle
     }
 
+
+    // A-16: Publisher ACL — restrict who can publish certain events
+    static PUBLISHER_ACL = {
+        'FRAUD_DETECTED': ['fraud-engine', 'anomaly-engine', 'scan-guard'],
+        'TRUST_SCORE_UPDATED': ['trust-engine'],
+        'KILL_SWITCH_ACTIVATED': ['kill-switch-engine', 'platform-admin'],
+        'SCAN_COMPLETED': ['qr-routes', 'mobile-scan'],
+        'CONTAGION_DETECTED': ['contagion-engine'],
+    };
+
     async publish(type, data, context = {}) {
+        // A-16: Check publisher authorization
+        const allowed = SafeEventBus.PUBLISHER_ACL[type];
+        if (allowed && context.publisher && !allowed.includes(context.publisher)) {
+            console.warn(`[EVENT-BUS] Unauthorized publish: ${context.publisher} → ${type}`);
+            this._stats.failed++;
+            return; // Silently reject
+        }
+
         // v9.5.0: Throttle — max 1 event per type per org per 500ms
         const tKey = type + ':' + (data?.org_id || data?.orgId || 'g');
         const now = Date.now();

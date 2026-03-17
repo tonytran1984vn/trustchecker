@@ -114,7 +114,8 @@ const authLimiter = rateLimit({
     message: { error: 'Too many auth attempts. Try again in 15 minutes' },
     skipSuccessfulRequests: true
 });
-app.use('/healthz', require('./routes/healthz'));
+// A-11: Deep health check
+try { app.use('/healthz', require('./routes/health')); } catch(e) { app.use('/healthz', require('./routes/healthz')); }
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/change-password', authLimiter); // SEC-API-2: rate limit password changes

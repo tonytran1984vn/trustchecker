@@ -9,6 +9,9 @@ function setupRoutes(app) {
     // Public routes (no auth)
     const publicRoutes = require('../routes/public');
     const apiDocsRoutes = require('../routes/api-docs');
+    // A-11: Deep health check
+    try { app.use('/healthz', require('../routes/health')); } catch(e) {}
+
     app.use('/api/public', scanLimit, publicRoutes);
     app.use('/api/docs', apiDocsRoutes);
 
