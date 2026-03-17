@@ -15,6 +15,9 @@ const { validate, schemas } = require('../middleware/validate');
 
 const router = express.Router();
 
+const PLAN_LIMITS = { free: 50, starter: 500, pro: 5000, enterprise: 100000 };
+
+
 // ATK-06: Product metadata quality validation
 function validateProductQuality(body) {
     const warnings = [];

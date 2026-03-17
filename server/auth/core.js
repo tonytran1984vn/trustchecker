@@ -88,7 +88,7 @@ function requireRole(...roles) {
 
 // ─── Helper: Generate Token Pair ─────────────────────────────────────────────
 
-async function generateTokenPair(user, sessionId) {
+async function generateTokenPair(user, sessionId, options = {}) {
     const payload = {
         id: user.id,
         email: user.email,
@@ -113,10 +113,11 @@ async function generateTokenPair(user, sessionId) {
 
     const refreshToken = crypto.randomBytes(48).toString('hex');
     const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    const familyId = options?.familyId || uuidv4(); // ATK-08: token family tracking
     const expiresAt = new Date(Date.now() + REFRESH_EXPIRY_DAYS * 86400000).toISOString();
 
-    await db.prepare(`INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)`)
-        .run(uuidv4(), user.id, refreshHash, expiresAt);
+    await db.prepare(`INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, family_id) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), user.id, refreshHash, expiresAt, familyId);
 
     return { accessToken, refreshToken };
 }

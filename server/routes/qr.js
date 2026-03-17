@@ -34,6 +34,14 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             .update([req.ip || ip_address || '', req.headers['user-agent'] || '', req.headers['accept-language'] || ''].join('|'))
             .digest('hex')
             .slice(0, 16);
+        // ATK-27: Reject future/stale timestamps
+        if (req.body.timestamp) {
+            const ts = new Date(req.body.timestamp).getTime();
+            const now = Date.now();
+            if (ts > now + 300000) return res.status(400).json({ error: 'Timestamp in future' });
+            if (ts < now - 604800000) return res.status(400).json({ error: 'Timestamp too old' });
+        }
+
         const effectiveFingerprint = serverFingerprint + ':' + (device_fingerprint || 'none').slice(0, 16);
 
         if (!qr_data) {

@@ -59,6 +59,25 @@ class WebhookEngine {
     /**
      * Deliver webhook to all subscribers of an event
      */
+
+    // ATK-15: Sanitize webhook payloads — strip sensitive fields
+    static sanitizePayload(payload) {
+        if (!payload || typeof payload !== 'object') return payload;
+        const sensitive = ['password', 'mfa_secret', 'token', 'refresh_token', 'api_key',
+                          'secret', 'hash', 'token_hash', 'ip_address', 'device_fingerprint',
+                          'email', 'phone', 'ssn', 'credit_card'];
+        const clean = { ...payload };
+        for (const key of Object.keys(clean)) {
+            if (sensitive.some(s => key.toLowerCase().includes(s))) {
+                clean[key] = '[REDACTED]';
+            }
+            if (typeof clean[key] === 'object' && clean[key] !== null) {
+                clean[key] = WebhookEngine.sanitizePayload(clean[key]);
+            }
+        }
+        return clean;
+    }
+
     async deliver(eventType, payload) {
         const subs = this.subscribers.get(eventType) || [];
         const results = [];
