@@ -25,21 +25,22 @@ router.get('/stats', async (req, res) => {
 
         const verificationRate = scans.count > 0 ? Math.round((validScans.count / scans.count) * 100) : 0;
 
-        res.json({
-            total_products: products.count,
-            total_scans: scans.count,
-            today_scans: todayScans.count,
-            avg_trust_score: avgTrust.avg || 0,
-            blockchain_seals: seals.count,
-            open_alerts: alerts.count,
-            total_partners: partners.count,
-            total_batches: batches.count,
-            total_evidence: evidence.count,
-            active_certifications: certifications.count,
-            verification_rate: verificationRate,
-            platform_uptime: '99.97%',
-            last_updated: new Date().toISOString()
-        });
+        // S-03 FIX: Anonymize counts to ranges — prevent competitive intelligence
+            const anonymize = (n) => {
+                if (n < 100) return '100+';
+                if (n < 1000) return '1,000+';
+                if (n < 10000) return '10,000+';
+                if (n < 100000) return '100,000+';
+                return '1,000,000+';
+            };
+            res.json({
+                total_products: anonymize(products.count),
+                total_scans: anonymize(scans.count),
+                avg_trust_score: avgTrust.avg ? Math.round(avgTrust.avg) : 0,
+                verification_rate: verificationRate,
+                platform_uptime: '99.97%',
+                last_updated: new Date().toISOString()
+            });
     } catch (err) {
         console.error('Public stats error:', err);
         res.status(500).json({ error: 'Failed to fetch statistics' });

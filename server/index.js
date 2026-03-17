@@ -1,3 +1,4 @@
+require("dotenv").config();
 /**
  * TrustChecker v9.4 Server – Main Entry Point
  * Express + WebSocket server for the Distributed Digital Trust Infrastructure
@@ -238,3 +239,29 @@ const ready = boot().catch(err => {
 });
 
 module.exports = { app, server, ready };
+
+// ═══════════════════════════════════════════════════════
+// A-15: Graceful Shutdown Handler
+// ═══════════════════════════════════════════════════════
+const gracefulShutdown = (signal) => {
+    console.log(`\n[SHUTDOWN] ${signal} received. Shutting down gracefully...`);
+    // Stop accepting new connections
+    if (global._httpServer) {
+        global._httpServer.close(() => {
+            console.log('[SHUTDOWN] HTTP server closed');
+            // Close DB pool
+            try {
+                const db = require('./db');
+                if (db._pool) db._pool.end().then(() => console.log('[SHUTDOWN] DB pool closed'));
+            } catch(e) {}
+            // Exit after cleanup
+            setTimeout(() => process.exit(0), 1000);
+        });
+        // Force exit after 10s
+        setTimeout(() => { console.log('[SHUTDOWN] Forced exit'); process.exit(1); }, 10000);
+    } else {
+        process.exit(0);
+    }
+};
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);

@@ -8,12 +8,13 @@ const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 
-const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production'
-    ? (() => { throw new Error('JWT_SECRET env var is required in production'); })()
-    : 'trustchecker-secret-key-DEV-ONLY');
-if (!process.env.JWT_SECRET) {
-    console.warn('⚠️  JWT_SECRET not set — using dev fallback. Set JWT_SECRET env var for production!');
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    console.error('\n❌ FATAL: JWT_SECRET env var is required!');
+    console.error('   Generate one: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"\n');
+    process.exit(1);
 }
+// JWT_SECRET is now required — enforced above
 const JWT_EXPIRY = '1h';
 const REFRESH_EXPIRY_DAYS = 7;
 const MAX_FAILED_ATTEMPTS = 5;

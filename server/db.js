@@ -14,7 +14,7 @@
 
 const path = require('path');
 
-if (!process.env.DATABASE_URL) { process.env.DATABASE_URL = 'postgresql://trustchecker:cccec19776a0a1262067a8fc7058aa18@localhost:5432/trustchecker'; /*fallback*/ } if (false) {
+if (!process.env.DATABASE_URL) {
   console.error('\n❌ FATAL: DATABASE_URL is not set!');
   console.error('   Set it in .env or PM2 ecosystem.config.js');
   console.error('   Example: DATABASE_URL=postgresql://user:pass@localhost:5432/trustchecker\n');
