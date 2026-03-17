@@ -189,6 +189,13 @@ function setupRoutes(app) {
     app.get('/api/version', versionInfoHandler);
     app.get('/api/v1/version', versionInfoHandler);
 
+    // Phase 3: V1 Domain Controllers (service-backed)
+    try {
+        const v1Controllers = require('../controllers/v1');
+        app.use('/api/v1', authMiddleware, v1Controllers);
+        console.log('[boot] V1 controllers mounted at /api/v1');
+    } catch(e) { console.warn('[boot] V1 controllers not loaded:', e.message); }
+
     // v9.5.0: Enterprise features
     app.use('/api/score-validation', require('../routes/score-validation'));
     app.use('/api/sso', require('../routes/sso'));
