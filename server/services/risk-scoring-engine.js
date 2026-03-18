@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V6 — Dynamic Trust + Risk-First Graph
+ * Risk Scoring Engine V7 — Trust Propagation + Deep Moat
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -334,13 +334,12 @@ async function historyScore(productId, actorId) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// V6 DYNAMIC TRUST + RISK-FIRST GRAPH
+// V7 TRUST PROPAGATION + DEEP MOAT
 // ═══════════════════════════════════════════════════════════════
 
 const GRAPH_LIMITS = { MAX_NODES: 500, MAX_DEPTH: 2, QUERY_TIMEOUT: 5000 };
 
 // ─── V6: TRUST VOLATILITY ────────────────────────────────────
-// High variance in risk scores = unstable behavior = trust penalty
 async function trustVolatility(actorId) {
     if (!actorId) return { volatility: 0, penalty: 0 };
     try {
@@ -359,6 +358,95 @@ async function trustVolatility(actorId) {
     return { volatility: 0, penalty: 0 };
 }
 
+// ─── V7: RISK TREND SLOPE (linear regression) ───────────────
+// Detects slowly increasing risk — even if volatility is low
+async function riskTrendSlope(actorId) {
+    if (!actorId) return { slope: 0, penalty: 0 };
+    try {
+        const scores = await db.all(
+            `SELECT risk_score, EXTRACT(EPOCH FROM created_at) as ts
+             FROM risk_scores WHERE actor_id = $1
+             AND created_at > NOW() - INTERVAL '7 days'
+             ORDER BY created_at ASC LIMIT 50`,
+            [actorId]
+        );
+        if (!scores || scores.length < 4) return { slope: 0, penalty: 0 };
+        // Simple linear regression: slope = Σ(xi-x̄)(yi-ȳ) / Σ(xi-x̄)²
+        const n = scores.length;
+        const xs = scores.map((s, i) => i); // use index as x for simplicity
+        const ys = scores.map(s => parseFloat(s.risk_score) || 0);
+        const xMean = (n - 1) / 2;
+        const yMean = ys.reduce((a, b) => a + b, 0) / n;
+        let num = 0, den = 0;
+        for (let i = 0; i < n; i++) {
+            num += (xs[i] - xMean) * (ys[i] - yMean);
+            den += (xs[i] - xMean) ** 2;
+        }
+        const slope = den > 0 ? num / den : 0;
+        // Positive slope = risk trending up → trust penalty
+        const penalty = slope > 0 ? Math.min(0.2, slope * 0.01) : 0;
+        return { slope: Math.round(slope * 100) / 100, penalty: Math.round(penalty * 100) / 100, samples: n };
+    } catch(_) {}
+    return { slope: 0, penalty: 0 };
+}
+
+// ─── V7: TRUST PROPAGATION (network-level trust) ───────────
+// An actor in a low-trust cluster gets their trust reduced
+// network_trust = avg(trust of neighbors) weighted by interaction
+async function trustPropagation(actorId) {
+    if (!actorId) return { network_trust: 0.5, neighbor_count: 0, penalty: 0 };
+    try {
+        // Find neighbors: actors who touched the same products in last 1h
+        const neighbors = await db.all(
+            `SELECT se2.device_fingerprint, COUNT(*) as shared_products
+             FROM scan_events se1
+             JOIN scan_events se2 ON se1.product_id = se2.product_id
+             WHERE se1.device_fingerprint = $1
+             AND se2.device_fingerprint != $1
+             AND se2.device_fingerprint IS NOT NULL
+             AND se1.scanned_at > NOW() - INTERVAL '1 hour'
+             AND se2.scanned_at > NOW() - INTERVAL '1 hour'
+             GROUP BY se2.device_fingerprint
+             ORDER BY COUNT(*) DESC
+             LIMIT 20`,
+            [actorId]
+        );
+        if (!neighbors || neighbors.length === 0) return { network_trust: 0.5, neighbor_count: 0, penalty: 0 };
+
+        // Get avg_risk_score of neighbors from actor_risk_profiles
+        const neighborIds = neighbors.map(n => n.device_fingerprint);
+        let totalWeightedRisk = 0, totalWeight = 0;
+        for (const n of neighbors.slice(0, 10)) {
+            const profile = await db.get(
+                `SELECT avg_risk_score, flagged_count, total_scans FROM actor_risk_profiles WHERE actor_id = $1`,
+                [n.device_fingerprint]
+            );
+            const weight = parseInt(n.shared_products) || 1;
+            if (profile) {
+                const risk = parseFloat(profile.avg_risk_score) || 0;
+                totalWeightedRisk += risk * weight;
+                totalWeight += weight;
+            } else {
+                // Unknown neighbor → neutral risk (30)
+                totalWeightedRisk += 30 * weight;
+                totalWeight += weight;
+            }
+        }
+        const neighborAvgRisk = totalWeight > 0 ? totalWeightedRisk / totalWeight : 30;
+        // Convert neighbor risk to trust influence: high risk neighbors → low network trust
+        const networkTrust = Math.max(0.1, 1 - (neighborAvgRisk / 100));
+        // Penalty: if network trust < 0.5, penalize this actor
+        const penalty = networkTrust < 0.5 ? Math.min(0.25, (0.5 - networkTrust) * 0.5) : 0;
+        return {
+            network_trust: Math.round(networkTrust * 100) / 100,
+            neighbor_count: neighbors.length,
+            neighbor_avg_risk: Math.round(neighborAvgRisk),
+            penalty: Math.round(penalty * 100) / 100,
+        };
+    } catch(_) {}
+    return { network_trust: 0.5, neighbor_count: 0, penalty: 0 };
+}
+
 // ─── V6: CROSS-ENTITY TRUST FUSION ──────────────────────────
 // Trust CANNOT fully override strong anomaly signals
 function entityTrustFusion(actorTrust, deviceTrust, anomalyScore) {
@@ -367,7 +455,7 @@ function entityTrustFusion(actorTrust, deviceTrust, anomalyScore) {
     return Math.max(0.1, Math.min(1.0, rawTrust * anomalyFactor + 0.3 * (1 - anomalyFactor)));
 }
 
-// ─── V6: ACTOR TRUST (volatility + decay) ───────────────────
+// ─── V7: ACTOR TRUST (volatility + decay + trend + propagation) ─
 async function actorTrustScore(actorId) {
     if (!actorId) return { trust: 0.5, reasons: [] };
     const reasons = [];
@@ -393,13 +481,23 @@ async function actorTrustScore(actorId) {
         // V6: Trust volatility penalty
         const vol = await trustVolatility(actorId);
         trust -= vol.penalty;
-        // V6: Temporal decay — inactive accounts lose trust
+        // V7: Risk trend slope penalty
+        const trend = await riskTrendSlope(actorId);
+        trust -= trend.penalty;
+        // V7: Trust propagation (network influence)
+        const network = await trustPropagation(actorId);
+        trust -= network.penalty;
+        // V7: Contextual decay — λ varies by risk level
         const lastActive = profile.updated_at ? new Date(profile.updated_at) : new Date(profile.created_at);
         const inactiveDays = (Date.now() - lastActive.getTime()) / 86400000;
-        if (inactiveDays > 1) trust *= Math.exp(-0.02 * inactiveDays);
+        if (inactiveDays > 1) {
+            // High-risk actors decay faster (λ up to 0.05), low-risk decay slower (λ=0.01)
+            const lambda = avgRisk > 60 ? 0.05 : avgRisk > 30 ? 0.02 : 0.01;
+            trust *= Math.exp(-lambda * inactiveDays);
+        }
         trust = Math.max(0, Math.min(1.0, trust));
-        reasons.push({ trust, age_hours: Math.round(ageHours), flag_ratio: Math.round(flagRatio * 100) / 100, avg_risk: Math.round(avgRisk), volatility: vol.volatility, vol_penalty: vol.penalty, inactive_days: Math.round(inactiveDays * 10) / 10 });
-        return { trust, reasons, volatility: vol };
+        reasons.push({ trust, age_hours: Math.round(ageHours), flag_ratio: Math.round(flagRatio * 100) / 100, avg_risk: Math.round(avgRisk), volatility: vol.volatility, vol_penalty: vol.penalty, trend_slope: trend.slope, trend_penalty: trend.penalty, network_trust: network.network_trust, network_penalty: network.penalty, neighbor_count: network.neighbor_count, inactive_days: Math.round(inactiveDays * 10) / 10 });
+        return { trust, reasons, volatility: vol, trend, network };
     } catch(_) {}
     return { trust: 0.3, reasons: [] };
 }
@@ -461,14 +559,18 @@ async function multiHopCollusion(actorId) {
         );
         if (!myProducts || myProducts.length === 0) return { hops: 0, cluster_size: 0, score: 0, reasons };
         const productIds = myProducts.map(r => r.product_id);
-        // V6: Risk-first — ORDER BY scan frequency DESC (risky actors first)
+        // V7: Multi-factor BFS priority — combines frequency + risk profile
         const hop1Actors = await db.all(
-            `SELECT device_fingerprint, COUNT(*) as scan_count FROM scan_events
-             WHERE product_id::text = ANY(string_to_array($1, ','))
-             AND device_fingerprint != $2
-             AND device_fingerprint IS NOT NULL
-             AND scanned_at > NOW() - INTERVAL '1 hour'
-             GROUP BY device_fingerprint ORDER BY COUNT(*) DESC
+            `SELECT se.device_fingerprint, COUNT(*) as scan_count,
+                    COALESCE(arp.avg_risk_score, 30) as actor_risk
+             FROM scan_events se
+             LEFT JOIN actor_risk_profiles arp ON arp.actor_id = se.device_fingerprint
+             WHERE se.product_id::text = ANY(string_to_array($1, ','))
+             AND se.device_fingerprint != $2
+             AND se.device_fingerprint IS NOT NULL
+             AND se.scanned_at > NOW() - INTERVAL '1 hour'
+             GROUP BY se.device_fingerprint, arp.avg_risk_score
+             ORDER BY (COALESCE(arp.avg_risk_score, 30) * 0.5 + COUNT(*) * 5 * 0.5) DESC
              LIMIT ${GRAPH_LIMITS.MAX_NODES}`,
             [productIds.join(','), actorId]
         );
@@ -505,7 +607,7 @@ async function multiHopCollusion(actorId) {
         if (clusterSize >= 4 && totalProducts >= 3) {
             const baseSeverity = Math.min(80, Math.round(60 * trustMultiplier));
             score += baseSeverity * 0.8;
-            reasons.push({ rule: 'multi_hop_cluster', severity: baseSeverity, confidence: 0.8, cluster_size: clusterSize, products: totalProducts, hops: 2, avg_trust: Math.round(avgTrust * 100) / 100, density, traversal: 'risk_first' });
+            reasons.push({ rule: 'multi_hop_cluster', severity: baseSeverity, confidence: 0.8, cluster_size: clusterSize, products: totalProducts, hops: 2, avg_trust: Math.round(avgTrust * 100) / 100, density, traversal: 'multi_factor' });
         } else if (clusterSize >= 3 && totalProducts >= 2) {
             const baseSeverity = Math.min(60, Math.round(35 * trustMultiplier));
             score += baseSeverity * 0.7;
@@ -927,4 +1029,4 @@ async function calculateRisk(input) {
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, actorTrustScore, deviceTrustScore, trustVolatility, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS };
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS };
