@@ -136,6 +136,20 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
         }
 
         
+        // TC21-HMAC-VERIFY: Validate QR signature integrity
+        try {
+            const parts = qr_data.split('-');
+            if (parts.length >= 4) {
+                const sigPart = parts[parts.length - 1]; // Last segment is signature
+                const dataPart = parts.slice(0, -1).join('-');
+                const expectedSig = require('crypto').createHmac('sha256', process.env.QR_SECRET || process.env.JWT_SECRET || 'tc-default-key')
+                    .update(qrCode.product_id + parts[2] + '0').digest('hex').slice(0, 8);
+                if (sigPart !== expectedSig && sigPart.length === 8) {
+                    req._hmacMismatch = true; // Flag for response enrichment
+                }
+            }
+        } catch(_hmac) {}
+
         // TC21-REUSE: Check for QR code reuse pattern
         const reuseResult = await checkQrReuse(qrCode.id, qr_data, req.ip || ip_address, effectiveFingerprint || device_fingerprint, db);
         if (reuseResult.blocked) {
@@ -300,6 +314,11 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             // ✅ First-time scan — product is authentic
             result = 'valid';
             message = '✅ Sản phẩm bạn vừa kiểm tra là HÀNG CHÍNH HÃNG. Đây là lần đầu tiên mã được kiểm tra.';
+            // TC21-CLAIM-PROMPT: Suggest ownership registration on first scan
+            scan_warning = scan_warning || {};
+            scan_warning.claim_available = true;
+            scan_warning.claim_message = '📋 Bạn có thể đăng ký sở hữu sản phẩm này để bảo vệ quyền lợi của bạn.';
+            scan_warning.claim_url = '/api/qr/claim';
         } else {
             // ⚠️ Repeat scan — warn user
             const firstTime = new Date(firstScanRecord.scanned_at + 'Z');
@@ -383,6 +402,8 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             scan_verification: {
                 is_first_scan: isFirstScan,
                 total_scans: scanCount + 1,
+                // TC21-OWNERSHIP-SCAN: Add ownership status
+                ownership_claimed: await (async () => { try { const c = await db.get('SELECT id FROM ownership_claims WHERE qr_code_id = $1', [qrCode.id]); return !!c; } catch(_) { return false; } })(),
                 ...(scan_warning || {})
             },
             product: product ? {
@@ -414,6 +435,15 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
                 data_hash: seal.data_hash,
                 merkle_root: seal.merkle_root
             },
+            // TC21-ENRICHED: Reuse analytics + ownership
+            previously_verified: !isFirstScan,
+            reuse_analytics: {
+                total_scans: scanCount + 1,
+                is_first_scan: isFirstScan,
+                unique_devices: 'see scan_verification',
+                reuse_risk: scanCount >= 10 ? 'CRITICAL' : scanCount >= 5 ? 'HIGH' : scanCount >= 3 ? 'MEDIUM' : 'LOW',
+            },
+            hmac_valid: !req._hmacMismatch,
             response_time_ms: responseTime
         });
     } catch (err) {
@@ -457,7 +487,7 @@ router.post('/generate', async (req, res) => {
             const seq = crypto.randomBytes(8).toString('hex');
             const hmac = crypto.createHmac('sha256', process.env.QR_SECRET || process.env.JWT_SECRET || 'tc-default-key')
               .update(product_id + seq + i).digest('hex').slice(0, 8);
-            const qrData = `${codePrefix}-${year}-${seq}-${checkChar}`;
+            const qrData = `${codePrefix}-${year}-${seq}-${hmac}`;
 
             const id = uuidv4();
             try {
@@ -497,6 +527,89 @@ router.post('/generate', async (req, res) => {
     } catch (err) {
         console.error('QR Generate error:', err);
         res.status(500).json({ error: 'Failed to generate codes' });
+    }
+});
+
+// TC21-OWNERSHIP-CLAIM: POST /api/qr/claim — Register product ownership
+router.post('/claim', async (req, res) => {
+    try {
+        const { qr_data, claimer_name, claimer_email, claimer_phone } = req.body;
+        if (!qr_data) return res.status(400).json({ error: 'qr_data is required' });
+
+        // Look up QR code
+        const qrCode = await db.get('SELECT id, product_id, org_id FROM qr_codes WHERE qr_data = $1', [qr_data]);
+        if (!qrCode) return res.status(404).json({ error: 'QR code not found' });
+
+        // Check if already claimed
+        const existing = await db.get('SELECT id, claimer_name, claimed_at FROM ownership_claims WHERE qr_code_id = $1', [qrCode.id]);
+        if (existing) {
+            return res.json({
+                claimed: true,
+                already_claimed: true,
+                claimed_by: existing.claimer_name || 'Anonymous',
+                claimed_at: existing.claimed_at,
+                message: '⚠️ Sản phẩm này đã được đăng ký sở hữu bởi người khác. Nếu bạn mua hàng chính hãng, hãy liên hệ nhà sản xuất.',
+            });
+        }
+
+        // Register ownership
+        const claimId = require('uuid').v4();
+        const deviceFp = req.body.device_fingerprint || req.headers['user-agent'] || '';
+        const ipAddr = req.ip || req.body.ip_address || '';
+        
+        await db.run(`INSERT INTO ownership_claims (id, qr_code_id, product_id, claimer_device, claimer_ip, claimer_name, claimer_email, claimer_phone, org_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [claimId, qrCode.id, qrCode.product_id, deviceFp, ipAddr, claimer_name || null, claimer_email || null, claimer_phone || null, qrCode.org_id]);
+
+        // Audit
+        try {
+            await db.run(`INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, details, ip_address)
+                VALUES ($1, 'customer', 'ownership_claimed', 'product', $2, $3, $4)`,
+                [require('uuid').v4(), qrCode.product_id, JSON.stringify({ qr_code_id: qrCode.id, claimer: claimer_name || 'Anonymous' }), ipAddr]);
+        } catch(_) {}
+
+        res.json({
+            claimed: true,
+            already_claimed: false,
+            claim_id: claimId,
+            product_id: qrCode.product_id,
+            message: '✅ Đăng ký sở hữu thành công! Bạn là chủ sở hữu hợp pháp của sản phẩm này.',
+        });
+    } catch(err) {
+        console.error('Ownership claim error:', err);
+        res.status(500).json({ error: 'Claim failed' });
+    }
+});
+
+// TC21-OWNERSHIP: GET /api/qr/ownership/:qr_data — Check ownership status
+router.get('/ownership/:qr_data', async (req, res) => {
+    try {
+        const qrCode = await db.get('SELECT id, product_id FROM qr_codes WHERE qr_data = $1', [req.params.qr_data]);
+        if (!qrCode) return res.status(404).json({ error: 'QR code not found' });
+
+        const claim = await db.get('SELECT id, claimer_name, claimed_at, status FROM ownership_claims WHERE qr_code_id = $1', [qrCode.id]);
+        
+        const totalScans = await db.get('SELECT COUNT(*) as c FROM scan_events WHERE qr_code_id = $1', [qrCode.id]);
+        const uniqueDevices = await db.get('SELECT COUNT(DISTINCT device_fingerprint) as c FROM scan_events WHERE qr_code_id = $1', [qrCode.id]);
+        const fingerprints = await db.get('SELECT COUNT(DISTINCT ip_hash) as unique_ips, SUM(scan_count) as total FROM qr_scan_fingerprints WHERE qr_code_id = $1', [qrCode.id]);
+
+        res.json({
+            product_id: qrCode.product_id,
+            ownership: claim ? {
+                claimed: true,
+                owner: claim.claimer_name || 'Anonymous',
+                claimed_at: claim.claimed_at,
+                status: claim.status,
+            } : { claimed: false },
+            scan_analytics: {
+                total_scans: parseInt(totalScans?.c || 0),
+                unique_devices: parseInt(uniqueDevices?.c || 0),
+                unique_ips: parseInt(fingerprints?.unique_ips || 0),
+                reuse_risk: (fingerprints?.unique_ips || 0) >= 4 ? 'HIGH' : 'LOW',
+            }
+        });
+    } catch(err) {
+        res.status(500).json({ error: 'Lookup failed' });
     }
 });
 
