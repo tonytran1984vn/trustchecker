@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V9 — Probabilistic Graph Engine
+ * Risk Scoring Engine V10 — Self-Learning Bayesian System
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -11,6 +11,27 @@
  * Decision: NORMAL (<40) | SUSPICIOUS (40-69) | SOFT_BLOCK (70-85) | HARD_BLOCK (>85)
  */
 const db = require('../db');
+
+// ─── V10: SIGNAL STATS TABLE (auto-create) ───────────────
+const SIGNAL_NAMES = ['scan_pattern', 'geo', 'frequency', 'history', 'graph'];
+const DEFAULT_LR = { scan_pattern: 1.5, geo: 1.8, frequency: 1.3, history: 1.4, graph: 2.0 };
+
+async function initSignalStats() {
+    try {
+        await db.run(`CREATE TABLE IF NOT EXISTS signal_stats (
+            signal_name TEXT PRIMARY KEY,
+            fraud_count INTEGER DEFAULT 0,
+            legit_count INTEGER DEFAULT 0,
+            learned_lr NUMERIC DEFAULT 1.0,
+            last_updated TIMESTAMPTZ DEFAULT NOW()
+        )`);
+        for (const s of SIGNAL_NAMES) {
+            await db.run(`INSERT INTO signal_stats (signal_name, learned_lr) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [s, DEFAULT_LR[s] || 1.0]);
+        }
+    } catch(_) {}
+}
+// Fire and forget on load
+initSignalStats();
 
 // ─── WEIGHTS (V3: graph added, rebalanced) ────────────────────
 const WEIGHTS = {
@@ -546,18 +567,16 @@ async function multiEdgeScore(actorId, ipAddress) {
     return { score: Math.min(50, score), reasons };
 }
 
-// ─── V9: BAYESIAN RISK FUSION ────────────────────────────
-// P(fraud|evidence) = P(evidence|fraud) × P(fraud) / P(evidence)
-// Prior: actor history → base fraud probability
-// Likelihood: current signal strength
-// Posterior: probabilistic risk score
+// ─── V10: SELF-LEARNING BAYESIAN FUSION ────────────────
+// Uses learned likelihood ratios from signal_stats (data-driven)
+// Beta distribution for true statistical uncertainty
 async function bayesianRiskFusion(actorId, currentSignals) {
-    // currentSignals = { pattern, geo, frequency, history, graph } (0-100 each)
-    const result = { prior: 0.1, likelihood: 0.5, posterior: 0.1, confidence: 0.5, uncertainty: 0.5 };
+    const result = { prior: 0.1, likelihood: 0.5, posterior: 0.1, confidence: 0.5, uncertainty: 0.5, learned: false };
     try {
-        // PRIOR: P(fraud) from actor profile
-        let prior = 0.1; // base rate: 10% (no history = assume low)
+        // PRIOR: P(fraud) from actor + network + product
+        let prior = 0.1;
         let dataPoints = 0;
+        let fraudCount = 0, legitCount = 0;
         if (actorId) {
             const profile = await db.get(
                 `SELECT total_scans, flagged_count, avg_risk_score FROM actor_risk_profiles WHERE actor_id = $1`,
@@ -568,53 +587,153 @@ async function bayesianRiskFusion(actorId, currentSignals) {
                 const flagged = parseFloat(profile.flagged_count) || 0;
                 const avgRisk = parseFloat(profile.avg_risk_score) || 0;
                 dataPoints = scans;
-                // Prior = weighted combination of flag ratio and avg risk
+                fraudCount = Math.round(flagged);
+                legitCount = Math.max(0, scans - fraudCount);
                 const flagRatio = Math.min(1.0, flagged / scans);
                 prior = flagRatio * 0.6 + (avgRisk / 100) * 0.4;
-                prior = Math.max(0.01, Math.min(0.99, prior)); // clamp
+                prior = Math.max(0.01, Math.min(0.99, prior));
             }
         }
 
-        // LIKELIHOOD: P(evidence|fraud) from current signals
-        // Strong signals = high likelihood that this evidence appears given fraud
+        // V10: LEARNED LIKELIHOOD RATIOS from signal_stats
         const signals = currentSignals || {};
-        const signalValues = [
-            (signals.pattern || 0) / 100,
-            (signals.geo || 0) / 100,
-            (signals.frequency || 0) / 100,
-            (signals.history || 0) / 100,
-            (signals.graph || 0) / 100,
+        const signalEntries = [
+            { name: 'scan_pattern', value: (signals.pattern || 0) / 100 },
+            { name: 'geo', value: (signals.geo || 0) / 100 },
+            { name: 'frequency', value: (signals.frequency || 0) / 100 },
+            { name: 'history', value: (signals.history || 0) / 100 },
+            { name: 'graph', value: (signals.graph || 0) / 100 },
         ];
-        // Combined likelihood: higher when multiple signals fire
-        const avgSignal = signalValues.reduce((a, b) => a + b, 0) / signalValues.length;
-        const maxSignal = Math.max(...signalValues);
-        // Non-linear: multiple weak signals > one strong signal
-        const activeSignals = signalValues.filter(v => v > 0.1).length;
-        const breadthBonus = activeSignals >= 3 ? 0.15 : activeSignals >= 2 ? 0.08 : 0;
-        const likelihood = Math.min(0.99, avgSignal * 0.5 + maxSignal * 0.3 + breadthBonus + 0.1);
 
-        // P(evidence|not fraud) = complement
-        const likelihoodNotFraud = Math.max(0.01, 1 - likelihood * 0.8);
+        // Fetch learned LRs
+        let learnedLRs = {};
+        let usingLearned = false;
+        try {
+            const stats = await db.all(`SELECT signal_name, fraud_count, legit_count, learned_lr FROM signal_stats`);
+            if (stats && stats.length > 0) {
+                for (const s of stats) {
+                    const total = (parseInt(s.fraud_count) || 0) + (parseInt(s.legit_count) || 0);
+                    if (total >= 20) {
+                        // Enough data → use learned LR (Laplace smoothed)
+                        learnedLRs[s.signal_name] = parseFloat(s.learned_lr) || 1.0;
+                        usingLearned = true;
+                    } else {
+                        learnedLRs[s.signal_name] = DEFAULT_LR[s.signal_name] || 1.0;
+                    }
+                }
+            }
+        } catch(_) {}
 
-        // POSTERIOR: Bayes' theorem
-        const numerator = likelihood * prior;
-        const denominator = numerator + likelihoodNotFraud * (1 - prior);
+        // Combined likelihood using learned LRs
+        let combinedLR = 1.0;
+        const activeSignals = signalEntries.filter(s => s.value > 0.1);
+        const lrShifts = {};
+        for (const s of signalEntries) {
+            if (s.value > 0.1) {
+                const lr = learnedLRs[s.name] || DEFAULT_LR[s.name] || 1.0;
+                // Signal strength modulates LR: strong signal = full LR, weak = partial
+                const effectiveLR = 1.0 + (lr - 1.0) * s.value;
+                combinedLR *= effectiveLR;
+                lrShifts[s.name] = Math.round((effectiveLR - 1.0) * 100) / 100;
+            }
+        }
+        // Cap combined LR to prevent runaway
+        combinedLR = Math.max(0.1, Math.min(50, combinedLR));
+
+        // V10: Posterior via combined LR
+        // P(F|E) = LR × P(F) / (LR × P(F) + (1-P(F)))
+        const numerator = combinedLR * prior;
+        const denominator = numerator + (1 - prior);
         const posterior = denominator > 0 ? numerator / denominator : prior;
 
-        // UNCERTAINTY: based on data volume
-        // More data = lower uncertainty
-        const uncertainty = dataPoints >= 20 ? 0.1 : dataPoints >= 10 ? 0.2 : dataPoints >= 5 ? 0.3 : dataPoints >= 2 ? 0.4 : 0.6;
-        const confidence = 1 - uncertainty;
+        // V10: Beta distribution uncertainty (true statistical)
+        // α = fraud_count + 1, β = legit_count + 1 (Laplace prior)
+        const alpha = fraudCount + 1;
+        const beta = legitCount + 1;
+        const betaMean = alpha / (alpha + beta);
+        const betaVariance = (alpha * beta) / ((alpha + beta) ** 2 * (alpha + beta + 1));
+        const betaUncertainty = Math.sqrt(betaVariance);
+        // Scale uncertainty: high variance = high uncertainty
+        const uncertainty = Math.min(0.9, Math.max(0.05, betaUncertainty * 4));
+        const confidence = Math.round((1 - uncertainty) * 100) / 100;
 
         result.prior = Math.round(prior * 1000) / 1000;
-        result.likelihood = Math.round(likelihood * 1000) / 1000;
-        result.posterior = Math.round(posterior * 1000) / 1000;
-        result.confidence = Math.round(confidence * 100) / 100;
+        result.likelihood = Math.round(combinedLR * 1000) / 1000;
+        result.posterior = Math.round(Math.min(0.99, posterior) * 1000) / 1000;
+        result.confidence = confidence;
         result.uncertainty = Math.round(uncertainty * 100) / 100;
         result.data_points = dataPoints;
-        result.active_signals = activeSignals;
+        result.active_signals = activeSignals.length;
+        result.learned = usingLearned;
+        result.beta = { alpha, beta: beta, mean: Math.round(betaMean * 1000) / 1000 };
+        if (Object.keys(lrShifts).length > 0) result.lr_shifts = lrShifts;
     } catch(_) {}
     return result;
+}
+
+// ─── V10: UPDATE SIGNAL STATS (online learning) ─────────
+// Called after outcome is known (fraud or legit)
+async function updateSignalStats(signalName, isFraud, weight = 1.0) {
+    try {
+        const col = isFraud ? 'fraud_count' : 'legit_count';
+        const increment = Math.max(0.1, Math.min(1.0, weight)); // weighted increment
+        await db.run(
+            `UPDATE signal_stats SET ${col} = ${col} + $1, last_updated = NOW() WHERE signal_name = $2`,
+            [increment, signalName]
+        );
+        // Recompute learned LR with Laplace smoothing
+        const stats = await db.get(`SELECT fraud_count, legit_count FROM signal_stats WHERE signal_name = $1`, [signalName]);
+        if (stats) {
+            const fc = parseFloat(stats.fraud_count) || 0;
+            const lc = parseFloat(stats.legit_count) || 0;
+            const totalFraud = Math.max(1, fc);
+            const totalLegit = Math.max(1, lc);
+            // Laplace-smoothed LR
+            const pEgivenF = (fc + 1) / (totalFraud + 2);
+            const pEgivenNotF = (lc + 1) / (totalLegit + 2);
+            let rawLR = pEgivenF / Math.max(0.01, pEgivenNotF);
+            // Guardrail: cap LR 0.5–5.0
+            rawLR = Math.max(0.5, Math.min(5.0, rawLR));
+            // EMA blending: 90% old + 10% learned
+            const oldLR = DEFAULT_LR[signalName] || 1.0;
+            const blendedLR = 0.9 * oldLR + 0.1 * rawLR;
+            const finalLR = Math.max(0.5, Math.min(5.0, Math.round(blendedLR * 1000) / 1000));
+            await db.run(`UPDATE signal_stats SET learned_lr = $1 WHERE signal_name = $2`, [finalLR, signalName]);
+        }
+    } catch(_) {}
+}
+
+// ─── V10: RECORD OUTCOME (feedback API) ────────────────
+// source: 'admin' (1.0) | 'system' (0.7) | 'user' (0.3)
+async function recordOutcome(actorId, isFraud, activeSignalNames, source = 'system') {
+    const FEEDBACK_WEIGHT = { admin: 1.0, system: 0.7, user: 0.3 };
+    const weight = FEEDBACK_WEIGHT[source] || 0.3;
+    const updated = [];
+    try {
+        for (const sig of (activeSignalNames || SIGNAL_NAMES)) {
+            if (SIGNAL_NAMES.includes(sig)) {
+                await updateSignalStats(sig, isFraud, weight);
+                updated.push(sig);
+            }
+        }
+    } catch(_) {}
+    return { updated, weight, source, is_fraud: isFraud };
+}
+
+// ─── V10: GET LEARNED LRs (for inspection) ───────────────
+async function getLearnedLRs() {
+    try {
+        const stats = await db.all(`SELECT signal_name, fraud_count, legit_count, learned_lr, last_updated FROM signal_stats ORDER BY signal_name`);
+        return (stats || []).map(s => ({
+            signal: s.signal_name,
+            fraud_count: parseInt(s.fraud_count) || 0,
+            legit_count: parseInt(s.legit_count) || 0,
+            learned_lr: parseFloat(s.learned_lr) || 1.0,
+            default_lr: DEFAULT_LR[s.signal_name] || 1.0,
+            data_sufficient: ((parseInt(s.fraud_count) || 0) + (parseInt(s.legit_count) || 0)) >= 20,
+        }));
+    } catch(_) {}
+    return [];
 }
 
 // ─── V9: TOP REASONS RANKING ────────────────────────────
@@ -1210,7 +1329,7 @@ async function calculateRisk(input) {
             propagation: gr.multi_edge ? gr.multi_edge.score : 0,
             cold_start: coldStart.penalty,
         },
-        // V9: Bayesian posterior + uncertainty
+        // V9: Bayesian posterior + uncertainty (V10: learned LR + Beta)
         bayesian: await bayesianRiskFusion(actorId, {
             pattern: p.score, geo: g.score, frequency: f.score,
             history: h.score, graph: gr.score,
@@ -1220,4 +1339,4 @@ async function calculateRisk(input) {
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS };
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, getLearnedLRs, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR };
