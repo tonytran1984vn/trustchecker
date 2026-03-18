@@ -779,6 +779,60 @@ async function main() {
             med.route === 'monitoring' && low.route === 'auto_pass');
     }
 
+    // ━━━ V20 TRUST INFRASTRUCTURE ━━━
+    console.log('\n━━━ V20 TRUST INFRASTRUCTURE ━━━\n');
+
+    // V20-1: SLA-aware — value decays with delay
+    {
+        const fresh = R.slaAwareDecision(90, 'block', 0); // no delay
+        const delayed = R.slaAwareDecision(90, 'block', 10); // 10 min (SLA=5 for critical)
+        ok('V20-1', 'SLA: value decay', 'fresh=1, delayed=breached',
+            `fresh_val=${fresh.current_value},delayed_val=${delayed.current_value},breached=${delayed.breached},esc=${delayed.escalation}`,
+            fresh.current_value === 1 && delayed.breached === true && delayed.escalation === 'auto_block');
+    }
+
+    // V20-2: Human reliability — weighted by accuracy
+    {
+        R.humanReliability('good_analyst', true, true);
+        R.humanReliability('good_analyst', true, true);
+        R.humanReliability('bad_analyst', false, false);
+        R.humanReliability('bad_analyst', false, false);
+        const good = R.weightedFeedback('good_analyst', 1);
+        const bad = R.weightedFeedback('bad_analyst', 1);
+        ok('V20-2', 'Human reliability: weighted', 'good > bad',
+            `good_w=${good.weight},bad_w=${bad.weight}`,
+            good.weight > bad.weight && good.weighted_outcome > bad.weighted_outcome);
+    }
+
+    // V20-3: Incentive alignment — net_value metric
+    {
+        const blockHigh = R.incentiveAlignment('block', 90, 'pharma'); // high score block = save $$$
+        const passLow = R.incentiveAlignment('pass', 10, 'fmcg'); // low score pass fmcg = earn (FN cost low)
+        ok('V20-3', 'Incentive: net_value', 'block high=positive, pass low=positive',
+            `block_net=${blockHigh.net_impact},pass_net=${passLow.net_impact},metric=${blockHigh.unified_metric}`,
+            blockHigh.net_impact > 0 && passLow.net_impact > 0 && blockHigh.unified_metric === 'net_value_impact');
+    }
+
+    // V20-4: Trust network — share + query
+    {
+        R.trustNetworkShare('org_A', 'actor_x', 0.2, { fraud: true });
+        R.trustNetworkShare('org_B', 'actor_x', 0.3, { suspicious: true });
+        const q = R.trustNetworkQuery('actor_x');
+        const empty = R.trustNetworkQuery('actor_unknown');
+        ok('V20-4', 'Trust network: cross-org', 'found with 2 orgs',
+            `found=${q.found},orgs=${q.reporting_orgs},score=${q.cross_org_score},empty=${empty.found}`,
+            q.found === true && q.reporting_orgs === 2 && q.cross_org_score === 0.25 && empty.found === false);
+    }
+
+    // V20-5: Platform trust — blended score
+    {
+        const local = R.platformTrustScore('actor_unknown_2', 50); // no network data
+        const blended = R.platformTrustScore('actor_x', 50); // has network data
+        ok('V20-5', 'Platform trust: blend', 'local only vs blended',
+            `local_src=${local.source},blend_src=${blended.source},boost=${blended.network_boost}`,
+            local.source === 'local_only' && blended.source === 'blended' && blended.network_boost !== 0);
+    }
+
     // ━━━ INTEGRATION ━━━
     console.log('\n━━━ INTEGRATION ━━━\n');
     { ok('INT-1','risk_scores','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"))>0); }
@@ -787,14 +841,14 @@ async function main() {
     ok('INT-3','Decisions','data',d.replace(/\n/g,', '),d.length>0&&!d.startsWith('ERROR')); }
     { ok('INT-4','Graph','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"))>0); }
     { ok('INT-5','signal_stats','rows',psql("SELECT COUNT(*) FROM signal_stats"),parseInt(psql("SELECT COUNT(*) FROM signal_stats"))>=5); }
-    { // V19 response includes v19 org intelligence
+    { // V20 response includes v20 trust infrastructure
       const r = await R.calculateRisk({productId:createProduct('INT6','pharma'),actorId:'int6-'+Date.now(),scanType:'consumer',ipAddress:'8.8.8.8',category:'pharma'});
-      ok('INT-6','V19 metadata','v19 obj',`shadow=${typeof r.v19?.shadow_divergence},route=${r.v19?.org_routing}`,r.v19 && typeof r.v19.shadow_divergence === 'boolean' && typeof r.v19.org_routing === 'string'); }
+      ok('INT-6','V20 metadata','v20 obj',`sla=${r.v20?.sla_value},net=${r.v20?.trust_network_size}`,r.v20 && typeof r.v20.sla_value === 'number' && typeof r.v20.trust_network_size === 'number'); }
 
     // ═══════════
     const total=passed+failed;const pct=Math.round(passed/total*100);
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V19 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
+    console.log(`║  L4 V20 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║  Fraud:       ${results.filter(r=>r.id>='BF-1'&&r.id<='BF-6').filter(r=>r.pass).length}/6`);
     console.log(`║  Baselines:   ${results.filter(r=>r.id==='BF-7'||r.id==='BF-8').filter(r=>r.pass).length}/2`);
@@ -817,11 +871,12 @@ async function main() {
     console.log(`║  V17 Evolve:  ${results.filter(r=>r.id.startsWith('V17')).filter(r=>r.pass).length}/5`);
     console.log(`║  V18 Govern:  ${results.filter(r=>r.id.startsWith('V18')).filter(r=>r.pass).length}/5`);
     console.log(`║  V19 OrgInt:  ${results.filter(r=>r.id.startsWith('V19')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V20 Trust:   ${results.filter(r=>r.id.startsWith('V20')).filter(r=>r.pass).length}/5`);
     console.log(`║  Integration: ${results.filter(r=>r.id.startsWith('INT')).filter(r=>r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
     const fails=results.filter(r=>!r.pass);
     if(fails.length>0){console.log('\n❌ FAILED:');fails.forEach(f=>console.log(`  ${f.id}: ${f.name} | exp: ${f.expected} | act: ${f.actual}`));}
-    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V19',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
+    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V20',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
     console.log('\n📝 chaos-l4-report.json'); process.exit(0);
 }
 main().catch(e=>{console.error('FATAL:',e.message,e.stack);process.exit(1);});

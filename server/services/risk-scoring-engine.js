@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V19 — Organizational Intelligence Layer
+ * Risk Scoring Engine V20 — Trust Infrastructure Layer
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -1702,6 +1702,11 @@ async function calculateRisk(input) {
             shadow_divergence: shadowSystem(totalScore, decision).divergence,
             org_routing: decisionOrchestration(totalScore, decision).route,
         },
+        // V20: Trust infrastructure
+        v20: {
+            sla_value: slaAwareDecision(totalScore, decision).current_value,
+            trust_network_size: _trustNetwork.length,
+        },
     };
 }
 
@@ -2843,4 +2848,165 @@ function decisionOrchestration(score, decision) {
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, stealthResponseProtocol, adaptiveEntropyFloor, systemSelfAwareness, signalEvolution, getEvolutionState, metaAnchor, driftVsBias, recordFailure, checkFailureMemory, getFailureMemory, identityConstraints, getConstitution, governanceCheck, metaConstitution, getConstitutionAudit, dualSpeedEvolution, shadowSystem, humanGovernance, getHumanOverrides, decisionOrchestration, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
+// ─── V20: SLA-AWARE DECISION SYSTEM ───────
+function slaAwareDecision(score, decision, delayMinutes = 0) {
+    const urgencyMap = { critical: 5, high: 30, medium: 120, low: 1440 };
+    const orch = decisionOrchestration(score, decision);
+    const slaMinutes = urgencyMap[orch.urgency] || 1440;
+
+    // Decision value decays with delay
+    const decayRate = 1 / slaMinutes; // per minute
+    const currentValue = Math.max(0, Math.round((1 - decayRate * delayMinutes) * 100) / 100);
+
+    // Auto-escalate if delay > SLA
+    const breached = delayMinutes > slaMinutes;
+    let escalation = 'none';
+    if (breached && orch.urgency === 'critical') escalation = 'auto_block';
+    else if (breached && orch.urgency === 'high') escalation = 'auto_escalate_to_security';
+    else if (breached) escalation = 'auto_flag';
+
+    return {
+        urgency: orch.urgency,
+        sla_minutes: slaMinutes,
+        delay_minutes: delayMinutes,
+        current_value: currentValue,
+        breached,
+        escalation,
+        value_decay_rate: Math.round(decayRate * 10000) / 10000,
+    };
+}
+
+// ─── V20: HUMAN RELIABILITY MODEL ────────
+const _analystScores = {};
+
+function humanReliability(analystId, wasCorrect, agreedWithSystem) {
+    if (!_analystScores[analystId]) {
+        _analystScores[analystId] = { decisions: 0, correct: 0, agreed: 0, reliability: 0.5 };
+    }
+    const a = _analystScores[analystId];
+    a.decisions++;
+    if (wasCorrect) a.correct++;
+    if (agreedWithSystem) a.agreed++;
+
+    // Reliability = 0.5*accuracy + 0.3*consistency + 0.2*agreement
+    const accuracy = a.correct / a.decisions;
+    const consistency = Math.min(1, a.decisions / 20); // builds with experience
+    const agreement = a.agreed / a.decisions;
+    a.reliability = Math.round((0.5 * accuracy + 0.3 * consistency + 0.2 * agreement) * 100) / 100;
+
+    return {
+        analyst_id: analystId,
+        reliability: a.reliability,
+        accuracy: Math.round(accuracy * 100) / 100,
+        consistency: Math.round(consistency * 100) / 100,
+        agreement: Math.round(agreement * 100) / 100,
+        decisions: a.decisions,
+    };
+}
+
+function getAnalystScores() { return { ..._analystScores }; }
+
+function weightedFeedback(analystId, outcome) {
+    const a = _analystScores[analystId];
+    const weight = a ? a.reliability : 0.5;
+    return {
+        analyst_id: analystId,
+        weight,
+        weighted_outcome: outcome * weight,
+        raw_outcome: outcome,
+    };
+}
+
+// ─── V20: INCENTIVE ALIGNMENT ────────────
+function incentiveAlignment(decision, score, category) {
+    // Revenue impact: blocking = lost revenue, passing fraud = lost goods
+    const avgTransactionValue = { pharma: 500, electronics: 200, fmcg: 50, luxury: 1000 };
+    const txValue = avgTransactionValue[category] || 100;
+
+    const cost = dynamicCost(category);
+    const fnCost = cost.fn * txValue; // missing fraud
+    const fpCost = cost.fp * txValue; // false block
+
+    let netImpact, rationale;
+    if (decision === 'block' || decision === 'HARD_BLOCK') {
+        // Blocking: prevent fraud loss but risk false positive
+        const fraudProb = Math.min(1, score / 100);
+        netImpact = Math.round((fraudProb * fnCost - (1 - fraudProb) * fpCost) * 100) / 100;
+        rationale = `P(fraud)=${fraudProb.toFixed(2)}: saved $${Math.round(fraudProb * fnCost)} vs risked $${Math.round((1-fraudProb) * fpCost)}`;
+    } else {
+        // Passing: earn revenue but risk fraud
+        const fraudProb = Math.min(1, score / 100);
+        netImpact = Math.round(((1 - fraudProb) * txValue - fraudProb * fnCost) * 100) / 100;
+        rationale = `P(clean)=${(1-fraudProb).toFixed(2)}: earn $${Math.round((1-fraudProb) * txValue)} vs risk $${Math.round(fraudProb * fnCost)}`;
+    }
+
+    return {
+        decision,
+        score,
+        category: category || 'default',
+        transaction_value: txValue,
+        net_impact: netImpact,
+        fn_cost: fnCost,
+        fp_cost: fpCost,
+        rationale,
+        unified_metric: 'net_value_impact',
+    };
+}
+
+// ─── V20: TRUST NETWORK ──────────────────
+const _trustNetwork = [];
+
+function trustNetworkShare(orgId, actorId, trustScore, signals = {}) {
+    const entry = {
+        org_id: orgId,
+        actor_id: actorId,
+        trust_score: trustScore,
+        signals,
+        shared_at: Date.now(),
+    };
+    _trustNetwork.push(entry);
+    if (_trustNetwork.length > 1000) _trustNetwork.shift();
+    return { shared: true, network_size: _trustNetwork.length, entry_id: _trustNetwork.length - 1 };
+}
+
+function trustNetworkQuery(actorId) {
+    const matches = _trustNetwork.filter(e => e.actor_id === actorId);
+    if (matches.length === 0) return { found: false, actor_id: actorId, cross_org_score: null };
+
+    // Aggregate cross-org trust
+    const avgScore = Math.round(matches.reduce((s, m) => s + m.trust_score, 0) / matches.length * 100) / 100;
+    const orgs = [...new Set(matches.map(m => m.org_id))];
+
+    return {
+        found: true,
+        actor_id: actorId,
+        cross_org_score: avgScore,
+        reporting_orgs: orgs.length,
+        org_ids: orgs,
+        reports: matches.length,
+    };
+}
+
+function platformTrustScore(actorId, localScore) {
+    const network = trustNetworkQuery(actorId);
+    if (!network.found) {
+        return { score: localScore, source: 'local_only', network_boost: 0 };
+    }
+
+    // Blend local + network (0.7 local + 0.3 network)
+    const blended = Math.round((0.7 * localScore + 0.3 * network.cross_org_score) * 100) / 100;
+    const boost = Math.round((blended - localScore) * 100) / 100;
+
+    return {
+        score: blended,
+        local_score: localScore,
+        network_score: network.cross_org_score,
+        source: 'blended',
+        network_boost: boost,
+        reporting_orgs: network.reporting_orgs,
+    };
+}
+
+function getTrustNetwork() { return [..._trustNetwork]; }
+
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, stealthResponseProtocol, adaptiveEntropyFloor, systemSelfAwareness, signalEvolution, getEvolutionState, metaAnchor, driftVsBias, recordFailure, checkFailureMemory, getFailureMemory, identityConstraints, getConstitution, governanceCheck, metaConstitution, getConstitutionAudit, dualSpeedEvolution, shadowSystem, humanGovernance, getHumanOverrides, decisionOrchestration, slaAwareDecision, humanReliability, getAnalystScores, weightedFeedback, incentiveAlignment, trustNetworkShare, trustNetworkQuery, platformTrustScore, getTrustNetwork, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
