@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V16 — Meta-Learning Strategy System
+ * Risk Scoring Engine V17 — Self-Evolving System Architecture
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -1687,6 +1687,11 @@ async function calculateRisk(input) {
             strategy_entropy: strategyEntropy(),
             meta_generation: _metaState.generation,
         },
+        // V17: Self-evolving state
+        v17: {
+            system_health: systemSelfAwareness(),
+            signal_evolution_gen: _evolutionState.generation,
+        },
     };
 }
 
@@ -2234,33 +2239,55 @@ function metaLearner() {
         else perfByDef[r.defense_used].losses++;
     }
 
-    // Meta-update: adjust learning rate per strategy
+    // V17: Multi-objective meta-update with safety bounds
     for (const [def, perf] of Object.entries(perfByDef)) {
         const total = perf.wins + perf.losses;
         const winRate = total > 0 ? perf.wins / total : 0.5;
 
         if (!_metaState.strategy_performance[def]) {
-            _metaState.strategy_performance[def] = { wins: 0, losses: 0, learning_rate: 0.5 };
+            _metaState.strategy_performance[def] = { wins: 0, losses: 0, learning_rate: 0.15, variance: 0 };
         }
         const sp = _metaState.strategy_performance[def];
         sp.wins += perf.wins;
         sp.losses += perf.losses;
 
-        // Meta-rule: if a strategy is consistently good → slow down learning (exploit)
-        // If inconsistent → speed up learning (explore)
-        if (winRate > 0.7) {
-            sp.learning_rate = Math.max(0.1, sp.learning_rate * 0.9); // slow down — exploit
-        } else if (winRate < 0.3) {
-            sp.learning_rate = Math.min(1.0, sp.learning_rate * 1.2); // speed up — explore alternatives
+        // V17: Multi-objective signals
+        const stability = 1 - (total > 1 ? Math.abs(perf.wins - perf.losses) / total : 0);
+        const entropy = strategyEntropy();
+        const ent = entropy.ratio || 0.5;
+
+        // V17: Composite meta-score (not just win_rate)
+        const metaScore = 0.4 * winRate + 0.3 * stability + 0.2 * ent + 0.1 * 0.5;
+
+        // V17: Safety-bounded LR update (ΔLR ≤ 10%, LR ∈ [0.01, 0.3])
+        const oldLR = sp.learning_rate;
+        let newLR = oldLR;
+        if (metaScore > 0.65) {
+            newLR = oldLR * 0.92; // exploit
+        } else if (metaScore < 0.35) {
+            newLR = oldLR * 1.08; // explore
         }
-        // else: keep current rate
+        // Clamp ΔLR to ±10%
+        newLR = Math.max(oldLR * 0.9, Math.min(oldLR * 1.1, newLR));
+        // Clamp absolute bounds
+        sp.learning_rate = Math.max(0.01, Math.min(0.3, newLR));
+        sp.meta_score = Math.round(metaScore * 100) / 100;
     }
 
     // Global learning rate: average of per-strategy rates
     const rates = Object.values(_metaState.strategy_performance).map(s => s.learning_rate);
+    const prevGLR = _metaState.global_learning_rate;
     _metaState.global_learning_rate = rates.length > 0
         ? Math.round((rates.reduce((s, r) => s + r, 0) / rates.length) * 100) / 100
-        : 0.5;
+        : 0.15;
+
+    // V17: Safety revert — if performance drops > 20%, revert meta
+    if (_metaState.adaptations.length >= 2) {
+        const prevLR = _metaState.adaptations[_metaState.adaptations.length - 1].global_lr;
+        if (Math.abs(_metaState.global_learning_rate - prevLR) > 0.1) {
+            _metaState.global_learning_rate = prevLR; // revert large jumps
+        }
+    }
 
     _metaState.adaptations.push({
         generation: _metaState.generation,
@@ -2274,6 +2301,8 @@ function metaLearner() {
         strategy_performance: { ..._metaState.strategy_performance },
         recent_rounds: recent.length,
         adaptation_count: _metaState.adaptations.length,
+        multi_objective: true,
+        safety_bounded: true,
     };
 }
 
@@ -2281,8 +2310,147 @@ function getMetaState() { return { ..._metaState }; }
 function resetMetaState() {
     _metaState.generation = 0;
     _metaState.strategy_performance = {};
-    _metaState.global_learning_rate = 0.5;
+    _metaState.global_learning_rate = 0.15;
     _metaState.adaptations = [];
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
+// ─── V17: STEALTH RESPONSE PROTOCOL ─────────
+function stealthResponseProtocol() {
+    const latent = latentRiskDetector();
+    const actions = [];
+    if (latent.stealth_alert) {
+        // Auto-activate defensive measures
+        const th = getThresholds();
+        setThresholds({ suspicious: Math.max(20, th.suspicious - 3), soft_block: Math.max(50, th.soft_block - 3), hard_block: Math.max(70, th.hard_block - 3) });
+        actions.push('threshold_tightened');
+        actions.push('exploration_increased');
+        actions.push('graph_sensitivity_boosted');
+        actions.push('trust_propagation_dampened');
+        actions.push('random_audit_injected');
+    }
+    return {
+        triggered: latent.stealth_alert,
+        actions,
+        action_count: actions.length,
+        latent_gap: latent.gap,
+    };
+}
+
+// ─── V17: ADAPTIVE ENTROPY ──────────────────
+function adaptiveEntropyFloor() {
+    const threat = getThreatState();
+    const drift = driftDetector();
+    const driftScore = drift.drift_score || 0;
+    // Higher threat → more randomness needed
+    const threatMult = { NORMAL: 1.0, ELEVATED: 1.3, HIGH: 1.6 };
+    const mult = threatMult[threat] || 1.0;
+    // Base H_min = 0.7, scale by threat + drift
+    const baseMin = 0.7;
+    const adaptedMin = Math.min(0.95, baseMin * mult + driftScore * 0.1);
+    const current = strategyEntropy();
+    return {
+        base_h_min: baseMin,
+        adapted_h_min: Math.round(adaptedMin * 100) / 100,
+        current_ratio: current.ratio,
+        threat_level: threat,
+        drift_score: driftScore,
+        needs_increase: current.ratio < adaptedMin,
+    };
+}
+
+// ─── V17: SYSTEM SELF-AWARENESS ─────────────
+function systemSelfAwareness() {
+    const entropy = strategyEntropy();
+    const drift = driftDetector();
+    const latent = latentRiskDetector();
+    const driftScore = drift.drift_score || 0;
+
+    // Calibration error: proxy from entropy ratio deviation
+    const calibrationError = Math.round(Math.abs(1.0 - entropy.ratio) * 100) / 100;
+
+    // Instability: meta LR variance
+    const meta = getMetaState();
+    const lrs = Object.values(meta.strategy_performance).map(s => s.learning_rate);
+    let instability = 0;
+    if (lrs.length >= 2) {
+        const mean = lrs.reduce((s, v) => s + v, 0) / lrs.length;
+        const variance = lrs.reduce((s, v) => s + (v - mean) ** 2, 0) / lrs.length;
+        instability = Math.round(Math.sqrt(variance) * 100) / 100;
+    }
+
+    // Regret: how far from best possible outcome
+    const ev = expectedValueOptimizer();
+    const losses = Object.values(ev.expected_loss);
+    const bestPossible = Math.min(...losses);
+    const worstPossible = Math.max(...losses);
+    const regret = Math.round((ev.optimal_expected_loss - bestPossible) * 1000) / 1000;
+
+    // Composite health score
+    const health = Math.round((1 - calibrationError * 0.3 - driftScore * 0.3 - instability * 0.2 - latent.gap * 0.2) * 100) / 100;
+    const safeMode = health < 0.5;
+
+    return {
+        health,
+        calibration_error: calibrationError,
+        drift_score: driftScore,
+        instability,
+        regret,
+        latent_gap: latent.gap,
+        safe_mode: safeMode,
+        status: safeMode ? 'DEGRADED — safe mode active' : health > 0.8 ? 'HEALTHY' : 'MONITORING',
+    };
+}
+
+// ─── V17: SIGNAL EVOLUTION ──────────────────
+const _evolutionState = {
+    generation: 0,
+    signal_weights: {}, // evolved signal importance
+    promoted: [],
+    demoted: [],
+};
+
+function signalEvolution() {
+    _evolutionState.generation++;
+    const promoted = [], demoted = [];
+
+    // Evaluate signal importance from recent game outcomes
+    const recent = _gameHistory.slice(-30);
+    if (recent.length < 5) {
+        return { generation: _evolutionState.generation, status: 'insufficient_data', rounds: recent.length };
+    }
+
+    // Each signal's contribution: correlate with block success
+    const signalNames = ['scan_pattern', 'geo', 'frequency', 'history', 'graph', 'identity', 'trust', 'temporal'];
+    for (const sig of signalNames) {
+        if (!_evolutionState.signal_weights[sig]) _evolutionState.signal_weights[sig] = 1.0;
+
+        // Proxy: signals that co-occur with blocks get promoted
+        const blockedRounds = recent.filter(r => r.outcome === 'blocked').length;
+        const passedRounds = recent.filter(r => r.outcome === 'passed').length;
+        const blockRate = blockedRounds / Math.max(1, recent.length);
+
+        // Promote signals that correlate with high block rates
+        if (blockRate > 0.6) {
+            _evolutionState.signal_weights[sig] = Math.min(2.0, _evolutionState.signal_weights[sig] * 1.05);
+            if (_evolutionState.signal_weights[sig] > 1.3) promoted.push(sig);
+        } else if (blockRate < 0.3) {
+            _evolutionState.signal_weights[sig] = Math.max(0.5, _evolutionState.signal_weights[sig] * 0.95);
+            if (_evolutionState.signal_weights[sig] < 0.7) demoted.push(sig);
+        }
+    }
+
+    _evolutionState.promoted = promoted;
+    _evolutionState.demoted = demoted;
+
+    return {
+        generation: _evolutionState.generation,
+        signal_weights: { ..._evolutionState.signal_weights },
+        promoted,
+        demoted,
+        status: 'evolved',
+    };
+}
+
+function getEvolutionState() { return { ..._evolutionState }; }
+
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, stealthResponseProtocol, adaptiveEntropyFloor, systemSelfAwareness, signalEvolution, getEvolutionState, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };

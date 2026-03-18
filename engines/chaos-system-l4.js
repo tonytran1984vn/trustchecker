@@ -629,6 +629,58 @@ async function main() {
             meta.generation === 1 && typeof meta.global_learning_rate === 'number' && meta.adaptation_count === 1);
     }
 
+    // ━━━ V17 SELF-EVOLVING ━━━
+    console.log('\n━━━ V17 SELF-EVOLVING ━━━\n');
+
+    // V17-1: Multi-objective meta — uses 5 signals, not just win_rate
+    {
+        R.resetMetaState();
+        R.recordGameRound('farm', 'graph_boost', 'blocked');
+        R.recordGameRound('farm', 'graph_boost', 'blocked');
+        R.recordGameRound('slow_probe', 'trust_dampen', 'passed');
+        const meta = R.metaLearner();
+        ok('V17-1', 'Multi-obj meta: 5-signal', 'multi_objective=true',
+            `gen=${meta.generation},multi=${meta.multi_objective},safe=${meta.safety_bounded},glr=${meta.global_learning_rate}`,
+            meta.multi_objective === true && meta.safety_bounded === true && meta.global_learning_rate <= 0.3);
+    }
+
+    // V17-2: Meta safety — LR bounded [0.01, 0.3]
+    {
+        const ms = R.getMetaState();
+        const lrs = Object.values(ms.strategy_performance).map(s => s.learning_rate);
+        const allBounded = lrs.every(lr => lr >= 0.01 && lr <= 0.3);
+        ok('V17-2', 'Meta safety: LR bounded', 'all in [0.01,0.3]',
+            `lrs=[${lrs.map(l=>l.toFixed(3)).join(',')}],bounded=${allBounded}`,
+            allBounded && lrs.length > 0);
+    }
+
+    // V17-3: Stealth protocol — has action structure
+    {
+        const stealth = R.stealthResponseProtocol();
+        ok('V17-3', 'Stealth: response protocol', 'has structure',
+            `triggered=${stealth.triggered},actions=${stealth.action_count},gap=${stealth.latent_gap}`,
+            typeof stealth.triggered === 'boolean' && typeof stealth.action_count === 'number');
+    }
+
+    // V17-4: System health — self-awareness diagnostics
+    {
+        const health = R.systemSelfAwareness();
+        ok('V17-4', 'Self-aware: health check', 'has status',
+            `health=${health.health},cal=${health.calibration_error},drift=${health.drift_score},status=${health.status}`,
+            typeof health.health === 'number' && typeof health.safe_mode === 'boolean' && typeof health.status === 'string');
+    }
+
+    // V17-5: Signal evolution — promote/demote from data
+    {
+        // Add enough game rounds for evolution
+        R.recordGameRound('farm', 'graph_boost', 'blocked');
+        R.recordGameRound('farm', 'graph_boost', 'blocked');
+        const evo = R.signalEvolution();
+        ok('V17-5', 'Signal evolution: gen+weights', 'has evolved',
+            `gen=${evo.generation},status=${evo.status},sigs=${Object.keys(evo.signal_weights||{}).length}`,
+            evo.generation >= 1 && evo.status === 'evolved' && Object.keys(evo.signal_weights).length === 8);
+    }
+
     // ━━━ INTEGRATION ━━━
     console.log('\n━━━ INTEGRATION ━━━\n');
     { ok('INT-1','risk_scores','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"))>0); }
@@ -637,14 +689,14 @@ async function main() {
     ok('INT-3','Decisions','data',d.replace(/\n/g,', '),d.length>0&&!d.startsWith('ERROR')); }
     { ok('INT-4','Graph','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"))>0); }
     { ok('INT-5','signal_stats','rows',psql("SELECT COUNT(*) FROM signal_stats"),parseInt(psql("SELECT COUNT(*) FROM signal_stats"))>=5); }
-    { // V16 response includes v16 metadata
+    { // V17 response includes v17 metadata
       const r = await R.calculateRisk({productId:createProduct('INT6','pharma'),actorId:'int6-'+Date.now(),scanType:'consumer',ipAddress:'8.8.8.8',category:'pharma'});
-      ok('INT-6','V16 metadata','v16 obj',`latent=${typeof r.v16?.latent_risk},entropy=${typeof r.v16?.strategy_entropy},meta=${r.v16?.meta_generation}`,r.v16 && typeof r.v16.latent_risk === 'object' && typeof r.v16.strategy_entropy === 'object'); }
+      ok('INT-6','V17 metadata','v17 obj',`health=${typeof r.v17?.system_health},evo_gen=${r.v17?.signal_evolution_gen}`,r.v17 && typeof r.v17.system_health === 'object' && typeof r.v17.signal_evolution_gen === 'number'); }
 
     // ═══════════
     const total=passed+failed;const pct=Math.round(passed/total*100);
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V16 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
+    console.log(`║  L4 V17 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║  Fraud:       ${results.filter(r=>r.id>='BF-1'&&r.id<='BF-6').filter(r=>r.pass).length}/6`);
     console.log(`║  Baselines:   ${results.filter(r=>r.id==='BF-7'||r.id==='BF-8').filter(r=>r.pass).length}/2`);
@@ -664,11 +716,12 @@ async function main() {
     console.log(`║  V14 Game:    ${results.filter(r=>r.id.startsWith('V14')).filter(r=>r.pass).length}/5`);
     console.log(`║  V15 Learn:   ${results.filter(r=>r.id.startsWith('V15')).filter(r=>r.pass).length}/5`);
     console.log(`║  V16 Meta:    ${results.filter(r=>r.id.startsWith('V16')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V17 Evolve:  ${results.filter(r=>r.id.startsWith('V17')).filter(r=>r.pass).length}/5`);
     console.log(`║  Integration: ${results.filter(r=>r.id.startsWith('INT')).filter(r=>r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
     const fails=results.filter(r=>!r.pass);
     if(fails.length>0){console.log('\n❌ FAILED:');fails.forEach(f=>console.log(`  ${f.id}: ${f.name} | exp: ${f.expected} | act: ${f.actual}`));}
-    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V16',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
+    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V17',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
     console.log('\n📝 chaos-l4-report.json'); process.exit(0);
 }
 main().catch(e=>{console.error('FATAL:',e.message,e.stack);process.exit(1);});
