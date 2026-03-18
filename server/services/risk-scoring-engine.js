@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V15 — Dynamic Strategy Learning System
+ * Risk Scoring Engine V16 — Meta-Learning Strategy System
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -1681,6 +1681,12 @@ async function calculateRisk(input) {
             mixed_strategy: mixedStrategyNash(),
             game_rounds: _gameHistory.length,
         },
+        // V16: Meta-learning state
+        v16: {
+            latent_risk: latentRiskDetector(),
+            strategy_entropy: strategyEntropy(),
+            meta_generation: _metaState.generation,
+        },
     };
 }
 
@@ -1948,9 +1954,25 @@ function mixedStrategyNash() {
     for (const def of pm.defender_strategies) {
         distribution[def] = Math.round((scores[def] / totalScore) * 100) / 100;
     }
+    // V16: Entropy floor — prevent strategy collapse
+    const MIN_PROB = 0.05;
+    const n = pm.defender_strategies.length;
+    let redistributed = false;
+    for (const def of pm.defender_strategies) {
+        if (distribution[def] < MIN_PROB) {
+            distribution[def] = MIN_PROB;
+            redistributed = true;
+        }
+    }
+    if (redistributed) {
+        // Re-normalize
+        const sum = Object.values(distribution).reduce((s, v) => s + v, 0);
+        for (const def of pm.defender_strategies) distribution[def] = Math.round((distribution[def] / sum) * 100) / 100;
+    }
     return {
         distribution,
         type: 'mixed_strategy',
+        entropy_constrained: redistributed,
         top_defense: Object.entries(distribution).sort((a, b) => b[1] - a[1])[0]?.[0],
     };
 }
@@ -2085,4 +2107,182 @@ function adaptiveStrategy() {
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
+// ─── V16: LATENT RISK DETECTOR ──────────────────
+// Detects "stealth attacks" — expected fraud from patterns > observed fraud
+let _observedFraud = 0, _expectedFraud = 0;
+
+function latentRiskDetector() {
+    // Expected fraud: based on recent high-risk scans that SHOULD have been fraud
+    const history = _gameHistory;
+    const recent = history.slice(-20);
+    const passedAttacks = recent.filter(r => r.outcome === 'passed').length;
+    const blockedAttacks = recent.filter(r => r.outcome === 'blocked').length;
+    const totalRecent = recent.length;
+
+    // Expected fraud rate from patterns (high activity = more expected)
+    const expectedRate = totalRecent > 0 ? (passedAttacks + blockedAttacks * 0.3) / Math.max(1, totalRecent) : 0;
+    // Observed fraud rate from confirmed outcomes
+    const observedRate = totalRecent > 0 ? passedAttacks / Math.max(1, totalRecent) : 0;
+
+    const gap = Math.round((expectedRate - observedRate) * 100) / 100;
+    const stealthAlert = gap > 0.15; // significant gap = hidden fraud
+
+    return {
+        expected_rate: Math.round(expectedRate * 100) / 100,
+        observed_rate: Math.round(observedRate * 100) / 100,
+        gap,
+        stealth_alert: stealthAlert,
+        recent_rounds: totalRecent,
+    };
+}
+
+// ─── V16: STRATEGY ENTROPY ──────────────────────
+// Shannon entropy of defense distribution — higher = less predictable
+function strategyEntropy() {
+    const mixed = mixedStrategyNash();
+    const probs = Object.values(mixed.distribution);
+    let H = 0;
+    for (const p of probs) {
+        if (p > 0) H -= p * Math.log2(p);
+    }
+    const maxH = Math.log2(probs.length); // maximum entropy (uniform)
+    return {
+        entropy: Math.round(H * 1000) / 1000,
+        max_entropy: Math.round(maxH * 1000) / 1000,
+        ratio: Math.round((H / maxH) * 100) / 100, // 1.0 = perfectly uniform
+        healthy: H / maxH > 0.7, // need at least 70% of max entropy
+    };
+}
+
+// ─── V16: FEEDBACK CREDIBILITY ──────────────────
+// Not all feedback is equal — weight by source × consistency × anomaly
+function feedbackCredibility(source, outcome, recentOutcomes = []) {
+    const sourceWeights = { admin: 1.0, system: 0.7, user: 0.3, auto: 0.5 };
+    const sourceWeight = sourceWeights[source] || 0.3;
+
+    // Consistency: does this outcome match recent pattern?
+    let consistency = 1.0;
+    if (recentOutcomes.length >= 3) {
+        const sameCount = recentOutcomes.filter(o => o === outcome).length;
+        const sameRate = sameCount / recentOutcomes.length;
+        // If outcome disagrees with recent pattern, lower consistency
+        consistency = 0.5 + 0.5 * sameRate; // 0.5 to 1.0
+    }
+
+    // Anomaly: sudden flip from established pattern is suspicious
+    let anomalyScore = 1.0;
+    if (recentOutcomes.length >= 5) {
+        const lastThree = recentOutcomes.slice(-3);
+        const allSame = lastThree.every(o => o === lastThree[0]);
+        if (allSame && outcome !== lastThree[0]) {
+            anomalyScore = 0.5; // sudden reversal = suspicious
+        }
+    }
+
+    const credibility = Math.round(sourceWeight * consistency * anomalyScore * 100) / 100;
+    return { credibility, source_weight: sourceWeight, consistency: Math.round(consistency * 100) / 100, anomaly_score: anomalyScore };
+}
+
+// ─── V16: LONG-TERM VALUE (γ DISCOUNT) ─────────
+// V = E[loss_t] + γ × E[loss_future]
+function longTermValue(gamma = 0.8) {
+    const ev = expectedValueOptimizer();
+    const currentLoss = ev.optimal_expected_loss;
+
+    // Future loss estimate: trend from game history
+    let futureLoss = currentLoss; // default: same as current
+    if (_gameHistory.length >= 10) {
+        const recent5 = _gameHistory.slice(-5);
+        const older5 = _gameHistory.slice(-10, -5);
+        const recentPassRate = recent5.filter(r => r.outcome === 'passed').length / 5;
+        const olderPassRate = older5.filter(r => r.outcome === 'passed').length / 5;
+        const trend = recentPassRate - olderPassRate; // positive = getting worse
+        futureLoss = Math.max(0, currentLoss + trend * 0.5);
+    }
+
+    const V = currentLoss + gamma * futureLoss;
+    const suspiciousBuildUp = futureLoss > currentLoss * 1.2; // future worse by 20%+
+
+    return {
+        current_loss: Math.round(currentLoss * 1000) / 1000,
+        future_loss: Math.round(futureLoss * 1000) / 1000,
+        gamma,
+        total_value: Math.round(V * 1000) / 1000,
+        suspicious_buildup: suspiciousBuildUp,
+        recommendation: suspiciousBuildUp ? 'Possible slow-farming detected — consider preemptive action' : 'Stable trajectory',
+    };
+}
+
+// ─── V16: META-LEARNER ─────────────────────────
+// Learns HOW to learn: adjusts learning rates per strategy based on performance
+const _metaState = {
+    generation: 0,
+    strategy_performance: {}, // { 'graph_boost': { wins: 3, losses: 1, learning_rate: 0.5 } }
+    global_learning_rate: 0.5,
+    adaptations: [],
+};
+
+function metaLearner() {
+    _metaState.generation++;
+
+    // Evaluate each defense strategy's recent performance
+    const recent = _gameHistory.slice(-30);
+    const perfByDef = {};
+    for (const r of recent) {
+        if (!perfByDef[r.defense_used]) perfByDef[r.defense_used] = { wins: 0, losses: 0 };
+        if (r.outcome === 'blocked') perfByDef[r.defense_used].wins++;
+        else perfByDef[r.defense_used].losses++;
+    }
+
+    // Meta-update: adjust learning rate per strategy
+    for (const [def, perf] of Object.entries(perfByDef)) {
+        const total = perf.wins + perf.losses;
+        const winRate = total > 0 ? perf.wins / total : 0.5;
+
+        if (!_metaState.strategy_performance[def]) {
+            _metaState.strategy_performance[def] = { wins: 0, losses: 0, learning_rate: 0.5 };
+        }
+        const sp = _metaState.strategy_performance[def];
+        sp.wins += perf.wins;
+        sp.losses += perf.losses;
+
+        // Meta-rule: if a strategy is consistently good → slow down learning (exploit)
+        // If inconsistent → speed up learning (explore)
+        if (winRate > 0.7) {
+            sp.learning_rate = Math.max(0.1, sp.learning_rate * 0.9); // slow down — exploit
+        } else if (winRate < 0.3) {
+            sp.learning_rate = Math.min(1.0, sp.learning_rate * 1.2); // speed up — explore alternatives
+        }
+        // else: keep current rate
+    }
+
+    // Global learning rate: average of per-strategy rates
+    const rates = Object.values(_metaState.strategy_performance).map(s => s.learning_rate);
+    _metaState.global_learning_rate = rates.length > 0
+        ? Math.round((rates.reduce((s, r) => s + r, 0) / rates.length) * 100) / 100
+        : 0.5;
+
+    _metaState.adaptations.push({
+        generation: _metaState.generation,
+        global_lr: _metaState.global_learning_rate,
+        timestamp: Date.now(),
+    });
+
+    return {
+        generation: _metaState.generation,
+        global_learning_rate: _metaState.global_learning_rate,
+        strategy_performance: { ..._metaState.strategy_performance },
+        recent_rounds: recent.length,
+        adaptation_count: _metaState.adaptations.length,
+    };
+}
+
+function getMetaState() { return { ..._metaState }; }
+function resetMetaState() {
+    _metaState.generation = 0;
+    _metaState.strategy_performance = {};
+    _metaState.global_learning_rate = 0.5;
+    _metaState.adaptations = [];
+}
+
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };

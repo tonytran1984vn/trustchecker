@@ -578,6 +578,57 @@ async function main() {
             history.length >= 5 && adaptive.strategy === 'adapt' && adaptive.top_attack?.type === 'farm');
     }
 
+    // ━━━ V16 META-LEARNING ━━━
+    console.log('\n━━━ V16 META-LEARNING ━━━\n');
+
+    // V16-1: Latent risk — detects gap between expected and observed fraud
+    {
+        const latent = R.latentRiskDetector();
+        ok('V16-1', 'Latent risk: gap detection', 'has gap',
+            `exp=${latent.expected_rate},obs=${latent.observed_rate},gap=${latent.gap},stealth=${latent.stealth_alert}`,
+            typeof latent.gap === 'number' && typeof latent.stealth_alert === 'boolean');
+    }
+
+    // V16-2: Entropy — distribution never collapses (all p_i ≥ 0.05)
+    {
+        const entropy = R.strategyEntropy();
+        const mixed = R.mixedStrategyNash();
+        const minP = Math.min(...Object.values(mixed.distribution));
+        ok('V16-2', 'Entropy: floor holds', 'H ratio > 0.7',
+            `H=${entropy.entropy},max=${entropy.max_entropy},ratio=${entropy.ratio},minP=${minP}`,
+            entropy.ratio >= 0.7 && minP >= 0.04 && entropy.healthy === true);
+    }
+
+    // V16-3: Credibility — anomalous feedback gets lower weight
+    {
+        const normal = R.feedbackCredibility('admin', 'blocked', ['blocked', 'blocked', 'blocked', 'blocked', 'blocked']);
+        const anomaly = R.feedbackCredibility('user', 'passed', ['blocked', 'blocked', 'blocked', 'blocked', 'blocked']);
+        ok('V16-3', 'Credibility: anomaly downweight', 'anomaly < normal',
+            `normal=${normal.credibility},anomaly=${anomaly.credibility}`,
+            anomaly.credibility < normal.credibility && anomaly.anomaly_score === 0.5);
+    }
+
+    // V16-4: Long-term γ — total_value > current_loss
+    {
+        const ltv = R.longTermValue(0.8);
+        ok('V16-4', 'Long-term γ: V > E[loss]', 'discounted future',
+            `curr=${ltv.current_loss},future=${ltv.future_loss},V=${ltv.total_value},γ=${ltv.gamma}`,
+            ltv.total_value >= ltv.current_loss && ltv.gamma === 0.8);
+    }
+
+    // V16-5: Meta-learner — adjusts learning rate from performance
+    {
+        R.resetMetaState();
+        // Record rounds so meta-learner has data
+        R.recordGameRound('farm', 'graph_boost', 'blocked');
+        R.recordGameRound('farm', 'graph_boost', 'blocked');
+        R.recordGameRound('farm', 'graph_boost', 'blocked');
+        const meta = R.metaLearner();
+        ok('V16-5', 'Meta: learns from performance', 'has generation',
+            `gen=${meta.generation},glr=${meta.global_learning_rate},perf=${Object.keys(meta.strategy_performance).length}`,
+            meta.generation === 1 && typeof meta.global_learning_rate === 'number' && meta.adaptation_count === 1);
+    }
+
     // ━━━ INTEGRATION ━━━
     console.log('\n━━━ INTEGRATION ━━━\n');
     { ok('INT-1','risk_scores','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"))>0); }
@@ -586,14 +637,14 @@ async function main() {
     ok('INT-3','Decisions','data',d.replace(/\n/g,', '),d.length>0&&!d.startsWith('ERROR')); }
     { ok('INT-4','Graph','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"))>0); }
     { ok('INT-5','signal_stats','rows',psql("SELECT COUNT(*) FROM signal_stats"),parseInt(psql("SELECT COUNT(*) FROM signal_stats"))>=5); }
-    { // V15 response includes v13+v14+v15
+    { // V16 response includes v16 metadata
       const r = await R.calculateRisk({productId:createProduct('INT6','pharma'),actorId:'int6-'+Date.now(),scanType:'consumer',ipAddress:'8.8.8.8',category:'pharma'});
-      ok('INT-6','V15 metadata','v15 obj',`v15_rounds=${r.v15?.game_rounds},v15_mixed=${r.v15?.mixed_strategy?.type}`,r.v15 && r.v15.mixed_strategy?.type === 'mixed_strategy' && typeof r.v15.game_rounds === 'number'); }
+      ok('INT-6','V16 metadata','v16 obj',`latent=${typeof r.v16?.latent_risk},entropy=${typeof r.v16?.strategy_entropy},meta=${r.v16?.meta_generation}`,r.v16 && typeof r.v16.latent_risk === 'object' && typeof r.v16.strategy_entropy === 'object'); }
 
     // ═══════════
     const total=passed+failed;const pct=Math.round(passed/total*100);
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V15 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
+    console.log(`║  L4 V16 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║  Fraud:       ${results.filter(r=>r.id>='BF-1'&&r.id<='BF-6').filter(r=>r.pass).length}/6`);
     console.log(`║  Baselines:   ${results.filter(r=>r.id==='BF-7'||r.id==='BF-8').filter(r=>r.pass).length}/2`);
@@ -612,11 +663,12 @@ async function main() {
     console.log(`║  V13 Strat:   ${results.filter(r=>r.id.startsWith('V13')).filter(r=>r.pass).length}/5`);
     console.log(`║  V14 Game:    ${results.filter(r=>r.id.startsWith('V14')).filter(r=>r.pass).length}/5`);
     console.log(`║  V15 Learn:   ${results.filter(r=>r.id.startsWith('V15')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V16 Meta:    ${results.filter(r=>r.id.startsWith('V16')).filter(r=>r.pass).length}/5`);
     console.log(`║  Integration: ${results.filter(r=>r.id.startsWith('INT')).filter(r=>r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
     const fails=results.filter(r=>!r.pass);
     if(fails.length>0){console.log('\n❌ FAILED:');fails.forEach(f=>console.log(`  ${f.id}: ${f.name} | exp: ${f.expected} | act: ${f.actual}`));}
-    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V15',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
+    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V16',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
     console.log('\n📝 chaos-l4-report.json'); process.exit(0);
 }
 main().catch(e=>{console.error('FATAL:',e.message,e.stack);process.exit(1);});
