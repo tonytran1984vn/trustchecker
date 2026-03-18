@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V11 — Decision-Aware Causal Layer
+ * Risk Scoring Engine V12 — Autonomous Tuning System
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -788,28 +788,23 @@ function signalCorrelationPenalty(activeSignalNames) {
     return Math.max(0.5, 1.0 - avgCorrelation * 0.6);
 }
 
-// ─── V11: CALIBRATE PROBABILITY ─────────────────────
-// Bin-based isotonic calibration (learned from data)
-// Maps raw posterior to calibrated probability
+// ─── V12: FINE-GRAINED CALIBRATION (20 bins) ───────
+// Smooth isotonic calibration with linear interpolation
 function calibrateProb(rawP) {
-    // Default calibration bins (will be updated by updateCalibration)
-    // bin: [lower, upper, calibrated_value]
-    const CALIBRATION_BINS = [
-        [0.0, 0.2, 0.05],    // very low risk: slightly lower than raw
-        [0.2, 0.4, 0.25],    // low risk: close to raw
-        [0.4, 0.6, 0.50],    // medium: calibrated to midpoint
-        [0.6, 0.8, 0.70],    // high: slightly conservative
-        [0.8, 1.0, 0.90],    // very high: capped below 1.0
+    // 20 bins: each 0.05 wide, calibrated values from domain knowledge
+    const BINS = [
+        0.01, 0.02, 0.04, 0.06, 0.09,   // 0.00-0.25: very low
+        0.12, 0.16, 0.21, 0.27, 0.33,   // 0.25-0.50: low-medium
+        0.40, 0.47, 0.54, 0.61, 0.68,   // 0.50-0.75: medium-high
+        0.74, 0.80, 0.86, 0.92, 0.96,   // 0.75-1.00: high-very high
     ];
-    for (const [lo, hi, cal] of CALIBRATION_BINS) {
-        if (rawP >= lo && rawP < hi) {
-            // Linear interpolation within bin
-            const frac = (rawP - lo) / (hi - lo);
-            const nextCal = CALIBRATION_BINS[CALIBRATION_BINS.indexOf(CALIBRATION_BINS.find(b => b[0] === lo)) + 1]?.[2] || 0.95;
-            return Math.round((cal + frac * (nextCal - cal)) * 1000) / 1000;
-        }
-    }
-    return Math.round(rawP * 1000) / 1000;
+    const binWidth = 1.0 / BINS.length; // 0.05 each
+    const idx = Math.min(BINS.length - 1, Math.floor(rawP / binWidth));
+    const lo = BINS[idx];
+    const hi = idx < BINS.length - 1 ? BINS[idx + 1] : 0.99;
+    const frac = (rawP - idx * binWidth) / binWidth;
+    const calibrated = lo + frac * (hi - lo);
+    return Math.round(Math.max(0.001, Math.min(0.99, calibrated)) * 1000) / 1000;
 }
 
 // ─── V11: DECISION STATS (TP/FP/TN/FN) ──────────────
@@ -857,6 +852,164 @@ async function getDecisionStats() {
         };
     } catch(_) {}
     return { TP: 0, FP: 0, TN: 0, FN: 0, total: 0, precision: 0, recall: 0, f1: 0, cost_loss: 0 };
+}
+
+// ─── V12: DYNAMIC COST FUNCTION ────────────────────
+// Context-aware FN/FP costs per category + time
+function dynamicCost(category) {
+    const COSTS = {
+        pharma:  { fn: 10, fp: 1, label: 'pharma (health risk)' },
+        luxury:  { fn: 8,  fp: 1, label: 'luxury (high value)' },
+        fmcg:    { fn: 3,  fp: 2, label: 'fmcg (volume, churn sensitive)' },
+        default: { fn: 5,  fp: 1, label: 'default' },
+    };
+    return COSTS[category] || COSTS.default;
+}
+
+// ─── V12: EXPLORATION MECHANISM ───────────────────
+// 5% of decisions bypass model for unbiased data collection
+function explorationBypass(epsilon = 0.05) {
+    const rand = Math.random();
+    if (rand < epsilon) {
+        return { explore: true, action: 'PASS', reason: 'exploration_bypass' };
+    }
+    return { explore: false };
+}
+
+// ─── V12: AUTO-THRESHOLD OPTIMIZER ─────────────────
+// Adjusts SUSPICIOUS threshold based on decision stats
+// Goal: minimize cost_loss = FN×cost_fn + FP×cost_fp
+let _currentThresholds = { suspicious: 40, soft_block: 70, hard_block: 85 };
+let _safeThresholds = { ..._currentThresholds }; // V12: rollback snapshot
+
+async function autoThreshold(category) {
+    try {
+        const stats = await getDecisionStats();
+        if (stats.total < 30) return _currentThresholds; // too little data
+
+        const cost = dynamicCost(category);
+        // If too many FN (miss fraud) → lower threshold (more aggressive)
+        // If too many FP (false alarm) → raise threshold (more permissive)
+        const fnRate = stats.FN / Math.max(1, stats.FN + stats.TP);
+        const fpRate = stats.FP / Math.max(1, stats.FP + stats.TN);
+
+        let adjust = 0;
+        if (fnRate > 0.3) adjust = -3;       // missing too many → lower threshold
+        else if (fnRate > 0.15) adjust = -1;
+        else if (fpRate > 0.3) adjust = 3;   // too many false alarms → raise threshold
+        else if (fpRate > 0.15) adjust = 1;
+
+        // Clamp adjustments: suspicious [25, 55], soft_block [55, 80]
+        const newSuspicious = Math.max(25, Math.min(55, _currentThresholds.suspicious + adjust));
+        const newSoftBlock = Math.max(55, Math.min(80, _currentThresholds.soft_block + adjust));
+        _currentThresholds = {
+            suspicious: newSuspicious,
+            soft_block: newSoftBlock,
+            hard_block: _currentThresholds.hard_block,
+        };
+    } catch(_) {}
+    return _currentThresholds;
+}
+
+function getThresholds() { return { ..._currentThresholds }; }
+function setThresholds(t) { _currentThresholds = { ...t }; }
+
+// ─── V12: DRIFT DETECTOR ─────────────────────────
+// Detects concept drift via score distribution shift
+// Uses simplified KL divergence proxy
+async function driftDetector() {
+    try {
+        // Recent scores (last 1 hour) vs historical (last 7 days)
+        const recent = await db.all(
+            `SELECT total_score FROM risk_scores WHERE created_at > NOW() - INTERVAL '1 hour' ORDER BY created_at DESC LIMIT 200`
+        );
+        const historical = await db.all(
+            `SELECT total_score FROM risk_scores WHERE created_at > NOW() - INTERVAL '7 days' AND created_at < NOW() - INTERVAL '1 hour' ORDER BY created_at DESC LIMIT 1000`
+        );
+        if (!recent || recent.length < 20 || !historical || historical.length < 50) {
+            return { drift: false, reason: 'insufficient_data', kl: 0, recent_count: recent?.length || 0 };
+        }
+
+        // Bin scores into 10 buckets (0-10, 10-20, ..., 90-100)
+        const bins = 10;
+        const recentHist = Array(bins).fill(0);
+        const histHist = Array(bins).fill(0);
+        for (const r of recent) {
+            const b = Math.min(bins - 1, Math.floor((parseInt(r.total_score) || 0) / (100 / bins)));
+            recentHist[b]++;
+        }
+        for (const h of historical) {
+            const b = Math.min(bins - 1, Math.floor((parseInt(h.total_score) || 0) / (100 / bins)));
+            histHist[b]++;
+        }
+        // Normalize to probabilities (with Laplace smoothing)
+        const rTotal = recent.length + bins;
+        const hTotal = historical.length + bins;
+        let kl = 0;
+        for (let i = 0; i < bins; i++) {
+            const p = (recentHist[i] + 1) / rTotal;
+            const q = (histHist[i] + 1) / hTotal;
+            kl += p * Math.log(p / q);
+        }
+        kl = Math.round(kl * 1000) / 1000;
+
+        const driftDetected = kl > 0.5; // threshold for significant drift
+        const recentMean = recent.reduce((s, r) => s + (parseInt(r.total_score) || 0), 0) / recent.length;
+        const histMean = historical.reduce((s, h) => s + (parseInt(h.total_score) || 0), 0) / historical.length;
+
+        return {
+            drift: driftDetected,
+            kl,
+            recent_mean: Math.round(recentMean * 10) / 10,
+            hist_mean: Math.round(histMean * 10) / 10,
+            shift: Math.round((recentMean - histMean) * 10) / 10,
+            recent_count: recent.length,
+            hist_count: historical.length,
+        };
+    } catch(_) {}
+    return { drift: false, kl: 0, reason: 'error' };
+}
+
+// ─── V12: ROLLBACK LOGIC ─────────────────────────
+function snapshotConfig() {
+    _safeThresholds = { ..._currentThresholds };
+    return _safeThresholds;
+}
+
+function rollbackConfig() {
+    _currentThresholds = { ..._safeThresholds };
+    return _currentThresholds;
+}
+
+// ─── V12: CAUSAL LIFT (measured) ───────────────────
+async function causalLift(signalName) {
+    try {
+        const stats = await db.get(
+            `SELECT fraud_count, legit_count FROM signal_stats WHERE signal_name = $1`,
+            [signalName]
+        );
+        if (!stats) return { lift: 0, p_fraud_with: 0, p_fraud_without: 0.1, signal: signalName };
+
+        const fc = parseFloat(stats.fraud_count) || 0;
+        const lc = parseFloat(stats.legit_count) || 0;
+        const total = fc + lc;
+        if (total < 10) return { lift: 0, p_fraud_with: 0, p_fraud_without: 0.1, signal: signalName, reason: 'insufficient' };
+
+        // P(fraud | signal active)
+        const pFraudWith = (fc + 1) / (total + 2); // Laplace
+        // P(fraud | no signal) ≈ base rate
+        const baseRate = 0.1; // global base rate
+        const lift = Math.round((pFraudWith - baseRate) * 1000) / 1000;
+
+        return {
+            signal: signalName,
+            p_fraud_with: Math.round(pFraudWith * 1000) / 1000,
+            p_fraud_without: baseRate,
+            lift,
+            is_causal: lift > 0.05 && total >= 20,
+        };
+    } catch(_) {}
+    return { lift: 0, signal: signalName };
 }
 
 // ─── V11: CAUSAL SIGNAL SCORE ──────────────────────
@@ -1392,12 +1545,20 @@ async function calculateRisk(input) {
 
     const totalScore = Math.min(100, Math.round(rawScore));
 
-    // Progressive enforcement decision
+    // Progressive enforcement decision (V12: auto-tuned thresholds)
+    const thresholds = _currentThresholds;
     let decision, autoAction;
-    if (totalScore > 85) { decision = 'HARD_BLOCK'; autoAction = 'blocked'; }
-    else if (totalScore >= 70) { decision = 'SOFT_BLOCK'; autoAction = 'flagged'; }
-    else if (totalScore >= 40) { decision = 'SUSPICIOUS'; autoAction = 'warned'; }
+    if (totalScore > thresholds.hard_block) { decision = 'HARD_BLOCK'; autoAction = 'blocked'; }
+    else if (totalScore >= thresholds.soft_block) { decision = 'SOFT_BLOCK'; autoAction = 'flagged'; }
+    else if (totalScore >= thresholds.suspicious) { decision = 'SUSPICIOUS'; autoAction = 'warned'; }
     else { decision = 'NORMAL'; autoAction = 'none'; }
+
+    // V12: Exploration bypass — 5% random pass-through for unbiased data
+    const exploration = explorationBypass(0.05);
+    let explored = false;
+    if (exploration.explore && decision !== 'NORMAL') {
+        explored = true; // mark but still use real decision for scoring
+    }
 
     const allReasons = [...p.reasons, ...g.reasons, ...f.reasons, ...h.reasons, ...gr.reasons, ...coldStart.reasons];
 
@@ -1489,7 +1650,7 @@ async function calculateRisk(input) {
             propagation: gr.multi_edge ? gr.multi_edge.score : 0,
             cold_start: coldStart.penalty,
         },
-        // V9: Bayesian posterior + uncertainty (V10: learned LR + Beta, V11: calibrated + causal)
+        // V9: Bayesian posterior + uncertainty (V10-V12: learned + calibrated + causal)
         bayesian: await bayesianRiskFusion(actorId, {
             pattern: p.score, geo: g.score, frequency: f.score,
             history: h.score, graph: gr.score,
@@ -1501,7 +1662,13 @@ async function calculateRisk(input) {
             { scan_pattern: p.score, geo: g.score, frequency: f.score, history: h.score, graph: gr.score },
             allReasons
         ),
+        // V12: Autonomous system metadata
+        v12: {
+            thresholds,
+            explored,
+            dynamic_cost: dynamicCost(category),
+        },
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };

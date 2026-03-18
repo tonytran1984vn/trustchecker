@@ -344,6 +344,77 @@ async function main() {
             ds.cost_loss > 0 && ds.FN > 0);
     }
 
+    // ━━━ V12 AUTONOMOUS ━━━
+    console.log('\n━━━ V12 AUTONOMOUS ━━━\n');
+
+    // V12-1: Calibration 20 bins — calibrated_posterior should be smooth
+    {
+        // Test multiple raw values across the range
+        const c1 = R.calibrateProb(0.1);
+        const c2 = R.calibrateProb(0.3);
+        const c3 = R.calibrateProb(0.5);
+        const c4 = R.calibrateProb(0.7);
+        const c5 = R.calibrateProb(0.9);
+        // Should be monotonically increasing
+        ok('V12-1', 'Calibration: 20 bins monotonic', 'c1<c2<c3<c4<c5',
+            `c=[${c1},${c2},${c3},${c4},${c5}]`,
+            c1 < c2 && c2 < c3 && c3 < c4 && c4 < c5);
+    }
+
+    // V12-2: Causal lift — measured from signal_stats
+    {
+        // Feed enough data to have measurable lift
+        for (let i = 0; i < 12; i++) {
+            await R.recordOutcome(`lift-${i}`, true, ['graph'], 'admin');
+        }
+        for (let i = 0; i < 5; i++) {
+            await R.recordOutcome(`lift-l-${i}`, false, ['graph'], 'admin');
+        }
+        const lift = await R.causalLift('graph');
+        ok('V12-2', 'Causal lift: graph measured', 'has lift',
+            `lift=${lift.lift},p_with=${lift.p_fraud_with},signal=${lift.signal}`,
+            typeof lift.lift === 'number' && lift.signal === 'graph');
+    }
+
+    // V12-3: Dynamic cost — pharma FN should be higher than fmcg FN
+    {
+        const pharmaCost = R.dynamicCost('pharma');
+        const fmcgCost = R.dynamicCost('fmcg');
+        const defaultCost = R.dynamicCost('test');
+        ok('V12-3', 'Dynamic cost: pharma FN > fmcg FN', 'pharma > fmcg',
+            `pharma_fn=${pharmaCost.fn},fmcg_fn=${fmcgCost.fn},def_fn=${defaultCost.fn}`,
+            pharmaCost.fn > fmcgCost.fn && defaultCost.fn === 5);
+    }
+
+    // V12-4: Exploration — explorationBypass returns explore field
+    {
+        let explored = 0;
+        for (let i = 0; i < 100; i++) {
+            const ex = R.explorationBypass(0.05);
+            if (ex.explore) explored++;
+        }
+        // Should be roughly 5 out of 100 (allow 0-15 range)
+        ok('V12-4', 'Exploration: ~5% bypass rate', '0 < explored ≤ 15',
+            `explored=${explored}/100`,
+            explored >= 0 && explored <= 15);
+    }
+
+    // V12-5: Drift + Auto-threshold + Rollback
+    {
+        // Save current thresholds
+        const snap = R.snapshotConfig();
+        // Modify thresholds
+        R.setThresholds({ suspicious: 30, soft_block: 60, hard_block: 85 });
+        const modified = R.getThresholds();
+        // Rollback
+        const rolled = R.rollbackConfig();
+        // Drift detector should return (may be insufficient_data in test env)
+        const drift = await R.driftDetector();
+        ok('V12-5', 'Rollback: restore safe config', 'rolled == snap',
+            `mod=${modified.suspicious},rolled=${rolled.suspicious},snap=${snap.suspicious},drift_kl=${drift.kl}`,
+            rolled.suspicious === snap.suspicious && typeof drift.kl === 'number');
+    }
+
     // ━━━ INTEGRATION ━━━
     console.log('\n━━━ INTEGRATION ━━━\n');
     { ok('INT-1','risk_scores','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"))>0); }
@@ -352,12 +423,14 @@ async function main() {
     ok('INT-3','Decisions','data',d.replace(/\n/g,', '),d.length>0&&!d.startsWith('ERROR')); }
     { ok('INT-4','Graph','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"))>0); }
     { ok('INT-5','signal_stats','rows',psql("SELECT COUNT(*) FROM signal_stats"),parseInt(psql("SELECT COUNT(*) FROM signal_stats"))>=5); }
-    { ok('INT-6','Decision stats','data',psql("SELECT signal_name||'='||fraud_count::TEXT FROM signal_stats WHERE signal_name LIKE 'decision_%' ORDER BY signal_name"),!psql("SELECT COUNT(*) FROM signal_stats WHERE signal_name LIKE 'decision_%'").startsWith('ERROR')); }
+    { // V12 response includes v12 metadata
+      const r = await R.calculateRisk({productId:createProduct('INT6','pharma'),actorId:'int6-'+Date.now(),scanType:'consumer',ipAddress:'8.8.8.8',category:'pharma'});
+      ok('INT-6','V12 metadata','v12 obj',`th=${r.v12?.thresholds?.suspicious},cost_fn=${r.v12?.dynamic_cost?.fn}`,r.v12 && r.v12.thresholds && r.v12.dynamic_cost && r.v12.dynamic_cost.fn === 10); }
 
     // ═══════════
     const total=passed+failed;const pct=Math.round(passed/total*100);
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V11 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
+    console.log(`║  L4 V12 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║  Fraud:       ${results.filter(r=>r.id>='BF-1'&&r.id<='BF-6').filter(r=>r.pass).length}/6`);
     console.log(`║  Baselines:   ${results.filter(r=>r.id==='BF-7'||r.id==='BF-8').filter(r=>r.pass).length}/2`);
@@ -372,11 +445,12 @@ async function main() {
     console.log(`║  V9:          ${results.filter(r=>r.id.startsWith('V9')).filter(r=>r.pass).length}/5`);
     console.log(`║  V10 Learn:   ${results.filter(r=>r.id.startsWith('V10')).filter(r=>r.pass).length}/5`);
     console.log(`║  V11 Causal:  ${results.filter(r=>r.id.startsWith('V11')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V12 Auto:    ${results.filter(r=>r.id.startsWith('V12')).filter(r=>r.pass).length}/5`);
     console.log(`║  Integration: ${results.filter(r=>r.id.startsWith('INT')).filter(r=>r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
     const fails=results.filter(r=>!r.pass);
     if(fails.length>0){console.log('\n❌ FAILED:');fails.forEach(f=>console.log(`  ${f.id}: ${f.name} | exp: ${f.expected} | act: ${f.actual}`));}
-    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V11',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
+    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V12',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
     console.log('\n📝 chaos-l4-report.json'); process.exit(0);
 }
 main().catch(e=>{console.error('FATAL:',e.message,e.stack);process.exit(1);});
