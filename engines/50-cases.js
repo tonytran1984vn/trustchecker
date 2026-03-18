@@ -11,6 +11,7 @@ const { validateTransition } = require('../server/middleware/scm-state-machine')
 
 const BASE = process.env.TEST_URL || 'http://127.0.0.1:4000';
 let TOKEN = '', ORG_ID = '';
+const RUN = Date.now().toString(36); // Unique run ID to prevent SKU collisions
 
 async function login() {
     const r = await fetch(BASE + '/api/auth/login', {
@@ -37,7 +38,7 @@ function rand(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
 // ─── Helpers ─────────────────────────────────────────────────
 async function createProduct(sku) {
     const id = uuidv4();
-    sku = sku || 'TC50-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+    sku = (sku ? RUN + '-' + sku : 'TC50-' + crypto.randomBytes(4).toString('hex').toUpperCase());
     await db.run("INSERT INTO products (id, name, sku, category, manufacturer, origin_country, status, org_id, created_at) VALUES ($1,$2,$3,'Test','TC50','VN','active',$4,NOW())",
         [id, 'Test Product ' + sku, sku, ORG_ID]);
     const qrId = uuidv4();
@@ -474,7 +475,7 @@ async function group4() {
         const p = await createProduct('G4-33');
         const batchId = uuidv4();
         await db.run("INSERT INTO batches (id, batch_number, product_id, quantity, org_id, status, created_at) VALUES ($1,$2,$3,1000,$4,'created',NOW())",
-            [batchId, 'MISMATCH-001', p.id, ORG_ID]);
+            [batchId, RUN + '-MISMATCH', p.id, ORG_ID]);
         await scmEvent('commission', p.id, factory.id, 'Factory', null);
         await scmEvent('ship', p.id, factory.id, 'Shipped 1000', null);
         await scmEvent('receive', p.id, warehouse.id, 'Received 900', null);
@@ -551,7 +552,7 @@ async function group4() {
         // Create batch with past expiry
         const batchId = uuidv4();
         await db.run("INSERT INTO batches (id, batch_number, product_id, quantity, org_id, status, expiry_date, created_at) VALUES ($1,$2,$3,100,$4,'created',$5,NOW())",
-            [batchId, 'EXP-001', p.id, ORG_ID, '2025-01-01']);
+            [batchId, RUN + '-EXP', p.id, ORG_ID, '2025-01-01']);
         await scmEvent('commission', p.id, factory.id, 'Factory', null);
         await scmEvent('sell', p.id, distributor.id, 'Retail', null);
         const scan = await scanQR(p.qrData);
