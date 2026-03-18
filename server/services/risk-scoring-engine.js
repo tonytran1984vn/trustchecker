@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V8 — Multi-Edge Graph + Controlled Propagation
+ * Risk Scoring Engine V9 — Probabilistic Graph Engine
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -519,8 +519,10 @@ async function multiEdgeScore(actorId, ipAddress) {
                 const actors = parseInt(sameIpProduct.actors) || 0;
                 const products = parseInt(sameIpProduct.products) || 0;
                 if (actors >= 3 && products >= 2) {
-                    score += 35;
-                    reasons.push({ rule: 'multi_edge_ip_product', severity: 45, confidence: 0.75, actors, products, edge_types: ['ip', 'product'] });
+                    // V9: Non-linear interaction — IP + product overlap = boosted
+                    const interactionBoost = Math.min(15, Math.round(Math.sqrt(actors * products) * 3));
+                    score += 35 + interactionBoost;
+                    reasons.push({ rule: 'multi_edge_ip_product', severity: 45 + interactionBoost, confidence: 0.75, actors, products, edge_types: ['ip', 'product'], interaction_boost: interactionBoost });
                 }
             }
         }
@@ -542,6 +544,87 @@ async function multiEdgeScore(actorId, ipAddress) {
         }
     } catch(_) {}
     return { score: Math.min(50, score), reasons };
+}
+
+// ─── V9: BAYESIAN RISK FUSION ────────────────────────────
+// P(fraud|evidence) = P(evidence|fraud) × P(fraud) / P(evidence)
+// Prior: actor history → base fraud probability
+// Likelihood: current signal strength
+// Posterior: probabilistic risk score
+async function bayesianRiskFusion(actorId, currentSignals) {
+    // currentSignals = { pattern, geo, frequency, history, graph } (0-100 each)
+    const result = { prior: 0.1, likelihood: 0.5, posterior: 0.1, confidence: 0.5, uncertainty: 0.5 };
+    try {
+        // PRIOR: P(fraud) from actor profile
+        let prior = 0.1; // base rate: 10% (no history = assume low)
+        let dataPoints = 0;
+        if (actorId) {
+            const profile = await db.get(
+                `SELECT total_scans, flagged_count, avg_risk_score FROM actor_risk_profiles WHERE actor_id = $1`,
+                [actorId]
+            );
+            if (profile) {
+                const scans = parseInt(profile.total_scans) || 1;
+                const flagged = parseFloat(profile.flagged_count) || 0;
+                const avgRisk = parseFloat(profile.avg_risk_score) || 0;
+                dataPoints = scans;
+                // Prior = weighted combination of flag ratio and avg risk
+                const flagRatio = Math.min(1.0, flagged / scans);
+                prior = flagRatio * 0.6 + (avgRisk / 100) * 0.4;
+                prior = Math.max(0.01, Math.min(0.99, prior)); // clamp
+            }
+        }
+
+        // LIKELIHOOD: P(evidence|fraud) from current signals
+        // Strong signals = high likelihood that this evidence appears given fraud
+        const signals = currentSignals || {};
+        const signalValues = [
+            (signals.pattern || 0) / 100,
+            (signals.geo || 0) / 100,
+            (signals.frequency || 0) / 100,
+            (signals.history || 0) / 100,
+            (signals.graph || 0) / 100,
+        ];
+        // Combined likelihood: higher when multiple signals fire
+        const avgSignal = signalValues.reduce((a, b) => a + b, 0) / signalValues.length;
+        const maxSignal = Math.max(...signalValues);
+        // Non-linear: multiple weak signals > one strong signal
+        const activeSignals = signalValues.filter(v => v > 0.1).length;
+        const breadthBonus = activeSignals >= 3 ? 0.15 : activeSignals >= 2 ? 0.08 : 0;
+        const likelihood = Math.min(0.99, avgSignal * 0.5 + maxSignal * 0.3 + breadthBonus + 0.1);
+
+        // P(evidence|not fraud) = complement
+        const likelihoodNotFraud = Math.max(0.01, 1 - likelihood * 0.8);
+
+        // POSTERIOR: Bayes' theorem
+        const numerator = likelihood * prior;
+        const denominator = numerator + likelihoodNotFraud * (1 - prior);
+        const posterior = denominator > 0 ? numerator / denominator : prior;
+
+        // UNCERTAINTY: based on data volume
+        // More data = lower uncertainty
+        const uncertainty = dataPoints >= 20 ? 0.1 : dataPoints >= 10 ? 0.2 : dataPoints >= 5 ? 0.3 : dataPoints >= 2 ? 0.4 : 0.6;
+        const confidence = 1 - uncertainty;
+
+        result.prior = Math.round(prior * 1000) / 1000;
+        result.likelihood = Math.round(likelihood * 1000) / 1000;
+        result.posterior = Math.round(posterior * 1000) / 1000;
+        result.confidence = Math.round(confidence * 100) / 100;
+        result.uncertainty = Math.round(uncertainty * 100) / 100;
+        result.data_points = dataPoints;
+        result.active_signals = activeSignals;
+    } catch(_) {}
+    return result;
+}
+
+// ─── V9: TOP REASONS RANKING ────────────────────────────
+function rankTopReasons(allReasons, maxReasons = 3) {
+    if (!allReasons || allReasons.length === 0) return [];
+    return allReasons
+        .filter(r => r.severity && r.confidence)
+        .sort((a, b) => (b.severity * b.confidence) - (a.severity * a.confidence))
+        .slice(0, maxReasons)
+        .map(r => ({ rule: r.rule, impact: Math.round(r.severity * r.confidence), severity: r.severity, confidence: r.confidence }));
 }
 
 // ─── V6: CROSS-ENTITY TRUST FUSION ──────────────────────────
@@ -1118,7 +1201,7 @@ async function calculateRisk(input) {
         cold_start: coldStart,
         category_multiplier: catMult,
         recovery: recovery || null,
-        // V8: Explainability layer — component breakdown
+        // V8: Explainability layer
         components: {
             behavior: Math.round(p.score * WEIGHTS.scan_pattern + g.score * WEIGHTS.geo),
             temporal: Math.round(f.score * WEIGHTS.frequency + h.score * WEIGHTS.history),
@@ -1127,7 +1210,14 @@ async function calculateRisk(input) {
             propagation: gr.multi_edge ? gr.multi_edge.score : 0,
             cold_start: coldStart.penalty,
         },
+        // V9: Bayesian posterior + uncertainty
+        bayesian: await bayesianRiskFusion(actorId, {
+            pattern: p.score, geo: g.score, frequency: f.score,
+            history: h.score, graph: gr.score,
+        }),
+        // V9: Top reasons (sorted by impact)
+        top_reasons: rankTopReasons(allReasons),
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS };
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS };
