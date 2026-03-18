@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V17 — Self-Evolving System Architecture
+ * Risk Scoring Engine V18 — System Identity & Governance Layer
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -1692,6 +1692,11 @@ async function calculateRisk(input) {
             system_health: systemSelfAwareness(),
             signal_evolution_gen: _evolutionState.generation,
         },
+        // V18: Governance state
+        v18: {
+            identity_check: identityConstraints(),
+            failure_memory_count: _failureMemory.length,
+        },
     };
 }
 
@@ -2419,24 +2424,38 @@ function signalEvolution() {
         return { generation: _evolutionState.generation, status: 'insufficient_data', rounds: recent.length };
     }
 
-    // Each signal's contribution: correlate with block success
+    // V18: GLOBAL CONTRIBUTION SCORING (not local block_rate)
+    // Each signal's value = Δ(global objective) when active vs baseline
     const signalNames = ['scan_pattern', 'geo', 'frequency', 'history', 'graph', 'identity', 'trust', 'temporal'];
+    const blockedRounds = recent.filter(r => r.outcome === 'blocked').length;
+    const passedRounds = recent.filter(r => r.outcome === 'passed').length;
+    const globalBlockRate = blockedRounds / Math.max(1, recent.length);
+    // Global objective: minimize FN (passed attacks are bad)
+    const globalScore = 1 - (passedRounds / Math.max(1, recent.length)); // higher = better
+
     for (const sig of signalNames) {
         if (!_evolutionState.signal_weights[sig]) _evolutionState.signal_weights[sig] = 1.0;
 
-        // Proxy: signals that co-occur with blocks get promoted
-        const blockedRounds = recent.filter(r => r.outcome === 'blocked').length;
-        const passedRounds = recent.filter(r => r.outcome === 'passed').length;
-        const blockRate = blockedRounds / Math.max(1, recent.length);
+        // V18: Contribution = marginal impact on global objective
+        // Proxy: if global objective is good AND this signal is active, signal contributed
+        const contribution = globalScore * _evolutionState.signal_weights[sig];
+        const threshold = 0.6;
 
-        // Promote signals that correlate with high block rates
-        if (blockRate > 0.6) {
-            _evolutionState.signal_weights[sig] = Math.min(2.0, _evolutionState.signal_weights[sig] * 1.05);
-            if (_evolutionState.signal_weights[sig] > 1.3) promoted.push(sig);
-        } else if (blockRate < 0.3) {
-            _evolutionState.signal_weights[sig] = Math.max(0.5, _evolutionState.signal_weights[sig] * 0.95);
+        if (contribution > threshold) {
+            _evolutionState.signal_weights[sig] = Math.min(2.0, _evolutionState.signal_weights[sig] * 1.03);
+            if (_evolutionState.signal_weights[sig] > 1.2) promoted.push(sig);
+        } else if (contribution < 0.3) {
+            _evolutionState.signal_weights[sig] = Math.max(0.5, _evolutionState.signal_weights[sig] * 0.97);
             if (_evolutionState.signal_weights[sig] < 0.7) demoted.push(sig);
         }
+    }
+
+    // V18: Check identity constraints before committing
+    const idCheck = identityConstraints();
+    if (!idCheck.all_passed) {
+        // Rollback evolution — identity violation
+        _evolutionState.generation--;
+        return { generation: _evolutionState.generation, status: 'rejected_by_governance', violation: idCheck.violations };
     }
 
     _evolutionState.promoted = promoted;
@@ -2448,9 +2467,181 @@ function signalEvolution() {
         promoted,
         demoted,
         status: 'evolved',
+        global_contribution: true,
     };
 }
 
 function getEvolutionState() { return { ..._evolutionState }; }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, stealthResponseProtocol, adaptiveEntropyFloor, systemSelfAwareness, signalEvolution, getEvolutionState, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
+// ─── V18: META ANCHOR / REGULARIZATION ──────
+const _metaBaseline = { learning_rate: 0.15, strategy_distribution: null };
+
+function metaAnchor() {
+    const meta = getMetaState();
+    const anchored = {};
+
+    for (const [def, perf] of Object.entries(meta.strategy_performance)) {
+        const baseLR = _metaBaseline.learning_rate;
+        const currentLR = perf.learning_rate;
+        // Regularize: 0.8×current + 0.2×baseline
+        const regularizedLR = 0.8 * currentLR + 0.2 * baseLR;
+        // Snap back if too far from baseline (>3× deviation)
+        const deviation = Math.abs(currentLR - baseLR) / baseLR;
+        const snappedBack = deviation > 3.0;
+        anchored[def] = {
+            original_lr: currentLR,
+            regularized_lr: Math.round(regularizedLR * 1000) / 1000,
+            deviation: Math.round(deviation * 100) / 100,
+            snapped_back: snappedBack,
+            final_lr: snappedBack ? baseLR : Math.round(regularizedLR * 1000) / 1000,
+        };
+    }
+
+    return {
+        baseline_lr: _metaBaseline.learning_rate,
+        strategies: anchored,
+        any_snapped: Object.values(anchored).some(a => a.snapped_back),
+    };
+}
+
+// ─── V18: DRIFT vs BIAS SEPARATION ─────────
+function driftVsBias() {
+    const drift = driftDetector();
+    const driftScore = drift.drift_score || 0;
+    const entropy = strategyEntropy();
+    const health = systemSelfAwareness();
+
+    // Bias indicators: calibration error high + low drift (model is wrong, not data changed)
+    const calibrationError = health.calibration_error || 0;
+    const biasScore = calibrationError > 0.15 && driftScore < 0.3 ? calibrationError : 0;
+
+    // Drift indicators: drift high + calibration ok (data changed, model was fine)
+    const isDrift = driftScore > 0.2 && calibrationError < 0.2;
+    const isBias = biasScore > 0;
+
+    let action = 'monitor';
+    if (isDrift && !isBias) action = 'adapt';
+    else if (isBias && !isDrift) action = 'rollback';
+    else if (isDrift && isBias) action = 'recalibrate';
+
+    return {
+        drift_score: driftScore,
+        bias_score: Math.round(biasScore * 100) / 100,
+        is_drift: isDrift,
+        is_bias: isBias,
+        action,
+        rationale: isDrift ? 'Data distribution changed — adapt signals' :
+                   isBias ? 'Model systematic error — revert to known-good config' :
+                   'System operating normally',
+    };
+}
+
+// ─── V18: FAILURE MEMORY ───────────────────
+const _failureMemory = [];
+
+function recordFailure(config, outcome) {
+    _failureMemory.push({
+        config: { ...config },
+        outcome,
+        timestamp: Date.now(),
+    });
+    // Keep last 50 failures
+    if (_failureMemory.length > 50) _failureMemory.shift();
+}
+
+function checkFailureMemory(proposedConfig) {
+    // Check similarity to past bad configs
+    for (const failure of _failureMemory) {
+        let matchCount = 0, totalKeys = 0;
+        for (const [k, v] of Object.entries(failure.config)) {
+            totalKeys++;
+            if (proposedConfig[k] !== undefined) {
+                const diff = Math.abs((proposedConfig[k] || 0) - (v || 0));
+                if (diff < 0.1) matchCount++;
+            }
+        }
+        const similarity = totalKeys > 0 ? matchCount / totalKeys : 0;
+        if (similarity > 0.8) {
+            return { safe: false, similarity: Math.round(similarity * 100) / 100, matched_failure: failure.outcome };
+        }
+    }
+    return { safe: true, similarity: 0, checked: _failureMemory.length };
+}
+
+function getFailureMemory() { return [..._failureMemory]; }
+
+// ─── V18: IDENTITY CONSTRAINTS (CONSTITUTION) ─
+const _systemConstitution = {
+    // Invariants that MUST hold — no evolution can violate these
+    min_entropy_ratio: 0.5,       // strategy never fully deterministic
+    max_learning_rate: 0.3,       // no wild meta adaptation
+    min_learning_rate: 0.01,      // never freeze learning
+    max_signal_weight: 2.0,       // no single signal dominance
+    min_signal_weight: 0.5,       // no signal extinction
+    max_latent_gap: 0.5,          // stealth detection must work
+    max_drift_tolerance: 0.8,     // system must respond to drift
+};
+
+function identityConstraints() {
+    const violations = [];
+    const entropy = strategyEntropy();
+    const meta = getMetaState();
+    const latent = latentRiskDetector();
+    const drift = driftDetector();
+    const evo = getEvolutionState();
+
+    // Check entropy
+    if (entropy.ratio < _systemConstitution.min_entropy_ratio) {
+        violations.push({ rule: 'min_entropy', value: entropy.ratio, limit: _systemConstitution.min_entropy_ratio });
+    }
+
+    // Check meta LR bounds
+    for (const [def, perf] of Object.entries(meta.strategy_performance)) {
+        if (perf.learning_rate > _systemConstitution.max_learning_rate) {
+            violations.push({ rule: 'max_lr', strategy: def, value: perf.learning_rate, limit: _systemConstitution.max_learning_rate });
+        }
+        if (perf.learning_rate < _systemConstitution.min_learning_rate) {
+            violations.push({ rule: 'min_lr', strategy: def, value: perf.learning_rate, limit: _systemConstitution.min_learning_rate });
+        }
+    }
+
+    // Check signal weights
+    for (const [sig, w] of Object.entries(evo.signal_weights || {})) {
+        if (w > _systemConstitution.max_signal_weight) {
+            violations.push({ rule: 'max_signal_weight', signal: sig, value: w, limit: _systemConstitution.max_signal_weight });
+        }
+        if (w < _systemConstitution.min_signal_weight) {
+            violations.push({ rule: 'min_signal_weight', signal: sig, value: w, limit: _systemConstitution.min_signal_weight });
+        }
+    }
+
+    return {
+        all_passed: violations.length === 0,
+        violations,
+        violation_count: violations.length,
+        constitution: { ..._systemConstitution },
+    };
+}
+
+function getConstitution() { return { ..._systemConstitution }; }
+
+// ─── V18: GOVERNANCE CHECK (WRAPS ALL) ──────
+function governanceCheck() {
+    const identity = identityConstraints();
+    const anchor = metaAnchor();
+    const diagnosis = driftVsBias();
+    const health = systemSelfAwareness();
+
+    return {
+        identity_ok: identity.all_passed,
+        identity_violations: identity.violation_count,
+        meta_anchored: !anchor.any_snapped,
+        diagnosis: diagnosis.action,
+        system_health: health.health,
+        safe_mode: health.safe_mode,
+        failure_memory_size: _failureMemory.length,
+        governance_status: identity.all_passed && !health.safe_mode ? 'GOVERNED' : 'INTERVENTION_NEEDED',
+    };
+}
+
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, stealthResponseProtocol, adaptiveEntropyFloor, systemSelfAwareness, signalEvolution, getEvolutionState, metaAnchor, driftVsBias, recordFailure, checkFailureMemory, getFailureMemory, identityConstraints, getConstitution, governanceCheck, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };

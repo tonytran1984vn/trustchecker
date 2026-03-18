@@ -681,6 +681,54 @@ async function main() {
             evo.generation >= 1 && evo.status === 'evolved' && Object.keys(evo.signal_weights).length === 8);
     }
 
+    // ━━━ V18 GOVERNANCE ━━━
+    console.log('\n━━━ V18 GOVERNANCE ━━━\n');
+
+    // V18-1: Global contribution — signalEvolution uses global objective, not local
+    {
+        R.recordGameRound('farm', 'graph_boost', 'blocked');
+        R.recordGameRound('farm', 'graph_boost', 'blocked');
+        const evo = R.signalEvolution();
+        ok('V18-1', 'Global contribution: evolved', 'global=true',
+            `status=${evo.status},global=${evo.global_contribution},sigs=${Object.keys(evo.signal_weights||{}).length}`,
+            evo.status === 'evolved' && evo.global_contribution === true);
+    }
+
+    // V18-2: Meta anchor — regularization with baseline
+    {
+        const anchor = R.metaAnchor();
+        ok('V18-2', 'Meta anchor: bounded deviation', 'has baseline',
+            `baseline=${anchor.baseline_lr},snapped=${anchor.any_snapped}`,
+            anchor.baseline_lr === 0.15 && typeof anchor.any_snapped === 'boolean');
+    }
+
+    // V18-3: Drift vs bias — differential diagnosis
+    {
+        const dvb = R.driftVsBias();
+        ok('V18-3', 'Drift vs bias: action', 'has action',
+            `drift=${dvb.drift_score},bias=${dvb.bias_score},action=${dvb.action}`,
+            ['monitor', 'adapt', 'rollback', 'recalibrate'].includes(dvb.action) && typeof dvb.rationale === 'string');
+    }
+
+    // V18-4: Failure memory — records and checks
+    {
+        R.recordFailure({ lr: 0.5, weight: 1.8 }, 'oscillation');
+        const check1 = R.checkFailureMemory({ lr: 0.5, weight: 1.8 }); // similar
+        const check2 = R.checkFailureMemory({ lr: 0.01, weight: 0.5 }); // different
+        ok('V18-4', 'Failure memory: anti-regression', 'similar=unsafe',
+            `similar_safe=${check1.safe},diff_safe=${check2.safe},mem=${R.getFailureMemory().length}`,
+            check1.safe === false && check2.safe === true);
+    }
+
+    // V18-5: Identity constraints — constitution holds
+    {
+        const id = R.identityConstraints();
+        const gov = R.governanceCheck();
+        ok('V18-5', 'Governance: constitution check', 'all passed',
+            `id_ok=${id.all_passed},violations=${id.violation_count},status=${gov.governance_status}`,
+            id.all_passed === true && gov.governance_status === 'GOVERNED' && id.constitution.min_entropy_ratio === 0.5);
+    }
+
     // ━━━ INTEGRATION ━━━
     console.log('\n━━━ INTEGRATION ━━━\n');
     { ok('INT-1','risk_scores','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"))>0); }
@@ -689,14 +737,14 @@ async function main() {
     ok('INT-3','Decisions','data',d.replace(/\n/g,', '),d.length>0&&!d.startsWith('ERROR')); }
     { ok('INT-4','Graph','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"))>0); }
     { ok('INT-5','signal_stats','rows',psql("SELECT COUNT(*) FROM signal_stats"),parseInt(psql("SELECT COUNT(*) FROM signal_stats"))>=5); }
-    { // V17 response includes v17 metadata
+    { // V18 response includes v18 governance
       const r = await R.calculateRisk({productId:createProduct('INT6','pharma'),actorId:'int6-'+Date.now(),scanType:'consumer',ipAddress:'8.8.8.8',category:'pharma'});
-      ok('INT-6','V17 metadata','v17 obj',`health=${typeof r.v17?.system_health},evo_gen=${r.v17?.signal_evolution_gen}`,r.v17 && typeof r.v17.system_health === 'object' && typeof r.v17.signal_evolution_gen === 'number'); }
+      ok('INT-6','V18 metadata','v18 obj',`id_ok=${r.v18?.identity_check?.all_passed},mem=${r.v18?.failure_memory_count}`,r.v18 && r.v18.identity_check?.all_passed === true && typeof r.v18.failure_memory_count === 'number'); }
 
     // ═══════════
     const total=passed+failed;const pct=Math.round(passed/total*100);
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V17 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
+    console.log(`║  L4 V18 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║  Fraud:       ${results.filter(r=>r.id>='BF-1'&&r.id<='BF-6').filter(r=>r.pass).length}/6`);
     console.log(`║  Baselines:   ${results.filter(r=>r.id==='BF-7'||r.id==='BF-8').filter(r=>r.pass).length}/2`);
@@ -717,11 +765,12 @@ async function main() {
     console.log(`║  V15 Learn:   ${results.filter(r=>r.id.startsWith('V15')).filter(r=>r.pass).length}/5`);
     console.log(`║  V16 Meta:    ${results.filter(r=>r.id.startsWith('V16')).filter(r=>r.pass).length}/5`);
     console.log(`║  V17 Evolve:  ${results.filter(r=>r.id.startsWith('V17')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V18 Govern:  ${results.filter(r=>r.id.startsWith('V18')).filter(r=>r.pass).length}/5`);
     console.log(`║  Integration: ${results.filter(r=>r.id.startsWith('INT')).filter(r=>r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
     const fails=results.filter(r=>!r.pass);
     if(fails.length>0){console.log('\n❌ FAILED:');fails.forEach(f=>console.log(`  ${f.id}: ${f.name} | exp: ${f.expected} | act: ${f.actual}`));}
-    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V17',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
+    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V18',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
     console.log('\n📝 chaos-l4-report.json'); process.exit(0);
 }
 main().catch(e=>{console.error('FATAL:',e.message,e.stack);process.exit(1);});
