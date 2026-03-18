@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V5 — Trust-Weighted Graph + Scale-Safe
+ * Risk Scoring Engine V6 — Dynamic Trust + Risk-First Graph
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -334,99 +334,113 @@ async function historyScore(productId, actorId) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// V5 GRAPH INTELLIGENCE — Trust-Weighted, Scale-Safe
+// V6 DYNAMIC TRUST + RISK-FIRST GRAPH
 // ═══════════════════════════════════════════════════════════════
 
-// ─── V5 CONSTANTS ─────────────────────────────────────────────
-const GRAPH_LIMITS = {
-    MAX_NODES: 500,    // BFS won't process more than 500 actors
-    MAX_DEPTH: 2,      // max hop depth
-    QUERY_TIMEOUT: 5000, // 5s query budget per graph call
-};
+const GRAPH_LIMITS = { MAX_NODES: 500, MAX_DEPTH: 2, QUERY_TIMEOUT: 5000 };
 
-// ─── V5: ACTOR TRUST SCORE ───────────────────────────────────
-// Returns 0.0 (untrusted) to 1.0 (fully trusted)
-// Based on: profile age, scan history consistency, flag ratio
+// ─── V6: TRUST VOLATILITY ────────────────────────────────────
+// High variance in risk scores = unstable behavior = trust penalty
+async function trustVolatility(actorId) {
+    if (!actorId) return { volatility: 0, penalty: 0 };
+    try {
+        const stats = await db.get(
+            `SELECT STDDEV(risk_score) as stddev, AVG(risk_score) as avg, COUNT(*) as cnt
+             FROM risk_scores WHERE actor_id = $1 AND created_at > NOW() - INTERVAL '7 days'`,
+            [actorId]
+        );
+        if (!stats || parseInt(stats.cnt) < 3) return { volatility: 0, penalty: 0 };
+        const stddev = parseFloat(stats.stddev) || 0;
+        const avg = parseFloat(stats.avg) || 0;
+        const cv = avg > 0 ? stddev / avg : 0;
+        const penalty = Math.min(0.3, cv * 0.5);
+        return { volatility: Math.round(cv * 100) / 100, stddev: Math.round(stddev), penalty: Math.round(penalty * 100) / 100 };
+    } catch(_) {}
+    return { volatility: 0, penalty: 0 };
+}
+
+// ─── V6: CROSS-ENTITY TRUST FUSION ──────────────────────────
+// Trust CANNOT fully override strong anomaly signals
+function entityTrustFusion(actorTrust, deviceTrust, anomalyScore) {
+    const rawTrust = actorTrust * 0.4 + deviceTrust * 0.3;
+    const anomalyFactor = anomalyScore > 50 ? Math.max(0.3, 1 - (anomalyScore - 50) / 100) : 1.0;
+    return Math.max(0.1, Math.min(1.0, rawTrust * anomalyFactor + 0.3 * (1 - anomalyFactor)));
+}
+
+// ─── V6: ACTOR TRUST (volatility + decay) ───────────────────
 async function actorTrustScore(actorId) {
     if (!actorId) return { trust: 0.5, reasons: [] };
     const reasons = [];
-
     try {
         const profile = await db.get(
-            `SELECT total_scans, flagged_count, blocked_count, avg_risk_score, created_at 
+            `SELECT total_scans, flagged_count, blocked_count, avg_risk_score, created_at, updated_at
              FROM actor_risk_profiles WHERE actor_id = $1`,
             [actorId]
         );
-        if (!profile) return { trust: 0.3, reasons: [{ note: 'no_profile' }] }; // unknown → low trust
-
+        if (!profile) return { trust: 0.3, reasons: [{ note: 'no_profile' }] };
         const totalScans = parseInt(profile.total_scans) || 1;
         const flagRatio = (parseFloat(profile.flagged_count) || 0) / totalScans;
         const avgRisk = parseFloat(profile.avg_risk_score) || 0;
         const ageHours = (Date.now() - new Date(profile.created_at).getTime()) / 3600000;
-
-        // Trust formula: age bonus + low flag penalty + low risk bonus
-        let trust = 0.5; // baseline
-
-        // Age trust: older = more trusted (up to +0.3)
-        if (ageHours > 168) trust += 0.3;       // > 7 days
-        else if (ageHours > 24) trust += 0.15;   // > 1 day
-        else trust -= 0.1;                        // < 1 day
-
-        // Flag ratio penalty (up to -0.4)
+        let trust = 0.5;
+        if (ageHours > 168) trust += 0.3;
+        else if (ageHours > 24) trust += 0.15;
+        else trust -= 0.1;
         trust -= flagRatio * 0.4;
-
-        // Low avg risk bonus (up to +0.2)
         if (avgRisk < 20) trust += 0.2;
         else if (avgRisk < 40) trust += 0.1;
         else if (avgRisk > 60) trust -= 0.2;
-
+        // V6: Trust volatility penalty
+        const vol = await trustVolatility(actorId);
+        trust -= vol.penalty;
+        // V6: Temporal decay — inactive accounts lose trust
+        const lastActive = profile.updated_at ? new Date(profile.updated_at) : new Date(profile.created_at);
+        const inactiveDays = (Date.now() - lastActive.getTime()) / 86400000;
+        if (inactiveDays > 1) trust *= Math.exp(-0.02 * inactiveDays);
         trust = Math.max(0, Math.min(1.0, trust));
-        reasons.push({ trust, age_hours: Math.round(ageHours), flag_ratio: Math.round(flagRatio * 100) / 100, avg_risk: Math.round(avgRisk) });
-        return { trust, reasons };
+        reasons.push({ trust, age_hours: Math.round(ageHours), flag_ratio: Math.round(flagRatio * 100) / 100, avg_risk: Math.round(avgRisk), volatility: vol.volatility, vol_penalty: vol.penalty, inactive_days: Math.round(inactiveDays * 10) / 10 });
+        return { trust, reasons, volatility: vol };
     } catch(_) {}
     return { trust: 0.3, reasons: [] };
 }
 
-// ─── V5: DEVICE TRUST SCORE ──────────────────────────────────
-// Measures device stability: consistent IP, behavior patterns
+// ─── V6: DEVICE TRUST (with reuse penalty) ───────────────────
 async function deviceTrustScore(actorId) {
     if (!actorId) return { trust: 0.5, stability: 'unknown', reasons: [] };
     const reasons = [];
-
     try {
-        // Check IP consistency: how many unique IPs in 24h?
         const ipData = await db.get(
             `SELECT COUNT(DISTINCT ip_address) as ips, COUNT(*) as scans
              FROM scan_events WHERE device_fingerprint = $1
-             AND scanned_at > NOW() - INTERVAL '24 hours'`,
-            [actorId]
+             AND scanned_at > NOW() - INTERVAL '24 hours'`, [actorId]
         );
         const uniqueIPs = parseInt(ipData?.ips) || 0;
         const totalScans = parseInt(ipData?.scans) || 0;
-
-        // Check scan type consistency
         const typeData = await db.all(
             `SELECT DISTINCT scan_type FROM scan_events 
-             WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '24 hours'`,
-            [actorId]
+             WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '24 hours'`, [actorId]
         );
         const uniqueTypes = typeData ? typeData.length : 0;
-
-        let trust = 0.7; // baseline for known device
-        let stability = 'stable';
-
-        // IP consistency (VPN/proxy = low stability)
+        let trust = 0.7, stability = 'stable';
         if (uniqueIPs > 10) { trust -= 0.4; stability = 'rotating'; }
         else if (uniqueIPs > 5) { trust -= 0.2; stability = 'unstable'; }
-        else if (uniqueIPs <= 2) { trust += 0.1; }
-
-        // Role consistency (multiple roles = suspicious)
+        else if (uniqueIPs <= 2) trust += 0.1;
         if (uniqueTypes >= 3) { trust -= 0.3; stability = 'chameleon'; }
-        else if (uniqueTypes >= 2) { trust -= 0.1; }
-
-        // Low activity = less data = less trust
+        else if (uniqueTypes >= 2) trust -= 0.1;
         if (totalScans < 3) trust -= 0.1;
-
+        // V6: Cross-actor device reuse penalty
+        try {
+            const ipActors = await db.get(
+                `SELECT COUNT(DISTINCT device_fingerprint) as fp_count
+                 FROM scan_events WHERE ip_address IN (
+                     SELECT DISTINCT ip_address FROM scan_events 
+                     WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '1 hour'
+                 ) AND scanned_at > NOW() - INTERVAL '1 hour'`, [actorId]
+            );
+            const fpCount = parseInt(ipActors?.fp_count) || 0;
+            if (fpCount > 10) { trust -= 0.3; stability = 'shared_device'; reasons.push({ rule: 'device_reuse_high', actors_sharing: fpCount }); }
+            else if (fpCount > 5) { trust -= 0.15; reasons.push({ rule: 'device_reuse_moderate', actors_sharing: fpCount }); }
+        } catch(_) {}
         trust = Math.max(0, Math.min(1.0, trust));
         reasons.push({ trust, stability, unique_ips: uniqueIPs, unique_types: uniqueTypes, total_scans_24h: totalScans });
         return { trust, stability, reasons };
@@ -434,48 +448,41 @@ async function deviceTrustScore(actorId) {
     return { trust: 0.5, stability: 'unknown', reasons: [] };
 }
 
-// ─── V5: TRUST-WEIGHTED MULTI-HOP (BFS with scale limits) ────
+// ─── V6: RISK-FIRST BFS (priority traversal) ─────────────────
 async function multiHopCollusion(actorId) {
     if (!actorId) return { hops: 0, cluster_size: 0, score: 0, reasons: [] };
     const reasons = [];
     let score = 0;
-
     try {
-        // Step 1: Products touched by this actor (1h window)
         const myProducts = await db.all(
             `SELECT DISTINCT product_id FROM scan_events 
              WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '1 hour'
-             LIMIT ${GRAPH_LIMITS.MAX_NODES}`,
-            [actorId]
+             LIMIT ${GRAPH_LIMITS.MAX_NODES}`, [actorId]
         );
         if (!myProducts || myProducts.length === 0) return { hops: 0, cluster_size: 0, score: 0, reasons };
-
         const productIds = myProducts.map(r => r.product_id);
-
-        // Step 2: Hop-1 actors (LIMITED to MAX_NODES)
+        // V6: Risk-first — ORDER BY scan frequency DESC (risky actors first)
         const hop1Actors = await db.all(
-            `SELECT DISTINCT device_fingerprint, product_id FROM scan_events 
+            `SELECT device_fingerprint, COUNT(*) as scan_count FROM scan_events
              WHERE product_id::text = ANY(string_to_array($1, ','))
              AND device_fingerprint != $2
              AND device_fingerprint IS NOT NULL
              AND scanned_at > NOW() - INTERVAL '1 hour'
+             GROUP BY device_fingerprint ORDER BY COUNT(*) DESC
              LIMIT ${GRAPH_LIMITS.MAX_NODES}`,
             [productIds.join(','), actorId]
         );
         if (!hop1Actors || hop1Actors.length === 0) return { hops: 0, cluster_size: 0, score: 0, reasons };
 
-        const hop1ActorIds = [...new Set(hop1Actors.map(a => a.device_fingerprint))].slice(0, GRAPH_LIMITS.MAX_NODES);
-
-        // Step 3: Hop-2 products (LIMITED)
+        const hop1ActorIds = hop1Actors.map(a => a.device_fingerprint).slice(0, GRAPH_LIMITS.MAX_NODES);
         const hop2Products = await db.all(
-            `SELECT DISTINCT se.product_id, se.device_fingerprint FROM scan_events se
+            `SELECT DISTINCT se.product_id FROM scan_events se
              WHERE se.device_fingerprint = ANY(string_to_array($1, ','))
              AND se.product_id::text != ALL(string_to_array($2, ','))
              AND se.scanned_at > NOW() - INTERVAL '1 hour'
              LIMIT ${GRAPH_LIMITS.MAX_NODES}`,
             [hop1ActorIds.join(','), productIds.join(',')]
         );
-
         const hop2ProductIds = hop2Products ? [...new Set(hop2Products.map(p => p.product_id))] : [];
         const clusterSize = 1 + hop1ActorIds.length;
         const totalProducts = productIds.length + hop2ProductIds.length;
@@ -498,7 +505,7 @@ async function multiHopCollusion(actorId) {
         if (clusterSize >= 4 && totalProducts >= 3) {
             const baseSeverity = Math.min(80, Math.round(60 * trustMultiplier));
             score += baseSeverity * 0.8;
-            reasons.push({ rule: 'multi_hop_cluster', severity: baseSeverity, confidence: 0.8, cluster_size: clusterSize, products: totalProducts, hops: 2, avg_trust: Math.round(avgTrust * 100) / 100, density });
+            reasons.push({ rule: 'multi_hop_cluster', severity: baseSeverity, confidence: 0.8, cluster_size: clusterSize, products: totalProducts, hops: 2, avg_trust: Math.round(avgTrust * 100) / 100, density, traversal: 'risk_first' });
         } else if (clusterSize >= 3 && totalProducts >= 2) {
             const baseSeverity = Math.min(60, Math.round(35 * trustMultiplier));
             score += baseSeverity * 0.7;
@@ -920,4 +927,4 @@ async function calculateRisk(input) {
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, actorTrustScore, deviceTrustScore, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS };
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, actorTrustScore, deviceTrustScore, trustVolatility, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS };
