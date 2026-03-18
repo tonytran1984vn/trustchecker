@@ -524,6 +524,60 @@ async function main() {
             typeof eq.optimal_defense === 'string' && typeof eq.minimax_loss === 'number' && eq.minimax_loss < 1);
     }
 
+    // ━━━ V15 STRATEGY LEARNING ━━━
+    console.log('\n━━━ V15 STRATEGY LEARNING ━━━\n');
+
+    // V15-1: Mixed strategy — returns distribution, not single defense
+    {
+        const mixed = R.mixedStrategyNash();
+        const keys = Object.keys(mixed.distribution || {});
+        const total = Object.values(mixed.distribution || {}).reduce((s, v) => s + v, 0);
+        ok('V15-1', 'Mixed strategy: distribution', 'has 5 strategies',
+            `keys=${keys.length},sum=${Math.round(total*100)/100},top=${mixed.top_defense}`,
+            keys.length === 5 && Math.abs(total - 1.0) < 0.05 && mixed.type === 'mixed_strategy');
+    }
+
+    // V15-2: Data-driven payoff — updatePayoff learns from outcomes
+    {
+        for (let i = 0; i < 6; i++) R.updatePayoff('farm', 'graph_boost', i < 2);
+        const adj = R.getPayoffAdjustments();
+        const pm = R.payoffMatrix();
+        ok('V15-2', 'Data payoff: learned', '6 data points',
+            `farm:graph_boost count=${adj['farm:graph_boost']?.count},dp=${pm.matrix?.farm?.graph_boost?.data_points}`,
+            adj['farm:graph_boost']?.count === 6 && pm.matrix?.farm?.graph_boost?.data_points === 6);
+    }
+
+    // V15-3: Continuous attack vector — 5D with cosine similarity
+    {
+        const farmLike = R.continuousAttackVector({ speed: 0.8, distribution: 0.9, identity_switch: 0.2, graph_depth: 0.7, temporal_pattern: 0.3 });
+        ok('V15-3', 'Continuous 5D: farm-like', 'nearest=farm',
+            `type=${farmLike.nearest_type},sim=${farmLike.similarity},dim=${farmLike.dimensions}`,
+            farmLike.nearest_type === 'farm' && farmLike.dimensions === 5 && farmLike.similarity > 0.9);
+    }
+
+    // V15-4: Expected value optimizer — E[loss] ≤ minimax (less conservative)
+    {
+        const ev = R.expectedValueOptimizer();
+        const nash = R.nashEquilibrium();
+        ok('V15-4', 'E[loss] ≤ minimax', 'less conservative',
+            `ev_loss=${ev.optimal_expected_loss},minimax=${nash.minimax_loss},ev_def=${ev.optimal_defense}`,
+            ev.optimal_expected_loss <= nash.minimax_loss && typeof ev.attack_probability === 'object');
+    }
+
+    // V15-5: Repeated game — history grows, adaptive strategy
+    {
+        R.recordGameRound('farm', 'graph_boost', 'blocked');
+        R.recordGameRound('farm', 'graph_boost', 'blocked');
+        R.recordGameRound('slow_probe', 'trust_dampen', 'passed');
+        R.recordGameRound('farm', 'graph_boost', 'blocked');
+        R.recordGameRound('farm', 'full_defense', 'blocked');
+        const history = R.getGameHistory();
+        const adaptive = R.adaptiveStrategy();
+        ok('V15-5', 'Repeated game: history+adapt', 'has rounds',
+            `rounds=${history.length},strategy=${adaptive.strategy},top_atk=${adaptive.top_attack?.type}`,
+            history.length >= 5 && adaptive.strategy === 'adapt' && adaptive.top_attack?.type === 'farm');
+    }
+
     // ━━━ INTEGRATION ━━━
     console.log('\n━━━ INTEGRATION ━━━\n');
     { ok('INT-1','risk_scores','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"))>0); }
@@ -532,14 +586,14 @@ async function main() {
     ok('INT-3','Decisions','data',d.replace(/\n/g,', '),d.length>0&&!d.startsWith('ERROR')); }
     { ok('INT-4','Graph','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"))>0); }
     { ok('INT-5','signal_stats','rows',psql("SELECT COUNT(*) FROM signal_stats"),parseInt(psql("SELECT COUNT(*) FROM signal_stats"))>=5); }
-    { // V14 response includes v13 + v14 metadata
+    { // V15 response includes v13+v14+v15
       const r = await R.calculateRisk({productId:createProduct('INT6','pharma'),actorId:'int6-'+Date.now(),scanType:'consumer',ipAddress:'8.8.8.8',category:'pharma'});
-      ok('INT-6','V14 metadata','v14 obj',`v13_th=${r.v13?.thresholds?.suspicious},v14_hyst=${r.v14?.threat_hysteresis}`,r.v13 && r.v14 && typeof r.v14.threat_hysteresis === 'string'); }
+      ok('INT-6','V15 metadata','v15 obj',`v15_rounds=${r.v15?.game_rounds},v15_mixed=${r.v15?.mixed_strategy?.type}`,r.v15 && r.v15.mixed_strategy?.type === 'mixed_strategy' && typeof r.v15.game_rounds === 'number'); }
 
     // ═══════════
     const total=passed+failed;const pct=Math.round(passed/total*100);
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V14 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
+    console.log(`║  L4 V15 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║  Fraud:       ${results.filter(r=>r.id>='BF-1'&&r.id<='BF-6').filter(r=>r.pass).length}/6`);
     console.log(`║  Baselines:   ${results.filter(r=>r.id==='BF-7'||r.id==='BF-8').filter(r=>r.pass).length}/2`);
@@ -557,11 +611,12 @@ async function main() {
     console.log(`║  V12 Auto:    ${results.filter(r=>r.id.startsWith('V12')).filter(r=>r.pass).length}/5`);
     console.log(`║  V13 Strat:   ${results.filter(r=>r.id.startsWith('V13')).filter(r=>r.pass).length}/5`);
     console.log(`║  V14 Game:    ${results.filter(r=>r.id.startsWith('V14')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V15 Learn:   ${results.filter(r=>r.id.startsWith('V15')).filter(r=>r.pass).length}/5`);
     console.log(`║  Integration: ${results.filter(r=>r.id.startsWith('INT')).filter(r=>r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
     const fails=results.filter(r=>!r.pass);
     if(fails.length>0){console.log('\n❌ FAILED:');fails.forEach(f=>console.log(`  ${f.id}: ${f.name} | exp: ${f.expected} | act: ${f.actual}`));}
-    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V14',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
+    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V15',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
     console.log('\n📝 chaos-l4-report.json'); process.exit(0);
 }
 main().catch(e=>{console.error('FATAL:',e.message,e.stack);process.exit(1);});

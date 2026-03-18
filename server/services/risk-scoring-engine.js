@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V14 — Game-Theoretic System
+ * Risk Scoring Engine V15 — Dynamic Strategy Learning System
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -1676,6 +1676,11 @@ async function calculateRisk(input) {
         v14: {
             threat_hysteresis: _threatState,
         },
+        // V15: Adaptive game state
+        v15: {
+            mixed_strategy: mixedStrategyNash(),
+            game_rounds: _gameHistory.length,
+        },
     };
 }
 
@@ -1866,74 +1871,218 @@ async function objectiveFeedback(category) {
 }
 async function globalObjective(category) { return objectiveFeedback(category); }
 
-// ─── V14: PAYOFF MATRIX ──────────────────────────
-// Models attacker strategies × defender strategies → costs
+// ─── V15: DATA-DRIVEN PAYOFF MATRIX ─────────────
+// Base payoffs + learned adjustments from real outcomes
+const _payoffAdjustments = {}; // { 'farm:graph_boost': { success_sum, count } }
+
 function payoffMatrix() {
     const ATTACKER_STRATEGIES = ['farm', 'slow_probe', 'role_juggle', 'device_spoof', 'supply_chain'];
     const DEFENDER_STRATEGIES = ['baseline', 'tight_threshold', 'graph_boost', 'trust_dampen', 'full_defense'];
+
+    const atkBase = { farm: 0.6, slow_probe: 0.7, role_juggle: 0.5, device_spoof: 0.4, supply_chain: 0.8 };
+    const defEffect = {
+        baseline:        { farm: 0.0, slow_probe: 0.0, role_juggle: 0.0, device_spoof: 0.0, supply_chain: 0.0 },
+        tight_threshold: { farm: 0.3, slow_probe: 0.1, role_juggle: 0.2, device_spoof: 0.1, supply_chain: 0.15 },
+        graph_boost:     { farm: 0.5, slow_probe: 0.1, role_juggle: 0.4, device_spoof: 0.1, supply_chain: 0.3 },
+        trust_dampen:    { farm: 0.2, slow_probe: 0.2, role_juggle: 0.1, device_spoof: 0.3, supply_chain: 0.5 },
+        full_defense:    { farm: 0.6, slow_probe: 0.3, role_juggle: 0.5, device_spoof: 0.4, supply_chain: 0.6 },
+    };
+    const defCostBase = { baseline: 0, tight_threshold: 0.1, graph_boost: 0.15, trust_dampen: 0.1, full_defense: 0.3 };
 
     const matrix = {};
     for (const atk of ATTACKER_STRATEGIES) {
         matrix[atk] = {};
         for (const def of DEFENDER_STRATEGIES) {
-            const atkBase = { farm: 0.6, slow_probe: 0.7, role_juggle: 0.5, device_spoof: 0.4, supply_chain: 0.8 };
-            const defEffect = {
-                baseline:        { farm: 0.0, slow_probe: 0.0, role_juggle: 0.0, device_spoof: 0.0, supply_chain: 0.0 },
-                tight_threshold: { farm: 0.3, slow_probe: 0.1, role_juggle: 0.2, device_spoof: 0.1, supply_chain: 0.15 },
-                graph_boost:     { farm: 0.5, slow_probe: 0.1, role_juggle: 0.4, device_spoof: 0.1, supply_chain: 0.3 },
-                trust_dampen:    { farm: 0.2, slow_probe: 0.2, role_juggle: 0.1, device_spoof: 0.3, supply_chain: 0.5 },
-                full_defense:    { farm: 0.6, slow_probe: 0.3, role_juggle: 0.5, device_spoof: 0.4, supply_chain: 0.6 },
-            };
-            const defCostBase = { baseline: 0, tight_threshold: 0.1, graph_boost: 0.15, trust_dampen: 0.1, full_defense: 0.3 };
-
-            const atkSuccess = Math.max(0, (atkBase[atk] || 0.5) - (defEffect[def]?.[atk] || 0));
+            // V15: Blend base payoff with learned data
+            const key = `${atk}:${def}`;
+            const learned = _payoffAdjustments[key];
+            let atkSuccess;
+            if (learned && learned.count >= 5) {
+                const learnedRate = learned.success_sum / learned.count;
+                const priorRate = Math.max(0, (atkBase[atk] || 0.5) - (defEffect[def]?.[atk] || 0));
+                atkSuccess = 0.7 * learnedRate + 0.3 * priorRate;
+            } else {
+                atkSuccess = Math.max(0, (atkBase[atk] || 0.5) - (defEffect[def]?.[atk] || 0));
+            }
             const defCost = defCostBase[def] || 0;
             matrix[atk][def] = {
                 attacker_success: Math.round(atkSuccess * 100) / 100,
                 defender_cost: Math.round(defCost * 100) / 100,
                 total_loss: Math.round((atkSuccess + defCost) * 100) / 100,
+                data_points: learned?.count || 0,
             };
         }
     }
     return { attacker_strategies: ATTACKER_STRATEGIES, defender_strategies: DEFENDER_STRATEGIES, matrix };
 }
 
-// ─── V14: NASH-LIKE EQUILIBRIUM ───────────────────
-// Find defender strategy that minimizes worst-case total_loss (minimax)
+// V15: Update payoff from real outcome
+function updatePayoff(attackType, defenseUsed, attackSucceeded) {
+    const key = `${attackType}:${defenseUsed}`;
+    if (!_payoffAdjustments[key]) _payoffAdjustments[key] = { success_sum: 0, count: 0 };
+    _payoffAdjustments[key].success_sum += attackSucceeded ? 1 : 0;
+    _payoffAdjustments[key].count++;
+    return _payoffAdjustments[key];
+}
+
+function getPayoffAdjustments() { return { ..._payoffAdjustments }; }
+
+// ─── V15: MIXED-STRATEGY NASH EQUILIBRIUM ───────
+function mixedStrategyNash() {
+    const pm = payoffMatrix();
+    const scores = {};
+    let totalScore = 0;
+    for (const def of pm.defender_strategies) {
+        let maxLoss = 0, avgLoss = 0;
+        for (const atk of pm.attacker_strategies) {
+            const loss = pm.matrix[atk][def].total_loss;
+            if (loss > maxLoss) maxLoss = loss;
+            avgLoss += loss;
+        }
+        avgLoss /= pm.attacker_strategies.length;
+        const weightedLoss = 0.6 * maxLoss + 0.4 * avgLoss;
+        scores[def] = 1 / Math.max(0.01, weightedLoss);
+        totalScore += scores[def];
+    }
+    const distribution = {};
+    for (const def of pm.defender_strategies) {
+        distribution[def] = Math.round((scores[def] / totalScore) * 100) / 100;
+    }
+    return {
+        distribution,
+        type: 'mixed_strategy',
+        top_defense: Object.entries(distribution).sort((a, b) => b[1] - a[1])[0]?.[0],
+    };
+}
+
+function sampleDefense() {
+    const mixed = mixedStrategyNash();
+    const rand = Math.random();
+    let cumulative = 0;
+    for (const [def, prob] of Object.entries(mixed.distribution)) {
+        cumulative += prob;
+        if (rand <= cumulative) return { defense: def, probability: prob, from: 'mixed_strategy' };
+    }
+    return { defense: 'full_defense', probability: 0, from: 'fallback' };
+}
+
+// V14 compat + V15 mixed strategy
 function nashEquilibrium() {
     const pm = payoffMatrix();
-    let bestDefender = null;
-    let bestWorstCase = Infinity;
-
+    let bestDefender = null, bestWorstCase = Infinity;
     for (const def of pm.defender_strategies) {
         let worstCase = 0;
         for (const atk of pm.attacker_strategies) {
             const totalLoss = pm.matrix[atk][def].total_loss;
             if (totalLoss > worstCase) worstCase = totalLoss;
         }
-        if (worstCase < bestWorstCase) {
-            bestWorstCase = worstCase;
-            bestDefender = def;
-        }
+        if (worstCase < bestWorstCase) { bestWorstCase = worstCase; bestDefender = def; }
     }
-
-    const attackerBest = {};
-    for (const def of pm.defender_strategies) {
-        let best = { atk: null, success: 0 };
-        for (const atk of pm.attacker_strategies) {
-            const s = pm.matrix[atk][def].attacker_success;
-            if (s > best.success) { best = { atk, success: s }; }
-        }
-        attackerBest[def] = best;
-    }
-
+    const mixed = mixedStrategyNash();
     return {
         optimal_defense: bestDefender,
         minimax_loss: Math.round(bestWorstCase * 100) / 100,
-        attacker_best_responses: attackerBest,
-        recommendation: `Use '${bestDefender}' strategy (minimax loss: ${Math.round(bestWorstCase * 100) / 100})`,
+        mixed_strategy: mixed.distribution,
+        recommendation: `Mixed: ${Object.entries(mixed.distribution).map(([d,p])=>`${d}(${Math.round(p*100)}%)`).join(', ')}`,
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, nashEquilibrium, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
+// ─── V15: EXPECTED-VALUE OPTIMIZER ──────────────
+const _gameHistory = [];
 
+function expectedValueOptimizer() {
+    const pm = payoffMatrix();
+    const attackProb = {};
+    const totalRounds = _gameHistory.length;
+    if (totalRounds >= 10) {
+        for (const atk of pm.attacker_strategies) attackProb[atk] = 0.01;
+        for (const round of _gameHistory) {
+            if (attackProb[round.attack_type] !== undefined) attackProb[round.attack_type]++;
+        }
+        const probTotal = Object.values(attackProb).reduce((s, v) => s + v, 0);
+        for (const atk of pm.attacker_strategies) attackProb[atk] /= probTotal;
+    } else {
+        for (const atk of pm.attacker_strategies) attackProb[atk] = 1 / pm.attacker_strategies.length;
+    }
+    const expectedLoss = {};
+    for (const def of pm.defender_strategies) {
+        let eLoss = 0;
+        for (const atk of pm.attacker_strategies) {
+            eLoss += attackProb[atk] * pm.matrix[atk][def].total_loss;
+        }
+        expectedLoss[def] = Math.round(eLoss * 1000) / 1000;
+    }
+    const best = Object.entries(expectedLoss).sort((a, b) => a[1] - b[1])[0];
+    return {
+        expected_loss: expectedLoss,
+        attack_probability: attackProb,
+        optimal_defense: best[0],
+        optimal_expected_loss: best[1],
+        data_rounds: totalRounds,
+    };
+}
+
+// ─── V15: CONTINUOUS ATTACK SPACE (5D) ──────────
+function continuousAttackVector(params = {}) {
+    const v = {
+        speed: Math.max(0, Math.min(1, params.speed ?? Math.random())),
+        distribution: Math.max(0, Math.min(1, params.distribution ?? Math.random())),
+        identity_switch: Math.max(0, Math.min(1, params.identity_switch ?? Math.random())),
+        graph_depth: Math.max(0, Math.min(1, params.graph_depth ?? Math.random())),
+        temporal_pattern: Math.max(0, Math.min(1, params.temporal_pattern ?? Math.random())),
+    };
+    const magnitude = Math.sqrt(Object.values(v).reduce((s, x) => s + x * x, 0));
+    const signatures = {
+        farm: [0.8, 0.9, 0.2, 0.7, 0.3],
+        slow_probe: [0.1, 0.1, 0.1, 0.2, 0.9],
+        role_juggle: [0.5, 0.5, 0.9, 0.5, 0.5],
+        device_spoof: [0.6, 0.3, 0.8, 0.2, 0.4],
+        supply_chain: [0.3, 0.7, 0.4, 0.9, 0.6],
+    };
+    let bestType = 'farm', bestSim = -1;
+    const vArr = [v.speed, v.distribution, v.identity_switch, v.graph_depth, v.temporal_pattern];
+    for (const [type, sig] of Object.entries(signatures)) {
+        let dot = 0, magA = 0, magB = 0;
+        for (let i = 0; i < 5; i++) { dot += vArr[i] * sig[i]; magA += vArr[i] ** 2; magB += sig[i] ** 2; }
+        const sim = dot / (Math.sqrt(magA) * Math.sqrt(magB) + 0.001);
+        if (sim > bestSim) { bestSim = sim; bestType = type; }
+    }
+    return { vector: v, magnitude: Math.round(magnitude * 1000) / 1000, nearest_type: bestType, similarity: Math.round(bestSim * 1000) / 1000, dimensions: 5 };
+}
+
+// ─── V15: REPEATED GAME MEMORY ──────────────────
+function recordGameRound(attackType, defenseUsed, outcome) {
+    const round = { round: _gameHistory.length + 1, attack_type: attackType, defense_used: defenseUsed, outcome, timestamp: Date.now() };
+    _gameHistory.push(round);
+    updatePayoff(attackType, defenseUsed, outcome === 'passed');
+    return round;
+}
+
+function getGameHistory() { return [..._gameHistory]; }
+
+function adaptiveStrategy() {
+    if (_gameHistory.length < 5) {
+        return { strategy: 'explore', reason: 'insufficient_history', rounds: _gameHistory.length };
+    }
+    const recent = _gameHistory.slice(-20);
+    const attackCounts = {}, defenseOutcomes = {};
+    for (const r of recent) {
+        attackCounts[r.attack_type] = (attackCounts[r.attack_type] || 0) + 1;
+        if (!defenseOutcomes[r.defense_used]) defenseOutcomes[r.defense_used] = { blocked: 0, passed: 0 };
+        if (r.outcome === 'blocked') defenseOutcomes[r.defense_used].blocked++;
+        else defenseOutcomes[r.defense_used].passed++;
+    }
+    const topAttack = Object.entries(attackCounts).sort((a, b) => b[1] - a[1])[0];
+    let bestDef = null, bestRate = -1;
+    for (const [def, stats] of Object.entries(defenseOutcomes)) {
+        const rate = stats.blocked / (stats.blocked + stats.passed + 0.01);
+        if (rate > bestRate) { bestRate = rate; bestDef = def; }
+    }
+    return {
+        strategy: 'adapt', top_attack: topAttack ? { type: topAttack[0], count: topAttack[1] } : null,
+        best_defense: bestDef, best_block_rate: Math.round(bestRate * 100) / 100,
+        rounds_analyzed: recent.length, total_rounds: _gameHistory.length,
+    };
+}
+
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
