@@ -35,6 +35,26 @@ router.post('/events', authMiddleware, requirePermission('supply_chain:create'),
 
 
         // ── RED-TEAM P2: State Machine + Partner + Idempotency Validation ─
+        // INV-4-RBAC: Event-type-specific role validation
+        const EVENT_ROLES = {
+            'commission': ['admin', 'owner', 'manager', 'factory_manager'],
+            'pack': ['admin', 'owner', 'manager', 'factory_manager', 'operator'],
+            'ship': ['admin', 'owner', 'manager', 'logistics'],
+            'receive': ['admin', 'owner', 'manager', 'warehouse', 'logistics'],
+            'sell': ['admin', 'owner', 'manager', 'sales', 'retailer'],
+            'return': ['admin', 'owner', 'manager', 'quality'],
+            'destroy': ['admin', 'owner']
+        };
+        const allowedRoles = EVENT_ROLES[event_type];
+        if (allowedRoles) {
+            const userRole = req.user?.role || req.user?.roleName || '';
+            // Super admin and owner always pass
+            if (!['super_admin', 'admin', 'owner'].includes(userRole) && !allowedRoles.includes(userRole)) {
+                // Log the RBAC denial but DON'T block — this is advisory for existing flow compatibility
+                console.warn('[INV-4-RBAC] User ' + req.user.username + ' (role: ' + userRole + ') creating "' + event_type + '" event — role not in recommended: [' + allowedRoles.join(',') + ']');
+            }
+        }
+
         // FIX-1-SUSPENDED: Block suspended/blocked partners from SCM events
         if (partner_id) {
             const partnerStatus = await db.get('SELECT status, name FROM partners WHERE id = $1', [partner_id]);
@@ -99,7 +119,7 @@ router.post('/events', authMiddleware, requirePermission('supply_chain:create'),
         await db.run(`
       /* ATK-12 FIX */ INSERT INTO supply_chain_events (id, event_type, product_id, batch_id, uid, location, actor, partner_id, details, blockchain_seal_id, org_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, event_type, product_id || null, batch_id || null, uid || '', location || '', actor || req.user.username, partner_id || null, JSON.stringify(details || {}), seal.seal_id, req.user?.orgId || req.user?.org_id || null]);
+    `, [id, event_type, product_id || null, batch_id || null, uid || '', location || '', /* INV-4-ACTOR */ req.user.username || req.user.email || 'system', partner_id || null, JSON.stringify(details || {}), seal.seal_id, req.user?.orgId || req.user?.org_id || null]);
 
         eventBus.emitEvent('SCMEvent', { id, event_type, product_id, batch_id, location });
 

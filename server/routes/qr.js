@@ -196,6 +196,22 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             product_name: product ? product.name : 'Unknown'
         });
 
+        // INV-3-SHIP-CHECK: Verify product has been shipped/distributed before allowing valid scan
+        let supplyChainWarning = null;
+        try {
+            const lastSCEvent = await db.get(
+                'SELECT event_type, location FROM supply_chain_events WHERE product_id = $1 ORDER BY created_at DESC LIMIT 1',
+                [qrCode.product_id]
+            );
+            if (!lastSCEvent) {
+                supplyChainWarning = 'Product has no supply chain events — may not be in distribution yet';
+            } else if (['commission', 'pack'].includes(lastSCEvent.event_type)) {
+                supplyChainWarning = 'Product is still at factory/packing stage — not yet in distribution';
+            } else if (lastSCEvent.event_type === 'return') {
+                supplyChainWarning = 'Product has been returned — may not be authorized for resale';
+            }
+        } catch(scErr) { /* non-blocking */ }
+
         // Step 4: Run Fraud Engine
         const fraudResult = await engineClient.fraudAnalyze({
             id: scanId,
@@ -643,6 +659,15 @@ router.post('/mobile-scan', validate(schemas.qrScan), async (req, res) => {
     `, [scanId, qrCode.id, qrCode.product_id,
             device_info?.model || 'mobile', device_info?.userAgent || 'Mobile Camera']);
 
+        // INV-3-MOBILE: Check supply chain status for mobile scans
+        let mobileScWarning = null;
+        try {
+            const lastEvt = await db.get('SELECT event_type FROM supply_chain_events WHERE product_id = $1 ORDER BY created_at DESC LIMIT 1', [qrCode.product_id]);
+            if (!lastEvt || ['commission', 'pack'].includes(lastEvt.event_type)) {
+                mobileScWarning = 'Product not yet in distribution';
+            }
+        } catch(_) {}
+
         const fraudResult = await engineClient.fraudAnalyze({ id: scanId, qr_code_id: qrCode.id, product_id: qrCode.product_id });
         const trustResult = trustEngine.calculate(qrCode.product_id, fraudResult.fraudScore);
 
@@ -659,6 +684,8 @@ router.post('/mobile-scan', validate(schemas.qrScan), async (req, res) => {
             fraud_score: fraudResult.fraudScore,
             trust_score: trustResult.score,
             trust_grade: trustResult.grade,
+                supply_chain_status: supplyChainWarning ? 'warning' : 'verified',
+                supply_chain_warning: supplyChainWarning || null, // INV-3-RESP
             response_time_ms: Date.now() - startTime
         });
     } catch (err) {

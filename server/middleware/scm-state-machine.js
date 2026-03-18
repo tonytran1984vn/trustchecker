@@ -49,6 +49,22 @@ async function validateTransition(productId, batchId, newEventType) {
     if (!allowedNext.includes(newEventType)) {
         return { valid: false, currentState, error: `Invalid transition: "${currentState}" → "${newEventType}". Allowed: [${allowedNext.join(', ')}]` };
     }
+    // INV-1-LOCATION: Product cannot be in 2 places at once
+    // If product is currently "in transit" (last event is ship), block ship/sell from different location
+    if (['ship', 'sell'].includes(newEventType)) {
+        const lastShipOrReceive = await db.get(
+            'SELECT event_type, location, partner_id FROM supply_chain_events WHERE (product_id = $1 OR batch_id = $2) AND event_type IN ($3, $4) ORDER BY created_at DESC LIMIT 1',
+            [productId || '', batchId || '', 'ship', 'receive']
+        );
+        if (lastShipOrReceive && lastShipOrReceive.event_type === 'ship') {
+            // Product is IN TRANSIT — cannot ship again or sell until received
+            return { 
+                valid: false, currentState, 
+                error: 'Product is currently in transit (shipped to ' + (lastShipOrReceive.location || 'unknown') + '). Must be received before ' + newEventType + '.' 
+            };
+        }
+    }
+
     // FIX-2-SHIP-RECEIVE: Physical verification for receive events
     if (newEventType === 'receive') {
         const hasShip = await db.get(
@@ -71,7 +87,18 @@ async function validateTransition(productId, batchId, newEventType) {
         }
     }
 
-    return { valid: true, currentState };
+    // INV-2-SKIP-DETECT: Detect and log any skipped intermediate steps
+    const FULL_CHAIN = ['commission', 'pack', 'ship', 'receive', 'sell'];
+    const currentIdx = FULL_CHAIN.indexOf(currentState);
+    const newIdx = FULL_CHAIN.indexOf(newEventType);
+    const skippedSteps = [];
+    if (currentIdx >= 0 && newIdx > currentIdx + 1) {
+        for (let s = currentIdx + 1; s < newIdx; s++) {
+            skippedSteps.push(FULL_CHAIN[s]);
+        }
+    }
+
+    return { valid: true, currentState, skippedSteps };
 }
 
 /**
