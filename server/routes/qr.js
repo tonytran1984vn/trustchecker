@@ -136,7 +136,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
         // Step 2.5: Check previous scans — CORE ANTI-COUNTERFEIT LOGIC
         // RED-TEAM P3-1: Use QR code ID hash as advisory lock to prevent concurrent first-scan race
         // Note: pg_advisory_xact_lock is released at end of transaction automatically
-        try { await db.run('SELECT pg_advisory_xact_lock(hashtext())', [qrCode.id]); } catch(e) { /* non-critical */ }
+        try { await db.run('SELECT pg_advisory_xact_lock(hashtext($1))', [qrCode.id]); } catch(e) { /* non-critical */ }
         const previousScans = await db.all(
             `SELECT id, scanned_at, ip_address, device_fingerprint, geo_city, geo_country 
              FROM scan_events 
@@ -151,9 +151,9 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
         // Step 3: Create scan event
         const scanId = uuidv4();
         await db.run(`
-      INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, device_fingerprint, ip_address, latitude, longitude, user_agent, result, scanned_at)
-      VALUES (?, ?, ?, 'validation', ?, ?, ?, ?, ?, 'pending', NOW())
-    `, [scanId, qrCode.id, qrCode.product_id, device_fingerprint || '', ip_address || '', latitude || null, longitude || null, user_agent || '']);
+      /* ATK-06-MAIN */ INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, device_fingerprint, ip_address, latitude, longitude, user_agent, result, scanned_at, org_id)
+      VALUES (?, ?, ?, 'validation', ?, ?, ?, ?, ?, 'pending', NOW(), ?)
+    `, [scanId, qrCode.id, qrCode.product_id, device_fingerprint || '', ip_address || '', latitude || null, longitude || null, user_agent || '', effectiveOrgId || qrCode.org_id || '']);
 
         eventBus.emitEvent(EVENT_TYPES.QR_SCANNED, {
             scan_id: scanId,
@@ -193,7 +193,12 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             const month = (firstTime.getMonth() + 1).toString().padStart(2, '0');
             const year = firstTime.getFullYear();
 
-            result = scanCount >= 3 ? 'suspicious' : 'warning';
+            // ATK-04 FIX: Geo-velocity — different IP within 1 hour = suspicious clone
+            if (firstScanRecord.ip_address && firstScanRecord.ip_address !== (req.ip || ip_address || '') && (Date.now() - new Date(firstScanRecord.scanned_at + 'Z').getTime()) < 3600000) {
+                result = 'suspicious';
+            } else {
+                result = scanCount >= 3 ? 'suspicious' : 'warning';
+            }
             message = `⚠️ Mã bạn kiểm tra đã được quét vào lúc ${hours} giờ ${minutes} phút ngày ${day} tháng ${month} năm ${year}. Lưu ý kiểm tra kĩ vì có thể không phải hàng chính hãng.`;
 
             scan_warning = {
@@ -322,9 +327,10 @@ router.post('/generate', async (req, res) => {
         const generated = [];
 
         for (let i = 0; i < qty; i++) {
-            const seq = String(Date.now()).slice(-6) + String(i).padStart(4, '0');
-            const checksum = seq.split('').reduce((a, c) => a + parseInt(c), 0) % 36;
-            const checkChar = checksum < 10 ? checksum : String.fromCharCode(55 + checksum);
+            // ATK-01 FIX: Crypto-random sequence
+            const seq = crypto.randomBytes(8).toString('hex');
+            const hmac = crypto.createHmac('sha256', process.env.QR_SECRET || process.env.JWT_SECRET || 'tc-default-key')
+              .update(product_id + seq + i).digest('hex').slice(0, 8);
             const qrData = `${codePrefix}-${year}-${seq}-${checkChar}`;
 
             const id = uuidv4();

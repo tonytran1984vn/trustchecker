@@ -35,6 +35,15 @@ router.post('/events', authMiddleware, requirePermission('supply_chain:create'),
 
 
         // ── RED-TEAM P2: State Machine + Partner + Idempotency Validation ─
+        // ATK-07 FIX: Verify product exists and belongs to org
+        if (product_id) {
+            const orgId07 = req.user?.orgId || req.user?.org_id;
+            const productExists = await db.get('SELECT id FROM products WHERE id = $1 AND org_id = $2', [product_id, orgId07]);
+            if (!productExists) {
+                return res.status(404).json({ error: 'Product not found in your organization', code: 'PRODUCT_NOT_FOUND' });
+            }
+        }
+
         // P2-1: Validate lifecycle transition
         const transition = await validateTransition(product_id, batch_id, event_type);
         if (!transition.valid) {
@@ -77,9 +86,9 @@ router.post('/events', authMiddleware, requirePermission('supply_chain:create'),
         const seal = await blockchainEngine.seal('SCMEvent', id, { event_type, product_id, batch_id, location, actor });
 
         await db.run(`
-      INSERT INTO supply_chain_events (id, event_type, product_id, batch_id, uid, location, actor, partner_id, details, blockchain_seal_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, event_type, product_id || null, batch_id || null, uid || '', location || '', actor || req.user.username, partner_id || null, JSON.stringify(details || {}), seal.seal_id]);
+      /* ATK-12 FIX */ INSERT INTO supply_chain_events (id, event_type, product_id, batch_id, uid, location, actor, partner_id, details, blockchain_seal_id, org_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [id, event_type, product_id || null, batch_id || null, uid || '', location || '', actor || req.user.username, partner_id || null, JSON.stringify(details || {}), seal.seal_id, req.user?.orgId || req.user?.org_id || null]);
 
         eventBus.emitEvent('SCMEvent', { id, event_type, product_id, batch_id, location });
 
@@ -108,12 +117,13 @@ const { withTransaction } = require('../middleware/transaction');
 router.get('/events/:productId/journey', authMiddleware, async (req, res) => {
     try {
         const events = await db.all(`
-      SELECT sce.*, p.name as partner_name
+      /* ATK-09 FIX */ SELECT sce.*, p.name as partner_name
       FROM supply_chain_events sce
       LEFT JOIN partners p ON sce.partner_id = p.id
-      WHERE sce.product_id = ?
+      LEFT JOIN products pr ON sce.product_id = pr.id
+      WHERE sce.product_id = ? AND (pr.org_id = ? OR ? IS NULL)
       ORDER BY sce.created_at ASC
-    `, [req.params.productId]);
+    `, [req.params.productId, req.user?.orgId || req.user?.org_id || null, req.user?.orgId || req.user?.org_id || null]);
 
         const product = await db.get('SELECT name, sku FROM products WHERE id = ?', [req.params.productId]);
 
@@ -158,6 +168,13 @@ router.post('/batches', authMiddleware, requireRole('operator', 'admin', 'compan
     try {
         const { batch_number, product_id, quantity, manufactured_date, expiry_date, origin_facility } = req.body;
         if (!batch_number || !product_id) return res.status(400).json({ error: 'batch_number and product_id required' });
+
+        // ATK-08 FIX: Verify product belongs to user's org
+        const batchOrgId08 = req.user?.org_id || req.user?.orgId;
+        if (batchOrgId08) {
+            const batchProduct = await db.get('SELECT id FROM products WHERE id = ? AND org_id = ?', [product_id, batchOrgId08]);
+            if (!batchProduct) return res.status(404).json({ error: 'Product not found in your organization', code: 'PRODUCT_NOT_FOUND' });
+        }
 
         const id = uuidv4();
         const orgId = req.user?.org_id || null;
@@ -208,7 +225,9 @@ router.get('/batches', authMiddleware, async (req, res) => {
 // ─── GET /api/scm/batches/:id/trace – Trace batch through chain ──────────────
 router.get('/batches/:id/trace', authMiddleware, async (req, res) => {
     try {
-        const batch = await db.get('SELECT b.*, p.name as product_name FROM batches b LEFT JOIN products p ON b.product_id = p.id WHERE b.id = ?', [req.params.id]);
+        // ATK-10 FIX: Org-scoped batch trace
+        const traceOrg = req.user?.org_id || req.user?.orgId;
+        const batch = await db.get('SELECT b.*, p.name as product_name FROM batches b LEFT JOIN products p ON b.product_id = p.id WHERE b.id = ? AND (p.org_id = ? OR ? IS NULL)', [req.params.id, traceOrg, traceOrg]);
         if (!batch) return res.status(404).json({ error: 'Batch not found' });
 
         const events = await db.all(`
@@ -321,7 +340,8 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
 router.post('/batches/:id/recall', authMiddleware, requirePermission('batch:manage'), async (req, res) => {
     try {
         const { reason, severity } = req.body;
-        const batch = await db.get('SELECT b.*, p.name as product_name FROM batches b LEFT JOIN products p ON b.product_id = p.id WHERE b.id = ?', [req.params.id]);
+        /* ATK-13 FIX */ const recallOrg = req.user?.org_id || req.user?.orgId;
+        const batch = await db.get('SELECT b.*, p.name as product_name FROM batches b LEFT JOIN products p ON b.product_id = p.id WHERE b.id = ? AND (p.org_id = ? OR ? IS NULL)', [req.params.id, recallOrg, recallOrg]);
         if (!batch) return res.status(404).json({ error: 'Batch not found' });
 
         // Mark batch as recalled
@@ -338,9 +358,10 @@ router.post('/batches/:id/recall', authMiddleware, requirePermission('batch:mana
 
         // ── RED-TEAM P1-3: Cascade revoke ALL QR codes in this batch ──────
         const revokedQRs = await db.run(`
-          UPDATE qr_codes SET status = 'revoked' 
-          WHERE product_id IN (SELECT id FROM products WHERE batch_id = ?) 
-          AND status != 'revoked'
+          /* ATK-14 FIX */ UPDATE qr_codes SET status = 'revoked' 
+          WHERE product_id IN (
+              SELECT DISTINCT sce.product_id FROM supply_chain_events sce WHERE sce.batch_id = ?
+          ) AND status != 'revoked'
         `, [req.params.id]);
         console.log('[BatchRecall] QR codes revoked for batch:', req.params.id);
 

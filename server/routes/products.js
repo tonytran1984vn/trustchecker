@@ -1,3 +1,4 @@
+// [MIGRATED] Use req.services.product for new logic
 const { cacheInvalidate } = require('../middleware/cache-invalidate');
 
 function _safeId(name) {
@@ -12,8 +13,15 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { eventBus, EVENT_TYPES } = require('../events');
 const { validate, schemas } = require('../middleware/validate');
+const blockchainEngine = require('../engines/infrastructure/blockchain');
 
 const router = express.Router();
+
+router.use((req, res, next) => {
+    res.set('X-Deprecation', 'Use /api/v1/products instead');
+    next();
+});
+
 
 const PLAN_LIMITS = { free: 50, starter: 500, pro: 5000, enterprise: 100000 };
 
@@ -65,7 +73,9 @@ router.get('/', async (req, res) => {
         params.push(Number(limit), Math.max(Number(offset) || 0, 0));
 
         const products = await db.prepare(query).all(...params);
-        const total = await db.get('SELECT COUNT(*) as count FROM products');
+        /* ATK-03 FIX */ const totalQ = req.user.role !== 'super_admin' && req.user.orgId ? 'SELECT COUNT(*) as count FROM products WHERE org_id = ?' : 'SELECT COUNT(*) as count FROM products';
+        const totalP = req.user.role !== 'super_admin' && req.user.orgId ? [req.user.orgId] : [];
+        const total = await db.get(totalQ, totalP);
 
         res.json({ products, total: total.count });
     } catch (err) {
@@ -190,6 +200,8 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
         await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
             .run(uuidv4(), req.user.id, 'PRODUCT_REGISTERED', 'product', productId, JSON.stringify({ name, sku, weight_kg, quantity }));
 
+        // ATK-02-SEAL: Seal product creation into blockchain
+        try { await blockchainEngine.seal('ProductCreated', productId, { sku, name, manufacturer, origin_country }); } catch(e) { console.error('[ATK-02-SEAL]', e.message); }
         eventBus.emitEvent(EVENT_TYPES.PRODUCT_REGISTERED, {
             product_id: productId,
             name,
