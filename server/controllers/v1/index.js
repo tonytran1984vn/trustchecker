@@ -11,12 +11,12 @@ const v1ReadLimit = rateLimiter.middleware({ windowMs: 60000, max: 120, keyGener
 const v1WriteLimit = rateLimiter.middleware({ windowMs: 60000, max: 30, keyGenerator: "combined", message: "V1 API write limit (30/min)" });
 const v1AdminLimit = rateLimiter.middleware({ windowMs: 60000, max: 20, keyGenerator: "combined", message: "V1 admin limit (20/min)" });
 
-// Apply read limit globally to all GET requests
-router.get("*", v1ReadLimit);
-// Apply write limit to all mutations
-router.post("*", v1WriteLimit);
-router.put("*", v1WriteLimit);
-router.delete("*", v1WriteLimit);
+// Apply rate limits via middleware
+router.use((req, res, next) => {
+    if (req.method === "GET") return v1ReadLimit(req, res, next);
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return v1WriteLimit(req, res, next);
+    next();
+});
 
 const controllers = [
     { path: "/products", module: "./products.controller" },

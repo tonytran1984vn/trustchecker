@@ -39,7 +39,7 @@ function setupMiddleware(app, redis) {
     app.use(observabilityMiddleware);
 
     // API-scoped middleware
-    app.use('/api/', apiVersionMiddleware);
+    app.use('/api/', apiVersionMiddleware());
     app.use('/api/', apiMeteringMiddleware);
     app.use('/api/', apiGateway.middleware());
     app.use('/api/', orgMiddleware);
