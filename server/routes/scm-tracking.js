@@ -25,6 +25,7 @@ router.use((req, res, next) => {
 router.use(authMiddleware);
 
 // ─── POST /api/scm/events – Record EPCIS event ──────────────────────────────
+// BS-DEFENSE: Idempotency + Replay detection on SCM events
 router.post('/events', authMiddleware, requirePermission('supply_chain:create'), validate(schemas.scmEvent), async (req, res) => {
     try {
         const { event_type, product_id, batch_id, uid, location, actor, partner_id, details } = req.body;
@@ -76,6 +77,13 @@ router.post('/events', authMiddleware, requirePermission('supply_chain:create'),
         }
 
         // P2-1: Validate lifecycle transition
+        // BS-2-LOCK: Advisory lock to prevent concurrent product updates
+        const { acquireProductLock } = require('../middleware/blind-spot-defense');
+        const lockAcquired = await acquireProductLock(product_id);
+        if (!lockAcquired) {
+            return res.status(409).json({ error: 'Product is being updated by another request. Please retry.', code: 'CONCURRENT_UPDATE' });
+        }
+
         const transition = await validateTransition(product_id, batch_id, event_type);
         if (!transition.valid) {
             return res.status(400).json({ 

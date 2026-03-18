@@ -5,6 +5,7 @@
  */
 
 const express = require('express');
+const { bulkScanDetector, replayDetector } = require("../middleware/blind-spot-defense");
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware } = require('../auth');
@@ -296,6 +297,8 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             product_id: qrCode.product_id,
             result,
             fraud_score: fraudResult.fraudScore,
+                bulk_scan_detected: req.bulkScanDetected || false,
+                is_replay: req.isReplay || false,
             trust_score: trustResult.score
         });
 
@@ -630,7 +633,7 @@ router.get('/camera-config', async (req, res) => {
 });
 
 // ─── POST /api/qr/mobile-scan — Mobile scan with image data ────────────────
-router.post('/mobile-scan', validate(schemas.qrScan), async (req, res) => {
+router.post('/mobile-scan', bulkScanDetector, replayDetector, validate(schemas.qrScan), async (req, res) => {
     const startTime = Date.now();
     try {
         const { qr_data, image_data, device_info } = req.body;

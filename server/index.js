@@ -82,6 +82,10 @@ app.use(helmet({
 }));
 app.use(compression());
 app.use(express.json({ limit: '2mb' })); // SEC-API-2: reduced from 5mb
+
+// BS-DEFENSE: Global idempotency guard
+const { idempotencyGuard } = require("./middleware/blind-spot-defense");
+app.use(idempotencyGuard);
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
 // Prometheus Metrics
