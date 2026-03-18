@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V3 — Adversarial-Resistant, Graph Intelligence
+ * Risk Scoring Engine V4 — Multi-Hop Graph Intelligence + Identity Layer
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -334,41 +334,197 @@ async function historyScore(productId, actorId) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// V3 FEATURES
+// V4 GRAPH INTELLIGENCE — Multi-hop, Temporal, Identity Layer
 // ═══════════════════════════════════════════════════════════════
 
-// ─── V3 FEATURE 5: GRAPH INTELLIGENCE (Collusion Detection) ──
-async function graphScore(productId, actorId) {
-    let score = 0;
+// ─── V4: MULTI-HOP COLLUSION (Connected Components via BFS) ──
+// Finds actor clusters that share products across multiple hops:
+//   A→P1→B→P2→C = 2-hop collusion (A and C never touch same product)
+async function multiHopCollusion(actorId) {
+    if (!actorId) return { hops: 0, cluster_size: 0, reasons: [] };
     const reasons = [];
+    let score = 0;
 
-    // 3.1: Actor-product cluster — detect multi-actor chains on same product
     try {
-        const actors = await db.all(
-            `SELECT DISTINCT device_fingerprint, scan_type 
-             FROM scan_events WHERE product_id = $1 
-             AND scanned_at > NOW() - INTERVAL '1 hour'
-             AND device_fingerprint IS NOT NULL`,
-            [productId]
+        // Step 1: Find all products this actor touched (1h window)
+        const myProducts = await db.all(
+            `SELECT DISTINCT product_id FROM scan_events 
+             WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '1 hour'`,
+            [actorId]
         );
-        if (actors && actors.length >= 3) {
-            const roles = new Set(actors.map(a => a.scan_type));
-            const hasDistributor = roles.has('distributor');
-            const hasRetailer = roles.has('retailer');
-            const hasConsumer = roles.has('consumer');
+        if (!myProducts || myProducts.length === 0) return { hops: 0, cluster_size: 0, reasons };
 
-            if (hasDistributor && hasRetailer && hasConsumer) {
-                // Full chain collusion: all 3 roles scanned same product within 1h
-                score += 70 * 0.85;
-                reasons.push({ rule: 'full_chain_collusion', severity: 70, confidence: 0.85, actors: actors.length, roles: [...roles] });
-            } else if (roles.size >= 2 && actors.length >= 4) {
-                score += 45 * 0.75;
-                reasons.push({ rule: 'partial_chain_cluster', severity: 45, confidence: 0.75, actors: actors.length, roles: [...roles] });
+        const productIds = myProducts.map(r => r.product_id);
+        
+        // Step 2: Find all OTHER actors who touched those same products (hop 1)
+        const hop1Actors = await db.all(
+            `SELECT DISTINCT device_fingerprint, product_id FROM scan_events 
+             WHERE product_id::text = ANY(string_to_array($1, ','))
+             AND device_fingerprint != $2
+             AND device_fingerprint IS NOT NULL
+             AND scanned_at > NOW() - INTERVAL '1 hour'`,
+            [productIds.join(','), actorId]
+        );
+        
+        if (!hop1Actors || hop1Actors.length === 0) return { hops: 0, cluster_size: 0, reasons };
+
+        const hop1ActorIds = [...new Set(hop1Actors.map(a => a.device_fingerprint))];
+
+        // Step 3: Find products touched by hop1 actors that THIS actor didn't touch (hop 2)
+        const hop2Products = await db.all(
+            `SELECT DISTINCT se.product_id, se.device_fingerprint FROM scan_events se
+             WHERE se.device_fingerprint = ANY(string_to_array($1, ','))
+             AND se.product_id::text != ALL(string_to_array($2, ','))
+             AND se.scanned_at > NOW() - INTERVAL '1 hour'`,
+            [hop1ActorIds.join(','), productIds.join(',')]
+        );
+
+        const hop2ProductIds = hop2Products ? [...new Set(hop2Products.map(p => p.product_id))] : [];
+
+        // Cluster size = unique actors in the graph
+        const clusterSize = 1 + hop1ActorIds.length;
+        const totalProducts = productIds.length + hop2ProductIds.length;
+
+        if (clusterSize >= 4 && totalProducts >= 3) {
+            score += 60 * 0.8;
+            reasons.push({ rule: 'multi_hop_cluster', severity: 60, confidence: 0.8, cluster_size: clusterSize, products: totalProducts, hops: 2 });
+        } else if (clusterSize >= 3 && totalProducts >= 2) {
+            score += 35 * 0.7;
+            reasons.push({ rule: 'multi_hop_small', severity: 35, confidence: 0.7, cluster_size: clusterSize, products: totalProducts, hops: 2 });
+        }
+
+        return { hops: 2, cluster_size: clusterSize, score, reasons };
+    } catch(_) {}
+    return { hops: 0, cluster_size: 0, score: 0, reasons };
+}
+
+// ─── V4: ROLE-SWITCH DETECTION ────────────────────────────────
+// Same device/IP appearing under different supply chain roles
+async function roleSwitchDetection(actorId, productId) {
+    const reasons = [];
+    let score = 0;
+    if (!actorId) return { score: 0, reasons };
+
+    try {
+        // Check if this device_fingerprint has scanned as different roles
+        const roleHistory = await db.all(
+            `SELECT DISTINCT scan_type FROM scan_events 
+             WHERE device_fingerprint = $1 
+             AND scanned_at > NOW() - INTERVAL '24 hours'
+             AND scan_type IS NOT NULL`,
+            [actorId]
+        );
+        if (roleHistory && roleHistory.length >= 2) {
+            const roles = roleHistory.map(r => r.scan_type);
+            const hasSupplyChain = roles.includes('distributor') || roles.includes('retailer');
+            const hasConsumer = roles.includes('consumer');
+            
+            if (hasSupplyChain && hasConsumer) {
+                // Same device acting as both supply chain AND consumer = very suspicious
+                score += 55 * 0.85;
+                reasons.push({ rule: 'role_switch_supply_consumer', severity: 55, confidence: 0.85, roles, note: 'same device, both supply chain + consumer' });
+            } else if (roleHistory.length >= 3) {
+                // 3+ different roles from same device
+                score += 40 * 0.8;
+                reasons.push({ rule: 'role_switch_multi', severity: 40, confidence: 0.8, roles, count: roleHistory.length });
+            } else {
+                score += 20 * 0.6;
+                reasons.push({ rule: 'role_switch_dual', severity: 20, confidence: 0.6, roles });
             }
         }
     } catch(_) {}
 
-    // 3.3: Cross-product correlation — actor scanning many products in 1h
+    return { score: Math.min(80, Math.round(score)), reasons };
+}
+
+// ─── V4: DEVICE-LEVEL IDENTITY MERGING ───────────────────────
+// Detect when multiple "actors" are really the same entity (IP/fingerprint cluster)
+async function deviceIdentityScore(actorId, ipAddress) {
+    const reasons = [];
+    let score = 0;
+    if (!actorId && !ipAddress) return { score: 0, reasons, merged_identities: 0 };
+
+    // IP cluster: multiple device_fingerprints from same IP
+    try {
+        if (ipAddress) {
+            const ipCluster = await db.get(
+                `SELECT COUNT(DISTINCT device_fingerprint) as actors, COUNT(*) as scans
+                 FROM scan_events WHERE ip_address = $1
+                 AND scanned_at > NOW() - INTERVAL '1 hour'
+                 AND device_fingerprint IS NOT NULL`,
+                [ipAddress]
+            );
+            if (ipCluster) {
+                const actorCount = parseInt(ipCluster.actors);
+                if (actorCount >= 5) {
+                    score += 50 * 0.85;
+                    reasons.push({ rule: 'ip_cluster_large', severity: 50, confidence: 0.85, actors: actorCount, ip: ipAddress });
+                } else if (actorCount >= 3) {
+                    score += 30 * 0.7;
+                    reasons.push({ rule: 'ip_cluster_moderate', severity: 30, confidence: 0.7, actors: actorCount });
+                }
+            }
+        }
+    } catch(_) {}
+
+    // Fingerprint reuse: same fingerprint associated with different IPs
+    try {
+        if (actorId) {
+            const ipDiversity = await db.get(
+                `SELECT COUNT(DISTINCT ip_address) as ips
+                 FROM scan_events WHERE device_fingerprint = $1
+                 AND scanned_at > NOW() - INTERVAL '24 hours'`,
+                [actorId]
+            );
+            if (ipDiversity && parseInt(ipDiversity.ips) > 5) {
+                score += 30 * 0.65;
+                reasons.push({ rule: 'fingerprint_ip_rotation', severity: 30, confidence: 0.65, unique_ips: parseInt(ipDiversity.ips), note: 'VPN/proxy rotation suspected' });
+            }
+        }
+    } catch(_) {}
+
+    return { score: Math.min(80, Math.round(score)), reasons, merged_identities: 0 };
+}
+
+// ─── V4 MAIN GRAPH SCORE (combines all sub-features) ─────────
+async function graphScore(productId, actorId, ipAddress) {
+    let score = 0;
+    const reasons = [];
+
+    // === V3 (kept): Single-hop collusion on same product ===
+    try {
+        // Temporal multi-window: 1h (high weight) + 24h (medium) + 7d (low)
+        const windows = [
+            { interval: '1 hour', weight: 1.0, label: '1h' },
+            { interval: '24 hours', weight: 0.5, label: '24h' },
+            { interval: '7 days', weight: 0.2, label: '7d' },
+        ];
+        for (const w of windows) {
+            const actors = await db.all(
+                `SELECT DISTINCT device_fingerprint, scan_type 
+                 FROM scan_events WHERE product_id = $1 
+                 AND scanned_at > NOW() - INTERVAL '${w.interval}'
+                 AND device_fingerprint IS NOT NULL`,
+                [productId]
+            );
+            if (actors && actors.length >= 3) {
+                const roles = new Set(actors.map(a => a.scan_type));
+                if (roles.has('distributor') && roles.has('retailer') && roles.has('consumer')) {
+                    const baseScore = 70 * 0.85 * w.weight;
+                    score += baseScore;
+                    reasons.push({ rule: `chain_collusion_${w.label}`, severity: 70, confidence: 0.85, weight: w.weight, actors: actors.length, roles: [...roles] });
+                    break; // Don't double-count same collusion across windows
+                } else if (roles.size >= 2 && actors.length >= 4) {
+                    const baseScore = 45 * 0.75 * w.weight;
+                    score += baseScore;
+                    reasons.push({ rule: `partial_cluster_${w.label}`, severity: 45, confidence: 0.75, weight: w.weight, actors: actors.length });
+                    break;
+                }
+            }
+        }
+    } catch(_) {}
+
+    // === V3 (kept): Cross-product correlation ===
     try {
         if (actorId) {
             const crossProduct = await db.get(
@@ -379,13 +535,12 @@ async function graphScore(productId, actorId) {
             );
             if (crossProduct) {
                 const pCount = parseInt(crossProduct.products);
-                const tCount = parseInt(crossProduct.total);
                 if (pCount > 20) {
                     score += 60 * 0.9;
-                    reasons.push({ rule: 'cross_product_extreme', severity: 60, confidence: 0.9, products_1h: pCount, total_scans: tCount });
+                    reasons.push({ rule: 'cross_product_extreme', severity: 60, confidence: 0.9, products_1h: pCount });
                 } else if (pCount > 10) {
                     score += 40 * 0.8;
-                    reasons.push({ rule: 'cross_product_high', severity: 40, confidence: 0.8, products_1h: pCount, total_scans: tCount });
+                    reasons.push({ rule: 'cross_product_high', severity: 40, confidence: 0.8, products_1h: pCount });
                 } else if (pCount > 5) {
                     score += 20 * 0.7;
                     reasons.push({ rule: 'cross_product_moderate', severity: 20, confidence: 0.7, products_1h: pCount });
@@ -394,23 +549,28 @@ async function graphScore(productId, actorId) {
         }
     } catch(_) {}
 
-    // Device-product affinity (same device obsessively scanning same product)
-    try {
-        if (actorId) {
-            const recentScans = await db.get(
-                `SELECT COUNT(*) as c FROM scan_events 
-                 WHERE device_fingerprint = $1 AND product_id = $2
-                 AND scanned_at > NOW() - INTERVAL '1 hour'`,
-                [actorId, productId]
-            );
-            if (recentScans && parseInt(recentScans.c) > 3) {
-                score += 25 * 0.8;
-                reasons.push({ rule: 'device_product_affinity', severity: 25, confidence: 0.8, repeat_scans: parseInt(recentScans.c) });
-            }
-        }
-    } catch(_) {}
+    // === V4 NEW: Multi-hop collusion ===
+    const multiHop = await multiHopCollusion(actorId);
+    if (multiHop.score > 0) {
+        score += multiHop.score;
+        reasons.push(...multiHop.reasons);
+    }
 
-    return { score: Math.min(100, Math.round(score)), reasons };
+    // === V4 NEW: Role-switch detection ===
+    const roleSwitch = await roleSwitchDetection(actorId, productId);
+    if (roleSwitch.score > 0) {
+        score += roleSwitch.score;
+        reasons.push(...roleSwitch.reasons);
+    }
+
+    // === V4 NEW: Device-level identity ===
+    const deviceId = await deviceIdentityScore(actorId, ipAddress);
+    if (deviceId.score > 0) {
+        score += deviceId.score;
+        reasons.push(...deviceId.reasons);
+    }
+
+    return { score: Math.min(100, Math.round(score)), reasons, multi_hop: multiHop, role_switch: roleSwitch, device_identity: deviceId };
 }
 
 // ─── V3 3.2: COLD-START PENALTY ──────────────────────────────
@@ -493,7 +653,7 @@ async function calculateRisk(input) {
         geoScore(productId, latitude, longitude, ipAddress),
         frequencyScore(productId, actorId),
         historyScore(productId, actorId),
-        graphScore(productId, actorId),  // V3: graph intelligence
+        graphScore(productId, actorId, ipAddress),  // V4: graph + multi-hop + identity
     ]);
 
     // V3: Cold-start penalty
@@ -622,4 +782,4 @@ async function calculateRisk(input) {
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT };
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT };

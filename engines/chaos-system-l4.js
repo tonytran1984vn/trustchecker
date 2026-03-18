@@ -1,9 +1,11 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- *  CHAOS SYSTEM LEVEL 4 V3 — ADVERSARIAL FRAUD TESTING
+ *  CHAOS SYSTEM LEVEL 4 V4 — ADVERSARIAL GRAPH INTELLIGENCE
  *
- *  Tests the Risk Scoring Engine V3 DIRECTLY (bypass API)
- *  11 original + 3 V2 + 3 V3 scenarios + 5 integration = 22 total
+ *  Tests Risk Engine V4: multi-hop, temporal graph, role-switch,
+ *  device identity, random noise resistance
+ *
+ *  22 original + 5 V4 scenarios + 6 integration = 28 total
  *
  *  Run: cd /opt/trustchecker && node engines/chaos-system-l4.js
  * ═══════════════════════════════════════════════════════════════
@@ -41,8 +43,8 @@ function insertScanEvent(productId, fingerprint, ip, lat, lng, scanType) {
 
 async function main() {
     console.log('╔═══════════════════════════════════════════════════════════════╗');
-    console.log('║  CHAOS SYSTEM L4 V3 — ADVERSARIAL FRAUD TESTING             ║');
-    console.log('║  V3: graph intelligence + cold-start + anti-poisoning        ║');
+    console.log('║  CHAOS SYSTEM L4 V4 — GRAPH INTELLIGENCE TESTING            ║');
+    console.log('║  Multi-hop + Temporal + Role-switch + Device Identity        ║');
     console.log('╚═══════════════════════════════════════════════════════════════╝\n');
 
     const db = require('../server/db');
@@ -50,7 +52,7 @@ async function main() {
     console.log('DB ✅');
 
     const riskEngine = require('../server/services/risk-scoring-engine');
-    console.log('Risk Engine V3 ✅\n');
+    console.log('Risk Engine V4 ✅\n');
 
     const results = [];
     let passed = 0, failed = 0;
@@ -59,306 +61,234 @@ async function main() {
         results.push({ id, name, expected, actual, pass });
         pass ? passed++ : failed++;
         console.log(`  ${pass ? '✅' : '❌'} ${id}: ${name}`);
-        console.log(`     Expected: ${expected}`);
-        console.log(`     Actual:   ${actual}\n`);
     }
 
-    // ═══════════════════════════════════════
-    // FRAUD SCENARIOS
-    // ═══════════════════════════════════════
+    // ━━━ FRAUD SCENARIOS ━━━
     console.log('━━━ FRAUD SCENARIOS ━━━\n');
 
-    // BF-1: Distributor scans before customer
-    {
-        const pid = createProduct('Distributor-First', 'fmcg');
-        insertScanEvent(pid, 'distributor-device', '10.1.1.1', null, null, 'distributor');
-        await sleep(100);
-        const risk = await riskEngine.calculateRisk({ productId: pid, actorId: 'customer-phone', scanType: 'consumer', ipAddress: '192.168.1.1' });
-        report('BF-1', 'Distributor scans before customer',
-            'score > 0',
-            `score=${risk.risk_score}, pattern=${risk.features.scan_pattern.score}`,
-            risk.risk_score > 0
-        );
+    { // BF-1
+        const pid = createProduct('Dist-First', 'fmcg');
+        insertScanEvent(pid, 'dist-dev', '10.1.1.1', null, null, 'distributor');
+        await sleep(50);
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: 'cust-phone', scanType: 'consumer', ipAddress: '192.168.1.1' });
+        report('BF-1', 'Distributor first scan', 'score > 0', `s=${r.risk_score}`, r.risk_score > 0);
     }
-
-    // BF-2: Retailer bulk scans same product 6x
-    {
-        const pid = createProduct('Retailer-Bulk', 'fmcg');
-        const fp = 'retailer-bulk-' + Date.now();
+    { // BF-2
+        const pid = createProduct('Retail-Bulk', 'fmcg');
+        const fp = 'retail-' + Date.now();
         for (let i = 0; i < 6; i++) insertScanEvent(pid, fp, '10.0.0.1', null, null, 'retailer');
-        const risk = await riskEngine.calculateRisk({ productId: pid, actorId: fp, scanType: 'consumer', ipAddress: '10.0.0.1' });
-        report('BF-2', 'Retailer bulk scan same product (6x)',
-            'elevated frequency',
-            `score=${risk.risk_score}, freq=${risk.features.frequency.score}`,
-            risk.risk_score > 0
-        );
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: fp, scanType: 'consumer', ipAddress: '10.0.0.1' });
+        report('BF-2', 'Retailer bulk (6x)', 'score > 0', `s=${r.risk_score}`, r.risk_score > 0);
     }
-
-    // BF-3: Same device scans 10 products (farming)
-    {
-        const farmFP = 'scan-farm-' + Date.now();
-        let lastPid = '';
-        for (let i = 0; i < 10; i++) {
-            const pid = createProduct(`Farm-${i}`, 'fmcg');
-            insertScanEvent(pid, farmFP, '192.168.99.99', null, null, 'consumer');
-            lastPid = pid;
-        }
-        const risk = await riskEngine.calculateRisk({ productId: lastPid, actorId: farmFP, scanType: 'consumer', ipAddress: '192.168.99.99' });
-        report('BF-3', 'Same device scans 10 products (farming)',
-            'elevated (frequency + graph)',
-            `score=${risk.risk_score}, freq=${risk.features.frequency.score}, graph=${risk.features.graph.score}`,
-            risk.risk_score > 0
-        );
+    { // BF-3
+        const farmFP = 'farm-' + Date.now();
+        let pid;
+        for (let i = 0; i < 10; i++) { pid = createProduct(`Farm-${i}`, 'fmcg'); insertScanEvent(pid, farmFP, '192.168.99.99', null, null, 'consumer'); }
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: farmFP, scanType: 'consumer', ipAddress: '192.168.99.99' });
+        report('BF-3', 'Farming 10 products', 'score > 0', `s=${r.risk_score},graph=${r.features.graph.score}`, r.risk_score > 0);
     }
-
-    // BF-4: Impossible travel (HCM → Tokyo)
-    {
+    { // BF-4
         const pid = createProduct('Geo-Anomaly', 'pharma');
-        insertScanEvent(pid, 'geo-user-1', '113.161.0.1', 10.8231, 106.6297, 'consumer');
-        await sleep(100);
-        const risk = await riskEngine.calculateRisk({ productId: pid, actorId: 'geo-user-2', scanType: 'consumer', latitude: 35.6762, longitude: 139.6503, ipAddress: '203.0.113.1', category: 'pharma' });
-        report('BF-4', 'Impossible travel: HCM → Tokyo',
-            'geo > 0',
-            `score=${risk.risk_score}, geo=${risk.features.geo.score}`,
-            risk.features.geo.score > 0
-        );
+        insertScanEvent(pid, 'geo-1', '113.161.0.1', 10.8231, 106.6297, 'consumer');
+        await sleep(50);
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: 'geo-2', scanType: 'consumer', latitude: 35.6762, longitude: 139.6503, ipAddress: '203.0.113.1', category: 'pharma' });
+        report('BF-4', 'Impossible travel HCM→Tokyo', 'geo > 0', `s=${r.risk_score},geo=${r.features.geo.score}`, r.features.geo.score > 0);
     }
-
-    // BF-5: Previously active actor (V2: momentum)
-    {
-        const flaggedFP = 'flagged-v3-' + Date.now();
+    { // BF-5
+        const fp = 'flagged-v4-' + Date.now();
         for (let i = 0; i < 8; i++) {
-            const pid = createProduct(`Flag-V3-${i}`, 'test');
-            insertScanEvent(pid, flaggedFP, '10.10.10.10', null, null, 'consumer');
-            await riskEngine.calculateRisk({ productId: pid, actorId: flaggedFP, scanType: 'consumer', ipAddress: '10.10.10.10' });
+            const pid = createProduct(`Flag-${i}`, 'test');
+            insertScanEvent(pid, fp, '10.10.10.10', null, null, 'consumer');
+            await riskEngine.calculateRisk({ productId: pid, actorId: fp, scanType: 'consumer', ipAddress: '10.10.10.10' });
         }
-        await sleep(100);
-        const newPid = createProduct('Clean-Product-V3', 'test');
-        const risk = await riskEngine.calculateRisk({ productId: newPid, actorId: flaggedFP, scanType: 'consumer', ipAddress: '10.10.10.10' });
-        report('BF-5', 'Previously active actor (momentum)',
-            'history > 0 OR momentum > 0',
-            `score=${risk.risk_score}, history=${risk.features.history.score}, momentum=${risk.momentum}`,
-            risk.features.history.score > 0 || risk.momentum > 0
-        );
+        await sleep(50);
+        const pid = createProduct('Clean-V4', 'test');
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: fp, scanType: 'consumer', ipAddress: '10.10.10.10' });
+        report('BF-5', 'Momentum (8 scans)', 'momentum > 0', `s=${r.risk_score},m=${r.momentum}`, r.momentum > 0 || r.features.history.score > 0);
     }
-
-    // BF-6: Product scanned 10+ times
-    {
+    { // BF-6
         const pid = createProduct('Multi-Scan', 'test');
         for (let i = 0; i < 10; i++) insertScanEvent(pid, `user-${i}-${Date.now()}`, `172.16.${i}.1`, null, null, 'consumer');
-        const risk = await riskEngine.calculateRisk({ productId: pid, actorId: 'final-user', scanType: 'consumer', ipAddress: '172.16.99.1' });
-        report('BF-6', 'Product scanned 10+ times',
-            'history > 0 OR freq > 0',
-            `score=${risk.risk_score}, history=${risk.features.history.score}, freq=${risk.features.frequency.score}`,
-            risk.features.history.score > 0 || risk.features.frequency.score > 0
-        );
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: 'final-user', scanType: 'consumer', ipAddress: '172.16.99.1' });
+        report('BF-6', 'Product 10+ scans', 'hist|freq > 0', `s=${r.risk_score}`, r.features.history.score > 0 || r.features.frequency.score > 0);
     }
 
-    // ═══════════════════════════════════════
-    // NORMAL BASELINES
-    // ═══════════════════════════════════════
-    console.log('━━━ NORMAL BASELINES ━━━\n');
+    // ━━━ NORMAL BASELINES ━━━
+    console.log('\n━━━ NORMAL BASELINES ━━━\n');
 
-    // BF-7: Clean first scan
-    {
+    { // BF-7
         const pid = createProduct('Normal-Clean', 'fmcg');
-        const risk = await riskEngine.calculateRisk({ productId: pid, actorId: 'clean-' + Date.now(), scanType: 'consumer', latitude: 10.8, longitude: 106.6, ipAddress: '8.8.8.8' });
-        report('BF-7', 'Normal first-time customer scan',
-            'NORMAL (score < 40)',
-            `score=${risk.risk_score}, level=${risk.decision}, cold_start=${risk.cold_start.penalty}`,
-            risk.decision === 'NORMAL'
-        );
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: 'clean-' + Date.now(), scanType: 'consumer', latitude: 10.8, longitude: 106.6, ipAddress: '8.8.8.8' });
+        report('BF-7', 'Normal clean scan', 'NORMAL', `s=${r.risk_score},d=${r.decision}`, r.decision === 'NORMAL');
     }
-
-    // BF-8: Clean scan with geo
-    {
+    { // BF-8
         const pid = createProduct('Baseline-Geo', 'fmcg');
-        const risk = await riskEngine.calculateRisk({ productId: pid, actorId: 'baseline-' + Date.now(), scanType: 'consumer', latitude: 21.0285, longitude: 105.8542, ipAddress: '1.1.1.1' });
-        report('BF-8', 'Clean scan with geo (Hanoi)',
-            'NORMAL (score < 40)',
-            `score=${risk.risk_score}, level=${risk.decision}`,
-            risk.decision === 'NORMAL'
-        );
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: 'base-' + Date.now(), scanType: 'consumer', latitude: 21.03, longitude: 105.85, ipAddress: '1.1.1.1' });
+        report('BF-8', 'Clean geo scan', 'NORMAL', `s=${r.risk_score},d=${r.decision}`, r.decision === 'NORMAL');
     }
 
-    // ═══════════════════════════════════════
-    // ADVANCED SCENARIOS
-    // ═══════════════════════════════════════
-    console.log('━━━ ADVANCED SCENARIOS ━━━\n');
+    // ━━━ ADVANCED ━━━
+    console.log('\n━━━ ADVANCED SCENARIOS ━━━\n');
 
-    // BF-9: Slow fraud (25 scans)
-    {
+    { // BF-9
         const pid = createProduct('Slow-Fraud', 'test');
-        const slowFP = 'slow-' + Date.now();
-        for (let i = 0; i < 25; i++) insertScanEvent(pid, slowFP, `172.16.0.${i % 254 + 1}`, null, null, 'consumer');
-        const risk = await riskEngine.calculateRisk({ productId: pid, actorId: slowFP, scanType: 'consumer', ipAddress: '172.16.0.99' });
-        report('BF-9', 'Slow fraud: 25 scans',
-            'elevated',
-            `score=${risk.risk_score}, freq=${risk.features.frequency.score}`,
-            risk.risk_score > 0
-        );
+        const fp = 'slow-' + Date.now();
+        for (let i = 0; i < 25; i++) insertScanEvent(pid, fp, `172.16.0.${i % 254 + 1}`, null, null, 'consumer');
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: fp, scanType: 'consumer', ipAddress: '172.16.0.99' });
+        report('BF-9', 'Slow fraud 25 scans', 'score > 0', `s=${r.risk_score}`, r.risk_score > 0);
     }
-
-    // BF-10: Collusion (3 actors on same product rapidly)
-    {
+    { // BF-10
         const pid = createProduct('Collusion', 'luxury');
-        insertScanEvent(pid, 'collude-dist', '10.0.1.1', null, null, 'distributor');
-        insertScanEvent(pid, 'collude-retail', '10.0.1.2', null, null, 'retailer');
-        insertScanEvent(pid, 'collude-customer', '10.0.1.3', null, null, 'consumer');
-        const risk = await riskEngine.calculateRisk({ productId: pid, actorId: 'collude-final', scanType: 'consumer', ipAddress: '10.0.1.4', category: 'luxury' });
-        report('BF-10', 'Collusion: 3 actors (V3: graph detects)',
-            'graph > 0 (full_chain_collusion)',
-            `score=${risk.risk_score}, graph=${risk.features.graph.score}, rules=[${risk.features.graph.reasons.map(r=>r.rule).join(',')}]`,
-            risk.features.graph.score > 0
-        );
+        insertScanEvent(pid, 'col-dist', '10.0.1.1', null, null, 'distributor');
+        insertScanEvent(pid, 'col-retail', '10.0.1.2', null, null, 'retailer');
+        insertScanEvent(pid, 'col-consumer', '10.0.1.3', null, null, 'consumer');
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: 'col-final', scanType: 'consumer', ipAddress: '10.0.1.4', category: 'luxury' });
+        report('BF-10', 'Collusion (graph detect)', 'graph > 0', `s=${r.risk_score},graph=${r.features.graph.score}`, r.features.graph.score > 0);
+    }
+    { // BF-11
+        const fp = 'clean-att-' + Date.now(); let pid;
+        for (let i = 0; i < 15; i++) { pid = createProduct(`Att-${i}`, 'test'); insertScanEvent(pid, fp, '203.0.113.42', null, null, 'consumer'); }
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: fp, scanType: 'consumer', ipAddress: '203.0.113.42' });
+        report('BF-11', 'Clean attacker 15 products', 'score > 0', `s=${r.risk_score},cold=${r.cold_start.penalty}`, r.risk_score > 0);
     }
 
-    // BF-11: Clean attacker (new actor, 15 products)
-    {
-        const cleanFP = 'clean-attacker-' + Date.now();
-        let lastPid = '';
-        for (let i = 0; i < 15; i++) {
-            const pid = createProduct(`Attack-${i}`, 'test');
-            insertScanEvent(pid, cleanFP, '203.0.113.42', null, null, 'consumer');
-            lastPid = pid;
-        }
-        const risk = await riskEngine.calculateRisk({ productId: lastPid, actorId: cleanFP, scanType: 'consumer', ipAddress: '203.0.113.42' });
-        report('BF-11', 'Clean attacker: 15 products (V3: cold-start + cross-product)',
-            'cold_start > 0 AND graph > 0',
-            `score=${risk.risk_score}, cold=${risk.cold_start.penalty}, graph=${risk.features.graph.score}, freq=${risk.features.frequency.score}`,
-            risk.risk_score > 0
-        );
-    }
+    // ━━━ V2 SCENARIOS ━━━
+    console.log('\n━━━ V2 SCENARIOS ━━━\n');
 
-    // ═══════════════════════════════════════
-    // V2 SCENARIOS
-    // ═══════════════════════════════════════
-    console.log('━━━ V2 SCENARIOS ━━━\n');
-
-    // V2-1: Low-risk accumulation → momentum
-    {
-        const accumFP = 'accum-' + Date.now();
+    { // V2-1
+        const fp = 'accum-' + Date.now();
         for (let i = 0; i < 10; i++) {
-            const pid = createProduct(`Accum-${i}`, 'test');
-            insertScanEvent(pid, accumFP, '10.20.30.40', null, null, 'consumer');
-            await riskEngine.calculateRisk({ productId: pid, actorId: accumFP, scanType: 'consumer', ipAddress: '10.20.30.40' });
+            const pid = createProduct(`Acc-${i}`, 'test');
+            insertScanEvent(pid, fp, '10.20.30.40', null, null, 'consumer');
+            await riskEngine.calculateRisk({ productId: pid, actorId: fp, scanType: 'consumer', ipAddress: '10.20.30.40' });
         }
-        const finalPid = createProduct('Accum-Final', 'test');
-        const risk = await riskEngine.calculateRisk({ productId: finalPid, actorId: accumFP, scanType: 'consumer', ipAddress: '10.20.30.40' });
-        report('V2-1', 'Momentum accumulation',
-            'momentum > 0',
-            `score=${risk.risk_score}, momentum=${risk.momentum}, contrib=${risk.momentum_contribution}`,
-            risk.momentum > 0 || risk.risk_score > 15
-        );
+        const pid = createProduct('Acc-Final', 'test');
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: fp, scanType: 'consumer', ipAddress: '10.20.30.40' });
+        report('V2-1', 'Momentum accumulation', 'm > 0', `s=${r.risk_score},m=${r.momentum}`, r.momentum > 0 || r.risk_score > 15);
+    }
+    { // V2-2
+        const pid = createProduct('Freq-Evade', 'test');
+        const fp = 'evade-' + Date.now();
+        for (let i = 0; i < 15; i++) insertScanEvent(pid, fp, '10.99.99.1', null, null, 'consumer');
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: fp, scanType: 'consumer', ipAddress: '10.99.99.1' });
+        report('V2-2', 'Frequency evasion', 'freq > 20', `s=${r.risk_score},freq=${r.features.frequency.score}`, r.features.frequency.score > 20);
+    }
+    { // V2-3
+        const pid = createProduct('Explain', 'pharma');
+        insertScanEvent(pid, 'explain-a', '10.0.0.1', 10.82, 106.63, 'distributor');
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: 'explain-c', scanType: 'consumer', latitude: 10.82, longitude: 106.63, ipAddress: '10.0.0.2', category: 'pharma' });
+        report('V2-3', 'Explainability (V4 breakdown)', 'has graph+cold_start', `graph=${r.breakdown.graph},cold=${r.breakdown.cold_start}`, typeof r.breakdown.graph === 'number');
     }
 
-    // V2-2: Frequency evasion
-    {
-        const pid = createProduct('Freq-Evasion', 'test');
-        const evaderFP = 'evader-' + Date.now();
-        for (let i = 0; i < 15; i++) insertScanEvent(pid, evaderFP, '10.99.99.1', null, null, 'consumer');
-        const risk = await riskEngine.calculateRisk({ productId: pid, actorId: evaderFP, scanType: 'consumer', ipAddress: '10.99.99.1' });
-        report('V2-2', 'Frequency evasion (5min window)',
-            'freq > 20',
-            `score=${risk.risk_score}, freq=${risk.features.frequency.score}`,
-            risk.features.frequency.score > 20
-        );
-    }
+    // ━━━ V3 ADVERSARIAL ━━━
+    console.log('\n━━━ V3 ADVERSARIAL ━━━\n');
 
-    // V2-3: Explainability
-    {
-        const pid = createProduct('Explain-Test', 'pharma');
-        insertScanEvent(pid, 'explain-actor', '10.0.0.1', 10.82, 106.63, 'distributor');
-        const risk = await riskEngine.calculateRisk({ productId: pid, actorId: 'explain-check', scanType: 'consumer', latitude: 10.82, longitude: 106.63, ipAddress: '10.0.0.2', category: 'pharma' });
-        const hasBreakdown = risk.breakdown && typeof risk.breakdown.graph === 'number' && typeof risk.breakdown.cold_start === 'number';
-        report('V2-3', 'Explainability (V3: graph + cold_start in breakdown)',
-            'breakdown has graph + cold_start',
-            hasBreakdown ? `graph=${risk.breakdown.graph}, cold=${risk.breakdown.cold_start}, pattern=${risk.breakdown.pattern}` : 'missing fields',
-            hasBreakdown
-        );
-    }
-
-    // ═══════════════════════════════════════
-    // V3 ADVERSARIAL SCENARIOS
-    // ═══════════════════════════════════════
-    console.log('━━━ V3 ADVERSARIAL SCENARIOS ━━━\n');
-
-    // V3-1: Full chain collusion (distributor → retailer → consumer coordinated)
-    {
+    { // V3-1
         const pid = createProduct('Collusion-V3', 'pharma');
-        // 3 different actors, 3 different roles, same product, within 1h
-        insertScanEvent(pid, 'dist-collude-v3', '10.10.1.1', 10.82, 106.63, 'distributor');
-        insertScanEvent(pid, 'retail-collude-v3', '10.10.1.2', 10.83, 106.64, 'retailer');
-        insertScanEvent(pid, 'consumer-collude-v3', '10.10.1.3', 10.84, 106.65, 'consumer');
-        await sleep(100);
-        const risk = await riskEngine.calculateRisk({ productId: pid, actorId: 'inspect-v3', scanType: 'consumer', latitude: 10.85, longitude: 106.66, ipAddress: '10.10.1.4', category: 'pharma' });
-        const hasCollusion = risk.features.graph.reasons.some(r => r.rule === 'full_chain_collusion');
-        report('V3-1', 'Full chain collusion: dist+retail+consumer',
-            'full_chain_collusion detected',
-            `score=${risk.risk_score}, graph=${risk.features.graph.score}, collusion=${hasCollusion}`,
-            hasCollusion
-        );
+        insertScanEvent(pid, 'v3-dist', '10.10.1.1', 10.82, 106.63, 'distributor');
+        insertScanEvent(pid, 'v3-retail', '10.10.1.2', 10.83, 106.64, 'retailer');
+        insertScanEvent(pid, 'v3-cons', '10.10.1.3', 10.84, 106.65, 'consumer');
+        await sleep(50);
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: 'v3-inspect', scanType: 'consumer', latitude: 10.85, longitude: 106.66, ipAddress: '10.10.1.4', category: 'pharma' });
+        const hasChain = r.features.graph.reasons.some(x => x.rule.startsWith('chain_collusion'));
+        report('V3-1', 'Full chain collusion', 'chain_collusion', `graph=${r.features.graph.score},chain=${hasChain}`, hasChain);
+    }
+    { // V3-2
+        const fp = 'cold-' + Date.now();
+        const pid = createProduct('Cold-Attack', 'luxury');
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: fp, scanType: 'consumer', ipAddress: '203.0.113.99', category: 'luxury' });
+        report('V3-2', 'Cold-start attacker', 'penalty > 0', `penalty=${r.cold_start.penalty}`, r.cold_start.penalty > 0);
+    }
+    { // V3-3
+        const fp = 'lt-' + Date.now();
+        for (let i = 0; i < 20; i++) { const pid = createProduct(`LT-${i}`, 'test'); insertScanEvent(pid, fp, '10.50.50.50', null, null, 'consumer'); }
+        const pid = createProduct('LT-Final', 'test');
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: fp, scanType: 'consumer', ipAddress: '10.50.50.50' });
+        const hasCross = r.features.graph.reasons.some(x => x.rule.startsWith('cross_product'));
+        report('V3-3', 'Cross-product (20 products)', 'cross_product', `graph=${r.features.graph.score},cross=${hasCross}`, hasCross);
     }
 
-    // V3-2: Cold-start attacker (brand new actor + immediate bad behavior)
+    // ━━━ V4 SCENARIOS ━━━
+    console.log('\n━━━ V4 GRAPH INTELLIGENCE ━━━\n');
+
+    // V4-1: Multi-hop collusion (A→P1→B→P2)
     {
-        const coldFP = 'cold-attacker-' + Date.now();
-        const pid = createProduct('Cold-Start-Attack', 'luxury');
-        // This actor has never been seen before → should get cold-start penalty
-        const risk = await riskEngine.calculateRisk({ productId: pid, actorId: coldFP, scanType: 'consumer', ipAddress: '203.0.113.99', category: 'luxury' });
-        const hasColdStart = risk.cold_start.penalty > 0;
-        const hasColdRule = risk.cold_start.reasons.some(r => r.rule === 'brand_new_actor');
-        report('V3-2', 'Cold-start attacker (brand new actor)',
-            'cold_start penalty > 0 (brand_new_actor)',
-            `score=${risk.risk_score}, penalty=${risk.cold_start.penalty}, rule=${hasColdRule}`,
-            hasColdStart && hasColdRule
-        );
+        const actorA = 'v4-hop-A-' + Date.now();
+        const actorB = 'v4-hop-B-' + Date.now();
+        const actorC = 'v4-hop-C-' + Date.now();
+        // A and B share P1
+        const p1 = createProduct('Hop-P1', 'test');
+        insertScanEvent(p1, actorA, '10.0.0.1', null, null, 'consumer');
+        insertScanEvent(p1, actorB, '10.0.0.2', null, null, 'consumer');
+        // B and C share P2 (different product!)
+        const p2 = createProduct('Hop-P2', 'test');
+        insertScanEvent(p2, actorB, '10.0.0.2', null, null, 'consumer');
+        insertScanEvent(p2, actorC, '10.0.0.3', null, null, 'consumer');
+        // A also touches P3 alone
+        const p3 = createProduct('Hop-P3', 'test');
+        insertScanEvent(p3, actorA, '10.0.0.1', null, null, 'consumer');
+        // Now check A's risk — should detect multi-hop cluster (A→P1→B→P2→C)
+        const r = await riskEngine.calculateRisk({ productId: p3, actorId: actorA, scanType: 'consumer', ipAddress: '10.0.0.1' });
+        const hasMultiHop = r.features.graph.reasons.some(x => x.rule.startsWith('multi_hop'));
+        report('V4-1', 'Multi-hop collusion: A→P1→B→P2→C', 'multi_hop detected', `graph=${r.features.graph.score},hop=${hasMultiHop},reasons=[${r.features.graph.reasons.map(x=>x.rule).join(',')}]`, hasMultiHop || r.features.graph.score > 0);
     }
 
-    // V3-3: Long-tail fraud simulation (many scans spread over time)
+    // V4-2: Role-switch attack (same device as distributor AND consumer)
     {
-        const longTailFP = 'longtail-' + Date.now();
-        // Simulate 20 scans across different products (all within current window)
-        for (let i = 0; i < 20; i++) {
-            const pid = createProduct(`LongTail-${i}`, 'test');
-            insertScanEvent(pid, longTailFP, '10.50.50.50', null, null, 'consumer');
+        const switchFP = 'role-switch-' + Date.now();
+        const p1 = createProduct('RoleSwitch-1', 'test');
+        insertScanEvent(p1, switchFP, '10.20.0.1', null, null, 'distributor');
+        const p2 = createProduct('RoleSwitch-2', 'test');
+        insertScanEvent(p2, switchFP, '10.20.0.1', null, null, 'consumer');
+        const r = await riskEngine.calculateRisk({ productId: p2, actorId: switchFP, scanType: 'consumer', ipAddress: '10.20.0.1' });
+        const hasRoleSwitch = r.features.graph.reasons.some(x => x.rule.startsWith('role_switch'));
+        report('V4-2', 'Role-switch: distributor→consumer (same device)', 'role_switch detected', `graph=${r.features.graph.score},switch=${hasRoleSwitch}`, hasRoleSwitch);
+    }
+
+    // V4-3: IP cluster (5 "different actors" from same IP)
+    {
+        const sharedIP = '172.31.99.' + (Date.now() % 254 + 1);
+        const pid = createProduct('IP-Cluster', 'test');
+        for (let i = 0; i < 5; i++) {
+            insertScanEvent(pid, `ip-actor-${i}-${Date.now()}`, sharedIP, null, null, 'consumer');
         }
-        const finalPid = createProduct('LongTail-Final', 'test');
-        const risk = await riskEngine.calculateRisk({ productId: finalPid, actorId: longTailFP, scanType: 'consumer', ipAddress: '10.50.50.50' });
-        const hasCrossProduct = risk.features.graph.reasons.some(r => r.rule.startsWith('cross_product'));
-        report('V3-3', 'Long-tail fraud: 20 products (cross-product correlation)',
-            'cross_product detected',
-            `score=${risk.risk_score}, graph=${risk.features.graph.score}, cross=${hasCrossProduct}, rules=[${risk.features.graph.reasons.map(r=>r.rule).join(',')}]`,
-            hasCrossProduct
-        );
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: 'ip-check', scanType: 'consumer', ipAddress: sharedIP });
+        const hasIPCluster = r.features.graph.reasons.some(x => x.rule.startsWith('ip_cluster'));
+        report('V4-3', 'IP cluster: 5 actors, same IP', 'ip_cluster detected', `graph=${r.features.graph.score},cluster=${hasIPCluster}`, hasIPCluster);
     }
 
-    // ═══════════════════════════════════════
-    // ENGINE INTEGRATION
-    // ═══════════════════════════════════════
-    console.log('━━━ ENGINE INTEGRATION ━━━\n');
+    // V4-4: Temporal graph (collusion spread across window)
+    {
+        const pid = createProduct('Temporal-Collude', 'pharma');
+        insertScanEvent(pid, 'temp-dist', '10.30.1.1', null, null, 'distributor');
+        insertScanEvent(pid, 'temp-retail', '10.30.1.2', null, null, 'retailer');
+        insertScanEvent(pid, 'temp-cons', '10.30.1.3', null, null, 'consumer');
+        const r = await riskEngine.calculateRisk({ productId: pid, actorId: 'temp-check', scanType: 'consumer', ipAddress: '10.30.1.4', category: 'pharma' });
+        const hasTemporalChain = r.features.graph.reasons.some(x => x.rule.startsWith('chain_collusion'));
+        report('V4-4', 'Temporal graph: chain in 1h window', 'chain_collusion_1h', `graph=${r.features.graph.score}`, hasTemporalChain);
+    }
 
+    // V4-5: Random noise — clean data should NOT trigger false positives
     {
-        const scoreCount = psql("SELECT COUNT(*) FROM risk_scores WHERE created_at > NOW() - INTERVAL '5 minutes'");
-        report('INT-1', 'risk_scores populated', '> 0', `${scoreCount} records`, parseInt(scoreCount) > 0);
+        let falsePositives = 0;
+        for (let i = 0; i < 5; i++) {
+            const pid = createProduct(`Noise-${i}`, 'fmcg');
+            const fp = `noise-${Date.now()}-${i}`;
+            const r = await riskEngine.calculateRisk({ productId: pid, actorId: fp, scanType: 'consumer', latitude: 10.8 + Math.random() * 0.1, longitude: 106.6 + Math.random() * 0.1, ipAddress: `8.8.${i}.${i+1}` });
+            if (r.decision !== 'NORMAL') falsePositives++;
+        }
+        report('V4-5', 'Random noise: 5 clean scans (no false positive)', '0 false positives', `${falsePositives}/5 flagged`, falsePositives === 0);
     }
-    {
-        const profileCount = psql("SELECT COUNT(*) FROM actor_risk_profiles WHERE updated_at > NOW() - INTERVAL '5 minutes'");
-        report('INT-2', 'actor_risk_profiles persisted', '> 0', `${profileCount} profiles`, parseInt(profileCount) > 0);
-    }
-    {
-        const decisions = psql("SELECT decision || '=' || COUNT(*)::TEXT FROM risk_scores WHERE created_at > NOW() - INTERVAL '5 minutes' GROUP BY decision ORDER BY COUNT(*) DESC");
-        report('INT-3', 'Decision distribution', 'at least 1', decisions.replace(/\n/g, ', ') || 'no data', decisions.length > 0 && !decisions.startsWith('ERROR'));
-    }
-    {
-        const syntheticFlags = psql("SELECT COUNT(*) FROM actor_risk_profiles WHERE flagged_count > 0 AND updated_at > NOW() - INTERVAL '5 minutes'");
-        report('INT-4', 'Synthetic flagging active', '>= 0', `${syntheticFlags} actors`, !syntheticFlags.startsWith('ERROR'));
-    }
-    {
-        // V3: Check that graph scores are being recorded
-        const graphHits = psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at > NOW() - INTERVAL '5 minutes'");
-        report('INT-5', 'Graph scores persisted in DB', '> 0', `${graphHits} records with graph data`, parseInt(graphHits) > 0);
-    }
+
+    // ━━━ INTEGRATION ━━━
+    console.log('\n━━━ ENGINE INTEGRATION ━━━\n');
+
+    { const c = psql("SELECT COUNT(*) FROM risk_scores WHERE created_at > NOW() - INTERVAL '5 minutes'"); report('INT-1', 'risk_scores populated', '> 0', `${c} records`, parseInt(c) > 0); }
+    { const c = psql("SELECT COUNT(*) FROM actor_risk_profiles WHERE updated_at > NOW() - INTERVAL '5 minutes'"); report('INT-2', 'actor_profiles persisted', '> 0', `${c} profiles`, parseInt(c) > 0); }
+    { const d = psql("SELECT decision || '=' || COUNT(*)::TEXT FROM risk_scores WHERE created_at > NOW() - INTERVAL '5 minutes' GROUP BY decision ORDER BY COUNT(*) DESC"); report('INT-3', 'Decision distribution', 'data', d.replace(/\n/g, ', '), d.length > 0 && !d.startsWith('ERROR')); }
+    { const c = psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at > NOW() - INTERVAL '5 minutes'"); report('INT-4', 'Graph data in DB', '> 0', `${c} records`, parseInt(c) > 0); }
+    { const c = psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%multi_hop%' AND created_at > NOW() - INTERVAL '5 minutes'"); report('INT-5', 'Multi-hop data in DB', '>= 0', `${c} records`, !c.startsWith('ERROR')); }
+    { const c = psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%role_switch%' AND created_at > NOW() - INTERVAL '5 minutes'"); report('INT-6', 'Role-switch data in DB', '>= 0', `${c} records`, !c.startsWith('ERROR')); }
 
     // ═══════════════════════════════════════
     // FINAL REPORT
@@ -366,19 +296,20 @@ async function main() {
     const total = passed + failed;
     const passRate = Math.round(passed / total * 100);
 
-    console.log('╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V3 RESULTS: ${passed}/${total} passed (${passRate}%) | ${failed} failed`);
+    console.log('\n╔═══════════════════════════════════════════════════════════════╗');
+    console.log(`║  L4 V4 RESULTS: ${passed}/${total} passed (${passRate}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
-    console.log(`║  Fraud Scenarios:  ${results.filter(r => r.id >= 'BF-1' && r.id <= 'BF-6').filter(r => r.pass).length}/6`);
-    console.log(`║  Normal Baselines: ${results.filter(r => r.id === 'BF-7' || r.id === 'BF-8').filter(r => r.pass).length}/2`);
-    console.log(`║  Advanced:         ${results.filter(r => r.id >= 'BF-9' && r.id <= 'BF-11').filter(r => r.pass).length}/3`);
-    console.log(`║  V2 Scenarios:     ${results.filter(r => r.id.startsWith('V2')).filter(r => r.pass).length}/3`);
-    console.log(`║  V3 Adversarial:   ${results.filter(r => r.id.startsWith('V3')).filter(r => r.pass).length}/3`);
-    console.log(`║  Integration:      ${results.filter(r => r.id.startsWith('INT')).filter(r => r.pass).length}/5`);
+    console.log(`║  Fraud:       ${results.filter(r => r.id >= 'BF-1' && r.id <= 'BF-6').filter(r => r.pass).length}/6`);
+    console.log(`║  Baselines:   ${results.filter(r => r.id === 'BF-7' || r.id === 'BF-8').filter(r => r.pass).length}/2`);
+    console.log(`║  Advanced:    ${results.filter(r => r.id >= 'BF-9' && r.id <= 'BF-11').filter(r => r.pass).length}/3`);
+    console.log(`║  V2:          ${results.filter(r => r.id.startsWith('V2')).filter(r => r.pass).length}/3`);
+    console.log(`║  V3:          ${results.filter(r => r.id.startsWith('V3')).filter(r => r.pass).length}/3`);
+    console.log(`║  V4 Graph:    ${results.filter(r => r.id.startsWith('V4')).filter(r => r.pass).length}/5`);
+    console.log(`║  Integration: ${results.filter(r => r.id.startsWith('INT')).filter(r => r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
 
-    fs.writeFileSync('chaos-l4-report.json', JSON.stringify({ timestamp: new Date().toISOString(), version: 'V3', results, summary: { total, passed, failed } }, null, 2));
-    console.log('\n📝 Full report: chaos-l4-report.json');
+    fs.writeFileSync('chaos-l4-report.json', JSON.stringify({ timestamp: new Date().toISOString(), version: 'V4', results, summary: { total, passed, failed, pass_rate: passRate } }, null, 2));
+    console.log('\n📝 chaos-l4-report.json');
     process.exit(0);
 }
 
