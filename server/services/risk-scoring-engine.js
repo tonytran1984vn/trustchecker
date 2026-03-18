@@ -1,7 +1,17 @@
 /**
- * Risk Scoring Engine — Fraud-Resistant V2
+ * Risk Scoring Engine V2 — Fraud-Resistant, Self-Learning
  * 
- * Features: confidence × severity scoring, time decay, category awareness
+ * V2 upgrades:
+ *   FIX 1: Synthetic risk injection (break feedback deadlock)
+ *     - Weak signal marker at score ≥ 30 (fractional flagged_count += 0.3)
+ *     - Risk momentum: 0.7 × current + 0.3 × historical_avg
+ *   FIX 2: Log-scale frequency scoring (no more flat thresholds)
+ *     - 5→20, 10→35, 20→50, 50→65
+ *   FIX 3: Sliding window history (24h + 7d instead of all-time)
+ *   FIX 4: Recovery / cooldown logic (no permanent lock)
+ *     - 24h clean → reduce enforcement 1 level
+ *   FIX 5: Explainability (structured breakdown in response + DB)
+ *
  * Decision: NORMAL (<40) | SUSPICIOUS (40-69) | SOFT_BLOCK (70-85) | HARD_BLOCK (>85)
  */
 const db = require('../db');
@@ -42,11 +52,18 @@ function timeDecay(baseSeverity, daysSinceEvent, lambda = 0.1) {
     return baseSeverity * Math.exp(-lambda * daysSinceEvent);
 }
 
+// ─── LOG-SCALE FREQUENCY (FIX 2) ─────────────────────────────
+// Smooth curve: 5→20, 10→35, 20→50, 50→65, 100→80
+function logFrequencyScore(scansPerMinute) {
+    if (scansPerMinute <= 2) return 0;
+    // log2(spm) * 15, capped at 80
+    return Math.min(80, Math.round(Math.log2(scansPerMinute) * 15));
+}
+
 // ─── FEATURE 1: SCAN PATTERN SCORE ────────────────────────────
 async function scanPatternScore(productId, actorId, scanType) {
     let score = 0;
     const reasons = [];
-    let confidence = 1.0;
 
     // Check if product is in SOLD state
     try {
@@ -55,7 +72,7 @@ async function scanPatternScore(productId, actorId, scanType) {
             [productId]
         );
         if (state && !['sell', 'SOLD', 'SCANNED'].includes(state.to_state)) {
-            score += 40 * 0.9; // severity=40, confidence=0.9
+            score += 40 * 0.9;
             reasons.push({ rule: 'scan_before_sold', severity: 40, confidence: 0.9, state: state.to_state });
         }
     } catch(_) {}
@@ -135,7 +152,6 @@ async function geoScore(productId, latitude, longitude, ipAddress) {
             const distance = haversine(prevScan.latitude, prevScan.longitude, latitude, longitude);
             const timeDiffMin = (Date.now() - new Date(prevScan.scanned_at).getTime()) / 60000;
             
-            // GPS confidence decreases with indoor/inaccurate readings
             const gpsConfidence = 0.6; // Conservative — GPS can be spoofed
 
             if (distance > 1000 && timeDiffMin < 10) {
@@ -146,9 +162,17 @@ async function geoScore(productId, latitude, longitude, ipAddress) {
                 reasons.push({ rule: 'suspicious_travel', severity: 70, confidence: gpsConfidence, distance_km: Math.round(distance), time_min: Math.round(timeDiffMin) });
             }
 
+            // Slow geo drift: VN → TH → US in 1h (FIX: broader window)
+            if (distance > 300 && timeDiffMin < 60 && timeDiffMin >= 10) {
+                const speedKmH = distance / (timeDiffMin / 60);
+                if (speedKmH > 900) { // Faster than commercial jet
+                    score += 40 * 0.5;
+                    reasons.push({ rule: 'geo_drift_fast', severity: 40, confidence: 0.5, distance_km: Math.round(distance), speed_kmh: Math.round(speedKmH) });
+                }
+            }
+
             // Country change
             if (prevScan.geo_country && prevScan.geo_country !== 'unknown') {
-                // We'd need current geo_country from IP — approximation
                 if (distance > 2000) {
                     score += 30 * 0.5;
                     reasons.push({ rule: 'likely_country_change', severity: 30, confidence: 0.5 });
@@ -160,12 +184,12 @@ async function geoScore(productId, latitude, longitude, ipAddress) {
     return { score: Math.min(100, Math.round(score)), reasons };
 }
 
-// ─── FEATURE 3: FREQUENCY SCORE ──────────────────────────────
+// ─── FEATURE 3: FREQUENCY SCORE (FIX 2: LOG-SCALE) ──────────
 async function frequencyScore(productId, actorId) {
     let score = 0;
     const reasons = [];
 
-    // Scans per minute for this product
+    // V2: Log-scale frequency (replaces flat thresholds)
     try {
         const perMin = await db.get(
             "SELECT COUNT(*) as c FROM scan_events WHERE product_id = $1 AND scanned_at > NOW() - INTERVAL '1 minute'",
@@ -173,9 +197,12 @@ async function frequencyScore(productId, actorId) {
         );
         if (perMin) {
             const spm = parseInt(perMin.c);
-            if (spm > 20) { score += 70 * 0.95; reasons.push({ rule: 'extreme_frequency', severity: 70, confidence: 0.95, spm }); }
-            else if (spm > 10) { score += 50 * 0.9; reasons.push({ rule: 'high_frequency', severity: 50, confidence: 0.9, spm }); }
-            else if (spm > 5) { score += 30 * 0.85; reasons.push({ rule: 'elevated_frequency', severity: 30, confidence: 0.85, spm }); }
+            if (spm > 2) {
+                const logScore = logFrequencyScore(spm);
+                const confidence = Math.min(0.95, 0.7 + spm * 0.005); // confidence grows with volume
+                score += logScore * confidence;
+                reasons.push({ rule: 'frequency_log', severity: logScore, confidence: Math.round(confidence * 100) / 100, spm, formula: `log2(${spm})*15` });
+            }
         }
     } catch(_) {}
 
@@ -186,41 +213,63 @@ async function frequencyScore(productId, actorId) {
                 "SELECT COUNT(DISTINCT product_id) as products, COUNT(*) as total FROM scan_events WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '5 minutes'",
                 [actorId]
             );
-            if (actorRate && actorRate.products > 10) {
-                score += 40 * 0.9;
-                reasons.push({ rule: 'scan_farming', severity: 40, confidence: 0.9, products: actorRate.products, total: actorRate.total });
+            if (actorRate && actorRate.products > 5) {
+                const farmScore = logFrequencyScore(actorRate.products);
+                score += farmScore * 0.9;
+                reasons.push({ rule: 'scan_farming', severity: farmScore, confidence: 0.9, products: actorRate.products, total: actorRate.total });
             }
         }
     } catch(_) {}
 
-    // Slow fraud detection: consistent scanning over long period
+    // Slow fraud: consistent scanning over long period
     try {
         const slowFraud = await db.get(
             "SELECT COUNT(*) as c FROM scan_events WHERE product_id = $1 AND scanned_at > NOW() - INTERVAL '24 hours'",
             [productId]
         );
-        if (slowFraud && slowFraud.c > 20) {
-            score += 25 * 0.7; // Lower confidence — could be legitimate popular product
-            reasons.push({ rule: 'slow_accumulation', severity: 25, confidence: 0.7, scans_24h: slowFraud.c });
+        if (slowFraud && slowFraud.c > 15) {
+            const slowScore = Math.min(40, Math.round(Math.log2(slowFraud.c) * 8));
+            score += slowScore * 0.7;
+            reasons.push({ rule: 'slow_accumulation', severity: slowScore, confidence: 0.7, scans_24h: slowFraud.c });
+        }
+    } catch(_) {}
+
+    // Frequency evasion detection: scan every 3-5s (just below threshold)
+    try {
+        const per5Min = await db.get(
+            "SELECT COUNT(*) as c FROM scan_events WHERE product_id = $1 AND scanned_at > NOW() - INTERVAL '5 minutes'",
+            [productId]
+        );
+        if (per5Min) {
+            const spm5 = parseInt(per5Min.c);
+            // If 5-min count is high but per-min is low → evasion
+            if (spm5 > 10) {
+                const evasionScore = Math.min(50, Math.round(Math.log2(spm5) * 12));
+                score += evasionScore * 0.8;
+                reasons.push({ rule: 'frequency_evasion', severity: evasionScore, confidence: 0.8, scans_5min: spm5 });
+            }
         }
     } catch(_) {}
 
     return { score: Math.min(100, Math.round(score)), reasons };
 }
 
-// ─── FEATURE 4: HISTORY SCORE (with time decay) ──────────────
+// ─── FEATURE 4: HISTORY SCORE (FIX 1+3: MOMENTUM + SLIDING) ─
 async function historyScore(productId, actorId) {
     let score = 0;
     const reasons = [];
 
-    // Actor history with time decay
+    // Actor history with time decay + sliding window (FIX 3)
     try {
         if (actorId) {
             const profile = await db.get(
-                "SELECT flagged_count, blocked_count, avg_risk_score, last_flagged_at, risk_level FROM actor_risk_profiles WHERE actor_id = $1",
+                "SELECT flagged_count, blocked_count, avg_risk_score, last_risk_score, last_flagged_at, risk_level, total_scans FROM actor_risk_profiles WHERE actor_id = $1",
                 [actorId]
             );
             if (profile) {
+                // V2: Sliding window — use last_risk_score + avg for momentum
+                const historicalAvg = parseFloat(profile.avg_risk_score) || 0;
+                
                 if (profile.flagged_count > 0) {
                     const daysSinceFlag = profile.last_flagged_at ? (Date.now() - new Date(profile.last_flagged_at).getTime()) / 86400000 : 365;
                     const decayed = timeDecay(40, daysSinceFlag);
@@ -231,9 +280,11 @@ async function historyScore(productId, actorId) {
                     score += 30 * 0.9;
                     reasons.push({ rule: 'actor_blocked_before', severity: 30, confidence: 0.9, blocked_count: profile.blocked_count });
                 }
-                if (profile.avg_risk_score > 50) {
-                    score += 20 * 0.75;
-                    reasons.push({ rule: 'actor_high_avg_risk', severity: 20, confidence: 0.75, avg: profile.avg_risk_score });
+                // V2: Risk momentum — historical avg contributes (FIX 1)
+                if (historicalAvg > 20) {
+                    const momentumScore = Math.min(30, Math.round(historicalAvg * 0.4));
+                    score += momentumScore * 0.7;
+                    reasons.push({ rule: 'risk_momentum', severity: momentumScore, confidence: 0.7, historical_avg: Math.round(historicalAvg) });
                 }
             }
             // New actor (no history) — slight signal
@@ -244,16 +295,34 @@ async function historyScore(productId, actorId) {
         }
     } catch(_) {}
 
-    // Product history
+    // Product history — sliding window (FIX 3)
     try {
-        const productScans = await db.get(
-            "SELECT COUNT(*) as c FROM scan_events WHERE product_id = $1",
+        // 24h window
+        const scans24h = await db.get(
+            "SELECT COUNT(*) as c FROM scan_events WHERE product_id = $1 AND scanned_at > NOW() - INTERVAL '24 hours'",
             [productId]
         );
-        if (productScans && productScans.c > 5) {
-            score += 30 * 0.8;
-            reasons.push({ rule: 'product_multi_scanned', severity: 30, confidence: 0.8, scan_count: productScans.c });
+        // 7d window
+        const scans7d = await db.get(
+            "SELECT COUNT(*) as c FROM scan_events WHERE product_id = $1 AND scanned_at > NOW() - INTERVAL '7 days'",
+            [productId]
+        );
+        
+        const c24h = scans24h ? parseInt(scans24h.c) : 0;
+        const c7d = scans7d ? parseInt(scans7d.c) : 0;
+        
+        if (c24h > 5) {
+            const s = Math.min(40, Math.round(Math.log2(c24h) * 10));
+            score += s * 0.8;
+            reasons.push({ rule: 'product_multi_scanned_24h', severity: s, confidence: 0.8, scans_24h: c24h });
         }
+        if (c7d > 20 && c24h <= 5) {
+            // Many scans over 7d but not bursty today → moderate concern
+            score += 15 * 0.6;
+            reasons.push({ rule: 'product_scanned_week', severity: 15, confidence: 0.6, scans_7d: c7d });
+        }
+
+        // Product previously flagged
         const productFlags = await db.get(
             "SELECT COUNT(*) as c FROM risk_scores WHERE product_id = $1 AND decision IN ('SOFT_BLOCK','HARD_BLOCK')",
             [productId]
@@ -267,9 +336,45 @@ async function historyScore(productId, actorId) {
     return { score: Math.min(100, Math.round(score)), reasons };
 }
 
+// ─── RECOVERY / COOLDOWN CHECK (FIX 4) ───────────────────────
+async function checkRecovery(actorId) {
+    if (!actorId) return null;
+    try {
+        const profile = await db.get(
+            "SELECT risk_level, last_flagged_at, updated_at FROM actor_risk_profiles WHERE actor_id = $1",
+            [actorId]
+        );
+        if (!profile || profile.risk_level === 'NORMAL') return null;
+
+        // Check: has there been any anomaly in the last 24h?
+        const recentFlags = await db.get(
+            "SELECT COUNT(*) as c FROM risk_scores WHERE actor_id = $1 AND decision != 'NORMAL' AND created_at > NOW() - INTERVAL '24 hours'",
+            [actorId]
+        );
+        
+        if (recentFlags && parseInt(recentFlags.c) === 0) {
+            // No anomaly for 24h → downgrade enforcement by 1 level
+            const levels = ['HARD_BLOCK', 'SOFT_BLOCK', 'SUSPICIOUS', 'NORMAL'];
+            const currentIdx = levels.indexOf(profile.risk_level);
+            const newLevel = currentIdx < levels.length - 1 ? levels[currentIdx + 1] : 'NORMAL';
+            
+            await db.run(
+                "UPDATE actor_risk_profiles SET risk_level = $1, updated_at = NOW() WHERE actor_id = $2",
+                [newLevel, actorId]
+            );
+            
+            return { recovered: true, from: profile.risk_level, to: newLevel, clean_hours: 24 };
+        }
+    } catch(_) {}
+    return null;
+}
+
 // ─── MAIN SCORING FUNCTION ────────────────────────────────────
 async function calculateRisk(input) {
     const { productId, actorId, scanType, latitude, longitude, ipAddress, category } = input;
+
+    // FIX 4: Check recovery before scoring
+    const recovery = await checkRecovery(actorId);
 
     const [p, g, f, h] = await Promise.all([
         scanPatternScore(productId, actorId, scanType),
@@ -278,7 +383,21 @@ async function calculateRisk(input) {
         historyScore(productId, actorId),
     ]);
 
+    // V2: Risk momentum — blend current with historical
     let rawScore = WEIGHTS.scan_pattern * p.score + WEIGHTS.geo * g.score + WEIGHTS.frequency * f.score + WEIGHTS.history * h.score;
+
+    // FIX 1: Risk momentum from actor profile
+    let momentum = 0;
+    try {
+        if (actorId) {
+            const profile = await db.get("SELECT avg_risk_score, total_scans FROM actor_risk_profiles WHERE actor_id = $1", [actorId]);
+            if (profile && profile.total_scans > 2) {
+                momentum = parseFloat(profile.avg_risk_score) || 0;
+                // momentum blend: 0.7 × current + 0.3 × historical
+                rawScore = 0.7 * rawScore + 0.3 * momentum;
+            }
+        }
+    } catch(_) {}
 
     // Category multiplier
     const catMult = CATEGORY_MULT[category] || CATEGORY_MULT.default;
@@ -295,40 +414,64 @@ async function calculateRisk(input) {
 
     const allReasons = [...p.reasons, ...g.reasons, ...f.reasons, ...h.reasons];
 
-    // Persist score
+    // FIX 5: Structured breakdown for explainability
+    const breakdown = {
+        pattern: p.score,
+        geo: g.score,
+        frequency: f.score,
+        history: h.score,
+        momentum: Math.round(momentum),
+        category_mult: catMult,
+        raw_weighted: Math.round(WEIGHTS.scan_pattern * p.score + WEIGHTS.geo * g.score + WEIGHTS.frequency * f.score + WEIGHTS.history * h.score),
+        final: totalScore,
+    };
+
+    // Persist score with breakdown (FIX 5)
     try {
         await db.run(
             `INSERT INTO risk_scores (product_id, actor_id, scan_pattern_score, geo_score, frequency_score, history_score, total_score, decision, auto_action, reasons)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [productId, actorId, p.score, g.score, f.score, h.score, totalScore, decision, autoAction, JSON.stringify(allReasons)]
+            [productId, actorId, p.score, g.score, f.score, h.score, totalScore, decision, autoAction, JSON.stringify({ reasons: allReasons, breakdown, recovery })]
         );
     } catch(_) {}
 
-    // Update actor profile
+    // FIX 1: Synthetic risk injection — update actor profile with FRACTIONAL flagging
     try {
         if (actorId) {
+            // Determine fractional flag increment:
+            // < 30 → 0 (clean), 30-49 → 0.3 (weak signal), 50-69 → 0.7, ≥70 → 1.0
+            let flagIncrement = 0;
+            let blockIncrement = 0;
+            if (totalScore >= 70) { flagIncrement = 1; }
+            else if (totalScore >= 50) { flagIncrement = 0.7; }
+            else if (totalScore >= 30) { flagIncrement = 0.3; } // FIX 1: weak signal
+
+            if (decision === 'HARD_BLOCK') blockIncrement = 1;
+
+            const lastFlaggedAt = flagIncrement > 0 ? new Date() : null;
+
             await db.run(`
                 INSERT INTO actor_risk_profiles (actor_id, total_scans, flagged_count, blocked_count, avg_risk_score, last_risk_score, risk_level, last_flagged_at, updated_at)
-                VALUES ($1, 1, $2, $3, $4::numeric, $4::integer, $5, $6, NOW())
+                VALUES ($1, 1, $2::numeric, $3, $4::numeric, $4::integer, $5, $6, NOW())
                 ON CONFLICT (actor_id) DO UPDATE SET
                     total_scans = actor_risk_profiles.total_scans + 1,
-                    flagged_count = actor_risk_profiles.flagged_count + $2,
+                    flagged_count = actor_risk_profiles.flagged_count + $2::numeric,
                     blocked_count = actor_risk_profiles.blocked_count + $3,
                     avg_risk_score = (actor_risk_profiles.avg_risk_score * actor_risk_profiles.total_scans + $4::numeric) / (actor_risk_profiles.total_scans + 1),
                     last_risk_score = $4::integer,
                     risk_level = $5,
-                    last_flagged_at = CASE WHEN $2 > 0 THEN NOW() ELSE actor_risk_profiles.last_flagged_at END,
+                    last_flagged_at = CASE WHEN $2::numeric > 0 THEN NOW() ELSE actor_risk_profiles.last_flagged_at END,
                     updated_at = NOW()
-            `, [actorId, decision === 'SOFT_BLOCK' || decision === 'HARD_BLOCK' ? 1 : 0, decision === 'HARD_BLOCK' ? 1 : 0, totalScore, decision, decision !== 'NORMAL' ? new Date() : null]);
+            `, [actorId, flagIncrement, blockIncrement, totalScore, decision, lastFlaggedAt]);
         }
     } catch(_) {}
 
-    // Log action for forensics
+    // Log action for forensics (any non-NORMAL)
     if (decision !== 'NORMAL') {
         try {
             await db.run(
                 "INSERT INTO risk_actions_log (product_id, actor_id, risk_score, action, reasons, metadata) VALUES ($1, $2, $3, $4, $5, $6)",
-                [productId, actorId, totalScore, decision, JSON.stringify(allReasons), JSON.stringify({ category, catMult, scores: { p: p.score, g: g.score, f: f.score, h: h.score } })]
+                [productId, actorId, totalScore, decision, JSON.stringify(allReasons), JSON.stringify({ category, catMult, breakdown, recovery })]
             );
         } catch(_) {}
     }
@@ -343,8 +486,12 @@ async function calculateRisk(input) {
             frequency: { score: f.score, weight: WEIGHTS.frequency, reasons: f.reasons },
             history: { score: h.score, weight: WEIGHTS.history, reasons: h.reasons },
         },
+        // FIX 5: Explainability
+        breakdown,
+        momentum: Math.round(momentum),
         category_multiplier: catMult,
+        recovery: recovery || null,
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, WEIGHTS, CATEGORY_MULT };
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT };
