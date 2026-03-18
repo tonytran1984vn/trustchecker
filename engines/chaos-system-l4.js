@@ -897,6 +897,55 @@ async function main() {
             scored.source === 'credibility_weighted' && typeof scored.confidence === 'number');
     }
 
+    // ━━━ V21.5 ADOPTABLE PROTOCOL ━━━
+    console.log('\n━━━ V21.5 ADOPTABLE PROTOCOL ━━━\n');
+
+    // V215-1: Trust contract — liability tiers
+    {
+        const high = R.trustContract(90, 'block', 'pharma');
+        const low = R.trustContract(5, 'pass', 'fmcg');
+        ok('V215-1', 'Trust contract: liability', 'high vs low',
+            `high=${high.liability_level},low=${low.liability_level},appeal=${high.appeal_available}`,
+            typeof high.liability_level === 'string' && typeof high.confidence === 'number' && high.audit_trail === true);
+    }
+
+    // V215-2: API standard — full format
+    {
+        const api = R.trustApiStandard(85, 'block', 'pharma', 'actor_api_test');
+        ok('V215-2', 'API standard: format', 'all fields present',
+            `trust=${api.trust_score},conf=${api.confidence},ver=${api.protocol_version},liability=${api.liability}`,
+            api.trust_score <= 1 && api.trust_score >= 0 &&
+            typeof api.confidence === 'number' &&
+            api.protocol_version === '21.5' &&
+            api.sources && api.explain && api.contract);
+    }
+
+    // V215-3: Contract disclaimer — decision ≠ verdict
+    {
+        const c = R.trustContract(50, 'soft_block', 'pharma');
+        ok('V215-3', 'Contract: disclaimer', 'not a verdict',
+            `disclaimer=${c.disclaimer}`,
+            c.disclaimer.includes('not a legal verdict') && c.disclaimer.includes(c.liability_level));
+    }
+
+    // V215-4: API explain — rationale + routing
+    {
+        const api = R.trustApiStandard(90, 'block', 'pharma', 'x');
+        ok('V215-4', 'API explain: rationale', 'has routing + impact',
+            `factor=${api.explain.top_factor},route=${api.explain.routing},team=${api.explain.team}`,
+            api.explain.top_factor === 'high_risk_signals' &&
+            api.explain.routing === 'incident_response' &&
+            typeof api.explain.net_impact === 'number');
+    }
+
+    // V215-5: API sources — local + network
+    {
+        const api = R.trustApiStandard(50, 'suspicious', 'pharma', 'actor_agree');
+        ok('V215-5', 'API sources: local+network', 'source distribution',
+            `local=${api.sources.local},net=${api.sources.network},contested=${api.sources.contested}`,
+            api.sources.local === true && typeof api.sources.network === 'boolean');
+    }
+
     // ━━━ INTEGRATION ━━━
     console.log('\n━━━ INTEGRATION ━━━\n');
     { ok('INT-1','risk_scores','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"))>0); }
@@ -905,14 +954,14 @@ async function main() {
     ok('INT-3','Decisions','data',d.replace(/\n/g,', '),d.length>0&&!d.startsWith('ERROR')); }
     { ok('INT-4','Graph','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"))>0); }
     { ok('INT-5','signal_stats','rows',psql("SELECT COUNT(*) FROM signal_stats"),parseInt(psql("SELECT COUNT(*) FROM signal_stats"))>=5); }
-    { // V21 response includes v21 trust economy
+    { // V21.5 response includes trust contract
       const r = await R.calculateRisk({productId:createProduct('INT6','pharma'),actorId:'int6-'+Date.now(),scanType:'consumer',ipAddress:'8.8.8.8',category:'pharma'});
-      ok('INT-6','V21 metadata','v21 obj',`orgs=${r.v21?.org_credibility_count},conf=${r.v21?.network_confidence}`,r.v21 && typeof r.v21.org_credibility_count === 'number' && typeof r.v21.network_confidence === 'number'); }
+      ok('INT-6','V21.5 metadata','v21 obj',`contract=${r.v21?.trust_contract}`,r.v21 && typeof r.v21.trust_contract === 'string'); }
 
     // ═══════════
     const total=passed+failed;const pct=Math.round(passed/total*100);
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V21 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
+    console.log(`║  L4 V21.5 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║  Fraud:       ${results.filter(r=>r.id>='BF-1'&&r.id<='BF-6').filter(r=>r.pass).length}/6`);
     console.log(`║  Baselines:   ${results.filter(r=>r.id==='BF-7'||r.id==='BF-8').filter(r=>r.pass).length}/2`);
@@ -936,12 +985,13 @@ async function main() {
     console.log(`║  V18 Govern:  ${results.filter(r=>r.id.startsWith('V18')).filter(r=>r.pass).length}/5`);
     console.log(`║  V19 OrgInt:  ${results.filter(r=>r.id.startsWith('V19')).filter(r=>r.pass).length}/5`);
     console.log(`║  V20 Trust:   ${results.filter(r=>r.id.startsWith('V20')).filter(r=>r.pass).length}/5`);
-    console.log(`║  V21 Econ:    ${results.filter(r=>r.id.startsWith('V21')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V21 Econ:    ${results.filter(r=>r.id.startsWith('V21-')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V21.5 Proto: ${results.filter(r=>r.id.startsWith('V215')).filter(r=>r.pass).length}/5`);
     console.log(`║  Integration: ${results.filter(r=>r.id.startsWith('INT')).filter(r=>r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
     const fails=results.filter(r=>!r.pass);
     if(fails.length>0){console.log('\n❌ FAILED:');fails.forEach(f=>console.log(`  ${f.id}: ${f.name} | exp: ${f.expected} | act: ${f.actual}`));}
-    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V21',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
+    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V21.5',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
     console.log('\n📝 chaos-l4-report.json'); process.exit(0);
 }
 main().catch(e=>{console.error('FATAL:',e.message,e.stack);process.exit(1);});

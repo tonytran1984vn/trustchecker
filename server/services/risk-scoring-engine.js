@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V21 — Trust Economy Layer
+ * Risk Scoring Engine V21.5 — Adoptable Trust Protocol
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -1711,6 +1711,7 @@ async function calculateRisk(input) {
         v21: {
             org_credibility_count: Object.keys(_orgCredibility).length,
             network_confidence: networkConfidence().confidence,
+            trust_contract: trustContract(totalScore, decision, category).liability_level,
         },
     };
 }
@@ -3153,4 +3154,91 @@ function conflictDetection(actorId) {
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, stealthResponseProtocol, adaptiveEntropyFloor, systemSelfAwareness, signalEvolution, getEvolutionState, metaAnchor, driftVsBias, recordFailure, checkFailureMemory, getFailureMemory, identityConstraints, getConstitution, governanceCheck, metaConstitution, getConstitutionAudit, dualSpeedEvolution, shadowSystem, humanGovernance, getHumanOverrides, decisionOrchestration, slaAwareDecision, humanReliability, getAnalystScores, weightedFeedback, incentiveAlignment, trustNetworkShare, trustNetworkQuery, platformTrustScore, getTrustNetwork, orgCredibility, getOrgCredibility, networkConfidence, crossOrgIncentive, conflictDetection, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
+// ─── V21.5: TRUST CONTRACT (decision ≠ verdict) ───
+function trustContract(score, decision, category) {
+    const conf = networkConfidence();
+    const selfAware = systemSelfAwareness();
+    const calibration = selfAware.calibration_error || 0;
+
+    // Confidence = system health × network maturity × calibration
+    const systemConf = Math.max(0, 1 - calibration);
+    const netConf = conf.confidence || 0;
+    const confidence = Math.round((0.5 * systemConf + 0.3 * netConf + 0.2 * (score > 20 ? 1 : 0.5)) * 100) / 100;
+
+    // Liability tier
+    let liability_level, legal_weight, appeal_available;
+    if (confidence >= 0.8) {
+        liability_level = 'enforceable';
+        legal_weight = 'high';
+        appeal_available = true;
+    } else if (confidence >= 0.5) {
+        liability_level = 'advisory';
+        legal_weight = 'medium';
+        appeal_available = true;
+    } else {
+        liability_level = 'informational';
+        legal_weight = 'low';
+        appeal_available = false;
+    }
+
+    return {
+        score,
+        decision,
+        confidence,
+        liability_level,
+        legal_weight,
+        appeal_available,
+        disclaimer: `This is a ${liability_level} risk assessment, not a legal verdict.`,
+        audit_trail: true,
+        category: category || 'default',
+    };
+}
+
+// ─── V21.5: API STANDARD (interoperable format) ───
+function trustApiStandard(score, decision, category, actorId) {
+    const contract = trustContract(score, decision, category);
+    const incentive = incentiveAlignment(decision, score, category);
+    const network = trustNetworkQuery(actorId || 'unknown');
+    const conflict = conflictDetection(actorId || 'unknown');
+    const orch = decisionOrchestration(score, decision);
+
+    return {
+        // Core trust output (standard format)
+        trust_score: Math.round((1 - score / 100) * 100) / 100, // inverted: 0=risky, 1=trusted
+        risk_score: score,
+        confidence: contract.confidence,
+        decision: contract.decision,
+        liability: contract.liability_level,
+
+        // Sources
+        sources: {
+            local: true,
+            network: network.found,
+            network_orgs: network.found ? network.reporting_orgs : 0,
+            contested: conflict.contested || false,
+        },
+
+        // Explain (mandatory for adoption)
+        explain: {
+            top_factor: decision === 'block' || decision === 'HARD_BLOCK' ? 'high_risk_signals' : 'within_tolerance',
+            net_impact: incentive.net_impact,
+            rationale: incentive.rationale,
+            routing: orch.route,
+            team: orch.team,
+        },
+
+        // Contract
+        contract: {
+            legal_weight: contract.legal_weight,
+            appeal_available: contract.appeal_available,
+            disclaimer: contract.disclaimer,
+            audit_trail: true,
+        },
+
+        // Metadata
+        protocol_version: '21.5',
+        timestamp: Date.now(),
+    };
+}
+
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, stealthResponseProtocol, adaptiveEntropyFloor, systemSelfAwareness, signalEvolution, getEvolutionState, metaAnchor, driftVsBias, recordFailure, checkFailureMemory, getFailureMemory, identityConstraints, getConstitution, governanceCheck, metaConstitution, getConstitutionAudit, dualSpeedEvolution, shadowSystem, humanGovernance, getHumanOverrides, decisionOrchestration, slaAwareDecision, humanReliability, getAnalystScores, weightedFeedback, incentiveAlignment, trustNetworkShare, trustNetworkQuery, platformTrustScore, getTrustNetwork, orgCredibility, getOrgCredibility, networkConfidence, crossOrgIncentive, conflictDetection, trustContract, trustApiStandard, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
