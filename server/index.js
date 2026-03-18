@@ -101,8 +101,7 @@ const apiLimiter = rateLimit({
     message: { error: 'Too many requests, please try again later' }
 });
 // v9.5.0: API Versioning — /api/v1/* forwards to /api/*
-app.use('/api/v1', (req, res, next) => { req.originalUrl = req.originalUrl.replace('/api/v1', '/api'); req.url = req.url; next(
-outer); });
+app.use('/api/v1', (req, res, next) => { req.originalUrl = req.originalUrl.replace('/api/v1', '/api'); req.url = req.url; next(); });
 app.use('/api/', apiLimiter);
 
 // Stricter rate limit for auth endpoints

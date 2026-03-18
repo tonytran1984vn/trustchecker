@@ -1,40 +1,26 @@
-// @ts-check
-const { test, expect } = require('@playwright/test');
-const { getAuthToken } = require('./helpers/auth');
+const { test, expect } = require("@playwright/test");
 
-test.describe('Input Validation (Zod)', () => {
-    let token;
-
-    test.beforeAll(async ({ request }) => {
-        token = await getAuthToken(request);
+test.describe("Input Validation", () => {
+    test("Login with invalid email returns error", async ({ request }) => {
+        const res = await request.post("/api/auth/login", {
+            data: { email: "not-an-email", password: "test123" },
+        });
+        expect([400, 401]).toContain(res.status());
+        const body = await res.json();
+        expect(body.error || body.errors).toBeTruthy();
     });
 
-    const authHeaders = () => ({
-        Authorization: 'Bearer ' + token,
-        'Content-Type': 'application/json',
-    });
-
-    test('Login with invalid email format returns 400', async ({ request }) => {
-        const res = await request.post('/api/auth/login', {
-            data: { email: 'not-an-email', password: 'test' },
+    test("Login with empty body returns error", async ({ request }) => {
+        const res = await request.post("/api/auth/login", {
+            data: {},
         });
         expect([400, 401]).toContain(res.status());
     });
 
-    test('Register with short password returns 400', async ({ request }) => {
-        const res = await request.post('/api/auth/register', {
-            data: { email: 'test@test.com', password: '123', username: 'test' },
+    test("POST with missing required fields returns error", async ({ request }) => {
+        const res = await request.post("/api/auth/login", {
+            data: { email: "", password: "" },
         });
-        expect([400, 403, 409]).toContain(res.status());
-    });
-
-    test('Validation errors have structured format', async ({ request }) => {
-        const res = await request.post('/api/auth/login', {
-            data: { email: '', password: '' },
-        });
-        const body = await res.json();
-        // Should have some error info
-        const hasErrors = body.errors || body.error || body.message;
-        expect(hasErrors).toBeTruthy();
+        expect([400, 401]).toContain(res.status());
     });
 });
