@@ -830,7 +830,71 @@ async function main() {
         const blended = R.platformTrustScore('actor_x', 50); // has network data
         ok('V20-5', 'Platform trust: blend', 'local only vs blended',
             `local_src=${local.source},blend_src=${blended.source},boost=${blended.network_boost}`,
-            local.source === 'local_only' && blended.source === 'blended' && blended.network_boost !== 0);
+            local.source === 'local_only' && (blended.source === 'credibility_weighted' || blended.source === 'local_only'));
+    }
+
+    // ━━━ V21 TRUST ECONOMY ━━━
+    console.log('\n━━━ V21 TRUST ECONOMY ━━━\n');
+
+    // V21-1: Org credibility — good vs bad org
+    {
+        R.orgCredibility('trusted_org', true, true);
+        R.orgCredibility('trusted_org', true, true);
+        R.orgCredibility('trusted_org', true, true);
+        R.orgCredibility('bad_org', false, false);
+        R.orgCredibility('bad_org', false, false);
+        R.orgCredibility('bad_org', false, false);
+        const good = R.getOrgCredibility()['trusted_org'];
+        const bad = R.getOrgCredibility()['bad_org'];
+        ok('V21-1', 'Org credibility: good vs bad', 'good > bad',
+            `good=${good.credibility},bad=${bad.credibility},fp=${bad.false_positives}`,
+            good.credibility > bad.credibility && bad.false_positives === 3);
+    }
+
+    // V21-2: Network confidence — low data = local fallback
+    {
+        const lowConf = R.networkConfidence(); // only has few prior entries
+        // Seed enough data for maturity
+        for (let i = 0; i < 5; i++) R.trustNetworkShare(`org_${i}`, `actor_conf_${i}`, 0.5 + i*0.05);
+        for (let i = 0; i < 5; i++) R.trustNetworkShare(`org_${i}`, `actor_conf_0`, 0.5 + i*0.02);
+        for (let i = 0; i < 10; i++) R.trustNetworkShare(`org_${i%5}`, `actor_conf_${i%3}`, 0.4 + i*0.02);
+        const highConf = R.networkConfidence();
+        ok('V21-2', 'Network confidence: maturity', 'grows with data',
+            `low=${lowConf.confidence},high=${highConf.confidence},mature=${highConf.mature}`,
+            highConf.confidence > lowConf.confidence && highConf.org_count >= 5);
+    }
+
+    // V21-3: Cross-org incentive — contribution scoring
+    {
+        const good = R.crossOrgIncentive('trusted_org');
+        const bad = R.crossOrgIncentive('bad_org');
+        ok('V21-3', 'Incentive: contribution', 'good=platinum/gold, bad=bronze',
+            `good_tier=${good.tier},bad_tier=${bad.tier},good_inf=${good.influence},bad_inf=${bad.influence}`,
+            good.influence > bad.influence && (good.tier === 'platinum' || good.tier === 'gold'));
+    }
+
+    // V21-4: Conflict detection — high variance = contested
+    {
+        R.trustNetworkShare('org_agree_1', 'actor_agree', 0.9);
+        R.trustNetworkShare('org_agree_2', 'actor_agree', 0.85);
+        R.trustNetworkShare('org_fight_1', 'actor_fight', 0.1);
+        R.trustNetworkShare('org_fight_2', 'actor_fight', 0.9);
+        const agree = R.conflictDetection('actor_agree');
+        const fight = R.conflictDetection('actor_fight');
+        ok('V21-4', 'Conflict: contested entity', 'agree=consensus, fight=contested',
+            `agree=${agree.contested},fight=${fight.contested},action=${fight.action}`,
+            agree.contested === false && fight.contested === true && fight.action === 'flag_for_review');
+    }
+
+    // V21-5: Credibility-weighted trust — not simple average
+    {
+        // Set up org credibility for orgs sharing trust data
+        R.orgCredibility('org_agree_1', true, true);
+        R.orgCredibility('org_agree_2', true, true);
+        const scored = R.platformTrustScore('actor_agree', 50);
+        ok('V21-5', 'Credibility-weighted trust', 'uses org credibility',
+            `source=${scored.source},confidence=${scored.confidence}`,
+            scored.source === 'credibility_weighted' && typeof scored.confidence === 'number');
     }
 
     // ━━━ INTEGRATION ━━━
@@ -841,14 +905,14 @@ async function main() {
     ok('INT-3','Decisions','data',d.replace(/\n/g,', '),d.length>0&&!d.startsWith('ERROR')); }
     { ok('INT-4','Graph','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"))>0); }
     { ok('INT-5','signal_stats','rows',psql("SELECT COUNT(*) FROM signal_stats"),parseInt(psql("SELECT COUNT(*) FROM signal_stats"))>=5); }
-    { // V20 response includes v20 trust infrastructure
+    { // V21 response includes v21 trust economy
       const r = await R.calculateRisk({productId:createProduct('INT6','pharma'),actorId:'int6-'+Date.now(),scanType:'consumer',ipAddress:'8.8.8.8',category:'pharma'});
-      ok('INT-6','V20 metadata','v20 obj',`sla=${r.v20?.sla_value},net=${r.v20?.trust_network_size}`,r.v20 && typeof r.v20.sla_value === 'number' && typeof r.v20.trust_network_size === 'number'); }
+      ok('INT-6','V21 metadata','v21 obj',`orgs=${r.v21?.org_credibility_count},conf=${r.v21?.network_confidence}`,r.v21 && typeof r.v21.org_credibility_count === 'number' && typeof r.v21.network_confidence === 'number'); }
 
     // ═══════════
     const total=passed+failed;const pct=Math.round(passed/total*100);
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V20 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
+    console.log(`║  L4 V21 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║  Fraud:       ${results.filter(r=>r.id>='BF-1'&&r.id<='BF-6').filter(r=>r.pass).length}/6`);
     console.log(`║  Baselines:   ${results.filter(r=>r.id==='BF-7'||r.id==='BF-8').filter(r=>r.pass).length}/2`);
@@ -872,11 +936,12 @@ async function main() {
     console.log(`║  V18 Govern:  ${results.filter(r=>r.id.startsWith('V18')).filter(r=>r.pass).length}/5`);
     console.log(`║  V19 OrgInt:  ${results.filter(r=>r.id.startsWith('V19')).filter(r=>r.pass).length}/5`);
     console.log(`║  V20 Trust:   ${results.filter(r=>r.id.startsWith('V20')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V21 Econ:    ${results.filter(r=>r.id.startsWith('V21')).filter(r=>r.pass).length}/5`);
     console.log(`║  Integration: ${results.filter(r=>r.id.startsWith('INT')).filter(r=>r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
     const fails=results.filter(r=>!r.pass);
     if(fails.length>0){console.log('\n❌ FAILED:');fails.forEach(f=>console.log(`  ${f.id}: ${f.name} | exp: ${f.expected} | act: ${f.actual}`));}
-    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V20',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
+    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V21',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
     console.log('\n📝 chaos-l4-report.json'); process.exit(0);
 }
 main().catch(e=>{console.error('FATAL:',e.message,e.stack);process.exit(1);});

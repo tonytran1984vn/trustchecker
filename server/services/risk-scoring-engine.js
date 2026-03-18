@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V20 — Trust Infrastructure Layer
+ * Risk Scoring Engine V21 — Trust Economy Layer
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -1707,6 +1707,11 @@ async function calculateRisk(input) {
             sla_value: slaAwareDecision(totalScore, decision).current_value,
             trust_network_size: _trustNetwork.length,
         },
+        // V21: Trust economy
+        v21: {
+            org_credibility_count: Object.keys(_orgCredibility).length,
+            network_confidence: networkConfidence().confidence,
+        },
     };
 }
 
@@ -2989,24 +2994,163 @@ function trustNetworkQuery(actorId) {
 
 function platformTrustScore(actorId, localScore) {
     const network = trustNetworkQuery(actorId);
-    if (!network.found) {
-        return { score: localScore, source: 'local_only', network_boost: 0 };
+    const conf = networkConfidence();
+
+    // V21: Confidence gating — only use network when mature
+    if (!network.found || conf.confidence < 0.3) {
+        return { score: localScore, source: 'local_only', network_boost: 0, confidence: conf.confidence };
     }
 
-    // Blend local + network (0.7 local + 0.3 network)
-    const blended = Math.round((0.7 * localScore + 0.3 * network.cross_org_score) * 100) / 100;
+    // V21: Credibility-weighted aggregation
+    const matches = _trustNetwork.filter(e => e.actor_id === actorId);
+    let weightedSum = 0, weightTotal = 0;
+    for (const m of matches) {
+        const cred = _orgCredibility[m.org_id];
+        const w = cred ? cred.credibility : 0.5;
+        weightedSum += m.trust_score * w;
+        weightTotal += w;
+    }
+    const networkScore = weightTotal > 0 ? weightedSum / weightTotal : network.cross_org_score;
+
+    // Blend with confidence-scaled weight
+    const networkWeight = 0.3 * conf.confidence;
+    const localWeight = 1 - networkWeight;
+    const blended = Math.round((localWeight * localScore + networkWeight * networkScore) * 100) / 100;
     const boost = Math.round((blended - localScore) * 100) / 100;
 
     return {
         score: blended,
         local_score: localScore,
-        network_score: network.cross_org_score,
-        source: 'blended',
+        network_score: Math.round(networkScore * 100) / 100,
+        source: 'credibility_weighted',
         network_boost: boost,
         reporting_orgs: network.reporting_orgs,
+        confidence: conf.confidence,
     };
 }
 
 function getTrustNetwork() { return [..._trustNetwork]; }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, stealthResponseProtocol, adaptiveEntropyFloor, systemSelfAwareness, signalEvolution, getEvolutionState, metaAnchor, driftVsBias, recordFailure, checkFailureMemory, getFailureMemory, identityConstraints, getConstitution, governanceCheck, metaConstitution, getConstitutionAudit, dualSpeedEvolution, shadowSystem, humanGovernance, getHumanOverrides, decisionOrchestration, slaAwareDecision, humanReliability, getAnalystScores, weightedFeedback, incentiveAlignment, trustNetworkShare, trustNetworkQuery, platformTrustScore, getTrustNetwork, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
+// ─── V21: ORG CREDIBILITY LAYER ───────────
+const _orgCredibility = {};
+
+function orgCredibility(orgId, wasAccurate, agreedWithConsensus) {
+    if (!_orgCredibility[orgId]) {
+        _orgCredibility[orgId] = {
+            reports: 0, accurate: 0, agreed: 0,
+            false_positives: 0, credibility: 0.5,
+        };
+    }
+    const o = _orgCredibility[orgId];
+    o.reports++;
+    if (wasAccurate) o.accurate++;
+    else o.false_positives++;
+    if (agreedWithConsensus) o.agreed++;
+
+    const accuracy = o.accurate / o.reports;
+    const consistency = Math.min(1, o.reports / 10); // matures with volume
+    const agreement = o.agreed / o.reports;
+    o.credibility = Math.round((0.5 * accuracy + 0.3 * consistency + 0.2 * agreement) * 100) / 100;
+
+    return {
+        org_id: orgId,
+        credibility: o.credibility,
+        accuracy: Math.round(accuracy * 100) / 100,
+        consistency: Math.round(consistency * 100) / 100,
+        agreement: Math.round(agreement * 100) / 100,
+        reports: o.reports,
+        false_positives: o.false_positives,
+    };
+}
+
+function getOrgCredibility() { return { ..._orgCredibility }; }
+
+// ─── V21: NETWORK CONFIDENCE GATING ──────
+function networkConfidence() {
+    const orgCount = [...new Set(_trustNetwork.map(e => e.org_id))].length;
+    const dataVolume = _trustNetwork.length;
+
+    // Agreement: std dev of scores per actor
+    const actorScores = {};
+    for (const e of _trustNetwork) {
+        if (!actorScores[e.actor_id]) actorScores[e.actor_id] = [];
+        actorScores[e.actor_id].push(e.trust_score);
+    }
+    let totalVariance = 0, actorCount = 0;
+    for (const scores of Object.values(actorScores)) {
+        if (scores.length >= 2) {
+            const mean = scores.reduce((s, v) => s + v, 0) / scores.length;
+            const variance = scores.reduce((s, v) => s + (v - mean) ** 2, 0) / scores.length;
+            totalVariance += variance;
+            actorCount++;
+        }
+    }
+    const avgAgreement = actorCount > 0 ? Math.max(0, 1 - Math.sqrt(totalVariance / actorCount)) : 0;
+
+    // Confidence = f(orgs, volume, agreement)
+    const orgFactor = Math.min(1, orgCount / 5); // full confidence at 5+ orgs
+    const volFactor = Math.min(1, dataVolume / 20); // full confidence at 20+ reports
+    const confidence = Math.round((0.4 * orgFactor + 0.3 * volFactor + 0.3 * avgAgreement) * 100) / 100;
+
+    return {
+        confidence,
+        org_count: orgCount,
+        data_volume: dataVolume,
+        avg_agreement: Math.round(avgAgreement * 100) / 100,
+        mature: confidence >= 0.5,
+    };
+}
+
+// ─── V21: CROSS-ORG INCENTIVE SYSTEM ─────
+function crossOrgIncentive(orgId) {
+    const cred = _orgCredibility[orgId];
+    if (!cred) return { org_id: orgId, contribution: 0, tier: 'unknown', influence: 0.5 };
+
+    // Contribution = usefulness - false positive harm
+    const usefulness = cred.accurate / Math.max(1, cred.reports);
+    const harm = cred.false_positives / Math.max(1, cred.reports);
+    const contribution = Math.round((usefulness - harm * 0.5) * 100) / 100;
+
+    // Tier system
+    let tier, influence;
+    if (contribution > 0.7) { tier = 'platinum'; influence = 1.5; }
+    else if (contribution > 0.4) { tier = 'gold'; influence = 1.0; }
+    else if (contribution > 0.1) { tier = 'silver'; influence = 0.7; }
+    else { tier = 'bronze'; influence = 0.3; }
+
+    return {
+        org_id: orgId,
+        contribution,
+        usefulness: Math.round(usefulness * 100) / 100,
+        harm: Math.round(harm * 100) / 100,
+        tier,
+        influence,
+        reports: cred.reports,
+    };
+}
+
+// ─── V21: CONFLICT DETECTION ─────────────
+function conflictDetection(actorId) {
+    const matches = _trustNetwork.filter(e => e.actor_id === actorId);
+    if (matches.length < 2) return { actor_id: actorId, contested: false, variance: 0, reports: matches.length };
+
+    const scores = matches.map(m => m.trust_score);
+    const mean = scores.reduce((s, v) => s + v, 0) / scores.length;
+    const variance = scores.reduce((s, v) => s + (v - mean) ** 2, 0) / scores.length;
+    const stddev = Math.sqrt(variance);
+
+    const contested = stddev > 0.2; // high disagreement
+
+    return {
+        actor_id: actorId,
+        contested,
+        mean_score: Math.round(mean * 100) / 100,
+        stddev: Math.round(stddev * 100) / 100,
+        variance: Math.round(variance * 10000) / 10000,
+        reports: matches.length,
+        orgs: [...new Set(matches.map(m => m.org_id))],
+        action: contested ? 'flag_for_review' : 'consensus',
+    };
+}
+
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, stealthResponseProtocol, adaptiveEntropyFloor, systemSelfAwareness, signalEvolution, getEvolutionState, metaAnchor, driftVsBias, recordFailure, checkFailureMemory, getFailureMemory, identityConstraints, getConstitution, governanceCheck, metaConstitution, getConstitutionAudit, dualSpeedEvolution, shadowSystem, humanGovernance, getHumanOverrides, decisionOrchestration, slaAwareDecision, humanReliability, getAnalystScores, weightedFeedback, incentiveAlignment, trustNetworkShare, trustNetworkQuery, platformTrustScore, getTrustNetwork, orgCredibility, getOrgCredibility, networkConfidence, crossOrgIncentive, conflictDetection, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
