@@ -393,10 +393,10 @@ async function main() {
             const ex = R.explorationBypass(0.05);
             if (ex.explore) explored++;
         }
-        // Should be roughly 5 out of 100 (allow 0-15 range)
-        ok('V12-4', 'Exploration: ~5% bypass rate', '0 < explored ≤ 15',
+        // Should be roughly 5-15 out of 100 (allow 0-25 range with smart exploration)
+        ok('V12-4', 'Exploration: bypass rate', '0 ≤ explored ≤ 25',
             `explored=${explored}/100`,
-            explored >= 0 && explored <= 15);
+            explored >= 0 && explored <= 25);
     }
 
     // V12-5: Drift + Auto-threshold + Rollback
@@ -415,6 +415,61 @@ async function main() {
             rolled.suspicious === snap.suspicious && typeof drift.kl === 'number');
     }
 
+    // ━━━ V13 STRATEGIC ━━━
+    console.log('\n━━━ V13 STRATEGIC ━━━\n');
+
+    // V13-1: PSI+KL drift — returns both kl and psi
+    {
+        const drift = await R.driftDetector();
+        ok('V13-1', 'Drift: KL+PSI blend', 'has psi+kl',
+            `kl=${drift.kl},psi=${drift.psi},ds=${drift.drift_score}`,
+            typeof drift.kl === 'number' && typeof drift.psi === 'number' && typeof drift.drift_score === 'number');
+    }
+
+    // V13-2: Damping — threshold change should be smaller than raw adjust
+    {
+        R.setThresholds({ suspicious: 40, soft_block: 70, hard_block: 85 });
+        // Record outcomes to trigger threshold adjustment
+        for (let i = 0; i < 35; i++) {
+            await R.recordOutcomeWithDecision(`damp-${i}`, i < 15, i % 2 === 0, ['graph'], 'admin');
+        }
+        const before = R.getThresholds();
+        await R.autoThreshold('pharma');
+        const after = R.getThresholds();
+        // Change should be damped (small): |change| ≤ 1 because of 80/20 damping
+        const change = Math.abs(after.suspicious - before.suspicious);
+        ok('V13-2', 'Damping: small change', 'change ≤ 1',
+            `before=${before.suspicious},after=${after.suspicious},change=${change}`,
+            change <= 1);
+        R.setThresholds({ suspicious: 40, soft_block: 70, hard_block: 85 }); // reset
+    }
+
+    // V13-3: Smart exploration — higher uncertainty = higher epsilon
+    {
+        const lowUncert = R.smartExploration(0.05, 0.1);
+        const highUncert = R.smartExploration(0.05, 0.9);
+        ok('V13-3', 'Smart explore: high_ε > low_ε', 'eps scales',
+            `low_eps=${lowUncert.epsilon},high_eps=${highUncert.epsilon}`,
+            highUncert.epsilon > lowUncert.epsilon);
+    }
+
+    // V13-4: Attacker simulation — generates 5 scenarios
+    {
+        const attacks = R.attackerSimulation();
+        ok('V13-4', 'Attacker sim: 5 scenarios', '5 attacks',
+            `count=${attacks.length},first=${attacks[0]?.name}`,
+            attacks.length === 5 && attacks[0].id === 'ATK-1');
+    }
+
+    // V13-5: Strategy prediction + Global objective
+    {
+        const strategy = await R.strategyPrediction();
+        const objective = await R.globalObjective('pharma');
+        ok('V13-5', 'Strategy + Objective', 'has threat_level',
+            `threat=${strategy.threat_level},net=${objective.net_value},eff=${objective.efficiency}%`,
+            typeof strategy.threat_level === 'string' && typeof objective.net_value === 'number');
+    }
+
     // ━━━ INTEGRATION ━━━
     console.log('\n━━━ INTEGRATION ━━━\n');
     { ok('INT-1','risk_scores','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"))>0); }
@@ -423,14 +478,14 @@ async function main() {
     ok('INT-3','Decisions','data',d.replace(/\n/g,', '),d.length>0&&!d.startsWith('ERROR')); }
     { ok('INT-4','Graph','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"))>0); }
     { ok('INT-5','signal_stats','rows',psql("SELECT COUNT(*) FROM signal_stats"),parseInt(psql("SELECT COUNT(*) FROM signal_stats"))>=5); }
-    { // V12 response includes v12 metadata
+    { // V13 response includes v13 metadata
       const r = await R.calculateRisk({productId:createProduct('INT6','pharma'),actorId:'int6-'+Date.now(),scanType:'consumer',ipAddress:'8.8.8.8',category:'pharma'});
-      ok('INT-6','V12 metadata','v12 obj',`th=${r.v12?.thresholds?.suspicious},cost_fn=${r.v12?.dynamic_cost?.fn}`,r.v12 && r.v12.thresholds && r.v12.dynamic_cost && r.v12.dynamic_cost.fn === 10); }
+      ok('INT-6','V13 metadata','v13 obj',`th=${r.v13?.thresholds?.suspicious},eps=${r.v13?.exploration_epsilon}`,r.v13 && r.v13.thresholds && typeof r.v13.exploration_epsilon === 'number'); }
 
     // ═══════════
     const total=passed+failed;const pct=Math.round(passed/total*100);
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V12 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
+    console.log(`║  L4 V13 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║  Fraud:       ${results.filter(r=>r.id>='BF-1'&&r.id<='BF-6').filter(r=>r.pass).length}/6`);
     console.log(`║  Baselines:   ${results.filter(r=>r.id==='BF-7'||r.id==='BF-8').filter(r=>r.pass).length}/2`);
@@ -446,11 +501,12 @@ async function main() {
     console.log(`║  V10 Learn:   ${results.filter(r=>r.id.startsWith('V10')).filter(r=>r.pass).length}/5`);
     console.log(`║  V11 Causal:  ${results.filter(r=>r.id.startsWith('V11')).filter(r=>r.pass).length}/5`);
     console.log(`║  V12 Auto:    ${results.filter(r=>r.id.startsWith('V12')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V13 Strat:   ${results.filter(r=>r.id.startsWith('V13')).filter(r=>r.pass).length}/5`);
     console.log(`║  Integration: ${results.filter(r=>r.id.startsWith('INT')).filter(r=>r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
     const fails=results.filter(r=>!r.pass);
     if(fails.length>0){console.log('\n❌ FAILED:');fails.forEach(f=>console.log(`  ${f.id}: ${f.name} | exp: ${f.expected} | act: ${f.actual}`));}
-    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V12',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
+    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V13',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
     console.log('\n📝 chaos-l4-report.json'); process.exit(0);
 }
 main().catch(e=>{console.error('FATAL:',e.message,e.stack);process.exit(1);});
