@@ -1,27 +1,24 @@
 /**
- * Risk Scoring Engine V2 — Fraud-Resistant, Self-Learning
+ * Risk Scoring Engine V3 — Adversarial-Resistant, Graph Intelligence
  * 
- * V2 upgrades:
- *   FIX 1: Synthetic risk injection (break feedback deadlock)
- *     - Weak signal marker at score ≥ 30 (fractional flagged_count += 0.3)
- *     - Risk momentum: 0.7 × current + 0.3 × historical_avg
- *   FIX 2: Log-scale frequency scoring (no more flat thresholds)
- *     - 5→20, 10→35, 20→50, 50→65
- *   FIX 3: Sliding window history (24h + 7d instead of all-time)
- *   FIX 4: Recovery / cooldown logic (no permanent lock)
- *     - 24h clean → reduce enforcement 1 level
- *   FIX 5: Explainability (structured breakdown in response + DB)
+ * V2: synthetic signals, log-freq, sliding window, recovery, explainability
+ * V3 upgrades:
+ *   3.1: Graph intelligence — collusion detection via actor-product clusters
+ *   3.2: Cold-start penalty — new actors (<24h) get risk boost
+ *   3.3: Cross-product correlation — actor scanning many products
+ *   3.4: Anti-poisoning — cap momentum contribution per event (max 5pts)
  *
  * Decision: NORMAL (<40) | SUSPICIOUS (40-69) | SOFT_BLOCK (70-85) | HARD_BLOCK (>85)
  */
 const db = require('../db');
 
-// ─── WEIGHTS ──────────────────────────────────────────────────
+// ─── WEIGHTS (V3: graph added, rebalanced) ────────────────────
 const WEIGHTS = {
-    scan_pattern: 0.35,
-    geo: 0.25,
-    frequency: 0.20,
-    history: 0.20,
+    scan_pattern: 0.30,  // V3: reduced from 0.35 to make room for graph
+    geo: 0.20,           // V3: reduced from 0.25
+    frequency: 0.15,     // V3: reduced from 0.20
+    history: 0.15,       // V3: reduced from 0.20
+    graph: 0.20,         // V3: NEW — collusion + cross-entity
 };
 
 // ─── CATEGORY MULTIPLIERS ─────────────────────────────────────
@@ -336,6 +333,120 @@ async function historyScore(productId, actorId) {
     return { score: Math.min(100, Math.round(score)), reasons };
 }
 
+// ═══════════════════════════════════════════════════════════════
+// V3 FEATURES
+// ═══════════════════════════════════════════════════════════════
+
+// ─── V3 FEATURE 5: GRAPH INTELLIGENCE (Collusion Detection) ──
+async function graphScore(productId, actorId) {
+    let score = 0;
+    const reasons = [];
+
+    // 3.1: Actor-product cluster — detect multi-actor chains on same product
+    try {
+        const actors = await db.all(
+            `SELECT DISTINCT device_fingerprint, scan_type 
+             FROM scan_events WHERE product_id = $1 
+             AND scanned_at > NOW() - INTERVAL '1 hour'
+             AND device_fingerprint IS NOT NULL`,
+            [productId]
+        );
+        if (actors && actors.length >= 3) {
+            const roles = new Set(actors.map(a => a.scan_type));
+            const hasDistributor = roles.has('distributor');
+            const hasRetailer = roles.has('retailer');
+            const hasConsumer = roles.has('consumer');
+
+            if (hasDistributor && hasRetailer && hasConsumer) {
+                // Full chain collusion: all 3 roles scanned same product within 1h
+                score += 70 * 0.85;
+                reasons.push({ rule: 'full_chain_collusion', severity: 70, confidence: 0.85, actors: actors.length, roles: [...roles] });
+            } else if (roles.size >= 2 && actors.length >= 4) {
+                score += 45 * 0.75;
+                reasons.push({ rule: 'partial_chain_cluster', severity: 45, confidence: 0.75, actors: actors.length, roles: [...roles] });
+            }
+        }
+    } catch(_) {}
+
+    // 3.3: Cross-product correlation — actor scanning many products in 1h
+    try {
+        if (actorId) {
+            const crossProduct = await db.get(
+                `SELECT COUNT(DISTINCT product_id) as products, COUNT(*) as total
+                 FROM scan_events WHERE device_fingerprint = $1
+                 AND scanned_at > NOW() - INTERVAL '1 hour'`,
+                [actorId]
+            );
+            if (crossProduct) {
+                const pCount = parseInt(crossProduct.products);
+                const tCount = parseInt(crossProduct.total);
+                if (pCount > 20) {
+                    score += 60 * 0.9;
+                    reasons.push({ rule: 'cross_product_extreme', severity: 60, confidence: 0.9, products_1h: pCount, total_scans: tCount });
+                } else if (pCount > 10) {
+                    score += 40 * 0.8;
+                    reasons.push({ rule: 'cross_product_high', severity: 40, confidence: 0.8, products_1h: pCount, total_scans: tCount });
+                } else if (pCount > 5) {
+                    score += 20 * 0.7;
+                    reasons.push({ rule: 'cross_product_moderate', severity: 20, confidence: 0.7, products_1h: pCount });
+                }
+            }
+        }
+    } catch(_) {}
+
+    // Device-product affinity (same device obsessively scanning same product)
+    try {
+        if (actorId) {
+            const recentScans = await db.get(
+                `SELECT COUNT(*) as c FROM scan_events 
+                 WHERE device_fingerprint = $1 AND product_id = $2
+                 AND scanned_at > NOW() - INTERVAL '1 hour'`,
+                [actorId, productId]
+            );
+            if (recentScans && parseInt(recentScans.c) > 3) {
+                score += 25 * 0.8;
+                reasons.push({ rule: 'device_product_affinity', severity: 25, confidence: 0.8, repeat_scans: parseInt(recentScans.c) });
+            }
+        }
+    } catch(_) {}
+
+    return { score: Math.min(100, Math.round(score)), reasons };
+}
+
+// ─── V3 3.2: COLD-START PENALTY ──────────────────────────────
+async function coldStartPenalty(actorId) {
+    if (!actorId) return { penalty: 0, reasons: [] };
+    const reasons = [];
+    let penalty = 0;
+
+    try {
+        const profile = await db.get(
+            "SELECT created_at, total_scans FROM actor_risk_profiles WHERE actor_id = $1",
+            [actorId]
+        );
+        if (!profile) {
+            // Brand new actor — no profile at all
+            penalty = 15;
+            reasons.push({ rule: 'brand_new_actor', severity: 15, confidence: 0.6, note: 'no profile exists' });
+        } else {
+            const ageHours = (Date.now() - new Date(profile.created_at).getTime()) / 3600000;
+            if (ageHours < 1) {
+                penalty = 20;
+                reasons.push({ rule: 'actor_age_lt_1h', severity: 20, confidence: 0.7, age_hours: Math.round(ageHours * 10) / 10 });
+            } else if (ageHours < 24) {
+                // Proportional: 20 at 0h → 5 at 24h
+                penalty = Math.round(20 * (1 - ageHours / 24));
+                reasons.push({ rule: 'actor_age_lt_24h', severity: penalty, confidence: 0.6, age_hours: Math.round(ageHours) });
+            }
+        }
+    } catch(_) {
+        penalty = 10;
+        reasons.push({ rule: 'cold_start_fallback', severity: 10, confidence: 0.5 });
+    }
+
+    return { penalty, reasons };
+}
+
 // ─── RECOVERY / COOLDOWN CHECK (FIX 4) ───────────────────────
 async function checkRecovery(actorId) {
     if (!actorId) return null;
@@ -369,32 +480,47 @@ async function checkRecovery(actorId) {
     return null;
 }
 
-// ─── MAIN SCORING FUNCTION ────────────────────────────────────
+// ─── MAIN SCORING FUNCTION (V3) ──────────────────────────────
 async function calculateRisk(input) {
     const { productId, actorId, scanType, latitude, longitude, ipAddress, category } = input;
 
     // FIX 4: Check recovery before scoring
     const recovery = await checkRecovery(actorId);
 
-    const [p, g, f, h] = await Promise.all([
+    // V3: Run all 5 features in parallel (including graph)
+    const [p, g, f, h, gr] = await Promise.all([
         scanPatternScore(productId, actorId, scanType),
         geoScore(productId, latitude, longitude, ipAddress),
         frequencyScore(productId, actorId),
         historyScore(productId, actorId),
+        graphScore(productId, actorId),  // V3: graph intelligence
     ]);
 
-    // V2: Risk momentum — blend current with historical
-    let rawScore = WEIGHTS.scan_pattern * p.score + WEIGHTS.geo * g.score + WEIGHTS.frequency * f.score + WEIGHTS.history * h.score;
+    // V3: Cold-start penalty
+    const coldStart = await coldStartPenalty(actorId);
 
-    // FIX 1: Risk momentum from actor profile
+    // V3: 5-feature weighted score (rebalanced weights)
+    let rawScore = WEIGHTS.scan_pattern * p.score 
+        + WEIGHTS.geo * g.score 
+        + WEIGHTS.frequency * f.score 
+        + WEIGHTS.history * h.score
+        + WEIGHTS.graph * gr.score;  // V3: graph contribution
+
+    // V3: Add cold-start penalty (direct add, not weighted)
+    rawScore += coldStart.penalty;
+
+    // V2: Risk momentum from actor profile
+    // V3: Anti-poisoning — cap momentum contribution to max 5 points per event
     let momentum = 0;
+    let momentumContribution = 0;
     try {
         if (actorId) {
             const profile = await db.get("SELECT avg_risk_score, total_scans FROM actor_risk_profiles WHERE actor_id = $1", [actorId]);
             if (profile && profile.total_scans > 2) {
                 momentum = parseFloat(profile.avg_risk_score) || 0;
-                // momentum blend: 0.7 × current + 0.3 × historical
-                rawScore = 0.7 * rawScore + 0.3 * momentum;
+                // V3 anti-poisoning: cap influence per event = max 5 points
+                momentumContribution = Math.min(5, momentum * 0.3);
+                rawScore = rawScore + momentumContribution; // V3: additive instead of blend
             }
         }
     } catch(_) {}
@@ -412,42 +538,42 @@ async function calculateRisk(input) {
     else if (totalScore >= 40) { decision = 'SUSPICIOUS'; autoAction = 'warned'; }
     else { decision = 'NORMAL'; autoAction = 'none'; }
 
-    const allReasons = [...p.reasons, ...g.reasons, ...f.reasons, ...h.reasons];
+    const allReasons = [...p.reasons, ...g.reasons, ...f.reasons, ...h.reasons, ...gr.reasons, ...coldStart.reasons];
 
-    // FIX 5: Structured breakdown for explainability
+    // V3: Enhanced breakdown with graph + cold-start
     const breakdown = {
         pattern: p.score,
         geo: g.score,
         frequency: f.score,
         history: h.score,
+        graph: gr.score,              // V3
+        cold_start: coldStart.penalty, // V3
         momentum: Math.round(momentum),
+        momentum_contribution: Math.round(momentumContribution), // V3: capped
         category_mult: catMult,
-        raw_weighted: Math.round(WEIGHTS.scan_pattern * p.score + WEIGHTS.geo * g.score + WEIGHTS.frequency * f.score + WEIGHTS.history * h.score),
+        raw_weighted: Math.round(rawScore / catMult), // before category mult
         final: totalScore,
     };
 
-    // Persist score with breakdown (FIX 5)
+    // Persist score with breakdown
     try {
         await db.run(
             `INSERT INTO risk_scores (product_id, actor_id, scan_pattern_score, geo_score, frequency_score, history_score, total_score, decision, auto_action, reasons)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [productId, actorId, p.score, g.score, f.score, h.score, totalScore, decision, autoAction, JSON.stringify({ reasons: allReasons, breakdown, recovery })]
+            [productId, actorId, p.score, g.score, f.score, h.score, totalScore, decision, autoAction, JSON.stringify({ reasons: allReasons, breakdown, recovery, graph_score: gr.score, cold_start: coldStart.penalty })]
         );
     } catch(_) {}
 
-    // FIX 1: Synthetic risk injection — update actor profile with FRACTIONAL flagging
+    // Synthetic risk injection — update actor profile with FRACTIONAL flagging
     try {
         if (actorId) {
-            // Determine fractional flag increment:
-            // < 30 → 0 (clean), 30-49 → 0.3 (weak signal), 50-69 → 0.7, ≥70 → 1.0
             let flagIncrement = 0;
             let blockIncrement = 0;
             if (totalScore >= 70) { flagIncrement = 1; }
             else if (totalScore >= 50) { flagIncrement = 0.7; }
-            else if (totalScore >= 30) { flagIncrement = 0.3; } // FIX 1: weak signal
+            else if (totalScore >= 30) { flagIncrement = 0.3; }
 
             if (decision === 'HARD_BLOCK') blockIncrement = 1;
-
             const lastFlaggedAt = flagIncrement > 0 ? new Date() : null;
 
             await db.run(`
@@ -485,13 +611,15 @@ async function calculateRisk(input) {
             geo: { score: g.score, weight: WEIGHTS.geo, reasons: g.reasons },
             frequency: { score: f.score, weight: WEIGHTS.frequency, reasons: f.reasons },
             history: { score: h.score, weight: WEIGHTS.history, reasons: h.reasons },
+            graph: { score: gr.score, weight: WEIGHTS.graph, reasons: gr.reasons },  // V3
         },
-        // FIX 5: Explainability
         breakdown,
         momentum: Math.round(momentum),
+        momentum_contribution: Math.round(momentumContribution), // V3: anti-poisoning
+        cold_start: coldStart,  // V3
         category_multiplier: catMult,
         recovery: recovery || null,
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT };
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT };
