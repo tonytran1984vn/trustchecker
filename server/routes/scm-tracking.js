@@ -442,5 +442,42 @@ router.post('/batches/:id/recall', authMiddleware, requirePermission('batch:mana
     }
 });
 
+
+// ─── DIGITAL TWIN + ANOMALY API ─────────────────────────────────
+const digitalTwin = require('../services/digital-twin');
+const anomalyEngine = require('../services/anomaly-engine');
+const eventProcessor = require('../services/event-processor');
+
+// GET /api/scm/digital-twin/:productId — Compute full state from event chain
+router.get('/digital-twin/:productId', async (req, res) => {
+    try {
+        const twin = await digitalTwin.reconcile(req.params.productId);
+        res.json(twin);
+    } catch(err) {
+        res.status(500).json({ error: 'Digital twin failed', detail: err.message });
+    }
+});
+
+// GET /api/scm/chain-integrity/:productId — Verify hash chain
+router.get('/chain-integrity/:productId', async (req, res) => {
+    try {
+        const { verifyChainIntegrity } = require('../middleware/scm-state-machine');
+        const result = await verifyChainIntegrity(req.params.productId);
+        res.json(result);
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/scm/anomalies — Recent anomaly alerts
+router.get('/anomalies', async (req, res) => {
+    res.json({ alerts: anomalyEngine.getAlerts(parseInt(req.query.limit) || 50), stats: anomalyEngine.getStats() });
+});
+
+// GET /api/scm/processor-stats — Event processor stats
+router.get('/processor-stats', async (req, res) => {
+    res.json(eventProcessor.getStats());
+});
+
 module.exports = router;
 

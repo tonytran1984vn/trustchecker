@@ -1,41 +1,96 @@
 /**
- * SCM State Machine — RED-TEAM P2-1
- * Enforces valid supply chain event transitions.
+ * Product Lifecycle State Machine V2 — Anti-Fraud + High-Scale
  * 
- * Valid transitions:
- *   null → commission
- *   commission → pack | ship (simple chains)
- *   pack → ship
- *   ship → receive
- *   receive → sell | ship | return
- *   sell → return
- *   return → destroy | commission (re-enter)
+ * Event-driven, immutable, hash-chained.
+ * State = computed from event chain, never updated directly.
  */
+const crypto = require('crypto');
 const db = require('../db');
 
-const VALID_TRANSITIONS = {
-    '_initial':    ['commission'],
-    'commission':  ['pack', 'ship'],
-    'pack':        ['ship'],
-    'ship':        ['receive'],
-    'receive':     ['sell', 'ship', 'return'],
-    'sell':        ['return'],
-    'return':      ['destroy', 'commission'],
+// ─── STANDARDIZED EVENT TYPES ─────────────────────────────────
+const EVENT_TYPES = {
+    PRODUCT_CREATED:     'PRODUCT_CREATED',
+    PRODUCT_PRODUCED:    'PRODUCT_PRODUCED',
+    SHIPPED:             'SHIPPED',
+    RECEIVED_WAREHOUSE:  'RECEIVED_WAREHOUSE',
+    DISTRIBUTED:         'DISTRIBUTED',
+    RECEIVED_RETAIL:     'RECEIVED_RETAIL',
+    SOLD:                'SOLD',
+    SCANNED:             'SCANNED',
+    RETURNED:            'RETURNED',
+    BLOCKED:             'BLOCKED',
+    // Legacy compat
+    commission:          'commission',
+    pack:                'pack',
+    ship:                'ship',
+    receive:             'receive',
+    sell:                'sell',
+    return_event:        'return',
 };
 
-/**
- * Validate lifecycle transition
- */
+// ─── VALID TRANSITIONS ────────────────────────────────────────
+const VALID_TRANSITIONS = {
+    '_initial':           ['commission', 'PRODUCT_CREATED'],
+    'commission':         ['pack', 'PRODUCT_PRODUCED', 'ship'],
+    'PRODUCT_CREATED':    ['PRODUCT_PRODUCED', 'pack', 'ship'],
+    'pack':               ['ship', 'SHIPPED'],
+    'PRODUCT_PRODUCED':   ['SHIPPED', 'ship'],
+    'ship':               ['receive', 'RECEIVED_WAREHOUSE'],
+    'SHIPPED':            ['RECEIVED_WAREHOUSE', 'receive'],
+    'receive':            ['sell', 'ship', 'return', 'DISTRIBUTED', 'RECEIVED_RETAIL'],
+    'RECEIVED_WAREHOUSE': ['DISTRIBUTED', 'SHIPPED', 'ship', 'sell', 'RETURNED'],
+    'DISTRIBUTED':        ['RECEIVED_RETAIL', 'receive', 'sell', 'SOLD'],
+    'RECEIVED_RETAIL':    ['SOLD', 'sell'],
+    'sell':               ['return', 'SCANNED', 'RETURNED'],
+    'SOLD':               ['SCANNED', 'RETURNED', 'return'],
+    'SCANNED':            ['RETURNED', 'return'],
+    'return':             ['destroy', 'commission', 'BLOCKED'],
+    'RETURNED':           ['BLOCKED', 'destroy', 'commission'],
+};
+
+// ─── RBAC MATRIX ──────────────────────────────────────────────
+const RBAC_MATRIX = {
+    factory:     ['commission', 'pack', 'ship', 'PRODUCT_CREATED', 'PRODUCT_PRODUCED', 'SHIPPED'],
+    warehouse:   ['receive', 'ship', 'RECEIVED_WAREHOUSE', 'SHIPPED', 'DISTRIBUTED'],
+    distributor: ['receive', 'ship', 'sell', 'DISTRIBUTED', 'RECEIVED_RETAIL', 'SHIPPED'],
+    retailer:    ['receive', 'sell', 'return', 'RECEIVED_RETAIL', 'SOLD', 'RETURNED'],
+    customer:    ['SCANNED', 'RETURNED', 'return'],
+    admin:       ['*'], // All events
+    owner:       ['*'],
+    operator:    ['*'],
+    system:      ['*'],
+};
+
+// ─── HASH COMPUTATION ─────────────────────────────────────────
+function computeEventHash(productId, eventType, fromState, actorId, prevHash, timestamp) {
+    const payload = [productId, eventType, fromState, eventType, actorId, timestamp, prevHash].join('|');
+    return crypto.createHash('sha256').update(payload).digest('hex');
+}
+
+function computeSignature(eventData) {
+    const secret = process.env.QR_SECRET || process.env.JWT_SECRET || 'tc-default-key';
+    const payload = JSON.stringify(eventData);
+    return crypto.createHmac('sha256', secret).update(payload).digest('hex');
+}
+
+// ─── VALIDATE TRANSITION ──────────────────────────────────────
 async function validateTransition(productId, batchId, newEventType) {
     let lastEvent = null;
     if (productId) {
+        // Prefer product_events (new), fallback to legacy
         lastEvent = await db.get(
-            `SELECT event_type FROM supply_chain_events WHERE product_id = $1 ORDER BY created_at DESC LIMIT 1`,
+            'SELECT to_state as event_type, hash FROM product_events WHERE product_id = $1 ORDER BY created_at DESC LIMIT 1',
             [productId]
         );
+        if (!lastEvent) {
+            lastEvent = await db.get(
+                'SELECT event_type FROM supply_chain_events WHERE product_id = $1 ORDER BY created_at DESC LIMIT 1',
+                [productId]
+            );
+        }
     } else if (batchId) {
         lastEvent = await db.get(
-            `SELECT event_type FROM supply_chain_events WHERE batch_id = $1 ORDER BY created_at DESC LIMIT 1`,
+            'SELECT event_type FROM supply_chain_events WHERE batch_id = $1 ORDER BY created_at DESC LIMIT 1',
             [batchId]
         );
     }
@@ -44,133 +99,162 @@ async function validateTransition(productId, batchId, newEventType) {
     const allowedNext = VALID_TRANSITIONS[currentState];
 
     if (!allowedNext) {
-        return { valid: false, currentState, error: `Terminal state "${currentState}" — no further events allowed` };
+        // Check if terminal (BLOCKED)
+        if (['BLOCKED', 'destroy'].includes(currentState)) {
+            return { valid: false, currentState, error: 'Terminal state "' + currentState + '" — no further events allowed' };
+        }
+        return { valid: false, currentState, error: 'Unknown state "' + currentState + '"' };
     }
+    
+    // Allow BLOCKED/RETURNED from any state
+    if (['BLOCKED', 'RETURNED', 'return'].includes(newEventType)) {
+        return { valid: true, currentState };
+    }
+
     if (!allowedNext.includes(newEventType)) {
-        return { valid: false, currentState, error: `Invalid transition: "${currentState}" → "${newEventType}". Allowed: [${allowedNext.join(', ')}]` };
+        return { valid: false, currentState, error: 'Invalid transition: "' + currentState + '" → "' + newEventType + '". Allowed: [' + allowedNext.join(', ') + ']' };
     }
-    // INV-1-LOCATION: Product cannot be in 2 places at once
-    // If product is currently "in transit" (last event is ship), block ship/sell from different location
-    if (['ship', 'sell'].includes(newEventType)) {
-        const lastShipOrReceive = await db.get(
-            'SELECT event_type, location, partner_id FROM supply_chain_events WHERE (product_id = $1 OR batch_id = $2) AND event_type IN ($3, $4) ORDER BY created_at DESC LIMIT 1',
-            [productId || '', batchId || '', 'ship', 'receive']
+
+    // INV-1: Location mutex
+    if (['ship', 'sell', 'SHIPPED', 'SOLD'].includes(newEventType)) {
+        const lastShip = await db.get(
+            'SELECT event_type, location_id FROM product_events WHERE product_id = $1 AND event_type IN ($2,$3) ORDER BY created_at DESC LIMIT 1',
+            [productId, 'ship', 'SHIPPED']
         );
-        if (lastShipOrReceive && lastShipOrReceive.event_type === 'ship') {
-            // Product is IN TRANSIT — cannot ship again or sell until received
-            return { 
-                valid: false, currentState, 
-                error: 'Product is currently in transit (shipped to ' + (lastShipOrReceive.location || 'unknown') + '). Must be received before ' + newEventType + '.' 
-            };
+        if (lastShip) {
+            const lastReceive = await db.get(
+                'SELECT id FROM product_events WHERE product_id = $1 AND event_type IN ($2,$3,$4) AND created_at > (SELECT created_at FROM product_events WHERE product_id = $1 AND event_type IN ($5,$6) ORDER BY created_at DESC LIMIT 1) LIMIT 1',
+                [productId, 'receive', 'RECEIVED_WAREHOUSE', 'RECEIVED_RETAIL', 'ship', 'SHIPPED']
+            );
+            if (!lastReceive && ['ship', 'SHIPPED'].includes(newEventType)) {
+                return { valid: false, currentState, error: 'Product is in transit — must be received before shipping again' };
+            }
         }
     }
 
-    // FIX-2-SHIP-RECEIVE: Physical verification for receive events
-    if (newEventType === 'receive') {
-        const hasShip = await db.get(
-            'SELECT id FROM supply_chain_events WHERE (product_id = $1 OR batch_id = $2) AND event_type = $3 ORDER BY created_at DESC LIMIT 1',
-            [productId || '', batchId || '', 'ship']
-        );
-        if (!hasShip) {
-            return { valid: false, currentState, error: 'Cannot receive: no prior ship event found. Product must be shipped before receiving.' };
+    // INV-5: Scan only after sell (configurable)
+    if (['SCANNED'].includes(newEventType)) {
+        if (!['sell', 'SOLD', 'SCANNED'].includes(currentState)) {
+            return { valid: false, currentState, error: 'Scan only allowed after SOLD state. Current: ' + currentState };
         }
     }
 
-    // FIX-3-SELL-RECEIVE: Physical verification for sell events
-    if (newEventType === 'sell') {
-        const hasReceive = await db.get(
-            'SELECT id FROM supply_chain_events WHERE (product_id = $1 OR batch_id = $2) AND event_type = $3 ORDER BY created_at DESC LIMIT 1',
-            [productId || '', batchId || '', 'receive']
-        );
-        if (!hasReceive) {
-            return { valid: false, currentState, error: 'Cannot sell: product was never received into inventory.' };
-        }
-    }
-
-    // INV-2-SKIP-DETECT: Detect and log any skipped intermediate steps
+    // Skip detection
     const FULL_CHAIN = ['commission', 'pack', 'ship', 'receive', 'sell'];
     const currentIdx = FULL_CHAIN.indexOf(currentState);
     const newIdx = FULL_CHAIN.indexOf(newEventType);
     const skippedSteps = [];
     if (currentIdx >= 0 && newIdx > currentIdx + 1) {
-        for (let s = currentIdx + 1; s < newIdx; s++) {
-            skippedSteps.push(FULL_CHAIN[s]);
-        }
+        for (let s = currentIdx + 1; s < newIdx; s++) skippedSteps.push(FULL_CHAIN[s]);
     }
 
-    return { valid: true, currentState, skippedSteps };
+    return { valid: true, currentState, skippedSteps, prevHash: lastEvent?.hash };
 }
 
-/**
- * Check for duplicate receive (idempotency — P2-4)
- */
-async function checkDuplicateReceive(productId, batchId, eventType) {
-    if (eventType !== 'receive') return { isDuplicate: false };
-    
-    const existing = await db.get(
-        `SELECT id, created_at FROM supply_chain_events 
-         WHERE (product_id = $1 OR batch_id = $2) AND event_type = 'receive'
-         ORDER BY created_at DESC LIMIT 1`,
-        [productId || '', batchId || '']
+// ─── VALIDATE RBAC ────────────────────────────────────────────
+function validateRBAC(actorRole, eventType) {
+    const allowed = RBAC_MATRIX[actorRole];
+    if (!allowed) return { valid: false, error: 'Unknown role: ' + actorRole };
+    if (allowed.includes('*')) return { valid: true };
+    if (!allowed.includes(eventType)) {
+        return { valid: false, error: 'Role "' + actorRole + '" cannot create event "' + eventType + '". Allowed: [' + allowed.join(', ') + ']' };
+    }
+    return { valid: true };
+}
+
+// ─── INSERT EVENT (via stored procedure) ──────────────────────
+async function insertProductEvent(productId, eventType, actorId, actorRole, locationId, partnerId, batchId, orgId, metadata) {
+    // Validate RBAC
+    const rbac = validateRBAC(actorRole, eventType);
+    if (!rbac.valid) return { success: false, error: rbac.error, code: 'RBAC_DENIED' };
+
+    // Compute signature
+    const sig = computeSignature({ productId, eventType, actorId, timestamp: new Date().toISOString() });
+
+    try {
+        const result = await db.get(
+            'SELECT * FROM insert_product_event($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+            [productId, eventType, actorId || 'system', actorRole || 'system', locationId, partnerId, batchId, orgId, JSON.stringify(metadata || {}), sig]
+        );
+        return { success: true, event_id: result?.event_id, hash: result?.computed_hash, from: result?.from_st, to: result?.to_st };
+    } catch(e) {
+        if (e.message.includes('INVALID_TRANSITION')) {
+            return { success: false, error: e.message, code: 'INVALID_TRANSITION' };
+        }
+        throw e;
+    }
+}
+
+// ─── VERIFY CHAIN INTEGRITY ──────────────────────────────────
+async function verifyChainIntegrity(productId) {
+    const events = await db.all(
+        'SELECT id, event_type, from_state, to_state, actor_id, prev_event_hash, hash, created_at FROM product_events WHERE product_id = $1 ORDER BY created_at ASC',
+        [productId]
     );
 
+    if (!events || events.length === 0) return { valid: true, events: 0 };
+
+    const issues = [];
+    let prevHash = '0000000000000000000000000000000000000000000000000000000000000000';
+    
+    for (let i = 0; i < events.length; i++) {
+        const e = events[i];
+        // Check prev_event_hash links
+        if (e.prev_event_hash !== prevHash && e.prev_event_hash !== 'MIGRATION_NO_PREV_HASH') {
+            issues.push({ event: i + 1, id: e.id, issue: 'prev_hash mismatch', expected: prevHash.substring(0, 16), got: (e.prev_event_hash || '').substring(0, 16) });
+        }
+        prevHash = e.hash;
+    }
+
+    return { valid: issues.length === 0, events: events.length, issues };
+}
+
+// ─── LEGACY COMPAT ────────────────────────────────────────────
+async function checkDuplicateReceive(productId, batchId, eventType) {
+    if (eventType !== 'receive' && eventType !== 'RECEIVED_WAREHOUSE') return { isDuplicate: false };
+    const existing = await db.get(
+        'SELECT id, created_at FROM product_events WHERE product_id = $1 AND event_type IN ($2,$3) ORDER BY created_at DESC LIMIT 1',
+        [productId || '', 'receive', 'RECEIVED_WAREHOUSE']
+    );
     if (existing) {
         const reShipped = await db.get(
-            `SELECT id FROM supply_chain_events 
-             WHERE (product_id = $1 OR batch_id = $2) AND event_type = 'ship'
-             AND created_at > $3 LIMIT 1`,
-            [productId || '', batchId || '', existing.created_at]
+            'SELECT id FROM product_events WHERE product_id = $1 AND event_type IN ($2,$3) AND created_at > $4 LIMIT 1',
+            [productId || '', 'ship', 'SHIPPED', existing.created_at]
         );
-        if (!reShipped) {
-            return { isDuplicate: true, existingId: existing.id, receivedAt: existing.created_at };
-        }
+        if (!reShipped) return { isDuplicate: true, existingId: existing.id };
     }
     return { isDuplicate: false };
 }
 
-/**
- * Validate partner belongs to org (P2-3)
- */
 async function validatePartner(partnerId, orgId) {
     if (!partnerId) return { valid: true };
-    
-    const partner = await db.get(
-        'SELECT id, name, status FROM partners WHERE id = $1 AND org_id = $2',
-        [partnerId, orgId]
-    );
-    
-    if (!partner) {
-        return { valid: false, error: `Partner "${partnerId}" not found in your organization` };
-    }
-    if (partner.status === 'suspended' || partner.status === 'blocked') {
-        return { valid: false, error: `Partner "${partner.name}" is ${partner.status}` };
-    }
+    const partner = await db.get('SELECT id, name, status FROM partners WHERE id = $1 AND org_id = $2', [partnerId, orgId]);
+    if (!partner) return { valid: false, error: 'Partner "' + partnerId + '" not found' };
+    if (['suspended', 'blocked'].includes(partner.status)) return { valid: false, error: 'Partner "' + partner.name + '" is ' + partner.status };
     return { valid: true, partner };
 }
 
-/**
- * Validate batch quantity (P2-5)
- */
 async function validateBatchQuantity(batchId, eventType) {
-    if (!batchId || !['ship', 'sell'].includes(eventType)) return { valid: true };
-
+    if (!batchId || !['ship', 'sell', 'SHIPPED', 'SOLD'].includes(eventType)) return { valid: true };
     const batch = await db.get('SELECT quantity, status FROM batches WHERE id = $1', [batchId]);
-    if (!batch) return { valid: true }; // No batch = no quantity check
-
-    if (batch.status === 'recalled') {
-        return { valid: false, error: `Batch is recalled — cannot ${eventType}` };
-    }
-
-    // Count items already shipped/sold from this batch
-    const shipped = await db.get(
-        `SELECT COUNT(*) as cnt FROM supply_chain_events WHERE batch_id = $1 AND event_type IN ('ship', 'sell')`,
-        [batchId]
-    );
-    
-    if (shipped && shipped.cnt >= batch.quantity) {
-        return { valid: false, error: `Batch quantity exceeded: ${shipped.cnt}/${batch.quantity} already processed` };
-    }
+    if (!batch) return { valid: true };
+    if (batch.status === 'recalled') return { valid: false, error: 'Batch is recalled' };
+    const shipped = await db.get("SELECT COUNT(*) as cnt FROM product_events WHERE batch_id = $1 AND event_type IN ('ship','sell','SHIPPED','SOLD')", [batchId]);
+    if (shipped && shipped.cnt >= batch.quantity) return { valid: false, error: 'Batch quantity exceeded: ' + shipped.cnt + '/' + batch.quantity };
     return { valid: true, remaining: batch.quantity - (shipped?.cnt || 0) };
 }
 
-module.exports = { validateTransition, checkDuplicateReceive, validatePartner, validateBatchQuantity, VALID_TRANSITIONS };
+module.exports = {
+    EVENT_TYPES,
+    VALID_TRANSITIONS,
+    RBAC_MATRIX,
+    validateTransition,
+    validateRBAC,
+    insertProductEvent,
+    verifyChainIntegrity,
+    computeEventHash,
+    computeSignature,
+    checkDuplicateReceive,
+    validatePartner,
+    validateBatchQuantity,
+};
