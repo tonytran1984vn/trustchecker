@@ -309,13 +309,13 @@ async function calculateRisk(input) {
         if (actorId) {
             await db.run(`
                 INSERT INTO actor_risk_profiles (actor_id, total_scans, flagged_count, blocked_count, avg_risk_score, last_risk_score, risk_level, last_flagged_at, updated_at)
-                VALUES ($1, 1, $2, $3, $4, $4, $5, $6, NOW())
+                VALUES ($1, 1, $2, $3, $4::numeric, $4::integer, $5, $6, NOW())
                 ON CONFLICT (actor_id) DO UPDATE SET
                     total_scans = actor_risk_profiles.total_scans + 1,
                     flagged_count = actor_risk_profiles.flagged_count + $2,
                     blocked_count = actor_risk_profiles.blocked_count + $3,
-                    avg_risk_score = (actor_risk_profiles.avg_risk_score * actor_risk_profiles.total_scans + $4) / (actor_risk_profiles.total_scans + 1),
-                    last_risk_score = $4,
+                    avg_risk_score = (actor_risk_profiles.avg_risk_score * actor_risk_profiles.total_scans + $4::numeric) / (actor_risk_profiles.total_scans + 1),
+                    last_risk_score = $4::integer,
                     risk_level = $5,
                     last_flagged_at = CASE WHEN $2 > 0 THEN NOW() ELSE actor_risk_profiles.last_flagged_at END,
                     updated_at = NOW()
