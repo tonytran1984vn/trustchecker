@@ -116,7 +116,21 @@ const ingestEPCIS = z.object({
     events: z.array(epcisEvent).min(1).max(1000),
 });
 
+
+// RED-TEAM FIX: Missing qrScan schema (was undefined, caused validate crash)
+const qrScan = {
+    body: z.object({
+        qr_data: z.string().min(1, 'qr_data is required'),
+        device_fingerprint: z.string().optional(),
+        ip_address: z.string().optional(),
+        latitude: z.number().optional().nullable(),
+        longitude: z.number().optional().nullable(),
+        user_agent: z.string().optional(),
+    }),
+};
+
 module.exports = {
+    qrScan,
     uuid, paginationQuery, idParam,
     login, register,
     createProduct, updateProduct, productQuery,

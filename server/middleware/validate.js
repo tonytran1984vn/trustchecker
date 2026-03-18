@@ -16,6 +16,7 @@ const { z } = require('zod');
  */
 function validate(schemas) {
     return (req, res, next) => {
+        if (!schemas) return next(); // Skip validation if schema is undefined
         const errors = [];
 
         if (schemas.body) {

@@ -1,8 +1,10 @@
+// [MIGRATED] Use /api/v1/supply-chain instead
 /**
  * SCM Tracking & Traceability Routes (FR-INTEG-002 + FR-SCM-001)
  * EPCIS/CBV event tracking + blockchain SCM layer
  */
 const express = require('express');
+const { validateTransition, checkDuplicateReceive, validatePartner, validateBatchQuantity } = require('../middleware/scm-state-machine');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
@@ -11,6 +13,12 @@ const { eventBus, EVENT_TYPES } = require('../events');
 const { validate, schemas } = require('../middleware/validate');
 
 const router = express.Router();
+
+router.use((req, res, next) => {
+    res.set('X-Deprecation', 'Use /api/v1/supply-chain instead');
+    next();
+});
+
 
 
 // GOV-1: All routes require authentication
@@ -23,6 +31,45 @@ router.post('/events', authMiddleware, requirePermission('supply_chain:create'),
         const validTypes = ['commission', 'pack', 'ship', 'receive', 'sell', 'return', 'destroy'];
         if (!event_type || !validTypes.includes(event_type)) {
             return res.status(400).json({ error: `event_type must be one of: ${validTypes.join(', ')}` });
+        }
+
+
+        // ── RED-TEAM P2: State Machine + Partner + Idempotency Validation ─
+        // P2-1: Validate lifecycle transition
+        const transition = await validateTransition(product_id, batch_id, event_type);
+        if (!transition.valid) {
+            return res.status(400).json({ 
+                error: transition.error,
+                current_state: transition.currentState,
+                requested: event_type,
+                code: 'INVALID_TRANSITION'
+            });
+        }
+
+        // P2-3: Validate partner belongs to org
+        if (partner_id) {
+            const orgId = req.user?.orgId || req.user?.org_id;
+            const partnerCheck = await validatePartner(partner_id, orgId);
+            if (!partnerCheck.valid) {
+                return res.status(400).json({ error: partnerCheck.error, code: 'INVALID_PARTNER' });
+            }
+        }
+
+        // P2-4: Prevent duplicate receive
+        const dupCheck = await checkDuplicateReceive(product_id, batch_id, event_type);
+        if (dupCheck.isDuplicate) {
+            return res.status(409).json({
+                error: 'Shipment already received',
+                existing_receive_id: dupCheck.existingId,
+                received_at: dupCheck.receivedAt,
+                code: 'DUPLICATE_RECEIVE'
+            });
+        }
+
+        // P2-5: Batch quantity validation
+        const qtyCheck = await validateBatchQuantity(batch_id, event_type);
+        if (!qtyCheck.valid) {
+            return res.status(400).json({ error: qtyCheck.error, code: 'BATCH_QUANTITY_EXCEEDED' });
         }
 
         const id = uuidv4();
@@ -288,6 +335,14 @@ router.post('/batches/:id/recall', authMiddleware, requirePermission('batch:mana
       VALUES (?, 'return', ?, ?, ?, ?, ?)
     `, [recallEventId, batch.product_id, req.params.id, req.user.username,
             JSON.stringify({ action: 'recall', reason: reason || 'Quality issue', severity: severity || 'high' }), seal.seal_id]);
+
+        // ── RED-TEAM P1-3: Cascade revoke ALL QR codes in this batch ──────
+        const revokedQRs = await db.run(`
+          UPDATE qr_codes SET status = 'revoked' 
+          WHERE product_id IN (SELECT id FROM products WHERE batch_id = ?) 
+          AND status != 'revoked'
+        `, [req.params.id]);
+        console.log('[BatchRecall] QR codes revoked for batch:', req.params.id);
 
         // Find affected shipments
         const affectedShipments = await db.all("SELECT * FROM shipments WHERE batch_id = ? AND status != 'delivered'", [req.params.id]);

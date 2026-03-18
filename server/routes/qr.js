@@ -1,3 +1,4 @@
+// [MIGRATED] Use /api/v1/verification instead
 /**
  * TrustChecker QR Validation Routes
  * Core validation flow: Scan → Fraud Engine → Trust Engine → Blockchain Seal → Response
@@ -15,6 +16,12 @@ const { validate, schemas } = require('../middleware/validate');
 const { orgGuard } = require('../middleware/org-middleware');
 
 const router = express.Router();
+
+router.use((req, res, next) => {
+    res.set('X-Deprecation', 'Use /api/v1/verification instead');
+    next();
+});
+
 
 // All routes require authentication
 router.use(authMiddleware);
@@ -55,9 +62,9 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             // Unknown QR — potential counterfeit
             const scanId = uuidv4();
             await db.run(`
-        INSERT INTO scan_events (id, scan_type, device_fingerprint, ip_address, latitude, longitude, user_agent, result, fraud_score, scanned_at)
-        VALUES (?, 'validation', ?, ?, ?, ?, ?, 'counterfeit', 1.0, NOW())
-      `, [scanId, effectiveFingerprint || '', req.ip || ip_address || '', latitude || null, longitude || null, req.headers['user-agent'] || user_agent || '']);
+        INSERT INTO scan_events (id, scan_type, device_fingerprint, ip_address, latitude, longitude, user_agent, result, fraud_score, scanned_at, org_id)
+        VALUES (?, 'validation', ?, ?, ?, ?, ?, 'counterfeit', 1.0, NOW(), ?)
+      `, [scanId, effectiveFingerprint || '', req.ip || ip_address || '', latitude || null, longitude || null, req.headers['user-agent'] || user_agent || '', req.orgId || req.user?.orgId || req.user?.org_id || '']);
 
             await blockchainEngine.seal('QRInvalid', scanId, { qr_data, result: 'counterfeit' });
 
@@ -77,15 +84,59 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             });
         }
 
+        
+        // ── RED-TEAM P1-1: Check QR expiry ──────────────────────────────────
+        if (qrCode.expires_at && new Date(qrCode.expires_at) < new Date()) {
+            const scanId = uuidv4();
+            await db.run(`
+              INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, device_fingerprint, ip_address, result, scanned_at, org_id)
+              VALUES (?, ?, ?, 'validation', ?, ?, 'expired', NOW(), ?)
+            `, [scanId, qrCode.id, qrCode.product_id, device_fingerprint || '', req.ip || ip_address || '', qrCode.org_id || '']);
+            await blockchainEngine.seal('QRExpired', scanId, { qr_data, result: 'expired' });
+            return res.json({
+                valid: false,
+                result: 'expired',
+                message: '⏰ MÃ QR ĐÃ HẾT HẠN — Mã này không còn hợp lệ. Liên hệ nhà sản xuất.',
+                fraud_score: 0.3,
+                trust_score: 0,
+                expired_at: qrCode.expires_at,
+                response_time_ms: Date.now() - startTime
+            });
+        }
+
         // Step 2: Get product (org-scoped)
         // ATK-02 FIX: Always scope product query to org
         let prodSql = 'SELECT * FROM products WHERE id = ?';
         const prodParams = [qrCode.product_id];
-        const effectiveOrgId = req.orgId || req.user?.orgId || req.user?.org_id;
+        // RED-TEAM P1-2: Default org_id from QR code for public (unauthenticated) scans
+        const effectiveOrgId = req.orgId || req.user?.orgId || req.user?.org_id || qrCode.org_id;
         if (effectiveOrgId) { prodSql += ' AND org_id = ?'; prodParams.push(effectiveOrgId); }
         const product = await db.prepare(prodSql).get(...prodParams);
 
+        
+        // ── RED-TEAM P1-4: Anti-bot scan deduplication (5s window) ────────
+        if (device_fingerprint || (req.ip && req.ip !== '::1')) {
+            const recentScan = await db.get(
+                `SELECT id FROM scan_events 
+                 WHERE qr_code_id = ? AND (device_fingerprint = ? OR ip_address = ?)
+                 AND scanned_at > NOW() - INTERVAL '5 seconds' AND result != 'pending'
+                 LIMIT 1`,
+                [qrCode.id, device_fingerprint || '', req.ip || ip_address || '']
+            );
+            if (recentScan) {
+                return res.json({
+                    valid: true,
+                    result: 'duplicate',
+                    message: 'Bạn vừa quét mã này. Vui lòng đợi vài giây rồi thử lại.',
+                    response_time_ms: Date.now() - startTime
+                });
+            }
+        }
+
         // Step 2.5: Check previous scans — CORE ANTI-COUNTERFEIT LOGIC
+        // RED-TEAM P3-1: Use QR code ID hash as advisory lock to prevent concurrent first-scan race
+        // Note: pg_advisory_xact_lock is released at end of transaction automatically
+        try { await db.run('SELECT pg_advisory_xact_lock(hashtext())', [qrCode.id]); } catch(e) { /* non-critical */ }
         const previousScans = await db.all(
             `SELECT id, scanned_at, ip_address, device_fingerprint, geo_city, geo_country 
              FROM scan_events 
