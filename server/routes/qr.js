@@ -4,6 +4,8 @@
  * Core validation flow: Scan → Fraud Engine → Trust Engine → Blockchain Seal → Response
  */
 
+let riskEngine;
+try { riskEngine = require('../services/risk-scoring-engine'); } catch(_) { riskEngine = null; }
 const express = require('express');
 const { bulkScanDetector, replayDetector } = require("../middleware/blind-spot-defense");
 
@@ -443,6 +445,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
                 unique_devices: 'see scan_verification',
                 reuse_risk: scanCount >= 10 ? 'CRITICAL' : scanCount >= 5 ? 'HIGH' : scanCount >= 3 ? 'MEDIUM' : 'LOW',
             },
+            risk_assessment: riskResult ? { score: riskResult.risk_score, level: riskResult.decision, action: riskResult.auto_action } : null,
             hmac_valid: !req._hmacMismatch,
             response_time_ms: responseTime
         });

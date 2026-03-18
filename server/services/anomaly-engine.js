@@ -100,6 +100,28 @@ class AnomalyEngine {
         }
         return { total: this.alerts.length, byRule };
     }
+
+
+
+    // PROGRESSIVE_ENFORCEMENT: Risk-driven auto-actions
+    async enforceRisk(productId, actorId, riskResult) {
+        if (!riskResult || riskResult.decision === 'NORMAL') return null;
+        const action = { product_id: productId, actor_id: actorId, risk_score: riskResult.risk_score, decision: riskResult.decision, action_taken: 'none' };
+        if (riskResult.decision === 'HARD_BLOCK') {
+            try {
+                const db = require('../db');
+                await db.run("UPDATE qr_codes SET status = 'blocked' WHERE product_id = $1", [productId]);
+                action.action_taken = 'product_blocked';
+            } catch(_) {}
+        } else if (riskResult.decision === 'SOFT_BLOCK') {
+            action.action_taken = 'product_flagged';
+        } else if (riskResult.decision === 'SUSPICIOUS') {
+            action.action_taken = 'warning_added';
+        }
+        this.alerts.push({ ...action, rule: 'RISK_ENFORCEMENT', severity: riskResult.decision, timestamp: new Date().toISOString() });
+        return action;
+    }
+
 }
 
 module.exports = new AnomalyEngine();

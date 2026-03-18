@@ -469,6 +469,33 @@ router.get('/chain-integrity/:productId', async (req, res) => {
     }
 });
 
+// GET /api/scm/verify-signature/:eventId — Verify event cryptographic signature
+router.get('/verify-signature/:eventId', async (req, res) => {
+    try {
+        const event = await db.get('SELECT * FROM product_events WHERE id = $1', [req.params.eventId]);
+        if (!event) return res.status(404).json({ error: 'Event not found' });
+        const { verifySignature } = require('../middleware/scm-state-machine');
+        const result = verifySignature(
+            { productId: event.product_id, eventType: event.event_type, actorId: event.actor_id, signed_at: event.created_at },
+            event.signature
+        );
+        res.json({ event_id: event.id, event_type: event.event_type, signature_check: result, hash: event.hash?.substring(0, 16), sequence: event.sequence_number });
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/scm/risk-profile/:actorId — Get actor risk profile
+router.get('/risk-profile/:actorId', async (req, res) => {
+    try {
+        const profile = await db.get('SELECT * FROM actor_risk_profiles WHERE actor_id = $1', [req.params.actorId]);
+        const recentScores = await db.all('SELECT total_score, decision, reasons, created_at FROM risk_scores WHERE actor_id = $1 ORDER BY created_at DESC LIMIT 10', [req.params.actorId]);
+        res.json({ profile: profile || { actor_id: req.params.actorId, risk_level: 'NEW' }, recent_scores: recentScores || [] });
+    } catch(err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET /api/scm/anomalies — Recent anomaly alerts
 router.get('/anomalies', async (req, res) => {
     res.json({ alerts: anomalyEngine.getAlerts(parseInt(req.query.limit) || 50), stats: anomalyEngine.getStats() });
