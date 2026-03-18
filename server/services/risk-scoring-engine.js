@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V7 — Trust Propagation + Deep Moat
+ * Risk Scoring Engine V8 — Multi-Edge Graph + Controlled Propagation
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -390,15 +390,15 @@ async function riskTrendSlope(actorId) {
     return { slope: 0, penalty: 0 };
 }
 
-// ─── V7: TRUST PROPAGATION (network-level trust) ───────────
-// An actor in a low-trust cluster gets their trust reduced
-// network_trust = avg(trust of neighbors) weighted by interaction
+// ─── V8: MULTI-EDGE TRUST PROPAGATION ─────────────────────
+// Edges: actor↔actor (product), actor↔IP, actor↔device
+// Distance decay: weight × 0.5^hop | Cap: propagation_impact ≤ 30%
 async function trustPropagation(actorId) {
-    if (!actorId) return { network_trust: 0.5, neighbor_count: 0, penalty: 0 };
+    if (!actorId) return { network_trust: 0.5, neighbor_count: 0, penalty: 0, edges: {} };
     try {
-        // Find neighbors: actors who touched the same products in last 1h
-        const neighbors = await db.all(
-            `SELECT se2.device_fingerprint, COUNT(*) as shared_products
+        // Edge 1: Product-sharing neighbors (hop 1, weight 1.0)
+        const productNeighbors = await db.all(
+            `SELECT se2.device_fingerprint, COUNT(DISTINCT se1.product_id) as shared_products
              FROM scan_events se1
              JOIN scan_events se2 ON se1.product_id = se2.product_id
              WHERE se1.device_fingerprint = $1
@@ -407,44 +407,141 @@ async function trustPropagation(actorId) {
              AND se1.scanned_at > NOW() - INTERVAL '1 hour'
              AND se2.scanned_at > NOW() - INTERVAL '1 hour'
              GROUP BY se2.device_fingerprint
-             ORDER BY COUNT(*) DESC
-             LIMIT 20`,
+             ORDER BY COUNT(DISTINCT se1.product_id) DESC
+             LIMIT 15`,
             [actorId]
-        );
-        if (!neighbors || neighbors.length === 0) return { network_trust: 0.5, neighbor_count: 0, penalty: 0 };
+        ) || [];
 
-        // Get avg_risk_score of neighbors from actor_risk_profiles
-        const neighborIds = neighbors.map(n => n.device_fingerprint);
-        let totalWeightedRisk = 0, totalWeight = 0;
-        for (const n of neighbors.slice(0, 10)) {
+        // Edge 2: IP-sharing neighbors (actors on same IP, weight 0.8)
+        const ipNeighbors = await db.all(
+            `SELECT se2.device_fingerprint, COUNT(DISTINCT se1.ip_address) as shared_ips
+             FROM scan_events se1
+             JOIN scan_events se2 ON se1.ip_address = se2.ip_address
+             WHERE se1.device_fingerprint = $1
+             AND se2.device_fingerprint != $1
+             AND se2.device_fingerprint IS NOT NULL
+             AND se1.ip_address IS NOT NULL
+             AND se1.scanned_at > NOW() - INTERVAL '1 hour'
+             AND se2.scanned_at > NOW() - INTERVAL '1 hour'
+             GROUP BY se2.device_fingerprint
+             ORDER BY COUNT(DISTINCT se1.ip_address) DESC
+             LIMIT 10`,
+            [actorId]
+        ) || [];
+
+        // Merge edges with weights and distance decay
+        const neighborMap = new Map(); // fp -> { risk, totalWeight }
+        const HOP1_DECAY = 1.0; // 0.5^0
+
+        // Process product edges (strongest signal)
+        for (const n of productNeighbors.slice(0, 10)) {
             const profile = await db.get(
-                `SELECT avg_risk_score, flagged_count, total_scans FROM actor_risk_profiles WHERE actor_id = $1`,
+                `SELECT avg_risk_score FROM actor_risk_profiles WHERE actor_id = $1`,
                 [n.device_fingerprint]
             );
-            const weight = parseInt(n.shared_products) || 1;
-            if (profile) {
-                const risk = parseFloat(profile.avg_risk_score) || 0;
-                totalWeightedRisk += risk * weight;
-                totalWeight += weight;
+            const risk = profile ? (parseFloat(profile.avg_risk_score) || 0) : 30;
+            const edgeWeight = (parseInt(n.shared_products) || 1) * 1.0 * HOP1_DECAY;
+            const existing = neighborMap.get(n.device_fingerprint) || { risk: 0, weight: 0 };
+            neighborMap.set(n.device_fingerprint, { risk: existing.risk + risk * edgeWeight, weight: existing.weight + edgeWeight });
+        }
+
+        // Process IP edges (secondary signal, weight 0.8)
+        for (const n of ipNeighbors.slice(0, 8)) {
+            if (neighborMap.has(n.device_fingerprint)) {
+                // Already connected via product — boost weight
+                const existing = neighborMap.get(n.device_fingerprint);
+                const profile = await db.get(
+                    `SELECT avg_risk_score FROM actor_risk_profiles WHERE actor_id = $1`,
+                    [n.device_fingerprint]
+                );
+                const risk = profile ? (parseFloat(profile.avg_risk_score) || 0) : 30;
+                const edgeWeight = (parseInt(n.shared_ips) || 1) * 0.8 * HOP1_DECAY;
+                neighborMap.set(n.device_fingerprint, { risk: existing.risk + risk * edgeWeight, weight: existing.weight + edgeWeight });
             } else {
-                // Unknown neighbor → neutral risk (30)
-                totalWeightedRisk += 30 * weight;
-                totalWeight += weight;
+                const profile = await db.get(
+                    `SELECT avg_risk_score FROM actor_risk_profiles WHERE actor_id = $1`,
+                    [n.device_fingerprint]
+                );
+                const risk = profile ? (parseFloat(profile.avg_risk_score) || 0) : 30;
+                const edgeWeight = (parseInt(n.shared_ips) || 1) * 0.8 * HOP1_DECAY;
+                neighborMap.set(n.device_fingerprint, { risk: risk * edgeWeight, weight: edgeWeight });
             }
         }
+
+        if (neighborMap.size === 0) return { network_trust: 0.5, neighbor_count: 0, penalty: 0, edges: { product: 0, ip: 0 } };
+
+        // Calculate weighted average risk
+        let totalWeightedRisk = 0, totalWeight = 0;
+        for (const [_, v] of neighborMap) {
+            totalWeightedRisk += v.risk;
+            totalWeight += v.weight;
+        }
         const neighborAvgRisk = totalWeight > 0 ? totalWeightedRisk / totalWeight : 30;
-        // Convert neighbor risk to trust influence: high risk neighbors → low network trust
         const networkTrust = Math.max(0.1, 1 - (neighborAvgRisk / 100));
-        // Penalty: if network trust < 0.5, penalize this actor
-        const penalty = networkTrust < 0.5 ? Math.min(0.25, (0.5 - networkTrust) * 0.5) : 0;
+
+        // V8: Cap propagation penalty at 30% max influence
+        const rawPenalty = networkTrust < 0.5 ? (0.5 - networkTrust) * 0.5 : 0;
+        const penalty = Math.min(0.15, rawPenalty); // Capped at 0.15 (30% of 0.5 baseline)
+
         return {
             network_trust: Math.round(networkTrust * 100) / 100,
-            neighbor_count: neighbors.length,
+            neighbor_count: neighborMap.size,
             neighbor_avg_risk: Math.round(neighborAvgRisk),
             penalty: Math.round(penalty * 100) / 100,
+            edges: { product: productNeighbors.length, ip: ipNeighbors.length },
         };
     } catch(_) {}
-    return { network_trust: 0.5, neighbor_count: 0, penalty: 0 };
+    return { network_trust: 0.5, neighbor_count: 0, penalty: 0, edges: { product: 0, ip: 0 } };
+}
+
+// ─── V8: MULTI-EDGE GRAPH SCORE ───────────────────────────
+// Explicit multi-edge scoring: product + IP + device edges
+async function multiEdgeScore(actorId, ipAddress) {
+    const reasons = [];
+    let score = 0;
+    if (!actorId) return { score: 0, reasons };
+    try {
+        // Edge type 1: Same IP, different actors, same product (strong fraud signal)
+        if (ipAddress) {
+            const sameIpProduct = await db.get(
+                `SELECT COUNT(DISTINCT se1.device_fingerprint) as actors, COUNT(DISTINCT se1.product_id) as products
+                 FROM scan_events se1
+                 WHERE se1.ip_address = $1
+                 AND se1.device_fingerprint != $2
+                 AND se1.scanned_at > NOW() - INTERVAL '1 hour'
+                 AND se1.product_id IN (
+                     SELECT DISTINCT product_id FROM scan_events 
+                     WHERE device_fingerprint = $2 AND scanned_at > NOW() - INTERVAL '1 hour'
+                 )`,
+                [ipAddress, actorId]
+            );
+            if (sameIpProduct) {
+                const actors = parseInt(sameIpProduct.actors) || 0;
+                const products = parseInt(sameIpProduct.products) || 0;
+                if (actors >= 3 && products >= 2) {
+                    score += 35;
+                    reasons.push({ rule: 'multi_edge_ip_product', severity: 45, confidence: 0.75, actors, products, edge_types: ['ip', 'product'] });
+                }
+            }
+        }
+
+        // Edge type 2: Different IPs but same products (coordinated scanning)
+        const crossIpSameProduct = await db.get(
+            `SELECT COUNT(DISTINCT ip_address) as ips
+             FROM scan_events WHERE product_id IN (
+                 SELECT DISTINCT product_id FROM scan_events 
+                 WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '1 hour'
+             )
+             AND device_fingerprint != $1
+             AND scanned_at > NOW() - INTERVAL '1 hour'`,
+            [actorId]
+        );
+        if (crossIpSameProduct && parseInt(crossIpSameProduct.ips) >= 5) {
+            score += 20;
+            reasons.push({ rule: 'multi_edge_cross_ip', severity: 30, confidence: 0.65, unique_ips: parseInt(crossIpSameProduct.ips), edge_types: ['ip', 'product'] });
+        }
+    } catch(_) {}
+    return { score: Math.min(50, score), reasons };
 }
 
 // ─── V6: CROSS-ENTITY TRUST FUSION ──────────────────────────
@@ -796,28 +893,23 @@ async function graphScore(productId, actorId, ipAddress) {
         }
     } catch(_) {}
 
-    // === V4 NEW: Multi-hop collusion ===
+    // === V4: Multi-hop collusion ===
     const multiHop = await multiHopCollusion(actorId);
-    if (multiHop.score > 0) {
-        score += multiHop.score;
-        reasons.push(...multiHop.reasons);
-    }
+    if (multiHop.score > 0) { score += multiHop.score; reasons.push(...multiHop.reasons); }
 
-    // === V4 NEW: Role-switch detection ===
+    // === V4: Role-switch detection ===
     const roleSwitch = await roleSwitchDetection(actorId, productId);
-    if (roleSwitch.score > 0) {
-        score += roleSwitch.score;
-        reasons.push(...roleSwitch.reasons);
-    }
+    if (roleSwitch.score > 0) { score += roleSwitch.score; reasons.push(...roleSwitch.reasons); }
 
-    // === V4 NEW: Device-level identity ===
+    // === V4: Device-level identity ===
     const deviceId = await deviceIdentityScore(actorId, ipAddress);
-    if (deviceId.score > 0) {
-        score += deviceId.score;
-        reasons.push(...deviceId.reasons);
-    }
+    if (deviceId.score > 0) { score += deviceId.score; reasons.push(...deviceId.reasons); }
 
-    return { score: Math.min(100, Math.round(score)), reasons, multi_hop: multiHop, role_switch: roleSwitch, device_identity: deviceId };
+    // === V8 NEW: Multi-edge graph scoring ===
+    const multiEdge = await multiEdgeScore(actorId, ipAddress);
+    if (multiEdge.score > 0) { score += multiEdge.score; reasons.push(...multiEdge.reasons); }
+
+    return { score: Math.min(100, Math.round(score)), reasons, multi_hop: multiHop, role_switch: roleSwitch, device_identity: deviceId, multi_edge: multiEdge };
 }
 
 // ─── V3 3.2: COLD-START PENALTY ──────────────────────────────
@@ -1022,11 +1114,20 @@ async function calculateRisk(input) {
         },
         breakdown,
         momentum: Math.round(momentum),
-        momentum_contribution: Math.round(momentumContribution), // V3: anti-poisoning
-        cold_start: coldStart,  // V3
+        momentum_contribution: Math.round(momentumContribution),
+        cold_start: coldStart,
         category_multiplier: catMult,
         recovery: recovery || null,
+        // V8: Explainability layer — component breakdown
+        components: {
+            behavior: Math.round(p.score * WEIGHTS.scan_pattern + g.score * WEIGHTS.geo),
+            temporal: Math.round(f.score * WEIGHTS.frequency + h.score * WEIGHTS.history),
+            graph: Math.round(gr.score * WEIGHTS.graph),
+            trust_modifier: gr.multi_hop ? Math.round((1 - (gr.multi_hop.avg_trust || 0.5)) * 20) : 0,
+            propagation: gr.multi_edge ? gr.multi_edge.score : 0,
+            cold_start: coldStart.penalty,
+        },
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS };
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS };
