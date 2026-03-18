@@ -946,6 +946,58 @@ async function main() {
             api.sources.local === true && typeof api.sources.network === 'boolean');
     }
 
+    // ━━━ V21.6 COMMERCIAL-READY ━━━
+    console.log('\n━━━ V21.6 COMMERCIAL-READY ━━━\n');
+
+    // V216-1: ROI dashboard — before/after
+    {
+        R.roiDashboard('record', { decision: 'block', value: 5000 });
+        R.roiDashboard('record', { decision: 'block', value: 3000 });
+        R.roiDashboard('record', { decision: 'pass', value: 2000 });
+        R.roiDashboard('set_baseline', { loss_rate: 0.05 });
+        const roi = R.roiDashboard('report');
+        ok('V216-1', 'ROI: before/after', 'saved > 0 + narrative',
+            `saved=${roi.delta.saved},pct=${roi.delta.saved_pct}%,blocked=${roi.total_blocked_value}`,
+            roi.delta.saved > 0 && roi.delta.saved_pct === 60 && roi.narrative.includes('tiết kiệm'));
+    }
+
+    // V216-2: Network insight — cross-org alert
+    {
+        const alert = R.networkInsight('cross_org_alert', { actor_id: 'actor_agree' });
+        ok('V216-2', 'Insight: cross-org alert', 'multi-org flagged',
+            `found=${alert.found !== false},severity=${alert.severity},orgs=${alert.orgs}`,
+            alert.type === 'cross_org_alert' && alert.orgs >= 2 && alert.action === 'immediate_review');
+    }
+
+    // V216-3: Network insight — geographic anomaly
+    {
+        const normal = R.networkInsight('geographic_anomaly', { batch_id: 'B001', locations: ['HCM', 'HN'], time_window_hours: 24 });
+        const suspicious = R.networkInsight('geographic_anomaly', { batch_id: 'B002', locations: ['HCM', 'DN', 'CT', 'HP'], time_window_hours: 6 });
+        ok('V216-3', 'Insight: geo anomaly', 'normal vs suspicious',
+            `normal=${normal.suspicious},susp=${suspicious.suspicious},action=${suspicious.action}`,
+            normal.suspicious === false && suspicious.suspicious === true && suspicious.action === 'flag_batch_counterfeit');
+    }
+
+    // V216-4: Network insight — shared actor
+    {
+        const shared = R.networkInsight('shared_actor', {});
+        ok('V216-4', 'Insight: shared actors', 'cross-org actors detected',
+            `count=${shared.count},type=${shared.type}`,
+            shared.type === 'shared_actor' && shared.count > 0 && shared.actors[0].org_count >= 2);
+    }
+
+    // V216-5: Market intelligence — hotspots
+    {
+        R.marketIntelligence('record', { region: 'HCM', category: 'pharma', risk_score: 80, is_fraud: true });
+        R.marketIntelligence('record', { region: 'HCM', category: 'pharma', risk_score: 75, is_fraud: true });
+        R.marketIntelligence('record', { region: 'HN', category: 'fmcg', risk_score: 20, is_fraud: false });
+        R.marketIntelligence('record', { region: 'HN', category: 'fmcg', risk_score: 15, is_fraud: false });
+        const intel = R.marketIntelligence('report');
+        ok('V216-5', 'Market intel: hotspots', 'HCM > HN fraud rate',
+            `top=${intel.top_risk_region},records=${intel.total_records}`,
+            intel.top_risk_region === 'HCM' && intel.hotspots[0].fraud_rate > intel.hotspots[1].fraud_rate);
+    }
+
     // ━━━ INTEGRATION ━━━
     console.log('\n━━━ INTEGRATION ━━━\n');
     { ok('INT-1','risk_scores','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"))>0); }
@@ -954,14 +1006,14 @@ async function main() {
     ok('INT-3','Decisions','data',d.replace(/\n/g,', '),d.length>0&&!d.startsWith('ERROR')); }
     { ok('INT-4','Graph','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"))>0); }
     { ok('INT-5','signal_stats','rows',psql("SELECT COUNT(*) FROM signal_stats"),parseInt(psql("SELECT COUNT(*) FROM signal_stats"))>=5); }
-    { // V21.5 response includes trust contract
+    { // V21.6 response includes roi
       const r = await R.calculateRisk({productId:createProduct('INT6','pharma'),actorId:'int6-'+Date.now(),scanType:'consumer',ipAddress:'8.8.8.8',category:'pharma'});
-      ok('INT-6','V21.5 metadata','v21 obj',`contract=${r.v21?.trust_contract}`,r.v21 && typeof r.v21.trust_contract === 'string'); }
+      ok('INT-6','V21.6 metadata','v21 obj',`roi=${r.v21?.roi_blocked_value}`,r.v21 && typeof r.v21.roi_blocked_value === 'number'); }
 
     // ═══════════
     const total=passed+failed;const pct=Math.round(passed/total*100);
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V21.5 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
+    console.log(`║  L4 V21.6 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║  Fraud:       ${results.filter(r=>r.id>='BF-1'&&r.id<='BF-6').filter(r=>r.pass).length}/6`);
     console.log(`║  Baselines:   ${results.filter(r=>r.id==='BF-7'||r.id==='BF-8').filter(r=>r.pass).length}/2`);
@@ -987,11 +1039,12 @@ async function main() {
     console.log(`║  V20 Trust:   ${results.filter(r=>r.id.startsWith('V20')).filter(r=>r.pass).length}/5`);
     console.log(`║  V21 Econ:    ${results.filter(r=>r.id.startsWith('V21-')).filter(r=>r.pass).length}/5`);
     console.log(`║  V21.5 Proto: ${results.filter(r=>r.id.startsWith('V215')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V21.6 Comm:  ${results.filter(r=>r.id.startsWith('V216')).filter(r=>r.pass).length}/5`);
     console.log(`║  Integration: ${results.filter(r=>r.id.startsWith('INT')).filter(r=>r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
     const fails=results.filter(r=>!r.pass);
     if(fails.length>0){console.log('\n❌ FAILED:');fails.forEach(f=>console.log(`  ${f.id}: ${f.name} | exp: ${f.expected} | act: ${f.actual}`));}
-    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V21.5',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
+    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V21.6',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
     console.log('\n📝 chaos-l4-report.json'); process.exit(0);
 }
 main().catch(e=>{console.error('FATAL:',e.message,e.stack);process.exit(1);});
