@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V4 — Multi-Hop Graph Intelligence + Identity Layer
+ * Risk Scoring Engine V5 — Trust-Weighted Graph + Scale-Safe
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -334,79 +334,189 @@ async function historyScore(productId, actorId) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// V4 GRAPH INTELLIGENCE — Multi-hop, Temporal, Identity Layer
+// V5 GRAPH INTELLIGENCE — Trust-Weighted, Scale-Safe
 // ═══════════════════════════════════════════════════════════════
 
-// ─── V4: MULTI-HOP COLLUSION (Connected Components via BFS) ──
-// Finds actor clusters that share products across multiple hops:
-//   A→P1→B→P2→C = 2-hop collusion (A and C never touch same product)
+// ─── V5 CONSTANTS ─────────────────────────────────────────────
+const GRAPH_LIMITS = {
+    MAX_NODES: 500,    // BFS won't process more than 500 actors
+    MAX_DEPTH: 2,      // max hop depth
+    QUERY_TIMEOUT: 5000, // 5s query budget per graph call
+};
+
+// ─── V5: ACTOR TRUST SCORE ───────────────────────────────────
+// Returns 0.0 (untrusted) to 1.0 (fully trusted)
+// Based on: profile age, scan history consistency, flag ratio
+async function actorTrustScore(actorId) {
+    if (!actorId) return { trust: 0.5, reasons: [] };
+    const reasons = [];
+
+    try {
+        const profile = await db.get(
+            `SELECT total_scans, flagged_count, blocked_count, avg_risk_score, created_at 
+             FROM actor_risk_profiles WHERE actor_id = $1`,
+            [actorId]
+        );
+        if (!profile) return { trust: 0.3, reasons: [{ note: 'no_profile' }] }; // unknown → low trust
+
+        const totalScans = parseInt(profile.total_scans) || 1;
+        const flagRatio = (parseFloat(profile.flagged_count) || 0) / totalScans;
+        const avgRisk = parseFloat(profile.avg_risk_score) || 0;
+        const ageHours = (Date.now() - new Date(profile.created_at).getTime()) / 3600000;
+
+        // Trust formula: age bonus + low flag penalty + low risk bonus
+        let trust = 0.5; // baseline
+
+        // Age trust: older = more trusted (up to +0.3)
+        if (ageHours > 168) trust += 0.3;       // > 7 days
+        else if (ageHours > 24) trust += 0.15;   // > 1 day
+        else trust -= 0.1;                        // < 1 day
+
+        // Flag ratio penalty (up to -0.4)
+        trust -= flagRatio * 0.4;
+
+        // Low avg risk bonus (up to +0.2)
+        if (avgRisk < 20) trust += 0.2;
+        else if (avgRisk < 40) trust += 0.1;
+        else if (avgRisk > 60) trust -= 0.2;
+
+        trust = Math.max(0, Math.min(1.0, trust));
+        reasons.push({ trust, age_hours: Math.round(ageHours), flag_ratio: Math.round(flagRatio * 100) / 100, avg_risk: Math.round(avgRisk) });
+        return { trust, reasons };
+    } catch(_) {}
+    return { trust: 0.3, reasons: [] };
+}
+
+// ─── V5: DEVICE TRUST SCORE ──────────────────────────────────
+// Measures device stability: consistent IP, behavior patterns
+async function deviceTrustScore(actorId) {
+    if (!actorId) return { trust: 0.5, stability: 'unknown', reasons: [] };
+    const reasons = [];
+
+    try {
+        // Check IP consistency: how many unique IPs in 24h?
+        const ipData = await db.get(
+            `SELECT COUNT(DISTINCT ip_address) as ips, COUNT(*) as scans
+             FROM scan_events WHERE device_fingerprint = $1
+             AND scanned_at > NOW() - INTERVAL '24 hours'`,
+            [actorId]
+        );
+        const uniqueIPs = parseInt(ipData?.ips) || 0;
+        const totalScans = parseInt(ipData?.scans) || 0;
+
+        // Check scan type consistency
+        const typeData = await db.all(
+            `SELECT DISTINCT scan_type FROM scan_events 
+             WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '24 hours'`,
+            [actorId]
+        );
+        const uniqueTypes = typeData ? typeData.length : 0;
+
+        let trust = 0.7; // baseline for known device
+        let stability = 'stable';
+
+        // IP consistency (VPN/proxy = low stability)
+        if (uniqueIPs > 10) { trust -= 0.4; stability = 'rotating'; }
+        else if (uniqueIPs > 5) { trust -= 0.2; stability = 'unstable'; }
+        else if (uniqueIPs <= 2) { trust += 0.1; }
+
+        // Role consistency (multiple roles = suspicious)
+        if (uniqueTypes >= 3) { trust -= 0.3; stability = 'chameleon'; }
+        else if (uniqueTypes >= 2) { trust -= 0.1; }
+
+        // Low activity = less data = less trust
+        if (totalScans < 3) trust -= 0.1;
+
+        trust = Math.max(0, Math.min(1.0, trust));
+        reasons.push({ trust, stability, unique_ips: uniqueIPs, unique_types: uniqueTypes, total_scans_24h: totalScans });
+        return { trust, stability, reasons };
+    } catch(_) {}
+    return { trust: 0.5, stability: 'unknown', reasons: [] };
+}
+
+// ─── V5: TRUST-WEIGHTED MULTI-HOP (BFS with scale limits) ────
 async function multiHopCollusion(actorId) {
-    if (!actorId) return { hops: 0, cluster_size: 0, reasons: [] };
+    if (!actorId) return { hops: 0, cluster_size: 0, score: 0, reasons: [] };
     const reasons = [];
     let score = 0;
 
     try {
-        // Step 1: Find all products this actor touched (1h window)
+        // Step 1: Products touched by this actor (1h window)
         const myProducts = await db.all(
             `SELECT DISTINCT product_id FROM scan_events 
-             WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '1 hour'`,
+             WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '1 hour'
+             LIMIT ${GRAPH_LIMITS.MAX_NODES}`,
             [actorId]
         );
-        if (!myProducts || myProducts.length === 0) return { hops: 0, cluster_size: 0, reasons };
+        if (!myProducts || myProducts.length === 0) return { hops: 0, cluster_size: 0, score: 0, reasons };
 
         const productIds = myProducts.map(r => r.product_id);
-        
-        // Step 2: Find all OTHER actors who touched those same products (hop 1)
+
+        // Step 2: Hop-1 actors (LIMITED to MAX_NODES)
         const hop1Actors = await db.all(
             `SELECT DISTINCT device_fingerprint, product_id FROM scan_events 
              WHERE product_id::text = ANY(string_to_array($1, ','))
              AND device_fingerprint != $2
              AND device_fingerprint IS NOT NULL
-             AND scanned_at > NOW() - INTERVAL '1 hour'`,
+             AND scanned_at > NOW() - INTERVAL '1 hour'
+             LIMIT ${GRAPH_LIMITS.MAX_NODES}`,
             [productIds.join(','), actorId]
         );
-        
-        if (!hop1Actors || hop1Actors.length === 0) return { hops: 0, cluster_size: 0, reasons };
+        if (!hop1Actors || hop1Actors.length === 0) return { hops: 0, cluster_size: 0, score: 0, reasons };
 
-        const hop1ActorIds = [...new Set(hop1Actors.map(a => a.device_fingerprint))];
+        const hop1ActorIds = [...new Set(hop1Actors.map(a => a.device_fingerprint))].slice(0, GRAPH_LIMITS.MAX_NODES);
 
-        // Step 3: Find products touched by hop1 actors that THIS actor didn't touch (hop 2)
+        // Step 3: Hop-2 products (LIMITED)
         const hop2Products = await db.all(
             `SELECT DISTINCT se.product_id, se.device_fingerprint FROM scan_events se
              WHERE se.device_fingerprint = ANY(string_to_array($1, ','))
              AND se.product_id::text != ALL(string_to_array($2, ','))
-             AND se.scanned_at > NOW() - INTERVAL '1 hour'`,
+             AND se.scanned_at > NOW() - INTERVAL '1 hour'
+             LIMIT ${GRAPH_LIMITS.MAX_NODES}`,
             [hop1ActorIds.join(','), productIds.join(',')]
         );
 
         const hop2ProductIds = hop2Products ? [...new Set(hop2Products.map(p => p.product_id))] : [];
-
-        // Cluster size = unique actors in the graph
         const clusterSize = 1 + hop1ActorIds.length;
         const totalProducts = productIds.length + hop2ProductIds.length;
 
+        // V5: Trust-weighted cluster scoring
+        // Get trust scores for hop1 actors (sample up to 10 for performance)
+        const sampleActors = hop1ActorIds.slice(0, 10);
+        let avgTrust = 0.5;
+        try {
+            const trustResults = await Promise.all(sampleActors.map(a => actorTrustScore(a)));
+            avgTrust = trustResults.reduce((sum, t) => sum + t.trust, 0) / trustResults.length;
+        } catch(_) {}
+
+        // V5: Trust-weighted severity: low-trust cluster = higher risk
+        const trustMultiplier = 1.5 - avgTrust; // 0.5 trust → 1.0×, 0.0 trust → 1.5×, 1.0 trust → 0.5×
+
+        // V5: Cluster density = actors × products / max_possible
+        const density = clusterSize * totalProducts;
+
         if (clusterSize >= 4 && totalProducts >= 3) {
-            score += 60 * 0.8;
-            reasons.push({ rule: 'multi_hop_cluster', severity: 60, confidence: 0.8, cluster_size: clusterSize, products: totalProducts, hops: 2 });
+            const baseSeverity = Math.min(80, Math.round(60 * trustMultiplier));
+            score += baseSeverity * 0.8;
+            reasons.push({ rule: 'multi_hop_cluster', severity: baseSeverity, confidence: 0.8, cluster_size: clusterSize, products: totalProducts, hops: 2, avg_trust: Math.round(avgTrust * 100) / 100, density });
         } else if (clusterSize >= 3 && totalProducts >= 2) {
-            score += 35 * 0.7;
-            reasons.push({ rule: 'multi_hop_small', severity: 35, confidence: 0.7, cluster_size: clusterSize, products: totalProducts, hops: 2 });
+            const baseSeverity = Math.min(60, Math.round(35 * trustMultiplier));
+            score += baseSeverity * 0.7;
+            reasons.push({ rule: 'multi_hop_small', severity: baseSeverity, confidence: 0.7, cluster_size: clusterSize, products: totalProducts, hops: 2, avg_trust: Math.round(avgTrust * 100) / 100 });
         }
 
-        return { hops: 2, cluster_size: clusterSize, score, reasons };
+        return { hops: 2, cluster_size: clusterSize, score, reasons, avg_trust: avgTrust };
     } catch(_) {}
     return { hops: 0, cluster_size: 0, score: 0, reasons };
 }
 
-// ─── V4: ROLE-SWITCH DETECTION ────────────────────────────────
-// Same device/IP appearing under different supply chain roles
+// ─── V5: ROLE-SWITCH DETECTION (kept from V4) ─────────────────
 async function roleSwitchDetection(actorId, productId) {
     const reasons = [];
     let score = 0;
     if (!actorId) return { score: 0, reasons };
 
     try {
-        // Check if this device_fingerprint has scanned as different roles
         const roleHistory = await db.all(
             `SELECT DISTINCT scan_type FROM scan_events 
              WHERE device_fingerprint = $1 
@@ -418,33 +528,35 @@ async function roleSwitchDetection(actorId, productId) {
             const roles = roleHistory.map(r => r.scan_type);
             const hasSupplyChain = roles.includes('distributor') || roles.includes('retailer');
             const hasConsumer = roles.includes('consumer');
-            
+
+            // V5: Get device trust to modulate severity
+            const devTrust = await deviceTrustScore(actorId);
+            const trustMod = Math.max(0.5, 1.5 - devTrust.trust); // low trust → higher severity
+
             if (hasSupplyChain && hasConsumer) {
-                // Same device acting as both supply chain AND consumer = very suspicious
-                score += 55 * 0.85;
-                reasons.push({ rule: 'role_switch_supply_consumer', severity: 55, confidence: 0.85, roles, note: 'same device, both supply chain + consumer' });
+                const sev = Math.round(55 * trustMod);
+                score += sev * 0.85;
+                reasons.push({ rule: 'role_switch_supply_consumer', severity: sev, confidence: 0.85, roles, device_trust: devTrust.trust });
             } else if (roleHistory.length >= 3) {
-                // 3+ different roles from same device
-                score += 40 * 0.8;
-                reasons.push({ rule: 'role_switch_multi', severity: 40, confidence: 0.8, roles, count: roleHistory.length });
+                const sev = Math.round(40 * trustMod);
+                score += sev * 0.8;
+                reasons.push({ rule: 'role_switch_multi', severity: sev, confidence: 0.8, roles, device_trust: devTrust.trust });
             } else {
                 score += 20 * 0.6;
                 reasons.push({ rule: 'role_switch_dual', severity: 20, confidence: 0.6, roles });
             }
         }
     } catch(_) {}
-
     return { score: Math.min(80, Math.round(score)), reasons };
 }
 
-// ─── V4: DEVICE-LEVEL IDENTITY MERGING ───────────────────────
-// Detect when multiple "actors" are really the same entity (IP/fingerprint cluster)
+// ─── V5: DEVICE IDENTITY (WiFi sharing protection) ───────────
 async function deviceIdentityScore(actorId, ipAddress) {
     const reasons = [];
     let score = 0;
     if (!actorId && !ipAddress) return { score: 0, reasons, merged_identities: 0 };
 
-    // IP cluster: multiple device_fingerprints from same IP
+    // IP cluster detection WITH WiFi sharing protection
     try {
         if (ipAddress) {
             const ipCluster = await db.get(
@@ -456,18 +568,44 @@ async function deviceIdentityScore(actorId, ipAddress) {
             );
             if (ipCluster) {
                 const actorCount = parseInt(ipCluster.actors);
-                if (actorCount >= 5) {
+                
+                // V5: WiFi sharing check — if actors have DIFFERENT behavior patterns, 
+                // likely shared WiFi (office/cafe), not same entity
+                let behaviorOverlap = 0;
+                if (actorCount >= 3 && actorId) {
+                    try {
+                        // Check if actors from this IP scan the SAME products (behavior overlap)
+                        const overlap = await db.get(
+                            `SELECT COUNT(DISTINCT product_id) as shared_products
+                             FROM scan_events 
+                             WHERE ip_address = $1 
+                             AND scanned_at > NOW() - INTERVAL '1 hour'
+                             GROUP BY product_id 
+                             HAVING COUNT(DISTINCT device_fingerprint) >= 2
+                             LIMIT 1`,
+                            [ipAddress]
+                        );
+                        behaviorOverlap = overlap ? parseInt(overlap.shared_products) || 0 : 0;
+                    } catch(_) {}
+                }
+
+                if (actorCount >= 5 && behaviorOverlap > 0) {
+                    // Many actors + same products = real cluster (not WiFi sharing)
                     score += 50 * 0.85;
-                    reasons.push({ rule: 'ip_cluster_large', severity: 50, confidence: 0.85, actors: actorCount, ip: ipAddress });
+                    reasons.push({ rule: 'ip_cluster_confirmed', severity: 50, confidence: 0.85, actors: actorCount, behavior_overlap: behaviorOverlap });
+                } else if (actorCount >= 5 && behaviorOverlap === 0) {
+                    // Many actors but different products = likely WiFi sharing → lower confidence
+                    score += 20 * 0.5;
+                    reasons.push({ rule: 'ip_cluster_wifi_likely', severity: 20, confidence: 0.5, actors: actorCount, note: 'possible WiFi sharing' });
                 } else if (actorCount >= 3) {
-                    score += 30 * 0.7;
-                    reasons.push({ rule: 'ip_cluster_moderate', severity: 30, confidence: 0.7, actors: actorCount });
+                    score += 25 * 0.65;
+                    reasons.push({ rule: 'ip_cluster_moderate', severity: 25, confidence: 0.65, actors: actorCount });
                 }
             }
         }
     } catch(_) {}
 
-    // Fingerprint reuse: same fingerprint associated with different IPs
+    // Fingerprint IP rotation (VPN detection) — kept from V4
     try {
         if (actorId) {
             const ipDiversity = await db.get(
@@ -478,7 +616,7 @@ async function deviceIdentityScore(actorId, ipAddress) {
             );
             if (ipDiversity && parseInt(ipDiversity.ips) > 5) {
                 score += 30 * 0.65;
-                reasons.push({ rule: 'fingerprint_ip_rotation', severity: 30, confidence: 0.65, unique_ips: parseInt(ipDiversity.ips), note: 'VPN/proxy rotation suspected' });
+                reasons.push({ rule: 'fingerprint_ip_rotation', severity: 30, confidence: 0.65, unique_ips: parseInt(ipDiversity.ips) });
             }
         }
     } catch(_) {}
@@ -782,4 +920,4 @@ async function calculateRisk(input) {
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT };
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, actorTrustScore, deviceTrustScore, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS };
