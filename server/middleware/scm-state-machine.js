@@ -49,6 +49,28 @@ async function validateTransition(productId, batchId, newEventType) {
     if (!allowedNext.includes(newEventType)) {
         return { valid: false, currentState, error: `Invalid transition: "${currentState}" → "${newEventType}". Allowed: [${allowedNext.join(', ')}]` };
     }
+    // FIX-2-SHIP-RECEIVE: Physical verification for receive events
+    if (newEventType === 'receive') {
+        const hasShip = await db.get(
+            'SELECT id FROM supply_chain_events WHERE (product_id = $1 OR batch_id = $2) AND event_type = $3 ORDER BY created_at DESC LIMIT 1',
+            [productId || '', batchId || '', 'ship']
+        );
+        if (!hasShip) {
+            return { valid: false, currentState, error: 'Cannot receive: no prior ship event found. Product must be shipped before receiving.' };
+        }
+    }
+
+    // FIX-3-SELL-RECEIVE: Physical verification for sell events
+    if (newEventType === 'sell') {
+        const hasReceive = await db.get(
+            'SELECT id FROM supply_chain_events WHERE (product_id = $1 OR batch_id = $2) AND event_type = $3 ORDER BY created_at DESC LIMIT 1',
+            [productId || '', batchId || '', 'receive']
+        );
+        if (!hasReceive) {
+            return { valid: false, currentState, error: 'Cannot sell: product was never received into inventory.' };
+        }
+    }
+
     return { valid: true, currentState };
 }
 

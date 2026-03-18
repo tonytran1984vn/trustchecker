@@ -35,6 +35,17 @@ router.post('/events', authMiddleware, requirePermission('supply_chain:create'),
 
 
         // ── RED-TEAM P2: State Machine + Partner + Idempotency Validation ─
+        // FIX-1-SUSPENDED: Block suspended/blocked partners from SCM events
+        if (partner_id) {
+            const partnerStatus = await db.get('SELECT status, name FROM partners WHERE id = $1', [partner_id]);
+            if (partnerStatus && (partnerStatus.status === 'suspended' || partnerStatus.status === 'blocked')) {
+                return res.status(403).json({ 
+                    error: 'Partner "' + partnerStatus.name + '" is ' + partnerStatus.status + ' - cannot process SCM events',
+                    code: 'PARTNER_SUSPENDED'
+                });
+            }
+        }
+
         // ATK-07 FIX: Verify product exists and belongs to org
         if (product_id) {
             const orgId07 = req.user?.orgId || req.user?.org_id;
@@ -105,6 +116,14 @@ const { withTransaction } = require('../middleware/transaction');
         } catch (lrgfErr) {
             console.error('[L-RGF] Governance flow error (non-blocking):', lrgfErr.message);
         }
+
+        // FIX-9-AUDIT: Log to immutable audit trail
+        try {
+            await db.run(
+                'INSERT INTO audit_log (actor_id, actor_email, action, entity_type, entity_id, org_id, new_value, ip_address, user_agent) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+                [req.user?.id, req.user?.email, 'SCM_EVENT_' + event_type.toUpperCase(), 'supply_chain_event', id, req.user?.orgId || req.user?.org_id, JSON.stringify({ event_type, product_id, batch_id, partner_id, location }), req.ip, req.headers['user-agent']]
+            );
+        } catch(auditErr) { console.error('[Audit]', auditErr.message); }
 
         res.status(201).json({ id, event_type, blockchain_seal: seal, governance });
     } catch (err) {

@@ -145,6 +145,36 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             [qrCode.id]
         );
         const scanCount = previousScans.length;
+
+        // FIX-4-THRESHOLD: Auto-block QR codes scanned 5+ times from different IPs
+        if (scanCount >= 5) {
+            const uniqueIPs = new Set(previousScans.map(s => s.ip_address)).size;
+            if (uniqueIPs >= 4) {
+                // Flag this QR code as under_review
+                try { await db.run("UPDATE qr_codes SET status = 'under_review' WHERE id = $1 AND status = 'active'", [qrCode.id]); } catch(e) {}
+                
+                const scanId = uuidv4();
+                await db.run(`
+                    INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, device_fingerprint, ip_address, result, scanned_at, org_id)
+                    VALUES (?, ?, ?, 'validation', ?, ?, 'blocked', NOW(), ?)`,
+                    [scanId, qrCode.id, qrCode.product_id, device_fingerprint || '', req.ip || ip_address || '', effectiveOrgId || qrCode.org_id || '']);
+                
+                eventBus.emitEvent('QRBlocked', {
+                    qr_code_id: qrCode.id, product_id: qrCode.product_id,
+                    scan_count: scanCount, unique_ips: uniqueIPs,
+                    message: 'QR code blocked: ' + scanCount + ' scans from ' + uniqueIPs + ' different IPs'
+                });
+                
+                return res.json({
+                    valid: false,
+                    result: 'blocked',
+                    message: 'QR code has been flagged for review due to unusual scan activity (' + scanCount + ' scans from ' + uniqueIPs + ' locations).',
+                    fraud_score: 0.9,
+                    trust_score: 5,
+                    response_time_ms: Date.now() - startTime
+                });
+            }
+        }
         const isFirstScan = scanCount === 0;
         const firstScanRecord = previousScans.length > 0 ? previousScans[0] : null;
 
@@ -155,6 +185,11 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
       VALUES (?, ?, ?, 'validation', ?, ?, ?, ?, ?, 'pending', NOW(), ?)
     `, [scanId, qrCode.id, qrCode.product_id, device_fingerprint || '', ip_address || '', latitude || null, longitude || null, user_agent || '', effectiveOrgId || qrCode.org_id || '']);
 
+        // FIX-9-AUDIT-SCAN: Log scan to audit trail
+        try {
+            await db.run('INSERT INTO audit_log (action, entity_type, entity_id, org_id, new_value, ip_address, user_agent) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+                ['QR_SCANNED', 'scan_event', scanId, effectiveOrgId || qrCode.org_id, JSON.stringify({ qr_code_id: qrCode.id, product_id: qrCode.product_id }), req.ip || ip_address, req.headers['user-agent'] || user_agent]);
+        } catch(auditErr) {}
         eventBus.emitEvent(EVENT_TYPES.QR_SCANNED, {
             scan_id: scanId,
             product_id: qrCode.product_id,
@@ -193,6 +228,14 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             const month = (firstTime.getMonth() + 1).toString().padStart(2, '0');
             const year = firstTime.getFullYear();
 
+            // FIX-5-VELOCITY-LOG: Log velocity anomaly to event bus for monitoring
+            if (firstScanRecord.ip_address && firstScanRecord.ip_address !== (req.ip || ip_address || '')) {
+                eventBus.emitEvent('VelocityAnomaly', {
+                    qr_code_id: qrCode.id, product_id: qrCode.product_id,
+                    first_ip: firstScanRecord.ip_address, current_ip: req.ip || ip_address,
+                    first_scan: firstScanRecord.scanned_at, time_diff_ms: Date.now() - new Date(firstScanRecord.scanned_at + 'Z').getTime()
+                });
+            }
             // ATK-04 FIX: Geo-velocity — different IP within 1 hour = suspicious clone
             if (firstScanRecord.ip_address && firstScanRecord.ip_address !== (req.ip || ip_address || '') && (Date.now() - new Date(firstScanRecord.scanned_at + 'Z').getTime()) < 3600000) {
                 result = 'suspicious';

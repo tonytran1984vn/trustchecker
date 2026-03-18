@@ -200,6 +200,11 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
         await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
             .run(uuidv4(), req.user.id, 'PRODUCT_REGISTERED', 'product', productId, JSON.stringify({ name, sku, weight_kg, quantity }));
 
+        // FIX-9-AUDIT: Log product creation to audit trail
+        try {
+            await db.run('INSERT INTO audit_log (actor_id, actor_email, action, entity_type, entity_id, org_id, new_value, ip_address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+                [req.user?.id, req.user?.email, 'PRODUCT_CREATED', 'product', productId, req.user?.orgId || req.user?.org_id, JSON.stringify({ name, sku, manufacturer, origin_country }), req.ip]);
+        } catch(auditErr) { console.error('[Audit]', auditErr.message); }
         // ATK-02-SEAL: Seal product creation into blockchain
         try { await blockchainEngine.seal('ProductCreated', productId, { sku, name, manufacturer, origin_country }); } catch(e) { console.error('[ATK-02-SEAL]', e.message); }
         eventBus.emitEvent(EVENT_TYPES.PRODUCT_REGISTERED, {
