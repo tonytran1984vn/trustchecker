@@ -1,6 +1,7 @@
 const { defineConfig } = require("@playwright/test");
 module.exports = defineConfig({
     testDir: "./e2e",
+    globalSetup: "./e2e/global-setup.js",
     fullyParallel: false,
     forbidOnly: !!process.env.CI,
     retries: 0,
