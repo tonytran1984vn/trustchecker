@@ -6,6 +6,43 @@
 
 const express = require('express');
 const { bulkScanDetector, replayDetector } = require("../middleware/blind-spot-defense");
+
+// TC-21-REUSE-CHECK: Detect QR code reuse pattern
+async function checkQrReuse(qrCodeId, qrData, ipAddr, deviceFp, db) {
+    const crypto = require('crypto');
+    const ipHash = crypto.createHash('sha256').update(ipAddr || '').digest('hex').substring(0, 16);
+    const devHash = crypto.createHash('sha256').update(deviceFp || '').digest('hex').substring(0, 16);
+    
+    try {
+        // Upsert fingerprint
+        await db.run(`INSERT INTO qr_scan_fingerprints (id, qr_code_id, qr_data, ip_hash, device_hash, ip_address, scan_count)
+            VALUES ($1, $2, $3, $4, $5, $6, 1)
+            ON CONFLICT (qr_code_id, device_hash) DO UPDATE SET scan_count = qr_scan_fingerprints.scan_count + 1, last_seen = NOW()`,
+            [require('uuid').v4(), qrCodeId, qrData, ipHash, devHash, ipAddr || '']);
+        
+        // Check if reuse threshold breached
+        const stats = await db.get(`SELECT COUNT(DISTINCT ip_hash) as unique_ips, SUM(scan_count) as total_scans
+            FROM qr_scan_fingerprints WHERE qr_code_id = $1 OR qr_data = $2`, [qrCodeId, qrData]);
+        
+        if (stats && stats.unique_ips >= 4 && stats.total_scans >= 5) {
+            // Auto-block QR code
+            await db.run("UPDATE qr_codes SET status = 'blocked' WHERE id = $1 AND status != 'blocked'", [qrCodeId]);
+            
+            // Audit log
+            try {
+                await db.run(`INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, details, ip_address, created_at)
+                    VALUES ($1, 'system', 'qr_reuse_auto_block', 'qr_code', $2, $3, $4, NOW())`,
+                    [require('uuid').v4(), qrCodeId || qrData, JSON.stringify({ unique_ips: stats.unique_ips, total_scans: stats.total_scans }), ipAddr || '']);
+            } catch(_) {}
+            
+            return { reuse_detected: true, blocked: true, unique_ips: stats.unique_ips, total_scans: stats.total_scans };
+        }
+        
+        return { reuse_detected: false, unique_ips: stats?.unique_ips || 0, total_scans: stats?.total_scans || 0 };
+    } catch(e) {
+        return { reuse_detected: false, error: e.message };
+    }
+}
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware } = require('../auth');
@@ -64,7 +101,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             const scanId = uuidv4();
             await db.run(`
         INSERT INTO scan_events (id, scan_type, device_fingerprint, ip_address, latitude, longitude, user_agent, result, fraud_score, scanned_at, org_id)
-        VALUES (?, 'validation', ?, ?, ?, ?, ?, 'counterfeit', 1.0, NOW(), ?)
+        VALUES ($1, 'validation', $2, $3, $4, $5, $6, 'counterfeit', 1.0, NOW(), $7)
       `, [scanId, effectiveFingerprint || '', req.ip || ip_address || '', latitude || null, longitude || null, req.headers['user-agent'] || user_agent || '', req.orgId || req.user?.orgId || req.user?.org_id || '']);
 
             await blockchainEngine.seal('QRInvalid', scanId, { qr_data, result: 'counterfeit' });
@@ -74,6 +111,19 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
                 qr_data: qr_data.substring(0, 20) + '...',
                 result: 'counterfeit'
             });
+
+            // TC-21: Track fingerprint for counterfeit scan
+            try {
+                const crypto = require('crypto');
+                const ipAddr2 = req.ip || ip_address || '';
+                const devFp2 = effectiveFingerprint || '';
+                const ipH = crypto.createHash('sha256').update(ipAddr2).digest('hex').substring(0, 16);
+                const devH = crypto.createHash('sha256').update(devFp2).digest('hex').substring(0, 16);
+                await db.run(`INSERT INTO qr_scan_fingerprints (id, qr_data, ip_hash, device_hash, ip_address, scan_count)
+                    VALUES ($1, $2, $3, $4, $5, 1)
+                    ON CONFLICT (qr_data, device_hash) DO UPDATE SET scan_count = qr_scan_fingerprints.scan_count + 1, last_seen = NOW()`,
+                    [require('uuid').v4(), qr_data, ipH, devH, ipAddr2]);
+            } catch(_fp) {}
 
             return res.json({
                 valid: false,
@@ -86,6 +136,20 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
         }
 
         
+        // TC21-REUSE: Check for QR code reuse pattern
+        const reuseResult = await checkQrReuse(qrCode.id, qr_data, req.ip || ip_address, effectiveFingerprint || device_fingerprint, db);
+        if (reuseResult.blocked) {
+            return res.json({
+                valid: false,
+                result: 'blocked',
+                message: '🚫 QR CODE BLOCKED — Reuse detected (' + reuseResult.unique_ips + ' IPs, ' + reuseResult.total_scans + ' scans)',
+                reuse_detected: true,
+                unique_ips: reuseResult.unique_ips,
+                total_scans: reuseResult.total_scans,
+                response_time_ms: Date.now() - startTime
+            });
+        }
+
         // ── RED-TEAM P1-1: Check QR expiry ──────────────────────────────────
         if (qrCode.expires_at && new Date(qrCode.expires_at) < new Date()) {
             const scanId = uuidv4();
@@ -289,7 +353,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
         // Step 7: Update scan event
         const responseTime = Date.now() - startTime;
         await db.run(`
-      UPDATE scan_events SET result = ?, fraud_score = ?, trust_score = ?, response_time_ms = ? WHERE id = ?
+      UPDATE scan_events SET result = $1, fraud_score = $2, trust_score = $3, response_time_ms = $4 WHERE id = $5
     `, [result, fraudResult.fraudScore, trustResult.score, responseTime, scanId]);
 
         // Step 8: Blockchain seal
@@ -642,11 +706,56 @@ router.post('/mobile-scan', bulkScanDetector, replayDetector, validate(schemas.q
         // Reuse the core validation logic
         const qrCode = await db.get('SELECT * FROM qr_codes WHERE qr_data = ?', [qr_data]);
         if (!qrCode) {
+            // TC-21 FIX: Log counterfeit scan event + fingerprint
+            const scanId = require('uuid').v4();
+            const crypto = require('crypto');
+            const ipAddr = req.ip || req.body.ip_address || '';
+            const devFp = req.body.device_fingerprint || req.body.device_info?.model || '';
+            const ipHash = crypto.createHash('sha256').update(ipAddr).digest('hex').substring(0, 16);
+            const devHash = crypto.createHash('sha256').update(devFp).digest('hex').substring(0, 16);
+            
+            try {
+                // Log scan event for counterfeit
+                await db.run(`INSERT INTO scan_events (id, scan_type, device_fingerprint, ip_address, result, fraud_score, scanned_at, org_id)
+                    VALUES ($1, 'mobile_camera', $2, $3, 'counterfeit', 1.0, NOW(), $4)`,
+                    [scanId, devFp, ipAddr, req.orgId || '']);
+                
+                // Track fingerprint (upsert)
+                await db.run(`INSERT INTO qr_scan_fingerprints (id, qr_data, ip_hash, device_hash, ip_address, scan_count)
+                    VALUES ($1, $2, $3, $4, $5, 1)
+                    ON CONFLICT (qr_data, device_hash) DO UPDATE SET scan_count = qr_scan_fingerprints.scan_count + 1, last_seen = NOW()`,
+                    [require('uuid').v4(), qr_data, ipHash, devHash, ipAddr]);
+                
+                // TC-21 FIX: Check reuse pattern
+                const uniqueIPs = await db.get(`SELECT COUNT(DISTINCT ip_hash) as c FROM qr_scan_fingerprints WHERE qr_data = $1`, [qr_data]);
+                const totalScans = await db.get(`SELECT SUM(scan_count) as c FROM qr_scan_fingerprints WHERE qr_data = $1`, [qr_data]);
+                
+                if (uniqueIPs?.c >= 4 && totalScans?.c >= 5) {
+                    // Auto-flag as reuse attack
+                    try {
+                        await db.run(`INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, details, ip_address, created_at)
+                            VALUES ($1, 'system', 'qr_reuse_detected', 'qr_code', $2, $3, $4, NOW())`,
+                            [require('uuid').v4(), qr_data, JSON.stringify({ unique_ips: uniqueIPs.c, total_scans: totalScans.c, threshold: '4 IPs / 5 scans' }), ipAddr]);
+                    } catch(_) {}
+                }
+            } catch(logErr) { console.error('TC21-LOG:', logErr.message); }
+            
             return res.json({
                 valid: false, result: 'counterfeit',
                 message: '❌ QR CODE NOT RECOGNIZED',
                 response_time_ms: Date.now() - startTime,
                 scan_type: 'mobile_camera'
+            });
+        }
+
+        // TC21-MOBILE-REUSE: Check reuse pattern
+        const mobileReuseResult = await checkQrReuse(qrCode.id, qr_data, req.ip || req.body.ip_address, req.body.device_fingerprint || req.body.device_info?.model, db);
+        if (mobileReuseResult.blocked) {
+            return res.json({
+                valid: false, result: 'blocked',
+                message: '🚫 QR CODE BLOCKED — Reuse detected',
+                reuse_detected: true, unique_ips: mobileReuseResult.unique_ips, total_scans: mobileReuseResult.total_scans,
+                response_time_ms: Date.now() - startTime, scan_type: 'mobile_camera'
             });
         }
 
