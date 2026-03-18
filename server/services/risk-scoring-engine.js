@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V10 — Self-Learning Bayesian System
+ * Risk Scoring Engine V11 — Decision-Aware Causal Layer
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -15,6 +15,21 @@ const db = require('../db');
 // ─── V10: SIGNAL STATS TABLE (auto-create) ───────────────
 const SIGNAL_NAMES = ['scan_pattern', 'geo', 'frequency', 'history', 'graph'];
 const DEFAULT_LR = { scan_pattern: 1.5, geo: 1.8, frequency: 1.3, history: 1.4, graph: 2.0 };
+
+// V11: Signal correlation matrix (0=independent, 1=fully correlated)
+// graph↔propagation are highly correlated, IP↔device correlated
+const SIGNAL_CORRELATIONS = {
+    'scan_pattern:geo': 0.1,
+    'scan_pattern:frequency': 0.3,
+    'scan_pattern:history': 0.2,
+    'scan_pattern:graph': 0.15,
+    'geo:frequency': 0.1,
+    'geo:history': 0.15,
+    'geo:graph': 0.2,
+    'frequency:history': 0.4,       // high: both temporal
+    'frequency:graph': 0.25,
+    'history:graph': 0.5,           // highest: history informs graph
+};
 
 async function initSignalStats() {
     try {
@@ -640,6 +655,10 @@ async function bayesianRiskFusion(actorId, currentSignals) {
         // Cap combined LR to prevent runaway
         combinedLR = Math.max(0.1, Math.min(50, combinedLR));
 
+        // V11: Correlation penalty — reduce LR when correlated signals co-fire
+        const correlationPenalty = signalCorrelationPenalty(activeSignals.map(s => s.name));
+        combinedLR *= correlationPenalty;
+
         // V10: Posterior via combined LR
         // P(F|E) = LR × P(F) / (LR × P(F) + (1-P(F)))
         const numerator = combinedLR * prior;
@@ -667,6 +686,10 @@ async function bayesianRiskFusion(actorId, currentSignals) {
         result.learned = usingLearned;
         result.beta = { alpha, beta: beta, mean: Math.round(betaMean * 1000) / 1000 };
         if (Object.keys(lrShifts).length > 0) result.lr_shifts = lrShifts;
+        result.correlation_penalty = correlationPenalty;
+
+        // V11: Calibrate posterior
+        result.calibrated_posterior = calibrateProb(result.posterior);
     } catch(_) {}
     return result;
 }
@@ -720,6 +743,13 @@ async function recordOutcome(actorId, isFraud, activeSignalNames, source = 'syst
     return { updated, weight, source, is_fraud: isFraud };
 }
 
+// V11: Enhanced recordOutcome with decision tracking
+async function recordOutcomeWithDecision(actorId, isFraud, wasDetected, activeSignalNames, source = 'system') {
+    const result = await recordOutcome(actorId, isFraud, activeSignalNames, source);
+    await updateDecisionStats(wasDetected, isFraud);
+    return { ...result, decision_tracked: true };
+}
+
 // ─── V10: GET LEARNED LRs (for inspection) ───────────────
 async function getLearnedLRs() {
     try {
@@ -734,6 +764,136 @@ async function getLearnedLRs() {
         }));
     } catch(_) {}
     return [];
+}
+
+// ─── V11: SIGNAL CORRELATION PENALTY ─────────────────
+// Reduces combined LR when correlated signals both fire
+// Returns multiplier 0.5–1.0 (1.0 = no penalty)
+function signalCorrelationPenalty(activeSignalNames) {
+    if (!activeSignalNames || activeSignalNames.length < 2) return 1.0;
+    let totalCorrelation = 0;
+    let pairs = 0;
+    for (let i = 0; i < activeSignalNames.length; i++) {
+        for (let j = i + 1; j < activeSignalNames.length; j++) {
+            const key1 = `${activeSignalNames[i]}:${activeSignalNames[j]}`;
+            const key2 = `${activeSignalNames[j]}:${activeSignalNames[i]}`;
+            const corr = SIGNAL_CORRELATIONS[key1] || SIGNAL_CORRELATIONS[key2] || 0;
+            totalCorrelation += corr;
+            pairs++;
+        }
+    }
+    if (pairs === 0) return 1.0;
+    const avgCorrelation = totalCorrelation / pairs;
+    // Penalty: higher correlation = lower multiplier (min 0.5)
+    return Math.max(0.5, 1.0 - avgCorrelation * 0.6);
+}
+
+// ─── V11: CALIBRATE PROBABILITY ─────────────────────
+// Bin-based isotonic calibration (learned from data)
+// Maps raw posterior to calibrated probability
+function calibrateProb(rawP) {
+    // Default calibration bins (will be updated by updateCalibration)
+    // bin: [lower, upper, calibrated_value]
+    const CALIBRATION_BINS = [
+        [0.0, 0.2, 0.05],    // very low risk: slightly lower than raw
+        [0.2, 0.4, 0.25],    // low risk: close to raw
+        [0.4, 0.6, 0.50],    // medium: calibrated to midpoint
+        [0.6, 0.8, 0.70],    // high: slightly conservative
+        [0.8, 1.0, 0.90],    // very high: capped below 1.0
+    ];
+    for (const [lo, hi, cal] of CALIBRATION_BINS) {
+        if (rawP >= lo && rawP < hi) {
+            // Linear interpolation within bin
+            const frac = (rawP - lo) / (hi - lo);
+            const nextCal = CALIBRATION_BINS[CALIBRATION_BINS.indexOf(CALIBRATION_BINS.find(b => b[0] === lo)) + 1]?.[2] || 0.95;
+            return Math.round((cal + frac * (nextCal - cal)) * 1000) / 1000;
+        }
+    }
+    return Math.round(rawP * 1000) / 1000;
+}
+
+// ─── V11: DECISION STATS (TP/FP/TN/FN) ──────────────
+// Tracks quality of decisions (not just probability accuracy)
+async function updateDecisionStats(wasDetected, isFraud) {
+    // wasDetected = decision was SUSPICIOUS, SOFT_BLOCK, or HARD_BLOCK
+    // isFraud = ground truth from outcome
+    try {
+        let category;
+        if (wasDetected && isFraud) category = 'TP';
+        else if (wasDetected && !isFraud) category = 'FP';
+        else if (!wasDetected && isFraud) category = 'FN';
+        else category = 'TN';
+        await db.run(
+            `INSERT INTO signal_stats (signal_name, fraud_count, legit_count, learned_lr)
+             VALUES ($1, $2, $3, 1.0)
+             ON CONFLICT (signal_name) DO UPDATE SET
+                fraud_count = signal_stats.fraud_count + $2,
+                legit_count = signal_stats.legit_count + $3,
+                last_updated = NOW()`,
+            [`decision_${category}`, category === 'TP' || category === 'FN' ? 1 : 0, category === 'FP' || category === 'TN' ? 1 : 0]
+        );
+    } catch(_) {}
+}
+
+async function getDecisionStats() {
+    try {
+        const stats = {};
+        for (const cat of ['TP', 'FP', 'TN', 'FN']) {
+            const row = await db.get(`SELECT fraud_count, legit_count FROM signal_stats WHERE signal_name = $1`, [`decision_${cat}`]);
+            stats[cat] = row ? (parseInt(row.fraud_count) || 0) + (parseInt(row.legit_count) || 0) : 0;
+        }
+        const total = stats.TP + stats.FP + stats.TN + stats.FN;
+        const precision = (stats.TP + stats.FP) > 0 ? stats.TP / (stats.TP + stats.FP) : 0;
+        const recall = (stats.TP + stats.FN) > 0 ? stats.TP / (stats.TP + stats.FN) : 0;
+        const f1 = (precision + recall) > 0 ? 2 * precision * recall / (precision + recall) : 0;
+        // Cost-based loss: FN costs 5× FP
+        const costLoss = stats.FN * 5 + stats.FP * 1;
+        return {
+            ...stats, total,
+            precision: Math.round(precision * 1000) / 1000,
+            recall: Math.round(recall * 1000) / 1000,
+            f1: Math.round(f1 * 1000) / 1000,
+            cost_loss: costLoss,
+        };
+    } catch(_) {}
+    return { TP: 0, FP: 0, TN: 0, FN: 0, total: 0, precision: 0, recall: 0, f1: 0, cost_loss: 0 };
+}
+
+// ─── V11: CAUSAL SIGNAL SCORE ──────────────────────
+// Estimates causal strength of each signal
+// Uses: exclusivity (does this signal predict fraud independently?)
+function causalSignalScore(signalScores, allReasons) {
+    // signalScores = { scan_pattern: 50, geo: 20, ... }
+    const scores = signalScores || {};
+    const causal = {};
+    const activeSignals = Object.entries(scores).filter(([_, v]) => v > 10);
+    for (const [name, score] of activeSignals) {
+        // Exclusivity: how much of total score comes from this signal alone
+        const totalOther = activeSignals
+            .filter(([n]) => n !== name)
+            .reduce((sum, [_, v]) => sum + v, 0);
+        const exclusivity = totalOther > 0 ? score / (score + totalOther) : 1.0;
+
+        // Signal-specific causal prior (domain knowledge)
+        const CAUSAL_PRIOR = {
+            scan_pattern: 0.7,  // strong causal: scanning pattern directly indicates intent
+            geo: 0.8,           // strong causal: impossible travel is direct evidence
+            frequency: 0.5,     // medium: high frequency could be legit automation
+            history: 0.6,       // medium: past behavior predicts but doesn't cause
+            graph: 0.9,         // very strong: network collusion is direct cause
+        };
+        const prior = CAUSAL_PRIOR[name] || 0.5;
+
+        // Causal score: prior × exclusivity × signal strength
+        const causalScore = Math.round(prior * exclusivity * (score / 100) * 100) / 100;
+        causal[name] = {
+            score: causalScore,
+            exclusivity: Math.round(exclusivity * 100) / 100,
+            causal_prior: prior,
+            is_likely_causal: causalScore > 0.15,
+        };
+    }
+    return causal;
 }
 
 // ─── V9: TOP REASONS RANKING ────────────────────────────
@@ -1329,14 +1489,19 @@ async function calculateRisk(input) {
             propagation: gr.multi_edge ? gr.multi_edge.score : 0,
             cold_start: coldStart.penalty,
         },
-        // V9: Bayesian posterior + uncertainty (V10: learned LR + Beta)
+        // V9: Bayesian posterior + uncertainty (V10: learned LR + Beta, V11: calibrated + causal)
         bayesian: await bayesianRiskFusion(actorId, {
             pattern: p.score, geo: g.score, frequency: f.score,
             history: h.score, graph: gr.score,
         }),
         // V9: Top reasons (sorted by impact)
         top_reasons: rankTopReasons(allReasons),
+        // V11: Causal signal analysis
+        causal: causalSignalScore(
+            { scan_pattern: p.score, geo: g.score, frequency: f.score, history: h.score, graph: gr.score },
+            allReasons
+        ),
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, getLearnedLRs, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR };
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };

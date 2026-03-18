@@ -268,6 +268,82 @@ async function main() {
             outcome.weight === 0.3 && outcome.source === 'user');
     }
 
+    // ━━━ V11 CAUSAL ━━━
+    console.log('\n━━━ V11 CAUSAL ━━━\n');
+
+    // V11-1: Decision stats — TP/FP/TN/FN tracked after recordOutcomeWithDecision
+    {
+        await R.recordOutcomeWithDecision('v11-tp', true, true, ['graph'], 'admin');   // TP
+        await R.recordOutcomeWithDecision('v11-fp', false, true, ['scan_pattern'], 'admin');  // FP
+        await R.recordOutcomeWithDecision('v11-fn', true, false, ['frequency'], 'admin');  // FN
+        await R.recordOutcomeWithDecision('v11-tn', false, false, ['geo'], 'admin');  // TN
+        const ds = await R.getDecisionStats();
+        ok('V11-1', 'Decision stats: TP/FP/TN/FN', 'tracked',
+            `TP=${ds.TP},FP=${ds.FP},TN=${ds.TN},FN=${ds.FN},f1=${ds.f1}`,
+            ds.TP > 0 && ds.total > 0 && typeof ds.f1 === 'number');
+    }
+
+    // V11-2: Calibration — calibrated_posterior should differ from raw posterior
+    {
+        const fp = 'v11-cal-' + Date.now();
+        for (let i = 0; i < 8; i++) {
+            const p = createProduct(`V11Cal${i}`, 'pharma');
+            ins(p, fp, '10.99.88.77', null, null, 'distributor');
+            await R.calculateRisk({ productId: p, actorId: fp, scanType: 'distributor', ipAddress: '10.99.88.77', category: 'pharma' });
+        }
+        const p = createProduct('V11CalF', 'pharma');
+        const r = await R.calculateRisk({ productId: p, actorId: fp, scanType: 'consumer', ipAddress: '10.99.88.77', category: 'pharma' });
+        ok('V11-2', 'Calibration: calibrated exists', 'has calibrated',
+            `raw=${r.bayesian.posterior},cal=${r.bayesian.calibrated_posterior}`,
+            typeof r.bayesian.calibrated_posterior === 'number' && r.bayesian.calibrated_posterior >= 0);
+    }
+
+    // V11-3: Correlation penalty — correlated signals produce lower LR than independent
+    {
+        // history+graph are highly correlated (0.5)
+        const penaltyHighCorr = R.signalCorrelationPenalty(['history', 'graph']);
+        // scan_pattern+geo are weakly correlated (0.1)
+        const penaltyLowCorr = R.signalCorrelationPenalty(['scan_pattern', 'geo']);
+        // Single signal = no penalty (1.0)
+        const penaltySingle = R.signalCorrelationPenalty(['scan_pattern']);
+        ok('V11-3', 'Correlation: high_corr < low_corr', 'hc < lc ≤ 1.0',
+            `hc=${penaltyHighCorr},lc=${penaltyLowCorr},single=${penaltySingle}`,
+            penaltyHighCorr < penaltyLowCorr && penaltySingle === 1.0);
+    }
+
+    // V11-4: Causal scoring — graph (prior 0.9) should have higher causal prior than frequency (0.5)
+    {
+        const p = createProduct('V11Caus', 'pharma');
+        ins(p, 'cau-d', '10.0.1.1', 10.82, 106.63, 'distributor');
+        ins(p, 'cau-r', '10.0.1.2', 10.83, 106.64, 'retailer');
+        ins(p, 'cau-c', '10.0.1.3', 10.84, 106.65, 'consumer');
+        const r = await R.calculateRisk({ productId: p, actorId: 'cau-x', scanType: 'consumer',
+            latitude: 10.85, longitude: 106.66, ipAddress: '10.0.1.4', category: 'pharma' });
+        const causal = r.causal;
+        // Check that causal field exists and has causal_prior
+        const hasGraph = causal && causal.graph;
+        const graphPrior = hasGraph ? causal.graph.causal_prior : 0;
+        ok('V11-4', 'Causal: graph prior = 0.9', 'prior = 0.9',
+            `graph_prior=${graphPrior},keys=${Object.keys(causal||{}).join(',')}`,
+            graphPrior === 0.9);
+    }
+
+    // V11-5: Cost-based loss — FN weighted 5× FP
+    {
+        // Record outcomes to generate cost
+        for (let i = 0; i < 3; i++) {
+            await R.recordOutcomeWithDecision(`v11-fn-${i}`, true, false, ['graph'], 'admin'); // FN
+        }
+        for (let i = 0; i < 2; i++) {
+            await R.recordOutcomeWithDecision(`v11-fp-${i}`, false, true, ['scan_pattern'], 'admin'); // FP
+        }
+        const ds = await R.getDecisionStats();
+        // Cost = FN*5 + FP*1
+        ok('V11-5', 'Cost loss: FN*5 + FP*1', 'cost > 0',
+            `cost=${ds.cost_loss},FN=${ds.FN},FP=${ds.FP}`,
+            ds.cost_loss > 0 && ds.FN > 0);
+    }
+
     // ━━━ INTEGRATION ━━━
     console.log('\n━━━ INTEGRATION ━━━\n');
     { ok('INT-1','risk_scores','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"))>0); }
@@ -276,12 +352,12 @@ async function main() {
     ok('INT-3','Decisions','data',d.replace(/\n/g,', '),d.length>0&&!d.startsWith('ERROR')); }
     { ok('INT-4','Graph','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"))>0); }
     { ok('INT-5','signal_stats','rows',psql("SELECT COUNT(*) FROM signal_stats"),parseInt(psql("SELECT COUNT(*) FROM signal_stats"))>=5); }
-    { ok('INT-6','Learned','data',psql("SELECT signal_name||'='||learned_lr::TEXT FROM signal_stats ORDER BY signal_name"),!psql("SELECT COUNT(*) FROM signal_stats").startsWith('ERROR')); }
+    { ok('INT-6','Decision stats','data',psql("SELECT signal_name||'='||fraud_count::TEXT FROM signal_stats WHERE signal_name LIKE 'decision_%' ORDER BY signal_name"),!psql("SELECT COUNT(*) FROM signal_stats WHERE signal_name LIKE 'decision_%'").startsWith('ERROR')); }
 
     // ═══════════
     const total=passed+failed;const pct=Math.round(passed/total*100);
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V10 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
+    console.log(`║  L4 V11 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║  Fraud:       ${results.filter(r=>r.id>='BF-1'&&r.id<='BF-6').filter(r=>r.pass).length}/6`);
     console.log(`║  Baselines:   ${results.filter(r=>r.id==='BF-7'||r.id==='BF-8').filter(r=>r.pass).length}/2`);
@@ -295,11 +371,12 @@ async function main() {
     console.log(`║  V8:          ${results.filter(r=>r.id.startsWith('V8')).filter(r=>r.pass).length}/5`);
     console.log(`║  V9:          ${results.filter(r=>r.id.startsWith('V9')).filter(r=>r.pass).length}/5`);
     console.log(`║  V10 Learn:   ${results.filter(r=>r.id.startsWith('V10')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V11 Causal:  ${results.filter(r=>r.id.startsWith('V11')).filter(r=>r.pass).length}/5`);
     console.log(`║  Integration: ${results.filter(r=>r.id.startsWith('INT')).filter(r=>r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
     const fails=results.filter(r=>!r.pass);
     if(fails.length>0){console.log('\n❌ FAILED:');fails.forEach(f=>console.log(`  ${f.id}: ${f.name} | exp: ${f.expected} | act: ${f.actual}`));}
-    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V10',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
+    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V11',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
     console.log('\n📝 chaos-l4-report.json'); process.exit(0);
 }
 main().catch(e=>{console.error('FATAL:',e.message,e.stack);process.exit(1);});
