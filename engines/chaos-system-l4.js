@@ -729,6 +729,56 @@ async function main() {
             id.all_passed === true && gov.governance_status === 'GOVERNED' && id.constitution.min_entropy_ratio === 0.5);
     }
 
+    // ━━━ V19 ORG INTELLIGENCE ━━━
+    console.log('\n━━━ V19 ORG INTELLIGENCE ━━━\n');
+
+    // V19-1: Meta-constitution — controlled update + audit
+    {
+        const mc = R.metaConstitution({ min_entropy_ratio: 0.48 }, 'admin_test'); // within 20%
+        const mc2 = R.metaConstitution({ min_entropy_ratio: 0.1 }, 'admin_test'); // >20% → reject
+        ok('V19-1', 'Meta-constitution: audit', 'accept small, reject large',
+            `updated=${mc.updated},rejected=${mc.rejected},audit=${mc.audit_size},rej2=${mc2.rejected}`,
+            mc.updated === 1 && mc.rejected === 0 && mc2.rejected === 1);
+    }
+
+    // V19-2: Dual-speed — fast vs slow classification
+    {
+        const fast = R.dualSpeedEvolution({ changes_thresholds: true }); // low risk
+        const slow = R.dualSpeedEvolution({ changes_constitution: true, changes_learning_rate: true }); // high risk
+        ok('V19-2', 'Dual-speed: fast/slow', 'fast=safe, slow=risky',
+            `fast=${fast.path},slow=${slow.path}`,
+            fast.path === 'fast' && slow.path === 'slow' && slow.requires_validation === true);
+    }
+
+    // V19-3: Shadow system — 2nd opinion divergence
+    {
+        const aligned = R.shadowSystem(20, 'pass'); // both low
+        const diverged = R.shadowSystem(35, 'pass'); // main=pass, shadow=soft_block (35×1.3=45.5)
+        ok('V19-3', 'Shadow: divergence detection', 'diverge on edge cases',
+            `aligned=${aligned.divergence},diverged=${diverged.divergence},action=${diverged.action}`,
+            aligned.divergence === false && diverged.divergence === true && diverged.action === 'trigger_investigation');
+    }
+
+    // V19-4: Human override — scoring + audit
+    {
+        const low = R.humanGovernance('manual_approve', 'analyst1', 'false positive');
+        const high = R.humanGovernance('whitelist', 'admin1', 'VIP customer');
+        ok('V19-4', 'Human gov: risk scoring', 'low=auto, high=multi',
+            `low_approved=${low.approved},high_multi=${high.requires_multi_approval},expiry=${high.expiry_hours}h`,
+            low.approved === true && high.requires_multi_approval === true && high.expiry_hours === 24);
+    }
+
+    // V19-5: Decision orchestration — routing by severity
+    {
+        const crit = R.decisionOrchestration(90, 'block');
+        const med = R.decisionOrchestration(40, 'suspicious');
+        const low = R.decisionOrchestration(10, 'pass');
+        ok('V19-5', 'Orchestration: routing', 'severity→team',
+            `crit=${crit.route},med=${med.route},low=${low.route}`,
+            crit.route === 'incident_response' && crit.team === 'security_ops' &&
+            med.route === 'monitoring' && low.route === 'auto_pass');
+    }
+
     // ━━━ INTEGRATION ━━━
     console.log('\n━━━ INTEGRATION ━━━\n');
     { ok('INT-1','risk_scores','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"))>0); }
@@ -737,14 +787,14 @@ async function main() {
     ok('INT-3','Decisions','data',d.replace(/\n/g,', '),d.length>0&&!d.startsWith('ERROR')); }
     { ok('INT-4','Graph','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"))>0); }
     { ok('INT-5','signal_stats','rows',psql("SELECT COUNT(*) FROM signal_stats"),parseInt(psql("SELECT COUNT(*) FROM signal_stats"))>=5); }
-    { // V18 response includes v18 governance
+    { // V19 response includes v19 org intelligence
       const r = await R.calculateRisk({productId:createProduct('INT6','pharma'),actorId:'int6-'+Date.now(),scanType:'consumer',ipAddress:'8.8.8.8',category:'pharma'});
-      ok('INT-6','V18 metadata','v18 obj',`id_ok=${r.v18?.identity_check?.all_passed},mem=${r.v18?.failure_memory_count}`,r.v18 && r.v18.identity_check?.all_passed === true && typeof r.v18.failure_memory_count === 'number'); }
+      ok('INT-6','V19 metadata','v19 obj',`shadow=${typeof r.v19?.shadow_divergence},route=${r.v19?.org_routing}`,r.v19 && typeof r.v19.shadow_divergence === 'boolean' && typeof r.v19.org_routing === 'string'); }
 
     // ═══════════
     const total=passed+failed;const pct=Math.round(passed/total*100);
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V18 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
+    console.log(`║  L4 V19 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║  Fraud:       ${results.filter(r=>r.id>='BF-1'&&r.id<='BF-6').filter(r=>r.pass).length}/6`);
     console.log(`║  Baselines:   ${results.filter(r=>r.id==='BF-7'||r.id==='BF-8').filter(r=>r.pass).length}/2`);
@@ -766,11 +816,12 @@ async function main() {
     console.log(`║  V16 Meta:    ${results.filter(r=>r.id.startsWith('V16')).filter(r=>r.pass).length}/5`);
     console.log(`║  V17 Evolve:  ${results.filter(r=>r.id.startsWith('V17')).filter(r=>r.pass).length}/5`);
     console.log(`║  V18 Govern:  ${results.filter(r=>r.id.startsWith('V18')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V19 OrgInt:  ${results.filter(r=>r.id.startsWith('V19')).filter(r=>r.pass).length}/5`);
     console.log(`║  Integration: ${results.filter(r=>r.id.startsWith('INT')).filter(r=>r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
     const fails=results.filter(r=>!r.pass);
     if(fails.length>0){console.log('\n❌ FAILED:');fails.forEach(f=>console.log(`  ${f.id}: ${f.name} | exp: ${f.expected} | act: ${f.actual}`));}
-    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V18',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
+    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V19',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
     console.log('\n📝 chaos-l4-report.json'); process.exit(0);
 }
 main().catch(e=>{console.error('FATAL:',e.message,e.stack);process.exit(1);});

@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V18 — System Identity & Governance Layer
+ * Risk Scoring Engine V19 — Organizational Intelligence Layer
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -1697,6 +1697,11 @@ async function calculateRisk(input) {
             identity_check: identityConstraints(),
             failure_memory_count: _failureMemory.length,
         },
+        // V19: Organizational intelligence
+        v19: {
+            shadow_divergence: shadowSystem(totalScore, decision).divergence,
+            org_routing: decisionOrchestration(totalScore, decision).route,
+        },
     };
 }
 
@@ -2644,4 +2649,198 @@ function governanceCheck() {
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, stealthResponseProtocol, adaptiveEntropyFloor, systemSelfAwareness, signalEvolution, getEvolutionState, metaAnchor, driftVsBias, recordFailure, checkFailureMemory, getFailureMemory, identityConstraints, getConstitution, governanceCheck, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
+// ─── V19: META-CONSTITUTION ────────────────
+const _constitutionAudit = [];
+
+function metaConstitution(proposedChanges, approver = 'system') {
+    // Constitution can evolve, but ONLY with audit + approval
+    const current = { ..._systemConstitution };
+    const changes = [];
+    const rejected = [];
+
+    for (const [key, newValue] of Object.entries(proposedChanges)) {
+        if (!(key in _systemConstitution)) {
+            rejected.push({ key, reason: 'unknown_constraint' });
+            continue;
+        }
+        const oldValue = _systemConstitution[key];
+        // Safety: no change > 20% in one update
+        const changePct = Math.abs(newValue - oldValue) / Math.max(0.001, Math.abs(oldValue));
+        if (changePct > 0.2) {
+            rejected.push({ key, reason: 'change_too_large', old: oldValue, new: newValue, pct: Math.round(changePct * 100) });
+            continue;
+        }
+        _systemConstitution[key] = newValue;
+        changes.push({ key, old: oldValue, new: newValue });
+    }
+
+    const entry = {
+        timestamp: Date.now(),
+        approver,
+        changes,
+        rejected,
+        snapshot: { ..._systemConstitution },
+    };
+    _constitutionAudit.push(entry);
+    if (_constitutionAudit.length > 100) _constitutionAudit.shift();
+
+    return {
+        updated: changes.length,
+        rejected: rejected.length,
+        changes,
+        rejected_details: rejected,
+        approver,
+        audit_size: _constitutionAudit.length,
+    };
+}
+
+function getConstitutionAudit() { return [..._constitutionAudit]; }
+
+// ─── V19: DUAL-SPEED EVOLUTION ────────────
+function dualSpeedEvolution(proposedUpdate) {
+    const identity = identityConstraints();
+    const health = systemSelfAwareness();
+
+    // Classify update risk
+    const riskFactors = [
+        proposedUpdate.changes_signal_weights ? 1 : 0,
+        proposedUpdate.changes_learning_rate ? 1 : 0,
+        proposedUpdate.changes_thresholds ? 1 : 0,
+        proposedUpdate.changes_constitution ? 2 : 0,
+    ];
+    const updateRisk = riskFactors.reduce((s, v) => s + v, 0);
+
+    let path, requires_validation;
+    if (updateRisk <= 1 && identity.all_passed && health.health > 0.7) {
+        path = 'fast';
+        requires_validation = false;
+    } else {
+        path = 'slow';
+        requires_validation = true;
+    }
+
+    return {
+        path,
+        update_risk: updateRisk,
+        requires_validation,
+        identity_ok: identity.all_passed,
+        health: health.health,
+        rationale: path === 'fast'
+            ? 'Low-risk update within constraints — auto-commit'
+            : 'High-risk or degraded state — requires validation before commit',
+    };
+}
+
+// ─── V19: SHADOW SYSTEM (2ND OPINION) ─────
+function shadowSystem(score, decision) {
+    // Shadow = loose model with higher sensitivity
+    const shadowMultiplier = 1.3; // 30% more sensitive
+    const shadowScore = (score || 0) * shadowMultiplier;
+    const mainBlock = (decision === 'block' || decision === 'soft_block');
+
+    // Shadow decision at lower threshold
+    const shadowThresholds = { suspicious: 25, soft_block: 40, hard_block: 55 };
+    let shadowDecision = 'pass';
+    if (shadowScore >= shadowThresholds.hard_block) shadowDecision = 'block';
+    else if (shadowScore >= shadowThresholds.soft_block) shadowDecision = 'soft_block';
+    else if (shadowScore >= shadowThresholds.suspicious) shadowDecision = 'suspicious';
+
+    const mainPass = !mainBlock;
+    const shadowBlock = (shadowDecision === 'block' || shadowDecision === 'soft_block');
+
+    // Divergence = shadow sees risk but main doesn't
+    const divergence = mainPass && shadowBlock;
+
+    return {
+        main_score: score || 0,
+        shadow_score: Math.round(shadowScore * 100) / 100,
+        main_decision: decision || 'unknown',
+        shadow_decision: shadowDecision,
+        divergence,
+        action: divergence ? 'trigger_investigation' : 'aligned',
+    };
+}
+
+// ─── V19: HUMAN GOVERNANCE LAYER ─────────
+const _humanOverrides = [];
+
+function humanGovernance(action, actor, reason, params = {}) {
+    const impactMap = {
+        whitelist: { impact: 0.8, risk: 0.9, reversibility: 0.3 },
+        threshold_override: { impact: 0.6, risk: 0.7, reversibility: 0.7 },
+        rule_disable: { impact: 0.9, risk: 0.95, reversibility: 0.5 },
+        manual_approve: { impact: 0.3, risk: 0.4, reversibility: 0.9 },
+    };
+
+    const scores = impactMap[action] || { impact: 0.5, risk: 0.5, reversibility: 0.5 };
+    const requiresMultiApproval = scores.risk > 0.7;
+    const expiryHours = scores.risk > 0.7 ? 24 : 168; // high risk = 24h, low = 7d
+
+    const override = {
+        action,
+        actor,
+        reason,
+        scores,
+        requires_multi_approval: requiresMultiApproval,
+        expiry: new Date(Date.now() + expiryHours * 3600000).toISOString(),
+        expiry_hours: expiryHours,
+        timestamp: Date.now(),
+        params,
+    };
+
+    _humanOverrides.push(override);
+    if (_humanOverrides.length > 200) _humanOverrides.shift();
+
+    return {
+        approved: !requiresMultiApproval, // auto-approve low risk
+        requires_multi_approval: requiresMultiApproval,
+        impact_score: scores.impact,
+        risk_score: scores.risk,
+        reversibility: scores.reversibility,
+        expiry_hours: expiryHours,
+        audit_size: _humanOverrides.length,
+    };
+}
+
+function getHumanOverrides() { return [..._humanOverrides]; }
+
+// ─── V19: DECISION ORCHESTRATION ─────────
+function decisionOrchestration(score, decision) {
+    const s = score || 0;
+    const d = decision || 'pass';
+
+    let route, team, urgency, actionSet;
+
+    if (d === 'block' || s >= 80) {
+        route = 'incident_response';
+        team = 'security_ops';
+        urgency = 'critical';
+        actionSet = ['block_actor', 'freeze_account', 'alert_compliance', 'create_case'];
+    } else if (d === 'soft_block' || s >= 50) {
+        route = 'investigation';
+        team = 'fraud_analysts';
+        urgency = 'high';
+        actionSet = ['manual_review', 'request_verification', 'flag_for_monitoring'];
+    } else if (d === 'suspicious' || s >= 30) {
+        route = 'monitoring';
+        team = 'risk_monitoring';
+        urgency = 'medium';
+        actionSet = ['add_to_watchlist', 'increase_logging', 'schedule_review'];
+    } else {
+        route = 'auto_pass';
+        team = 'none';
+        urgency = 'low';
+        actionSet = ['log_only'];
+    }
+
+    return {
+        route,
+        team,
+        urgency,
+        actions: actionSet,
+        score: s,
+        decision: d,
+    };
+}
+
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, stealthResponseProtocol, adaptiveEntropyFloor, systemSelfAwareness, signalEvolution, getEvolutionState, metaAnchor, driftVsBias, recordFailure, checkFailureMemory, getFailureMemory, identityConstraints, getConstitution, governanceCheck, metaConstitution, getConstitutionAudit, dualSpeedEvolution, shadowSystem, humanGovernance, getHumanOverrides, decisionOrchestration, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
