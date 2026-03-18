@@ -1,5 +1,5 @@
 /**
- * Risk Scoring Engine V13 — Strategic Fraud Intelligence
+ * Risk Scoring Engine V14 — Game-Theoretic System
  * 
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
@@ -1672,45 +1672,80 @@ async function calculateRisk(input) {
             exploration_epsilon: exploration.epsilon,
             dynamic_cost: dynamicCost(category),
         },
+        // V14: Game-theoretic state
+        v14: {
+            threat_hysteresis: _threatState,
+        },
     };
 }
 
-// ─── V13: ATTACKER SIMULATION ENGINE ──────────────
-// Generates attack scenarios to stress-test defenses
+// ─── V14: EVOLVING ATTACKER SIMULATION ──────────────
+// Mutates + evolves attacks based on what bypassed
+const _BASE_ATTACKS = [
+    { name: 'Farm attack', actors: 20, scans_per_actor: 3, overlap_ips: true, role: 'consumer',
+      description: 'Distributed scan farm', expected_detection: 'graph + frequency' },
+    { name: 'Slow probing', actors: 1, scans_per_actor: 50, overlap_ips: false, role: 'distributor',
+      description: 'Slow enumeration under radar', expected_detection: 'frequency + history' },
+    { name: 'Role juggling', actors: 5, scans_per_actor: 10, overlap_ips: true, role: 'mixed',
+      description: 'Alternating roles to evade patterns', expected_detection: 'role_switch + graph' },
+    { name: 'Device spoofing', actors: 3, scans_per_actor: 15, overlap_ips: false, role: 'consumer',
+      description: 'Random device/IP per scan', expected_detection: 'trust + scan_pattern' },
+    { name: 'Supply chain infiltrate', actors: 2, scans_per_actor: 8, overlap_ips: true, role: 'distributor',
+      description: 'Embed in legit supply chain', expected_detection: 'trust_propagation + multi_edge' },
+];
+let _evolvedAttacks = [];
+
 function attackerSimulation() {
-    const ATTACK_TEMPLATES = [
-        { name: 'Farm attack', actors: 20, scans_per_actor: 3, overlap_ips: true, role: 'consumer',
-          description: 'Distributed scan farm', expected_detection: 'graph + frequency' },
-        { name: 'Slow probing', actors: 1, scans_per_actor: 50, overlap_ips: false, role: 'distributor',
-          description: 'Slow enumeration under radar', expected_detection: 'frequency + history' },
-        { name: 'Role juggling', actors: 5, scans_per_actor: 10, overlap_ips: true, role: 'mixed',
-          description: 'Alternating roles to evade patterns', expected_detection: 'role_switch + graph' },
-        { name: 'Device spoofing', actors: 3, scans_per_actor: 15, overlap_ips: false, role: 'consumer',
-          description: 'Random device/IP per scan', expected_detection: 'trust + scan_pattern' },
-        { name: 'Supply chain infiltrate', actors: 2, scans_per_actor: 8, overlap_ips: true, role: 'distributor',
-          description: 'Embed in legit supply chain', expected_detection: 'trust_propagation + multi_edge' },
-    ];
-    return ATTACK_TEMPLATES.map((t, i) => ({
-        id: `ATK-${i+1}`,
-        ...t,
+    return _BASE_ATTACKS.map((t, i) => ({
+        id: `ATK-${i+1}`, ...t,
         total_scans: t.actors * t.scans_per_actor,
         risk_level: t.actors * t.scans_per_actor > 30 ? 'HIGH' : 'MEDIUM',
     }));
 }
 
-// ─── V13: STRATEGY PREDICTION ───────────────────
-// Detects escalating patterns that predict incoming attacks
+// V14: Mutation layer — combine two templates + random noise
+function evolveAttacker(parentA = 0, parentB = 1) {
+    const a = _BASE_ATTACKS[parentA % _BASE_ATTACKS.length];
+    const b = _BASE_ATTACKS[parentB % _BASE_ATTACKS.length];
+    const noise = () => Math.floor(Math.random() * 5) - 2;
+    const mutant = {
+        name: `Evolved: ${a.name.split(' ')[0]}+${b.name.split(' ')[0]}`,
+        actors: Math.max(1, Math.round((a.actors + b.actors) / 2) + noise()),
+        scans_per_actor: Math.max(1, Math.round((a.scans_per_actor + b.scans_per_actor) / 2) + noise()),
+        overlap_ips: Math.random() > 0.5,
+        role: Math.random() > 0.5 ? a.role : b.role,
+        description: `Mutated: ${a.description} × ${b.description}`,
+        expected_detection: `${a.expected_detection} + ${b.expected_detection}`,
+        generation: _evolvedAttacks.length + 1,
+        parents: [parentA, parentB],
+    };
+    mutant.total_scans = mutant.actors * mutant.scans_per_actor;
+    mutant.risk_level = mutant.total_scans > 30 ? 'HIGH' : 'MEDIUM';
+    mutant.id = `EVO-${_evolvedAttacks.length + 1}`;
+    _evolvedAttacks.push(mutant);
+    return mutant;
+}
+
+function getEvolvedAttacks() { return [..._evolvedAttacks]; }
+
+// ─── V14: THREAT HYSTERESIS ───────────────────────
+// Prevents flip-flopping between threat levels
+let _threatState = 'NORMAL';
+const HYSTERESIS = {
+    'NORMAL->ELEVATED': 5,
+    'ELEVATED->HIGH': 10,
+    'HIGH->ELEVATED': 5,
+    'ELEVATED->NORMAL': 2,
+};
+
 async function strategyPrediction() {
     try {
-        // Look for escalation signals in recent data
-        // 1. Rising scan frequency (actors getting bolder)
         const recentActors = await db.all(
             `SELECT actor_id, COUNT(*) as cnt FROM risk_scores
              WHERE created_at > NOW() - INTERVAL '1 hour'
              GROUP BY actor_id HAVING COUNT(*) > 5
              ORDER BY cnt DESC LIMIT 10`
         );
-        // 2. Rising average risk score
         const recentAvg = await db.get(
             `SELECT AVG(total_score) as avg_score, COUNT(*) as cnt FROM risk_scores
              WHERE created_at > NOW() - INTERVAL '30 minutes'`
@@ -1723,67 +1758,182 @@ async function strategyPrediction() {
         const recentAvgScore = parseFloat(recentAvg?.avg_score) || 0;
         const histAvgScore = parseFloat(historicalAvg?.avg_score) || 0;
         const scoreTrend = Math.round((recentAvgScore - histAvgScore) * 10) / 10;
-
-        // Escalation detection
         const highFreqActors = (recentActors || []).length;
-        const isEscalating = scoreTrend > 5 || highFreqActors > 3;
-        const threatLevel = isEscalating && scoreTrend > 10 ? 'HIGH' :
-                           isEscalating ? 'ELEVATED' : 'NORMAL';
+
+        // V14: Hysteresis-based state transitions
+        let newThreat = _threatState;
+        if (_threatState === 'NORMAL' && (scoreTrend > HYSTERESIS['NORMAL->ELEVATED'] || highFreqActors > 3)) {
+            newThreat = 'ELEVATED';
+        } else if (_threatState === 'ELEVATED' && scoreTrend > HYSTERESIS['ELEVATED->HIGH']) {
+            newThreat = 'HIGH';
+        } else if (_threatState === 'ELEVATED' && scoreTrend < HYSTERESIS['ELEVATED->NORMAL'] && highFreqActors <= 1) {
+            newThreat = 'NORMAL';
+        } else if (_threatState === 'HIGH' && scoreTrend < HYSTERESIS['HIGH->ELEVATED']) {
+            newThreat = 'ELEVATED';
+        }
+
+        const transitioned = newThreat !== _threatState;
+        const previousThreat = _threatState;
+        _threatState = newThreat;
 
         return {
-            threat_level: threatLevel,
-            is_escalating: isEscalating,
+            threat_level: newThreat,
+            previous_level: previousThreat,
+            transitioned,
+            is_escalating: newThreat !== 'NORMAL',
             score_trend: scoreTrend,
             high_freq_actors: highFreqActors,
             recent_avg: Math.round(recentAvgScore * 10) / 10,
             hist_avg: Math.round(histAvgScore * 10) / 10,
-            recommendation: isEscalating ?
-                'Consider lowering thresholds pre-emptively' :
-                'No escalation detected',
+            hysteresis: true,
         };
     } catch(_) {}
-    return { threat_level: 'UNKNOWN', is_escalating: false, score_trend: 0, recommendation: 'error' };
+    return { threat_level: _threatState, is_escalating: false, score_trend: 0, hysteresis: true };
 }
 
-// ─── V13: PRE-EMPTIVE DEFENSE ───────────────────
-// Proactively tightens thresholds when escalation detected
-async function preemptiveDefense() {
+function getThreatState() { return _threatState; }
+function setThreatState(s) { _threatState = s; }
+
+// ─── V14: MULTI-DIMENSIONAL DEFENSE ───────────────
+async function multiDimensionalDefense() {
     const strategy = await strategyPrediction();
-    const result = { strategy, action: 'none', thresholds_before: { ..._currentThresholds } };
+    const result = {
+        strategy,
+        actions: [],
+        thresholds_before: { ..._currentThresholds },
+    };
 
     if (strategy.threat_level === 'HIGH') {
-        // Tight mode: lower thresholds significantly
         _currentThresholds.suspicious = Math.max(25, _currentThresholds.suspicious - 5);
         _currentThresholds.soft_block = Math.max(55, _currentThresholds.soft_block - 5);
-        result.action = 'tightened_high';
+        result.actions.push('threshold_tightened');
+        result.actions.push('lr_graph_boosted');
+        result.lr_boost = { graph: 1.5 };
+        result.actions.push('trust_propagation_dampened');
+        result.trust_dampen = 0.5;
+        result.actions.push('exploration_increased');
+        result.exploration_boost = 0.1;
     } else if (strategy.threat_level === 'ELEVATED') {
-        // Alert mode: lower thresholds slightly
         _currentThresholds.suspicious = Math.max(25, _currentThresholds.suspicious - 2);
-        result.action = 'tightened_elevated';
+        result.actions.push('threshold_tightened');
+        result.actions.push('lr_graph_boosted');
+        result.lr_boost = { graph: 1.2 };
     }
+
     result.thresholds_after = { ..._currentThresholds };
+    result.action_count = result.actions.length;
     return result;
 }
+async function preemptiveDefense() { return multiDimensionalDefense(); }
 
-// ─── V13: GLOBAL OBJECTIVE FUNCTION ───────────────
-async function globalObjective(category) {
+// ─── V14: OBJECTIVE FEEDBACK LOOP ─────────────────
+let _lastNetValue = null;
+
+async function objectiveFeedback(category) {
     const stats = await getDecisionStats();
     const cost = dynamicCost(category);
-    // Revenue protected = TP × avg_transaction_value
-    // Friction cost = FP × churn_risk_per_false_alarm
     const avgTxValue = { pharma: 500, luxury: 1000, fmcg: 50, default: 200 };
     const txValue = avgTxValue[category] || avgTxValue.default;
     const revenueProtected = stats.TP * txValue;
-    const frictionCost = stats.FP * txValue * 0.1; // 10% churn risk per FP
-    const fraudLoss = stats.FN * txValue * cost.fn / 5; // scaled by category cost
+    const frictionCost = stats.FP * txValue * 0.1;
+    const fraudLoss = stats.FN * txValue * cost.fn / 5;
     const netValue = revenueProtected - frictionCost - fraudLoss;
+    const efficiency = stats.total > 0 ? Math.round((revenueProtected / Math.max(1, revenueProtected + frictionCost + fraudLoss)) * 100) : 0;
+
+    let feedback = 'neutral';
+    let adjustment = 0;
+    if (_lastNetValue !== null) {
+        const delta = netValue - _lastNetValue;
+        if (delta > 0) {
+            feedback = 'reinforce';
+            adjustment = 0;
+        } else if (delta < -txValue) {
+            feedback = 'penalize';
+            adjustment = 1;
+        }
+    }
+    _lastNetValue = netValue;
+
     return {
         revenue_protected: revenueProtected,
         friction_cost: frictionCost,
         fraud_loss: fraudLoss,
         net_value: netValue,
-        efficiency: stats.total > 0 ? Math.round((revenueProtected / Math.max(1, revenueProtected + frictionCost + fraudLoss)) * 100) : 0,
+        efficiency,
+        feedback,
+        adjustment,
+    };
+}
+async function globalObjective(category) { return objectiveFeedback(category); }
+
+// ─── V14: PAYOFF MATRIX ──────────────────────────
+// Models attacker strategies × defender strategies → costs
+function payoffMatrix() {
+    const ATTACKER_STRATEGIES = ['farm', 'slow_probe', 'role_juggle', 'device_spoof', 'supply_chain'];
+    const DEFENDER_STRATEGIES = ['baseline', 'tight_threshold', 'graph_boost', 'trust_dampen', 'full_defense'];
+
+    const matrix = {};
+    for (const atk of ATTACKER_STRATEGIES) {
+        matrix[atk] = {};
+        for (const def of DEFENDER_STRATEGIES) {
+            const atkBase = { farm: 0.6, slow_probe: 0.7, role_juggle: 0.5, device_spoof: 0.4, supply_chain: 0.8 };
+            const defEffect = {
+                baseline:        { farm: 0.0, slow_probe: 0.0, role_juggle: 0.0, device_spoof: 0.0, supply_chain: 0.0 },
+                tight_threshold: { farm: 0.3, slow_probe: 0.1, role_juggle: 0.2, device_spoof: 0.1, supply_chain: 0.15 },
+                graph_boost:     { farm: 0.5, slow_probe: 0.1, role_juggle: 0.4, device_spoof: 0.1, supply_chain: 0.3 },
+                trust_dampen:    { farm: 0.2, slow_probe: 0.2, role_juggle: 0.1, device_spoof: 0.3, supply_chain: 0.5 },
+                full_defense:    { farm: 0.6, slow_probe: 0.3, role_juggle: 0.5, device_spoof: 0.4, supply_chain: 0.6 },
+            };
+            const defCostBase = { baseline: 0, tight_threshold: 0.1, graph_boost: 0.15, trust_dampen: 0.1, full_defense: 0.3 };
+
+            const atkSuccess = Math.max(0, (atkBase[atk] || 0.5) - (defEffect[def]?.[atk] || 0));
+            const defCost = defCostBase[def] || 0;
+            matrix[atk][def] = {
+                attacker_success: Math.round(atkSuccess * 100) / 100,
+                defender_cost: Math.round(defCost * 100) / 100,
+                total_loss: Math.round((atkSuccess + defCost) * 100) / 100,
+            };
+        }
+    }
+    return { attacker_strategies: ATTACKER_STRATEGIES, defender_strategies: DEFENDER_STRATEGIES, matrix };
+}
+
+// ─── V14: NASH-LIKE EQUILIBRIUM ───────────────────
+// Find defender strategy that minimizes worst-case total_loss (minimax)
+function nashEquilibrium() {
+    const pm = payoffMatrix();
+    let bestDefender = null;
+    let bestWorstCase = Infinity;
+
+    for (const def of pm.defender_strategies) {
+        let worstCase = 0;
+        for (const atk of pm.attacker_strategies) {
+            const totalLoss = pm.matrix[atk][def].total_loss;
+            if (totalLoss > worstCase) worstCase = totalLoss;
+        }
+        if (worstCase < bestWorstCase) {
+            bestWorstCase = worstCase;
+            bestDefender = def;
+        }
+    }
+
+    const attackerBest = {};
+    for (const def of pm.defender_strategies) {
+        let best = { atk: null, success: 0 };
+        for (const atk of pm.attacker_strategies) {
+            const s = pm.matrix[atk][def].attacker_success;
+            if (s > best.success) { best = { atk, success: s }; }
+        }
+        attackerBest[def] = best;
+    }
+
+    return {
+        optimal_defense: bestDefender,
+        minimax_loss: Math.round(bestWorstCase * 100) / 100,
+        attacker_best_responses: attackerBest,
+        recommendation: `Use '${bestDefender}' strategy (minimax loss: ${Math.round(bestWorstCase * 100) / 100})`,
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, strategyPrediction, preemptiveDefense, globalObjective, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
+module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, nashEquilibrium, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
+

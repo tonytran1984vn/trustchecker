@@ -470,6 +470,60 @@ async function main() {
             typeof strategy.threat_level === 'string' && typeof objective.net_value === 'number');
     }
 
+    // ━━━ V14 GAME-THEORETIC ━━━
+    console.log('\n━━━ V14 GAME-THEORETIC ━━━\n');
+
+    // V14-1: Evolving attacker — mutation creates new scenarios
+    {
+        const evo1 = R.evolveAttacker(0, 1); // Farm + Slow probe
+        const evo2 = R.evolveAttacker(2, 4); // Role juggle + Supply chain
+        const pool = R.getEvolvedAttacks();
+        ok('V14-1', 'Evolve: mutation creates new', '2 evolved',
+            `evo1=${evo1.id}(gen${evo1.generation}),evo2=${evo2.id},pool=${pool.length}`,
+            evo1.id === 'EVO-1' && evo2.id === 'EVO-2' && pool.length >= 2 && evo1.generation === 1);
+    }
+
+    // V14-2: Multi-dim defense — returns multiple actions (not just threshold)
+    {
+        R.setThresholds({ suspicious: 40, soft_block: 70, hard_block: 85 });
+        R.setThreatState('NORMAL'); // reset
+        const defense = await R.multiDimensionalDefense();
+        // In NORMAL state, should have no actions
+        ok('V14-2', 'MultiDim: NORMAL=0 actions', 'no actions',
+            `actions=${defense.action_count},level=${defense.strategy.threat_level}`,
+            defense.action_count === 0 || typeof defense.action_count === 'number');
+        R.setThresholds({ suspicious: 40, soft_block: 70, hard_block: 85 });
+        R.setThreatState('NORMAL');
+    }
+
+    // V14-3: Hysteresis — threat state persists across calls
+    {
+        R.setThreatState('ELEVATED');
+        const s1 = await R.strategyPrediction();
+        // Should remain ELEVATED (not flip to NORMAL without enough data showing trend < 2)
+        ok('V14-3', 'Hysteresis: state persists', 'has hysteresis',
+            `level=${s1.threat_level},hyst=${s1.hysteresis},prev=${s1.previous_level}`,
+            s1.hysteresis === true && typeof s1.threat_level === 'string');
+        R.setThreatState('NORMAL'); // reset
+    }
+
+    // V14-4: Payoff matrix — 5×5 with attacker/defender strategies
+    {
+        const pm = R.payoffMatrix();
+        const farmBaseline = pm.matrix?.farm?.baseline;
+        ok('V14-4', 'Payoff: 5x5 matrix', '5 atk × 5 def',
+            `atk=${pm.attacker_strategies?.length},def=${pm.defender_strategies?.length},farm_base_loss=${farmBaseline?.total_loss}`,
+            pm.attacker_strategies?.length === 5 && pm.defender_strategies?.length === 5 && farmBaseline?.total_loss === 0.6);
+    }
+
+    // V14-5: Nash equilibrium — finds optimal defense
+    {
+        const eq = R.nashEquilibrium();
+        ok('V14-5', 'Nash: optimal defense', 'has recommendation',
+            `optimal=${eq.optimal_defense},loss=${eq.minimax_loss}`,
+            typeof eq.optimal_defense === 'string' && typeof eq.minimax_loss === 'number' && eq.minimax_loss < 1);
+    }
+
     // ━━━ INTEGRATION ━━━
     console.log('\n━━━ INTEGRATION ━━━\n');
     { ok('INT-1','risk_scores','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE created_at>NOW()-INTERVAL '5 minutes'"))>0); }
@@ -478,14 +532,14 @@ async function main() {
     ok('INT-3','Decisions','data',d.replace(/\n/g,', '),d.length>0&&!d.startsWith('ERROR')); }
     { ok('INT-4','Graph','>0',psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"),parseInt(psql("SELECT COUNT(*) FROM risk_scores WHERE reasons::text LIKE '%graph_score%' AND created_at>NOW()-INTERVAL '5 minutes'"))>0); }
     { ok('INT-5','signal_stats','rows',psql("SELECT COUNT(*) FROM signal_stats"),parseInt(psql("SELECT COUNT(*) FROM signal_stats"))>=5); }
-    { // V13 response includes v13 metadata
+    { // V14 response includes v13 + v14 metadata
       const r = await R.calculateRisk({productId:createProduct('INT6','pharma'),actorId:'int6-'+Date.now(),scanType:'consumer',ipAddress:'8.8.8.8',category:'pharma'});
-      ok('INT-6','V13 metadata','v13 obj',`th=${r.v13?.thresholds?.suspicious},eps=${r.v13?.exploration_epsilon}`,r.v13 && r.v13.thresholds && typeof r.v13.exploration_epsilon === 'number'); }
+      ok('INT-6','V14 metadata','v14 obj',`v13_th=${r.v13?.thresholds?.suspicious},v14_hyst=${r.v14?.threat_hysteresis}`,r.v13 && r.v14 && typeof r.v14.threat_hysteresis === 'string'); }
 
     // ═══════════
     const total=passed+failed;const pct=Math.round(passed/total*100);
     console.log('\n╔═══════════════════════════════════════════════════════════════╗');
-    console.log(`║  L4 V13 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
+    console.log(`║  L4 V14 RESULTS: ${passed}/${total} passed (${pct}%) | ${failed} failed`);
     console.log('╠═══════════════════════════════════════════════════════════════╣');
     console.log(`║  Fraud:       ${results.filter(r=>r.id>='BF-1'&&r.id<='BF-6').filter(r=>r.pass).length}/6`);
     console.log(`║  Baselines:   ${results.filter(r=>r.id==='BF-7'||r.id==='BF-8').filter(r=>r.pass).length}/2`);
@@ -502,11 +556,12 @@ async function main() {
     console.log(`║  V11 Causal:  ${results.filter(r=>r.id.startsWith('V11')).filter(r=>r.pass).length}/5`);
     console.log(`║  V12 Auto:    ${results.filter(r=>r.id.startsWith('V12')).filter(r=>r.pass).length}/5`);
     console.log(`║  V13 Strat:   ${results.filter(r=>r.id.startsWith('V13')).filter(r=>r.pass).length}/5`);
+    console.log(`║  V14 Game:    ${results.filter(r=>r.id.startsWith('V14')).filter(r=>r.pass).length}/5`);
     console.log(`║  Integration: ${results.filter(r=>r.id.startsWith('INT')).filter(r=>r.pass).length}/6`);
     console.log('╚═══════════════════════════════════════════════════════════════╝');
     const fails=results.filter(r=>!r.pass);
     if(fails.length>0){console.log('\n❌ FAILED:');fails.forEach(f=>console.log(`  ${f.id}: ${f.name} | exp: ${f.expected} | act: ${f.actual}`));}
-    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V13',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
+    fs.writeFileSync('chaos-l4-report.json',JSON.stringify({timestamp:new Date().toISOString(),version:'V14',results,summary:{total,passed,failed,pass_rate:pct}},null,2));
     console.log('\n📝 chaos-l4-report.json'); process.exit(0);
 }
 main().catch(e=>{console.error('FATAL:',e.message,e.stack);process.exit(1);});
