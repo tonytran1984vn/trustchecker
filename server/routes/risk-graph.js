@@ -83,13 +83,19 @@ router.get('/patterns', (req, res) => { res.json({ patterns: riskGraph.getPatter
 router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
     try {
         const orgId = req.user?.org_id || req.user?.orgId || null;
+        const orgFilter = orgId ? ' WHERE org_id = ?' : '';
+        const orgParams = orgId ? [orgId] : [];
         const shipments = orgId
             ? await db.all('SELECT s.* FROM shipments s LEFT JOIN partners fp ON s.from_partner_id = fp.id LEFT JOIN partners tp ON s.to_partner_id = tp.id WHERE (fp.org_id = ? OR tp.org_id = ?) ORDER BY s.created_at DESC LIMIT 100', [orgId, orgId]).catch(() => [])
             : await db.all('SELECT * FROM shipments ORDER BY created_at DESC LIMIT 100').catch(() => []);
         const credits = orgId
             ? await db.all('SELECT * FROM carbon_credits WHERE org_id = ? LIMIT 50', [orgId]).catch(() => [])
             : await db.all('SELECT * FROM carbon_credits LIMIT 50').catch(() => []);
-        const behavior = riskGraph.analyzeBehavior({ shipments, credits, partners: [], scans: [], routes: [] });
+        const partners = await db.prepare('SELECT * FROM partners' + orgFilter).all(...orgParams).catch(() => []);
+        const scans = orgId
+            ? await db.all('SELECT se.* FROM scan_events se LEFT JOIN products p ON se.product_id = p.id WHERE (p.org_id = ? OR p.org_id IS NULL) ORDER BY se.scanned_at DESC LIMIT 500', [orgId]).catch(() => [])
+            : await db.all('SELECT * FROM scan_events ORDER BY scanned_at DESC LIMIT 500').catch(() => []);
+        const behavior = riskGraph.analyzeBehavior({ shipments, credits, partners, scans, routes: [] });
         res.json({ title: 'Risk Intelligence Dashboard', behavior, total_shipments: shipments.length, total_credits: credits.length });
     } catch (err) { console.error('Dashboard error:', err.message, err.stack); res.status(500).json({ error: 'Dashboard failed' }); }
 });
