@@ -215,8 +215,11 @@ class APIGateway {
             const clientIP = req.ip || req.connection?.remoteAddress || '0.0.0.0';
 
             // 1. API Key validation (if header present or required)
+            // Skip for routes with their own DB-backed API key auth
+            const dbAuthPaths = ['/risk-intel'];
+            const hasOwnKeyAuth = dbAuthPaths.some(p => req.path.startsWith(p));
             const apiKey = req.headers['x-api-key'];
-            if (apiKey || this.requireApiKey) {
+            if ((apiKey || this.requireApiKey) && !hasOwnKeyAuth) {
                 if (!apiKey) {
                     this.stats.keyBlocked++;
                     return res.status(401).json({ error: 'API key required', code: 'MISSING_API_KEY' });

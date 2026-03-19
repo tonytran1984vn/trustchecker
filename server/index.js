@@ -51,7 +51,7 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
     maxAge: 86400
 }));
 
@@ -124,6 +124,7 @@ app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/change-password', authLimiter); // SEC-API-2: rate limit password changes
 app.use('/api/auth/reset-password', authLimiter);  // SEC-API-2: rate limit password resets
 app.use("/api/trust-network", require("./routes/trust-network"));
+app.use("/api/risk-intel", require("./routes/risk-intelligence")); // V21.6
 
 // API Key management UI
 app.get("/api-keys", (req, res) => {
@@ -141,6 +142,12 @@ async function boot() {
     // 1. Database initialization
     await db._readyPromise;
     console.log(`✅ Database initialized (${config.dbMode})`);
+
+    // V21.6: Risk Engine migration (idempotent)
+    try {
+        const { runMigration } = require('./migrations/risk-engine-v21-migration');
+        await runMigration();
+    } catch(e) { console.warn('⚠️  V21.6 migration skipped:', e.message); }
 
     // 2. Redis (optional)
     let redis = null;

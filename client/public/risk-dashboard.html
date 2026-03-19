@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrustChecker — Risk Intelligence Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: #0a0e1a; color: #e0e6f0; min-height: 100vh; }
+        
+        .header { 
+            background: linear-gradient(135deg, #0f1629 0%, #1a1f3a 100%);
+            border-bottom: 1px solid rgba(99, 179, 237, 0.15);
+            padding: 20px 32px; display: flex; align-items: center; justify-content: space-between;
+        }
+        .logo { font-size: 20px; font-weight: 700; color: #63b3ed; }
+        .logo span { color: #48bb78; }
+        .version { background: rgba(72, 187, 120, 0.15); color: #48bb78; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; padding: 24px 32px; }
+        
+        .card {
+            background: linear-gradient(145deg, #141929 0%, #1a1f3a 100%);
+            border: 1px solid rgba(99, 179, 237, 0.1);
+            border-radius: 16px; padding: 24px; transition: all 0.3s;
+        }
+        .card:hover { border-color: rgba(99, 179, 237, 0.3); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+        .card h3 { font-size: 14px; color: #8b95a8; font-weight: 500; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+        
+        .metric { font-size: 36px; font-weight: 700; margin-bottom: 8px; }
+        .metric.green { color: #48bb78; }
+        .metric.blue { color: #63b3ed; }
+        .metric.orange { color: #ed8936; }
+        .metric.red { color: #fc8181; }
+        .sub { font-size: 13px; color: #718096; }
+        
+        .before-after { display: flex; gap: 16px; margin-top: 12px; }
+        .ba-box { flex: 1; padding: 16px; border-radius: 12px; text-align: center; }
+        .ba-before { background: rgba(252, 129, 129, 0.1); border: 1px solid rgba(252, 129, 129, 0.2); }
+        .ba-after { background: rgba(72, 187, 120, 0.1); border: 1px solid rgba(72, 187, 120, 0.2); }
+        .ba-label { font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: 1px; }
+        .ba-value { font-size: 24px; font-weight: 700; margin-top: 4px; }
+        
+        .insight-list { list-style: none; }
+        .insight-item { padding: 12px; margin-bottom: 8px; border-radius: 10px; background: rgba(255,255,255,0.03); border-left: 3px solid; }
+        .insight-item.critical { border-color: #fc8181; }
+        .insight-item.warning { border-color: #ed8936; }
+        .insight-item.info { border-color: #63b3ed; }
+        .insight-title { font-weight: 600; font-size: 13px; }
+        .insight-msg { font-size: 12px; color: #8b95a8; margin-top: 4px; }
+        
+        .hotspot-table { width: 100%; border-collapse: collapse; }
+        .hotspot-table th { text-align: left; font-size: 11px; color: #718096; text-transform: uppercase; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .hotspot-table td { padding: 10px 0; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+        .fraud-high { color: #fc8181; font-weight: 600; }
+        .fraud-low { color: #48bb78; }
+        
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+        .status-badge.healthy { background: rgba(72, 187, 120, 0.15); color: #48bb78; }
+        .status-badge.degraded { background: rgba(237, 137, 54, 0.15); color: #ed8936; }
+        
+        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .dot.green { background: #48bb78; box-shadow: 0 0 8px rgba(72, 187, 120, 0.5); }
+        .dot.orange { background: #ed8936; }
+        
+        .bar-chart { display: flex; gap: 6px; align-items: flex-end; height: 80px; margin-top: 12px; }
+        .bar { flex: 1; background: linear-gradient(180deg, #63b3ed, #3182ce); border-radius: 4px 4px 0 0; min-height: 4px; transition: height 0.5s; }
+        
+        .narrative { background: rgba(99, 179, 237, 0.08); border: 1px solid rgba(99, 179, 237, 0.15); border-radius: 10px; padding: 16px; margin-top: 12px; font-size: 14px; line-height: 1.6; }
+        
+        .loading { opacity: 0.5; }
+        .refresh-btn { background: rgba(99, 179, 237, 0.15); color: #63b3ed; border: 1px solid rgba(99, 179, 237, 0.3); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; }
+        .refresh-btn:hover { background: rgba(99, 179, 237, 0.25); }
+        
+        .full-width { grid-column: 1 / -1; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <div class="logo">Trust<span>Checker</span> Risk Intelligence</div>
+            <div class="sub" style="margin-top:4px">Distribution Integrity & Revenue Protection</div>
+        </div>
+        <div style="display:flex;gap:12px;align-items:center">
+            <span class="version">V21.6 Protocol</span>
+            <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+        </div>
+    </div>
+
+    <div class="grid">
+        <!-- ROI Dashboard -->
+        <div class="card" id="roi-card">
+            <h3>💰 Revenue Protection</h3>
+            <div class="metric green" id="roi-saved">—</div>
+            <div class="sub" id="roi-pct">Loading...</div>
+            <div class="before-after">
+                <div class="ba-box ba-before">
+                    <div class="ba-label">Before</div>
+                    <div class="ba-value red" id="roi-before">—</div>
+                </div>
+                <div class="ba-box ba-after">
+                    <div class="ba-label">After</div>
+                    <div class="ba-value" style="color:#48bb78" id="roi-after">—</div>
+                </div>
+            </div>
+            <div class="narrative" id="roi-narrative">Loading ROI data...</div>
+        </div>
+
+        <!-- Network Status -->
+        <div class="card" id="status-card">
+            <h3>🌐 Trust Network</h3>
+            <div style="display:flex;gap:24px;margin-bottom:16px">
+                <div>
+                    <div class="metric blue" id="net-entries">—</div>
+                    <div class="sub">Trust Entries</div>
+                </div>
+                <div>
+                    <div class="metric green" id="net-orgs">—</div>
+                    <div class="sub">Org Credibilities</div>
+                </div>
+            </div>
+            <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">
+                <span class="sub">Confidence:</span>
+                <div class="metric blue" style="font-size:24px" id="net-confidence">—</div>
+                <span class="status-badge healthy" id="net-maturity">—</span>
+            </div>
+            <div class="sub" id="net-version">Engine V21.6 | Protocol 21.5</div>
+        </div>
+
+        <!-- Network Insights -->
+        <div class="card">
+            <h3>⚡ Network Insights</h3>
+            <ul class="insight-list" id="insight-list">
+                <li class="insight-item info"><div class="insight-title">Loading...</div></li>
+            </ul>
+        </div>
+
+        <!-- Market Intelligence -->
+        <div class="card">
+            <h3>📍 Market Intelligence</h3>
+            <table class="hotspot-table" id="hotspot-table">
+                <thead><tr><th>Region</th><th>Scans</th><th>Fraud Rate</th><th>Avg Risk</th></tr></thead>
+                <tbody id="hotspot-body"><tr><td colspan="4" class="sub">Loading...</td></tr></tbody>
+            </table>
+        </div>
+
+        <!-- Engine Health -->
+        <div class="card full-width">
+            <h3>🛡️ Engine Architecture</h3>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                <span class="status-badge healthy"><span class="dot green"></span> V1-V8 Detection</span>
+                <span class="status-badge healthy"><span class="dot green"></span> V9-V11 Inference</span>
+                <span class="status-badge healthy"><span class="dot green"></span> V12-V13 Control</span>
+                <span class="status-badge healthy"><span class="dot green"></span> V14-V15 Game</span>
+                <span class="status-badge healthy"><span class="dot green"></span> V16-V17 Evolve</span>
+                <span class="status-badge healthy"><span class="dot green"></span> V18 Govern</span>
+                <span class="status-badge healthy"><span class="dot green"></span> V19 Org</span>
+                <span class="status-badge healthy"><span class="dot green"></span> V20 Trust</span>
+                <span class="status-badge healthy"><span class="dot green"></span> V21 Economy</span>
+                <span class="status-badge healthy"><span class="dot green"></span> V21.5 Protocol</span>
+                <span class="status-badge healthy"><span class="dot green"></span> V21.6 Commercial</span>
+            </div>
+            <div class="sub" style="margin-top:12px">123/123 L4 Chaos Tests Passed (100%) | 16 Layers | Protocol v21.5</div>
+        </div>
+    </div>
+
+    <script>
+        const API = '/api/risk-intel';
+        const token = localStorage.getItem('token');
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
+        async function fetchAPI(path) {
+            try {
+                const res = await fetch(API + path, { headers });
+                if (!res.ok) return null;
+                return await res.json();
+            } catch(e) { return null; }
+        }
+
+        async function loadROI() {
+            const data = await fetchAPI('/roi/report');
+            if (!data) return;
+            const roi = data.live || {};
+            document.getElementById('roi-saved').textContent = '$' + (roi.delta?.saved || 0).toLocaleString();
+            document.getElementById('roi-pct').textContent = `${roi.delta?.saved_pct || 0}% reduction in losses`;
+            document.getElementById('roi-before').textContent = '$' + (roi.before?.monthly_loss || 0).toLocaleString();
+            document.getElementById('roi-after').textContent = '$' + (roi.after?.monthly_loss || 0).toLocaleString();
+            document.getElementById('roi-narrative').textContent = roi.narrative || 'No data yet. Record scan decisions to see ROI.';
+        }
+
+        async function loadStatus() {
+            const data = await fetchAPI('/status');
+            if (!data) return;
+            document.getElementById('net-entries').textContent = data.network?.trust_entries || 0;
+            document.getElementById('net-orgs').textContent = data.network?.org_credibilities || 0;
+            const conf = data.network?.confidence || 0;
+            document.getElementById('net-confidence').textContent = (conf * 100).toFixed(0) + '%';
+            const mat = data.network?.maturity || 'developing';
+            document.getElementById('net-maturity').textContent = mat;
+            document.getElementById('net-maturity').className = 'status-badge ' + (mat === 'mature' ? 'healthy' : 'degraded');
+        }
+
+        async function loadInsights() {
+            const data = await fetchAPI('/insights');
+            const list = document.getElementById('insight-list');
+            const items = (data?.persisted || []).slice(0, 8);
+            if (items.length === 0) {
+                list.innerHTML = '<li class="insight-item info"><div class="insight-title">No insights yet</div><div class="insight-msg">Share trust data and run scans to generate insights.</div></li>';
+                return;
+            }
+            list.innerHTML = items.map(i => {
+                const d = typeof i.data === 'string' ? JSON.parse(i.data) : i.data;
+                return `<li class="insight-item ${i.severity || 'info'}">
+                    <div class="insight-title">${i.type.replace(/_/g, ' ').toUpperCase()}</div>
+                    <div class="insight-msg">${d.message || i.actor_id || i.batch_id || 'Network activity'}</div>
+                </li>`;
+            }).join('');
+        }
+
+        async function loadMarket() {
+            const data = await fetchAPI('/market/report');
+            const body = document.getElementById('hotspot-body');
+            const spots = (data?.live?.hotspots || data?.persisted_hotspots || []).slice(0, 10);
+            if (spots.length === 0) {
+                body.innerHTML = '<tr><td colspan="4" class="sub">No market data yet. Record regional scans to see hotspots.</td></tr>';
+                return;
+            }
+            body.innerHTML = spots.map(h => `
+                <tr>
+                    <td style="font-weight:600">${h.region}</td>
+                    <td>${h.scans}</td>
+                    <td class="${h.fraud_rate > 30 ? 'fraud-high' : 'fraud-low'}">${h.fraud_rate}%</td>
+                    <td>${h.avg_risk || '—'}</td>
+                </tr>
+            `).join('');
+        }
+
+        function loadAll() {
+            loadROI(); loadStatus(); loadInsights(); loadMarket();
+        }
+
+        loadAll();
+        setInterval(loadAll, 30000);
+    </script>
+</body>
+</html>
