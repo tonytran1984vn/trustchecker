@@ -23,7 +23,16 @@ class RiskGraphEngine {
     /**
      * Analyze behavioral risk patterns from transaction data
      */
-    analyzeBehavior(shipments = [], credits = [], partners = [], scans = [], routes = []) {
+    analyzeBehavior(shipmentsOrData = [], credits = [], partners = [], scans = [], routes = []) {
+        // Support both: analyzeBehavior({shipments, credits, ...}) and analyzeBehavior(shipments, credits, ...)
+        let shipments = shipmentsOrData;
+        if (shipmentsOrData && !Array.isArray(shipmentsOrData) && typeof shipmentsOrData === 'object') {
+            shipments = shipmentsOrData.shipments || [];
+            credits = shipmentsOrData.credits || [];
+            partners = shipmentsOrData.partners || [];
+            scans = shipmentsOrData.scans || [];
+            routes = shipmentsOrData.routes || [];
+        }
         const signals = [];
         let riskScore = 0;
 

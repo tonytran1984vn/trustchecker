@@ -26,7 +26,7 @@ router.get('/behavior', cacheMiddleware(120), async (req, res) => {
             ? await db.all('SELECT se.* FROM scan_events se LEFT JOIN products p ON se.product_id = p.id WHERE (p.org_id = ? OR p.org_id IS NULL) ORDER BY se.scanned_at DESC LIMIT 500', [orgId]).catch(() => [])
             : await db.all('SELECT * FROM scan_events ORDER BY created_at DESC LIMIT 500').catch(() => []);
         res.json(riskGraph.analyzeBehavior({ shipments, credits, partners, scans, routes: [] }));
-    } catch (err) { res.status(500).json({ error: 'Behavioral analysis failed' }); }
+    } catch (err) { console.error('Behavioral analysis error:', err.message, err.stack); res.status(500).json({ error: 'Behavioral analysis failed' }); }
 });
 
 // POST /fraud-graph — Build fraud graph from entities
@@ -91,7 +91,7 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
             : await db.all('SELECT * FROM carbon_credits LIMIT 50').catch(() => []);
         const behavior = riskGraph.analyzeBehavior({ shipments, credits, partners: [], scans: [], routes: [] });
         res.json({ title: 'Risk Intelligence Dashboard', behavior, total_shipments: shipments.length, total_credits: credits.length });
-    } catch (err) { res.status(500).json({ error: 'Dashboard failed' }); }
+    } catch (err) { console.error('Dashboard error:', err.message, err.stack); res.status(500).json({ error: 'Dashboard failed' }); }
 });
 // GET /fraud-feed — Global fraud alerts feed (SA only)
 router.get('/fraud-feed', async (req, res) => {
