@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Risk Intelligence Dashboard — TrustChecker V21.6</title>
+<meta name="description" content="Real-time risk intelligence dashboard for TrustChecker anti-counterfeit platform">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0e17;--surface:#111827;--surface2:#1e293b;--border:#1e3a5f;--primary:#3b82f6;--primary-glow:rgba(59,130,246,0.15);--green:#10b981;--red:#ef4444;--amber:#f59e0b;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.header{background:linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%);border-bottom:1px solid var(--border);padding:20px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;backdrop-filter:blur(20px)}
+.header h1{font-size:22px;font-weight:700;background:linear-gradient(135deg,#60a5fa,#a78bfa);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.header .ver{font-size:11px;color:var(--primary);background:var(--primary-glow);padding:3px 10px;border-radius:12px;border:1px solid rgba(59,130,246,0.3);font-weight:600}
+.key-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 32px;display:flex;gap:12px;align-items:center}
+.key-bar label{font-size:13px;color:var(--text2);font-weight:500}
+.key-bar input{flex:1;max-width:420px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;color:var(--text);font-family:monospace;font-size:13px;outline:none;transition:border .2s}
+.key-bar input:focus{border-color:var(--primary)}
+.key-bar button{background:var(--primary);color:#fff;border:none;border-radius:8px;padding:8px 20px;font-weight:600;cursor:pointer;font-size:13px;transition:all .2s}
+.key-bar button:hover{background:#2563eb;transform:translateY(-1px)}
+.key-bar .status-dot{width:10px;height:10px;border-radius:50%;background:var(--text3);margin-left:auto;transition:all .3s}
+.key-bar .status-dot.ok{background:var(--green);box-shadow:0 0 8px rgba(16,185,129,0.5)}
+.key-bar .status-dot.err{background:var(--red);box-shadow:0 0 8px rgba(239,68,68,0.5)}
+.key-bar .status-text{font-size:12px;color:var(--text3);margin-left:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;padding:24px 32px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;transition:all .3s}
+.card:hover{border-color:rgba(59,130,246,0.4);box-shadow:0 4px 24px rgba(0,0,0,0.3)}
+.card h3{font-size:13px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text2);margin-bottom:16px;font-weight:600}
+.card .big{font-size:42px;font-weight:700;line-height:1}
+.card .sub{font-size:13px;color:var(--text3);margin-top:6px}
+.card .row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.card .row:last-child{border-bottom:none}
+.card .row .label{font-size:13px;color:var(--text2)}
+.card .row .value{font-size:14px;font-weight:600}
+.green{color:var(--green)}.red{color:var(--red)}.amber{color:var(--amber)}.blue{color:var(--primary)}
+.bar-chart{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.bar-item{display:flex;align-items:center;gap:10px}
+.bar-item .bar-label{font-size:12px;color:var(--text2);width:80px;text-align:right}
+.bar-item .bar-track{flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden}
+.bar-item .bar-fill{height:100%;border-radius:4px;transition:width .8s ease}
+.bar-item .bar-val{font-size:12px;font-weight:600;width:50px}
+.empty{text-align:center;color:var(--text3);padding:30px;font-size:14px}
+.pulse{animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.footer{text-align:center;padding:20px;color:var(--text3);font-size:12px;border-top:1px solid var(--border);margin-top:20px}
+@media(max-width:768px){.grid{grid-template-columns:1fr;padding:16px}.header{padding:16px}.key-bar{flex-wrap:wrap}.key-bar input{max-width:100%}}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>⚡ Risk Intelligence Dashboard</h1>
+  <span class="ver">V21.6 Engine</span>
+</div>
+
+<div class="key-bar">
+  <label>🔑 API Key:</label>
+  <input type="password" id="apiKey" placeholder="Enter your API key (e.g. tc_test_v21_risk_intel)" autocomplete="off">
+  <button onclick="loadAll()">Connect</button>
+  <div class="status-dot" id="statusDot"></div>
+  <span class="status-text" id="statusText">Not connected</span>
+</div>
+
+<div class="grid">
+  <!-- Engine Health -->
+  <div class="card" id="healthCard">
+    <h3>🏥 Engine Health</h3>
+    <div class="big green" id="healthStatus">—</div>
+    <div class="sub" id="healthDetail">Connect with API key to view</div>
+  </div>
+
+  <!-- ROI -->
+  <div class="card" id="roiCard">
+    <h3>💰 ROI Tracker</h3>
+    <div class="row"><span class="label">Total Scans</span><span class="value" id="roiScans">—</span></div>
+    <div class="row"><span class="label">Fraud Detected</span><span class="value red" id="roiFraud">—</span></div>
+    <div class="row"><span class="label">Blocked Value</span><span class="value amber" id="roiBlocked">—</span></div>
+    <div class="row"><span class="label">Passed Value</span><span class="value green" id="roiPassed">—</span></div>
+    <div class="row"><span class="label">Detection Rate</span><span class="value blue" id="roiRate">—</span></div>
+  </div>
+
+  <!-- Trust Network -->
+  <div class="card" id="trustCard">
+    <h3>🌐 Trust Network</h3>
+    <div class="row"><span class="label">Network Entries</span><span class="value" id="trustEntries">—</span></div>
+    <div class="row"><span class="label">Confidence</span><span class="value" id="trustConfidence">—</span></div>
+    <div class="row"><span class="label">Org Credibilities</span><span class="value" id="trustOrgs">—</span></div>
+    <div class="row"><span class="label">Maturity</span><span class="value" id="trustMature">—</span></div>
+  </div>
+
+  <!-- Network Insights -->
+  <div class="card" id="insightsCard">
+    <h3>🔍 Network Insights</h3>
+    <div id="insightsList"><div class="empty">No insights yet</div></div>
+  </div>
+
+  <!-- Market Intelligence -->
+  <div class="card" id="marketCard">
+    <h3>🗺️ Market Intelligence</h3>
+    <div id="marketHotspots"><div class="empty">No market data yet</div></div>
+  </div>
+
+  <!-- Recent Trust History -->
+  <div class="card" id="historyCard">
+    <h3>📜 Recent Trust History</h3>
+    <div id="trustHistory"><div class="empty">No trust data yet</div></div>
+  </div>
+</div>
+
+<div class="footer">
+  TrustChecker Risk Intelligence Platform — V21.6 Distributed Trust Protocol<br>
+  <span id="lastUpdate">Last updated: never</span>
+</div>
+
+<script>
+// Auto-detect path prefix (e.g. /trustchecker) from current URL
+const _pathPrefix = window.location.pathname.replace(/\/risk-dashboard.*/, '');
+const BASE = window.location.origin + _pathPrefix + '/api/risk-intel';
+let KEY = localStorage.getItem('risk_intel_api_key') || '';
+document.getElementById('apiKey').value = KEY;
+
+function headers() { return { 'X-API-Key': KEY, 'Content-Type': 'application/json' }; }
+function fmt(n) { return n == null ? '—' : typeof n === 'number' ? n.toLocaleString() : n; }
+function fmtUSD(n) { return n == null ? '—' : '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 0 }); }
+
+async function api(path) {
+    const r = await fetch(BASE + path, { headers: headers() });
+    if (!r.ok) throw new Error(r.status);
+    return r.json();
+}
+
+async function loadHealth() {
+    // Try public status first (no auth needed)
+    try {
+        const d = await fetch(BASE + '/public-status').then(r => r.json());
+        document.getElementById('healthStatus').textContent = d.health || 'UNKNOWN';
+        document.getElementById('healthStatus').className = 'big ' + (d.health === 'HEALTHY' ? 'green' : 'amber');
+        document.getElementById('healthDetail').textContent = `Engine ${d.engine_version} | Confidence: ${(d.confidence*100).toFixed(0)}% | Uptime: ${Math.round(d.uptime/60)}m`;
+    } catch(e) {}
+
+    // Full status with auth
+    try {
+        const d = await api('/status');
+        document.getElementById('healthStatus').textContent = d.health?.status || 'HEALTHY';
+        document.getElementById('healthStatus').className = 'big ' + (d.health?.safe_mode ? 'red' : 'green');
+        document.getElementById('healthDetail').textContent = `V${d.engine_version} | Trust entries: ${d.network.trust_entries} | Orgs: ${d.network.org_credibilities}`;
+        document.getElementById('trustEntries').textContent = fmt(d.network.trust_entries);
+        document.getElementById('trustConfidence').textContent = (d.network.confidence * 100).toFixed(0) + '%';
+        document.getElementById('trustOrgs').textContent = fmt(d.network.org_credibilities);
+        document.getElementById('trustMature').textContent = d.network.confidence > 0.5 ? '✅ Mature' : '🔄 Growing';
+    } catch(e) {}
+}
+
+async function loadROI() {
+    try {
+        const d = await api('/roi/report');
+        const p = d.persisted || {};
+        const l = d.live || {};
+        document.getElementById('roiScans').textContent = fmt(p.total_scans || l.total_scans || 0);
+        document.getElementById('roiFraud').textContent = fmt(p.fraud_detected || l.fraud_detected || 0);
+        document.getElementById('roiBlocked').textContent = fmtUSD(p.blocked_value || l.total_blocked_value || 0);
+        document.getElementById('roiPassed').textContent = fmtUSD(p.passed_value || l.total_passed_value || 0);
+        const total = (p.total_scans || 0);
+        const rate = total > 0 ? ((p.fraud_detected || 0) / total * 100).toFixed(1) + '%' : '0%';
+        document.getElementById('roiRate').textContent = rate;
+    } catch(e) {}
+}
+
+async function loadInsights() {
+    try {
+        const d = await api('/insights?limit=10');
+        const list = document.getElementById('insightsList');
+        const items = d.persisted || [];
+        if (items.length === 0) { list.innerHTML = '<div class="empty">No insights yet — data will appear after scans</div>'; return; }
+        list.innerHTML = items.map(i => `
+            <div class="row">
+                <span class="label">${i.type === 'geographic_anomaly' ? '🗺️' : '🔗'} ${i.type}</span>
+                <span class="value ${i.severity === 'critical' ? 'red' : i.severity === 'warning' ? 'amber' : 'green'}">${i.severity || 'info'}</span>
+            </div>
+        `).join('');
+    } catch(e) {}
+}
+
+async function loadMarket() {
+    try {
+        const d = await api('/market/report');
+        const el = document.getElementById('marketHotspots');
+        const hotspots = d.persisted_hotspots || [];
+        const live = d.live || {};
+        if (hotspots.length === 0 && (!live.hotspots || live.hotspots.length === 0)) {
+            el.innerHTML = '<div class="empty">No market data yet — data will appear after scans</div>';
+            return;
+        }
+        const data = hotspots.length > 0 ? hotspots : (live.hotspots || []);
+        const maxScans = Math.max(...data.map(h => h.scans || h.count || 1));
+        el.innerHTML = '<div class="bar-chart">' + data.slice(0, 8).map(h => {
+            const scans = h.scans || h.count || 0;
+            const pct = (scans / maxScans * 100).toFixed(0);
+            const fraud = h.fraud_count || 0;
+            const color = fraud > 3 ? 'var(--red)' : fraud > 0 ? 'var(--amber)' : 'var(--green)';
+            return `<div class="bar-item">
+                <span class="bar-label">${h.region}</span>
+                <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+                <span class="bar-val" style="color:${color}">${scans} scans</span>
+            </div>`;
+        }).join('') + '</div>';
+    } catch(e) {}
+}
+
+async function loadTrustHistory() {
+    try {
+        const d = await api('/trust/query/_recent');
+        const el = document.getElementById('trustHistory');
+        const items = d.history || [];
+        if (items.length === 0) { el.innerHTML = '<div class="empty">No trust data — auto-shared after scans</div>'; return; }
+        el.innerHTML = items.slice(0, 8).map(h => `
+            <div class="row">
+                <span class="label">${(h.actor_id || '').slice(0, 16)}…</span>
+                <span class="value ${h.trust_score > 0.6 ? 'green' : h.trust_score < 0.3 ? 'red' : 'amber'}">${(h.trust_score * 100).toFixed(0)}%</span>
+            </div>
+        `).join('');
+    } catch(e) { document.getElementById('trustHistory').innerHTML = '<div class="empty">No trust data yet</div>'; }
+}
+
+async function loadAll() {
+    KEY = document.getElementById('apiKey').value.trim();
+    if (KEY) localStorage.setItem('risk_intel_api_key', KEY);
+    
+    const dot = document.getElementById('statusDot');
+    const txt = document.getElementById('statusText');
+    dot.className = 'status-dot pulse';
+    txt.textContent = 'Connecting...';
+
+    try {
+        await loadHealth();
+        dot.className = 'status-dot ok';
+        txt.textContent = 'Connected';
+        await Promise.all([loadROI(), loadInsights(), loadMarket(), loadTrustHistory()]);
+        document.getElementById('lastUpdate').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+    } catch(e) {
+        dot.className = 'status-dot err';
+        txt.textContent = 'Connection failed';
+    }
+}
+
+// Auto-load public status on page load
+loadHealth();
+// Auto-refresh every 30s if connected
+if (KEY) { loadAll(); setInterval(loadAll, 30000); }
+</script>
+</body>
+</html>

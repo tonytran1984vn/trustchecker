@@ -53,6 +53,19 @@ async function riskIntelAuth(req, res, next) {
     return authMw(req, res, next);
 }
 
+// ─── Public endpoint (no auth needed) ───
+router.get('/public-status', (req, res) => {
+    try {
+        const awareness = R.systemSelfAwareness();
+        const confidence = R.networkConfidence();
+        res.json({
+            engine_version: '21.6', protocol_version: '21.5',
+            health: awareness.status, confidence: confidence.confidence,
+            maturity: confidence.mature, uptime: process.uptime(),
+        });
+    } catch(err) { res.status(500).json({ error: 'Engine unavailable' }); }
+});
+
 router.use(riskIntelAuth);
 
 // Helper: get org from request
@@ -417,6 +430,60 @@ router.get('/status', (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to get status' });
+    }
+});
+// ═══════════════════════════════════════════════════════════════
+// API KEY MANAGEMENT ENDPOINTS
+// ═══════════════════════════════════════════════════════════════
+
+// POST /keys/create — Generate new API key
+router.post('/keys/create', async (req, res) => {
+    try {
+        const { name, scopes, rate_limit } = req.body;
+        const orgId = getOrg(req);
+        const rawKey = `tc_${crypto.randomBytes(24).toString('hex')}`;
+        const hash = crypto.createHash('sha256').update(rawKey).digest('hex');
+        const prefix = rawKey.slice(0, 8);
+
+        await db.run(
+            `INSERT INTO api_keys (org_id, key_hash, key_prefix, name, scopes, rate_limit)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [orgId, hash, prefix, name || 'Default', scopes || ['*'], rate_limit || 60]
+        );
+
+        res.json({ success: true, api_key: rawKey, prefix, name: name || 'Default', warning: 'Save this key — it cannot be retrieved again' });
+    } catch (err) {
+        console.error('Key create error:', err.message);
+        res.status(500).json({ error: 'Failed to create API key' });
+    }
+});
+
+// GET /keys — List API keys (hashes hidden)
+router.get('/keys', async (req, res) => {
+    try {
+        const orgId = getOrg(req);
+        const keys = await db.all(
+            `SELECT id, key_prefix, name, scopes, rate_limit, last_used_at, revoked, created_at
+             FROM api_keys WHERE org_id = $1 ORDER BY created_at DESC LIMIT 50`,
+            [orgId]
+        );
+        res.json({ keys, total: keys.length });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to list API keys' });
+    }
+});
+
+// DELETE /keys/:id — Revoke an API key
+router.delete('/keys/:id', async (req, res) => {
+    try {
+        const orgId = getOrg(req);
+        await db.run(
+            `UPDATE api_keys SET revoked = true, updated_at = NOW() WHERE id = $1 AND org_id = $2`,
+            [req.params.id, orgId]
+        );
+        res.json({ success: true, message: 'API key revoked' });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to revoke API key' });
     }
 });
 

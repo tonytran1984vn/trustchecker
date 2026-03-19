@@ -130,6 +130,10 @@ app.use("/api/risk-intel", require("./routes/risk-intelligence")); // V21.6
 app.get("/api-keys", (req, res) => {
     res.sendFile(require("path").join(__dirname, "../client/api-keys.html"));
 });
+// Risk Intelligence Dashboard
+app.get("/risk-dashboard", (req, res) => {
+    res.sendFile(require("path").join(__dirname, "../client/risk-dashboard.html"));
+});
 
 // Trust Network: serve public join page
 app.get("/network/join/:token", function(req, res) {

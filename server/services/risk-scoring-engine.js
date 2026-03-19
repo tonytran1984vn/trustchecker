@@ -1630,6 +1630,53 @@ async function calculateRisk(input) {
         } catch(_) {}
     }
 
+    // ═══ V21.6: Auto-record hooks (ROI, Market, Trust) ═══════════
+    const _orgId = input.orgId || input.org_id || 'default';
+    const _txValue = { pharma: 500, luxury: 1000, fmcg: 50, electronics: 300, default: 200 };
+    const _val = _txValue[category] || _txValue.default;
+
+    // 1. ROI auto-record: every scan → upsert roi_tracker
+    try {
+        const isBlock = decision === 'HARD_BLOCK' || decision === 'SOFT_BLOCK';
+        roiDashboard('record', { decision, value: _val });
+        await db.run(
+            `INSERT INTO roi_tracker (org_id, total_scans, fraud_detected, blocked_value, passed_value)
+             VALUES ($1, 1, $2, $3, $4)
+             ON CONFLICT (org_id) DO UPDATE SET
+                total_scans = roi_tracker.total_scans + 1,
+                fraud_detected = roi_tracker.fraud_detected + $2,
+                blocked_value = roi_tracker.blocked_value + $3,
+                passed_value = roi_tracker.passed_value + $4,
+                updated_at = NOW()`,
+            [_orgId, isBlock ? 1 : 0, isBlock ? _val : 0, isBlock ? 0 : _val]
+        );
+    } catch(_) {}
+
+    // 2. Market data auto-record: every scan → insert market_data with region
+    try {
+        const _region = input.region || input.country || (latitude && longitude ? `${Math.round(latitude)},${Math.round(longitude)}` : 'unknown');
+        const isFraud = decision === 'HARD_BLOCK';
+        marketIntelligence('record', { region: _region, category, risk_score: totalScore, is_fraud: isFraud });
+        await db.run(
+            `INSERT INTO market_data (region, category, risk_score, is_fraud, org_id) VALUES ($1, $2, $3, $4, $5)`,
+            [_region, category || 'default', totalScore, isFraud, _orgId]
+        );
+    } catch(_) {}
+
+    // 3. Trust auto-share: new actors with clear patterns → auto-share to trust network
+    try {
+        if (actorId && (totalScore >= 50 || totalScore <= 10)) {
+            const trustScore = 1 - (totalScore / 100);
+            trustNetworkShare(_orgId, actorId, trustScore, { auto: true, decision, score: totalScore });
+            await db.run(
+                `INSERT INTO trust_network_data (org_id, actor_id, trust_score, metadata)
+                 VALUES ($1, $2, $3, $4)`,
+                [_orgId, actorId, trustScore, JSON.stringify({ auto: true, decision, risk_score: totalScore, category })]
+            );
+        }
+    } catch(_) {}
+    // ═══════════════════════════════════════════════════════════════
+
     return {
         risk_score: totalScore,
         decision,
