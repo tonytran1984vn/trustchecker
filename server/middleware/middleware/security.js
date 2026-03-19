@@ -10,7 +10,9 @@ function securityHeaders(req, res, next) {
     // HSTS — force HTTPS (S-05)
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
     // CSP — prevent XSS payload execution (S-06)
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https:; connect-src 'self'; frame-ancestors 'none'");
+    // NOTE: 'unsafe-inline' required for legacy client inline onclick handlers
+    // TODO: refactor client to use nonces/event listeners, then remove unsafe-inline
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com https:; connect-src 'self' wss:; frame-ancestors 'none'");
     // Prevent MIME type sniffing
     res.setHeader('X-Content-Type-Options', 'nosniff');
     // Prevent clickjacking
