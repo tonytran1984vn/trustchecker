@@ -54,11 +54,16 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 </div>
 
 <div class="key-bar">
-  <label>🔑 API Key:</label>
-  <input type="password" id="apiKey" placeholder="Enter your API key (e.g. tc_test_v21_risk_intel)" autocomplete="off">
-  <button onclick="loadAll()">Connect</button>
+  <span id="userInfo" style="font-size:13px;color:var(--green);font-weight:500">🔒 Loading user...</span>
+  <span style="margin-left:auto"></span>
+  <button onclick="toggleApiKey()" style="background:transparent;color:var(--text3);border:1px solid var(--border);font-size:11px;padding:5px 12px" id="apiToggle">🔑 API Key (optional)</button>
   <div class="status-dot" id="statusDot"></div>
-  <span class="status-text" id="statusText">Not connected</span>
+  <span class="status-text" id="statusText">Loading...</span>
+</div>
+<div id="apiKeyRow" style="display:none;background:var(--surface);border-bottom:1px solid var(--border);padding:10px 32px;display:none;gap:12px;align-items:center">
+  <label style="font-size:12px;color:var(--text3)">Override with API Key:</label>
+  <input type="password" id="apiKey" placeholder="Optional — for external access" autocomplete="off" style="flex:1;max-width:400px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;color:var(--text);font-family:monospace;font-size:12px;outline:none">
+  <button onclick="loadAll()" style="background:var(--primary);color:#fff;border:none;border-radius:6px;padding:6px 16px;font-size:12px;cursor:pointer">Apply</button>
 </div>
 
 <div class="grid">
@@ -117,16 +122,40 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 const _pathPrefix = window.location.pathname.replace(/\/risk-dashboard.*/, '');
 const _token = sessionStorage.getItem('tc_token');
 if (!_token) {
-    // Not logged in → redirect to login page
     window.location.href = _pathPrefix + '/' || '/trustchecker/';
     document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#94a3b8;font-family:Inter,sans-serif"><div style="text-align:center"><h2>🔒 Authentication Required</h2><p style="margin-top:12px">Redirecting to login...</p></div></div>';
 }
 
 const BASE = window.location.origin + _pathPrefix + '/api/risk-intel';
-let KEY = localStorage.getItem('risk_intel_api_key') || '';
-document.getElementById('apiKey').value = KEY;
+let _apiKeyOverride = localStorage.getItem('risk_intel_api_key') || '';
 
-function headers() { return { 'X-API-Key': KEY, 'Content-Type': 'application/json' }; }
+// Parse JWT to show user info
+function parseJWT(token) {
+    try { return JSON.parse(atob(token.split('.')[1])); } catch(e) { return null; }
+}
+const _user = parseJWT(_token);
+if (_user) {
+    const name = _user.email || _user.id;
+    const role = _user.role || 'user';
+    document.getElementById('userInfo').innerHTML = `✅ <strong>${name}</strong> &nbsp;|&nbsp; Role: <em>${role}</em>`;
+}
+
+function toggleApiKey() {
+    const row = document.getElementById('apiKeyRow');
+    if (row.style.display === 'none') { row.style.display = 'flex'; document.getElementById('apiKey').value = _apiKeyOverride; }
+    else row.style.display = 'none';
+}
+
+function headers() {
+    const h = { 'Content-Type': 'application/json' };
+    // API key override takes priority (for external testing)
+    if (_apiKeyOverride) {
+        h['X-API-Key'] = _apiKeyOverride;
+    } else if (_token) {
+        h['Authorization'] = 'Bearer ' + _token;
+    }
+    return h;
+}
 function fmt(n) { return n == null ? '—' : typeof n === 'number' ? n.toLocaleString() : n; }
 function fmtUSD(n) { return n == null ? '—' : '$' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 0 }); }
 
@@ -230,13 +259,17 @@ async function loadTrustHistory() {
 }
 
 async function loadAll() {
-    KEY = document.getElementById('apiKey').value.trim();
-    if (KEY) localStorage.setItem('risk_intel_api_key', KEY);
+    // Check for API key override
+    const keyInput = document.getElementById('apiKey');
+    if (keyInput && keyInput.value.trim()) {
+        _apiKeyOverride = keyInput.value.trim();
+        localStorage.setItem('risk_intel_api_key', _apiKeyOverride);
+    }
     
     const dot = document.getElementById('statusDot');
     const txt = document.getElementById('statusText');
     dot.className = 'status-dot pulse';
-    txt.textContent = 'Connecting...';
+    txt.textContent = 'Loading...';
 
     try {
         await loadHealth();
@@ -250,10 +283,10 @@ async function loadAll() {
     }
 }
 
-// Auto-load public status on page load
-loadHealth();
-// Auto-refresh every 30s if connected
-if (KEY) { loadAll(); setInterval(loadAll, 30000); }
+// Auto-load on page load (using JWT token)
+loadAll();
+// Auto-refresh every 30s
+setInterval(loadAll, 30000);
 </script>
 </body>
 </html>
