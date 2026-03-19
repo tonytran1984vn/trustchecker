@@ -23,7 +23,7 @@ router.get('/behavior', cacheMiddleware(120), async (req, res) => {
         const credits = await db.all('SELECT * FROM carbon_credits LIMIT 100').catch(() => []);
         const partners = await db.prepare('SELECT * FROM partners' + orgFilter).all(...orgParams).catch(() => []);
         const scans = orgId
-            ? await db.all('SELECT se.* FROM scan_events se LEFT JOIN products p ON se.product_id = p.id WHERE (p.org_id = ? OR p.org_id IS NULL) ORDER BY se.created_at DESC LIMIT 500', [orgId]).catch(() => [])
+            ? await db.all('SELECT se.* FROM scan_events se LEFT JOIN products p ON se.product_id = p.id WHERE (p.org_id = ? OR p.org_id IS NULL) ORDER BY se.scanned_at DESC LIMIT 500', [orgId]).catch(() => [])
             : await db.all('SELECT * FROM scan_events ORDER BY created_at DESC LIMIT 500').catch(() => []);
         res.json(riskGraph.analyzeBehavior({ shipments, credits, partners, scans, routes: [] }));
     } catch (err) { res.status(500).json({ error: 'Behavioral analysis failed' }); }
@@ -46,7 +46,7 @@ router.get('/hidden-links', cacheMiddleware(120), async (req, res) => {
             ? await db.all('SELECT s.* FROM shipments s LEFT JOIN partners fp ON s.from_partner_id = fp.id LEFT JOIN partners tp ON s.to_partner_id = tp.id WHERE (fp.org_id = ? OR tp.org_id = ?) ORDER BY s.created_at DESC LIMIT 200', [orgId, orgId]).catch(() => [])
             : await db.all('SELECT * FROM shipments ORDER BY created_at DESC LIMIT 200').catch(() => []);
         const scans = orgId
-            ? await db.all('SELECT se.* FROM scan_events se LEFT JOIN products p ON se.product_id = p.id WHERE (p.org_id = ? OR p.org_id IS NULL) ORDER BY se.created_at DESC LIMIT 500', [orgId]).catch(() => [])
+            ? await db.all('SELECT se.* FROM scan_events se LEFT JOIN products p ON se.product_id = p.id WHERE (p.org_id = ? OR p.org_id IS NULL) ORDER BY se.scanned_at DESC LIMIT 500', [orgId]).catch(() => [])
             : await db.all('SELECT * FROM scan_events ORDER BY created_at DESC LIMIT 500').catch(() => []);
         res.json(riskGraph.detectHiddenLinks(entities, shipments, scans));
     } catch (err) { res.status(500).json({ error: 'Link analysis failed' }); }
@@ -277,8 +277,8 @@ router.get('/risk-analytics', cacheMiddleware(120), async (req, res) => {
               `, [orgId]).catch(() => [])
                 : db.all(`
                 SELECT o.name, o.slug,
-                       (SELECT COUNT(*)::INT FROM scan_events se JOIN products p ON se.product_id = p.id WHERE p.org_id = o.id AND se.created_at > NOW() - INTERVAL '90 days') as scan_count,
-                       (SELECT COUNT(*)::INT FROM scan_events se JOIN products p ON se.product_id = p.id WHERE p.org_id = o.id AND se.result IN ('suspicious','failed') AND se.created_at > NOW() - INTERVAL '90 days') as bad_scans,
+                       (SELECT COUNT(*)::INT FROM scan_events se JOIN products p ON se.product_id = p.id WHERE p.org_id = o.id AND se.scanned_at > NOW() - INTERVAL '90 days') as scan_count,
+                       (SELECT COUNT(*)::INT FROM scan_events se JOIN products p ON se.product_id = p.id WHERE p.org_id = o.id AND se.result IN ('suspicious','failed') AND se.scanned_at > NOW() - INTERVAL '90 days') as bad_scans,
                        (SELECT COUNT(*)::INT FROM fraud_alerts WHERE org_id = o.id) as fraud_count,
                        (SELECT AVG(score) FROM trust_scores WHERE org_id = o.id) as avg_trust
                 FROM organizations o
