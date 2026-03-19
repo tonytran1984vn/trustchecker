@@ -113,8 +113,15 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 </div>
 
 <script>
-// Auto-detect path prefix (e.g. /trustchecker) from current URL
+// ─── Login Gate: require authentication ───
 const _pathPrefix = window.location.pathname.replace(/\/risk-dashboard.*/, '');
+const _token = sessionStorage.getItem('tc_token');
+if (!_token) {
+    // Not logged in → redirect to login page
+    window.location.href = _pathPrefix + '/' || '/trustchecker/';
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#94a3b8;font-family:Inter,sans-serif"><div style="text-align:center"><h2>🔒 Authentication Required</h2><p style="margin-top:12px">Redirecting to login...</p></div></div>';
+}
+
 const BASE = window.location.origin + _pathPrefix + '/api/risk-intel';
 let KEY = localStorage.getItem('risk_intel_api_key') || '';
 document.getElementById('apiKey').value = KEY;
