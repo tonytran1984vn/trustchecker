@@ -11066,3 +11066,381 @@ input:focus-visible {
 [data-theme="light"] .sa-card [style*="background:#0f172a"][style*="border-radius:8px"] {
   background: #f1f5f9 !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   UI/UX PRO MAX — PREMIUM VISUAL OVERHAUL v2
+   Targets actual SA workspace classes used across all pages
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 1. SA Cards — Premium Glassmorphism ──────────────────────── */
+.sa-page .sa-card,
+.sa-control-tower .sa-card {
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.85), rgba(30, 41, 59, 0.55)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 16px !important;
+  padding: 1.5rem !important;
+  backdrop-filter: blur(28px) !important;
+  -webkit-backdrop-filter: blur(28px) !important;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.sa-page .sa-card::before,
+.sa-control-tower .sa-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #06b6d4, #d4af37 50%, #8b5cf6);
+  opacity: 0.8;
+  z-index: 1;
+}
+
+.sa-page .sa-card:hover,
+.sa-control-tower .sa-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(212, 175, 55, 0.25) !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3), 0 0 30px rgba(6, 182, 212, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.sa-page .sa-card h3,
+.sa-control-tower .sa-card h3 {
+  font-size: 0.88rem !important;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #cbd5e1 !important;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ── 2. SA Metric Cards — Premium KPI Boxes ───────────────────── */
+.sa-metric {
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.6)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 16px !important;
+  padding: 1.5rem !important;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.sa-metric::after {
+  height: 3px !important;
+  border-radius: 0 0 2px 2px;
+  opacity: 0.9;
+}
+
+.sa-metric:hover {
+  transform: translateY(-4px) !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.sa-metric-blue:hover { box-shadow: 0 12px 36px rgba(59, 130, 246, 0.15), 0 4px 16px rgba(0, 0, 0, 0.3) !important; }
+.sa-metric-green:hover { box-shadow: 0 12px 36px rgba(34, 197, 94, 0.15), 0 4px 16px rgba(0, 0, 0, 0.3) !important; }
+.sa-metric-orange:hover { box-shadow: 0 12px 36px rgba(245, 158, 11, 0.15), 0 4px 16px rgba(0, 0, 0, 0.3) !important; }
+.sa-metric-purple:hover { box-shadow: 0 12px 36px rgba(139, 92, 246, 0.15), 0 4px 16px rgba(0, 0, 0, 0.3) !important; }
+
+.sa-metric-val {
+  font-size: 2.5rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.04em !important;
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.sa-metric-label {
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+}
+
+.sa-metric-sub {
+  font-size: 0.73rem !important;
+  color: #94a3b8 !important;
+}
+
+/* SA Metric Card — secondary variant */
+.sa-metric-card {
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.85), rgba(30, 41, 59, 0.55)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 14px !important;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.sa-metric-card:hover {
+  transform: translateY(-3px) !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3) !important;
+}
+
+.sa-metric-value {
+  font-size: 2.25rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.03em;
+}
+
+/* ── 3. SA Tables — Modern Data Grid ──────────────────────────── */
+.sa-page .sa-table,
+.sa-page table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+.sa-page .sa-table th,
+.sa-page table th {
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.8)) !important;
+  color: #94a3b8 !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  padding: 0.875rem 1rem !important;
+  border-bottom: 2px solid rgba(6, 182, 212, 0.15) !important;
+  white-space: nowrap;
+}
+
+.sa-page .sa-table th:first-child,
+.sa-page table th:first-child {
+  border-radius: 10px 0 0 0;
+}
+
+.sa-page .sa-table th:last-child,
+.sa-page table th:last-child {
+  border-radius: 0 10px 0 0;
+}
+
+.sa-page .sa-table td,
+.sa-page table td {
+  padding: 0.75rem 1rem !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+  font-size: 0.85rem !important;
+  transition: all 0.15s ease;
+}
+
+.sa-page .sa-table tbody tr:nth-child(even) td,
+.sa-page table tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.sa-page .sa-table tbody tr:hover td,
+.sa-page table tbody tr:hover td {
+  background: rgba(6, 182, 212, 0.06) !important;
+  border-bottom-color: rgba(6, 182, 212, 0.1) !important;
+}
+
+/* ── 4. SA Tabs — Animated Navigation ─────────────────────────── */
+.sa-page .sa-tabs {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  gap: 0.25rem !important;
+  padding-bottom: 0;
+}
+
+.sa-page .sa-tab {
+  padding: 0.75rem 1.25rem !important;
+  font-size: 0.82rem !important;
+  font-weight: 500;
+  border-radius: 8px 8px 0 0;
+  position: relative;
+  border-bottom: 3px solid transparent !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.sa-page .sa-tab:hover {
+  color: #e2e8f0 !important;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sa-page .sa-tab.active {
+  color: #d4af37 !important;
+  border-bottom: 3px solid transparent !important;
+  background: rgba(212, 175, 55, 0.06);
+}
+
+.sa-page .sa-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #06b6d4, #d4af37) !important;
+  border-radius: 3px 3px 0 0;
+}
+
+/* ── 5. Status Pills — Glass Effect ──────────────────────────── */
+.sa-status-pill {
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  font-size: 0.72rem !important;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+/* ── 6. Page Headers ─────────────────────────────────────────── */
+.sa-page > div:first-child {
+  position: relative;
+}
+
+/* ── 7. Sidebar Enhancement ───────────────────────────────────── */
+.sidebar .nav-item.active {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.12), rgba(212, 175, 55, 0.08)) !important;
+  border-left: 3px solid #06b6d4 !important;
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.06);
+}
+
+.sidebar .nav-item:not(.active):hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-left: 3px solid rgba(6, 182, 212, 0.3) !important;
+}
+
+/* ── 8. Header Enhancement ───────────────────────────────────── */
+.page-header {
+  border-bottom: 2px solid transparent !important;
+  border-image: linear-gradient(90deg, #06b6d4 0%, #d4af37 50%, #8b5cf6 100%) 1 !important;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* ── 9. Infrastructure Service Cards ──────────────────────────── */
+.sa-page .sa-card[style*="border-top:3px"] {
+  border-radius: 14px !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sa-page .sa-card[style*="border-top:3px"]:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* ── 10. Exec Cards ──────────────────────────────────────────── */
+.exec-card {
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.85), rgba(30, 41, 59, 0.55)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 16px !important;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.exec-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #06b6d4, #d4af37 50%, #8b5cf6);
+  opacity: 0.7;
+}
+
+.exec-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* ── 11. Donut/Ring Charts ──────────────────────────────────── */
+canvas {
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
+}
+
+/* ── 12. Scrollbar Styling ────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.5);
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   LIGHT MODE — Premium Overhaul
+   ═════════════════════════════════════════════════════════════════ */
+
+[data-theme="light"] .sa-page .sa-card,
+[data-theme="light"] .sa-control-tower .sa-card {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.02) !important;
+}
+
+[data-theme="light"] .sa-page .sa-card::before,
+[data-theme="light"] .sa-control-tower .sa-card::before {
+  opacity: 0.6;
+}
+
+[data-theme="light"] .sa-page .sa-card:hover,
+[data-theme="light"] .sa-control-tower .sa-card:hover {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.03) !important;
+}
+
+[data-theme="light"] .sa-page .sa-card h3,
+[data-theme="light"] .sa-control-tower .sa-card h3 {
+  color: #334155 !important;
+}
+
+[data-theme="light"] .sa-metric {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme="light"] .sa-metric-val {
+  background: linear-gradient(135deg, #1e293b, #334155) !important;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="light"] .sa-metric-label {
+  color: #64748b !important;
+}
+
+[data-theme="light"] .sa-page .sa-table th,
+[data-theme="light"] .sa-page table th {
+  background: linear-gradient(180deg, #f8fafc, #f1f5f9) !important;
+  color: #475569 !important;
+  border-bottom: 2px solid rgba(6, 182, 212, 0.15) !important;
+}
+
+[data-theme="light"] .sa-page .sa-table tbody tr:hover td,
+[data-theme="light"] .sa-page table tbody tr:hover td {
+  background: rgba(6, 182, 212, 0.04) !important;
+}
+
+[data-theme="light"] .sa-page .sa-tab.active {
+  color: #b8860b !important;
+  background: rgba(212, 175, 55, 0.06);
+}
+
+[data-theme="light"] .exec-card {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme="light"] .sidebar .nav-item.active {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.08), rgba(212, 175, 55, 0.05)) !important;
+}
+
+[data-theme="light"] .page-header {
+  border-image: linear-gradient(90deg, #06b6d4 0%, #d4af37 50%, #8b5cf6 100%) 1 !important;
+}
