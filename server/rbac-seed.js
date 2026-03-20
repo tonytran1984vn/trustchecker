@@ -737,7 +737,7 @@ const DEFAULT_BUSINESS_ROLES = [
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const DEFAULT_ORG = {
-    id: 'org-demo-001',
+    id: require('crypto').randomUUID(),
     name: 'TrustChecker Demo',
     slug: 'trustchecker-demo',
     plan: 'enterprise',
