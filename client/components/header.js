@@ -61,8 +61,8 @@ export function renderPageHeader() {
             <option value="vi" ${localStorage.getItem('tc_locale') === 'vi' ? 'selected' : ''}>VI</option>
           </select>
         </div>
-        <button class="header-icon-btn" id="theme-toggle-btn" onclick="window.__toggleTheme()" title="Toggle light/dark mode" aria-label="Toggle theme" style="font-size:1.1rem">
-          ${isLight ? '☀️' : '🌙'}
+        <button class="header-icon-btn" id="theme-toggle-btn" onclick="window.__toggleTheme()" title="Toggle light/dark mode" aria-label="Toggle theme">
+          ${isLight ? icon('sun', 18) : icon('moon', 18)}
         </button>
         <button class="header-icon-btn" onclick="toggleSearch()" title="Search" aria-label="Search">
           ${icon('search', 18)}
