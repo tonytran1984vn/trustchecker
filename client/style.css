@@ -1009,14 +1009,18 @@ a:hover {
 }
 
 .btn-primary {
-  background: var(--gradient-accent);
+  background: linear-gradient(135deg, #06b6d4, #0ea5e9);
   border: none;
-  color: #000;
+  color: #fff;
   font-weight: 700;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
+  transition: all 0.2s ease;
 }
 
 .btn-primary:hover {
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+  background: linear-gradient(135deg, #0ea5e9, #06b6d4);
+  box-shadow: 0 4px 16px rgba(6, 182, 212, 0.4);
+  transform: translateY(-1px);
 }
 
 .btn-danger {
