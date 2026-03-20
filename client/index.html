@@ -49,9 +49,8 @@
           document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#f0f2f5');
         }
         localStorage.setItem('tc_theme', next);
-        // Update toggle icon in header
-        var btn = document.getElementById('theme-toggle-btn');
-        if (btn) btn.innerHTML = next === 'dark' ? '🌙' : '☀️';
+        // Re-render UI for SVG icon update
+        if (typeof window.render === 'function') window.render();
       };
     })();
   </script>
