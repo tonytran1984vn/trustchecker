@@ -17,7 +17,8 @@ import { renderPage as renderCarbonRegistry } from '../infra/carbon-registry.js?
 // Prefetch ALL Carbon APIs in parallel on workspace entry
 if (!window._saCarbonCache) window._saCarbonCache = {};
 const cache = window._saCarbonCache;
-if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 60000)) {
+const _hasToken = !!(localStorage.getItem('token') || sessionStorage.getItem('token'));
+if (_hasToken && !cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 60000)) {
     cache._loading = true;
     // Store promise so tabs can await it
     window._saCarbonReady = Promise.allSettled([
@@ -46,7 +47,8 @@ if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 60000
         API.get('/hardening/carbon-registry/stats').catch(() => ({})),
     ]).then(results => {
         const v = results.map(r => r.value);
-        cache.carbonBundle = v[0];
+        // Only cache bundle if it's a valid response (has scope property, no error)
+        cache.carbonBundle = (v[0] && v[0].scope && !v[0].error) ? v[0] : null;
         cache.carbonCredit = { summary: v[1], passports: v[2], benchmarks: v[3], ingestion: v[4] };
         cache.greenFinance = { score: v[5], collateral: v[6], instruments: v[7], dashboard: v[8] };
         cache.sustainability = { stats: v[9] || {}, scores: v[10]?.leaderboard || [] };

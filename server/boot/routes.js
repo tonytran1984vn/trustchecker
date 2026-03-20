@@ -65,7 +65,7 @@ function setupRoutes(app) {
     const riskGraphRoutes = require('../routes/risk-graph');
     const complianceRegtechRoutes = require('../routes/compliance-regtech');
     // ARCHIVED: const apiEconomyRoutes = require('../routes/api-economy');
-    // ARCHIVED: const greenFinanceRoutes = require('../routes/green-finance');
+    const greenFinanceRoutes = require('../routes/green-finance');
     const reputationRoutes = require('../routes/reputation');
     const governanceRoutes = require('../routes/governance');
     const opsMonitoringRoutes = require('../routes/ops-monitoring');
@@ -143,7 +143,7 @@ function setupRoutes(app) {
         ['/risk-graph', riskGraphRoutes],
         ['/compliance-regtech', complianceRegtechRoutes],
         // ARCHIVED: ['/api-economy', apiEconomyRoutes],
-        // ARCHIVED: ['/green-finance', greenFinanceRoutes],
+        ['/green-finance', greenFinanceRoutes],
         ['/reputation', reputationRoutes],
         ['/governance', governanceRoutes],
         ['/ops', opsMonitoringRoutes],

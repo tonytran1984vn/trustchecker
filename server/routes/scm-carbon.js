@@ -36,20 +36,21 @@ function dateClause(col, from, to, params) {
 
 async function _getOrgProducts(orgId, from, to) {
     const params = [];
-    let q = 'SELECT * FROM products WHERE 1=1';
+    let q = 'SELECT id, name, category, carbon_footprint_kgco2e, created_at, updated_at, org_id FROM products WHERE 1=1';
     if (orgId) { q += ' AND org_id = ?'; params.push(orgId); }
     q += dateClause('created_at', from, to, params);
     q += ' LIMIT 200';
     return db.prepare(q).all(...params);
 }
 function getOrgProducts(orgId, from, to) {
-    return cached(`products:${orgId}:${from || ''}:${to || ''}`, 60, () => _getOrgProducts(orgId, from, to));
+    return cached(`products:${orgId}:${from || ''}:${to || ''}`, 300, () => _getOrgProducts(orgId, from, to));
 }
 
 async function _getOrgShipments(orgId, from, to) {
+    const cols = 'id, batch_id, carrier, from_partner_id, to_partner_id, status, estimated_delivery, actual_delivery, created_at';
     if (orgId) {
         const params = [orgId];
-        let q = `SELECT s.* FROM shipments s
+        let q = `SELECT ${cols.split(', ').map(c => 's.' + c).join(', ')} FROM shipments s
             INNER JOIN batches b ON s.batch_id = b.id
             INNER JOIN products p ON b.product_id = p.id
             WHERE p.org_id = ?`;
@@ -57,61 +58,66 @@ async function _getOrgShipments(orgId, from, to) {
         return db.prepare(q).all(...params);
     }
     const params = [];
-    let q = 'SELECT * FROM shipments WHERE 1=1';
+    let q = `SELECT ${cols} FROM shipments WHERE 1=1`;
     q += dateClause('created_at', from, to, params);
     return db.prepare(q).all(...params);
 }
 function getOrgShipments(orgId, from, to) {
-    return cached(`shipments:${orgId}:${from || ''}:${to || ''}`, 60, () => _getOrgShipments(orgId, from, to));
+    return cached(`shipments:${orgId}:${from || ''}:${to || ''}`, 300, () => _getOrgShipments(orgId, from, to));
 }
 
 async function _getOrgEvents(orgId, from, to) {
+    const cols = 'id, product_id, batch_id, event_type, created_at, org_id';
     if (orgId) {
         const params = [orgId];
-        let q = 'SELECT * FROM supply_chain_events WHERE org_id = ?';
+        let q = `SELECT ${cols} FROM supply_chain_events WHERE org_id = ?`;
         q += dateClause('created_at', from, to, params);
+        q += ' LIMIT 2000';
         return db.prepare(q).all(...params)
             .catch(() => {
                 const p2 = [orgId];
-                let q2 = `SELECT e.* FROM supply_chain_events e
+                let q2 = `SELECT ${cols.split(', ').map(c => 'e.' + c).join(', ')} FROM supply_chain_events e
                     INNER JOIN products p ON e.product_id = p.id
                     WHERE p.org_id = ?`;
                 q2 += dateClause('e.created_at', from, to, p2);
+                q2 += ' LIMIT 2000';
                 return db.prepare(q2).all(...p2);
             })
             .catch(() => []);
     }
     const params = [];
-    let q = 'SELECT * FROM supply_chain_events WHERE 1=1';
+    let q = `SELECT ${cols} FROM supply_chain_events WHERE 1=1`;
     q += dateClause('created_at', from, to, params);
+    q += ' LIMIT 2000';
     return db.prepare(q).all(...params);
 }
 function getOrgEvents(orgId, from, to) {
-    return cached(`events:${orgId}:${from || ''}:${to || ''}`, 60, () => _getOrgEvents(orgId, from, to));
+    return cached(`events:${orgId}:${from || ''}:${to || ''}`, 300, () => _getOrgEvents(orgId, from, to));
 }
 
 async function _getOrgPartners(orgId) {
+    const cols = 'id, name, country, type, trust_score, kyc_status, org_id';
     if (orgId) {
-        return db.all('SELECT * FROM partners WHERE org_id = ?', [orgId])
+        return db.all(`SELECT ${cols} FROM partners WHERE org_id = ?`, [orgId])
             .catch(() => []);
     }
-    return db.all('SELECT * FROM partners');
+    return db.all(`SELECT ${cols} FROM partners`);
 }
 function getOrgPartners(orgId) {
-    return cached(`partners:${orgId}`, 60, () => _getOrgPartners(orgId));
+    return cached(`partners:${orgId}`, 300, () => _getOrgPartners(orgId));
 }
 
 async function _getOrgViolations(orgId) {
     if (orgId) {
         return db.all(`
-            SELECT v.* FROM sla_violations v
+            SELECT v.id, v.partner_id, v.org_id FROM sla_violations v
             WHERE v.org_id = ?
         `, [orgId]).catch(() => []);
     }
-    return db.all('SELECT * FROM sla_violations');
+    return db.all('SELECT id, partner_id, org_id FROM sla_violations');
 }
 function getOrgViolations(orgId) {
-    return cached(`violations:${orgId}`, 60, () => _getOrgViolations(orgId));
+    return cached(`violations:${orgId}`, 300, () => _getOrgViolations(orgId));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -141,7 +147,7 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
                 Promise.resolve(carbonEngine.getGovernanceFlow()),
                 Promise.resolve(carbonEngine.getRoleMatrix()),
                 Promise.resolve(carbonEngine.getIndustryBenchmarks()),
-                db.get('SELECT COUNT(*) as c FROM carbon_offsets WHERE org_id = ?', [orgId]).catch(() => ({ c: 0 })),
+                db.get('SELECT COUNT(*) as c FROM carbon_offsets' + (orgId ? ' WHERE org_id = ?' : ''), orgId ? [orgId] : []).catch(() => ({ c: 0 })),
                 db.get('SELECT COUNT(*) as c FROM partners' + (orgId ? ' WHERE org_id = ?' : ''), orgId ? [orgId] : []).catch(() => ({ c: 0 })),
                 db.get('SELECT COUNT(*) as c FROM organizations').catch(() => ({ c: 0 })),
             ]);
@@ -195,7 +201,7 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
         // ESG grade
         let offsetCov = 0;
         try {
-            const off = await db.get('SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE org_id = ? AND status = ?', [orgId, 'retired']);
+            const off = await db.get('SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE status = ?' + (orgId ? ' AND org_id = ?' : ''), orgId ? ['retired', orgId] : ['retired']);
             offsetCov = Math.min(1, (off?.r || 0) / ((total_emissions_kgCO2e / 1000) || 1));
         } catch (_) { }
         const dataCov = products.length > 0 ? products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length : 0;
@@ -385,7 +391,7 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
         // Composite ESG grade (same logic as dashboard)
         let offsetCoverage = 0;
         try {
-            const offRes = await db.get(`SELECT COALESCE(SUM(quantity_tco2e),0) as retired FROM carbon_offsets WHERE org_id = ? AND status = 'retired'`, [orgId]);
+            const offRes = await db.get('SELECT COALESCE(SUM(quantity_tco2e),0) as retired FROM carbon_offsets WHERE status = ?' + (orgId ? ' AND org_id = ?' : ''), orgId ? ['retired', orgId] : ['retired']);
             offsetCoverage = Math.min(1, (offRes?.retired || 0) / ((total_emissions_kgCO2e / 1000) || 1));
         } catch (_) { }
         const dataCoverage = products.length > 0 ? products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length : 0;
@@ -497,7 +503,7 @@ router.get('/report', cacheMiddleware(180), async (req, res) => {
         // Override ESG grade with composite scoring (consistent with dashboard/scope)
         let offsetCov = 0;
         try {
-            const off = await db.get('SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE org_id = ? AND status = ?', [orgId, 'retired']);
+            const off = await db.get('SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE status = ?' + (orgId ? ' AND org_id = ?' : ''), orgId ? ['retired', orgId] : ['retired']);
             offsetCov = Math.min(1, (off?.r || 0) / ((actualKgCO2e / 1000) || 1));
         } catch (_) { }
         const dataCov = products.length > 0 ? products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length : 0;

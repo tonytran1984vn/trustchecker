@@ -26,7 +26,7 @@ async function fetchCarbonData() {
         // Use prefetched data from workspace if available
         const wc = window._saCarbonCache;
         let bundle = null;
-        if (wc?.carbonBundle && wc._loadedAt) {
+        if (wc?.carbonBundle && wc._loadedAt && !wc.carbonBundle.error && wc.carbonBundle.scope) {
             bundle = wc.carbonBundle;
         } else {
             bundle = await API.get('/scm/carbon/bundle').catch(() => null);

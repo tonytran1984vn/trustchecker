@@ -268,20 +268,54 @@ class CarbonEngine {
         let totalConfidence = 0;
         const confidenceCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
 
-        for (const product of products) {
-            // Match shipments: try batch chain first, then proportional fallback
-            let productShipments = shipments.filter(s => {
-                if (!s.batch_id) return false;
-                const batch = events.find(e => e.product_id === product.id && e.batch_id === s.batch_id);
-                return !!batch;
-            });
+        // ── PERF: Pre-index events by product_id for O(1) lookup ──
+        const eventsByProduct = new Map();
+        const batchProductSet = new Set(); // "batch_id:product_id" for shipment matching
+        for (const e of events) {
+            const pid = e.product_id;
+            if (pid) {
+                if (!eventsByProduct.has(pid)) eventsByProduct.set(pid, []);
+                eventsByProduct.get(pid).push(e);
+                if (e.batch_id) batchProductSet.add(`${e.batch_id}:${pid}`);
+            }
+        }
+
+        // ── PERF: Pre-index shipments by batch_id for O(1) lookup ──
+        const shipmentsByBatch = new Map();
+        for (const s of shipments) {
+            if (s.batch_id) {
+                if (!shipmentsByBatch.has(s.batch_id)) shipmentsByBatch.set(s.batch_id, []);
+                shipmentsByBatch.get(s.batch_id).push(s);
+            }
+        }
+
+        // Pre-compute proportional shipment allocation
+        const perProduct = products.length > 0 ? Math.max(1, Math.ceil(shipments.length / products.length)) : 0;
+
+        for (let idx = 0; idx < products.length; idx++) {
+            const product = products[idx];
+            const productId = product.id;
+
+            // ── PERF: O(1) event lookup instead of O(events.length) filter ──
+            const productEvents = eventsByProduct.get(productId) || [];
+
+            // Match shipments via batch chain using pre-indexed data
+            let productShipments = [];
+            const seenBatches = new Set();
+            for (const ev of productEvents) {
+                if (ev.batch_id && !seenBatches.has(ev.batch_id)) {
+                    seenBatches.add(ev.batch_id);
+                    const batchShipments = shipmentsByBatch.get(ev.batch_id);
+                    if (batchShipments) {
+                        for (const s of batchShipments) productShipments.push(s);
+                    }
+                }
+            }
+
             // Fallback: distribute unmatched shipments proportionally
             if (productShipments.length === 0 && shipments.length > 0) {
-                const idx = products.indexOf(product);
-                const perProduct = Math.max(1, Math.ceil(shipments.length / products.length));
                 productShipments = shipments.slice(idx * perProduct, (idx + 1) * perProduct);
             }
-            const productEvents = events.filter(e => e.product_id === product.id);
 
             const fp = this.calculateFootprint(product, productShipments, productEvents);
             const cat = product.category || 'General';

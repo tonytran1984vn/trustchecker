@@ -40,7 +40,7 @@ const fallback = {
 
 
 // ─── HTTP Helper ─────────────────────────────────────────────
-function httpPost(baseUrl, path, body, timeoutMs = 30000) {
+function httpPost(baseUrl, path, body, timeoutMs = 3000) {
     return new Promise((resolve, reject) => {
         const url = new URL(path, baseUrl);
         const data = JSON.stringify(body);
@@ -74,7 +74,16 @@ function httpPost(baseUrl, path, body, timeoutMs = 30000) {
 
 
 // ─── Generic Call Through Circuit Breaker ────────────────────
+// Skip HTTP if AI microservices aren't deployed (USE_JS_ENGINES=true or default localhost URLs)
+const _useJSOnly = process.env.USE_JS_ENGINES === 'true' ||
+    (!process.env.AI_SIMULATION_URL && !process.env.AI_DETECTION_URL && !process.env.AI_ANALYTICS_URL);
+
 async function callEngine(serviceName, path, payload, jsFallbackFn) {
+    // Fast path: skip HTTP entirely when AI services aren't configured
+    if (_useJSOnly) {
+        return jsFallbackFn();
+    }
+
     const breaker = breakers[serviceName];
     if (!breaker) {
         console.warn(`[engine-client] No circuit breaker for ${serviceName}, calling directly`);
