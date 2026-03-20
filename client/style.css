@@ -2826,10 +2826,30 @@ tr.toxic-node:hover td {
   transition: all 0.2s ease;
 }
 
+.header-icon-btn svg {
+  color: inherit;
+  stroke: currentColor;
+}
+
 .header-icon-btn:hover {
   background: rgba(6, 182, 212, 0.12);
   border-color: var(--cyan);
   transform: translateY(-1px);
+}
+
+/* Light mode: make header icon buttons clearly visible */
+[data-theme="light"] .header-icon-btn {
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #475569;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .header-icon-btn:hover {
+  background: #f0fdfa;
+  border-color: #06b6d4;
+  color: #06b6d4;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.15);
 }
 
 .notif-count {
