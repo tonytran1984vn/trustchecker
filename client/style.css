@@ -2829,6 +2829,11 @@ tr.toxic-node:hover td {
 .header-icon-btn svg {
   color: inherit;
   stroke: currentColor;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  flex-shrink: 0;
 }
 
 .header-icon-btn:hover {
