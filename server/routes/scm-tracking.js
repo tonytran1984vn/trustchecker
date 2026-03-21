@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 // [MIGRATED] Use /api/v1/supply-chain instead
 /**
  * SCM Tracking & Traceability Routes (FR-INTEG-002 + FR-SCM-001)
@@ -677,7 +678,6 @@ router.get('/verify-signature/:eventId', async (req, res) => {
         const event = await db.get('SELECT * FROM product_events WHERE id = $1', [req.params.eventId]);
         if (!event) return res.status(404).json({ error: 'Event not found' });
         const { verifySignature } = require('../middleware/scm-state-machine');
-const logger = require('../lib/logger');
         const result = verifySignature(
             {
                 productId: event.product_id,

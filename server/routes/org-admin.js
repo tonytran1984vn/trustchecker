@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 /**
  * Org Admin Routes — Company Admin Only
  *
@@ -4415,7 +4416,6 @@ router.get('/owner/ccs/allocation-baseline', requireExecutiveAccess(), async (re
         const tid = req.orgId;
         const carbonEngine = require('../engines/intelligence/carbon-engine');
         const engineClient = require('../engines/infrastructure/engine-client');
-const logger = require('../lib/logger');
 
         const [finConfig, products, shipments, events, partners, violations, offsets, scmStats, breaches, scanStats] =
             await Promise.all([

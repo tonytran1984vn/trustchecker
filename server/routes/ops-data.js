@@ -14,6 +14,7 @@ const { orgGuard } = require('../middleware/org-middleware');
 const { appendAuditEntry } = require('../utils/audit-chain');
 const { validate } = require('../middleware/validate');
 const schemas = require('../lib/schemas');
+const logger = require('../lib/logger');
 
 router.use(authMiddleware);
 router.use(orgGuard());
@@ -322,7 +323,6 @@ router.put('/data/incidents/:id', validate({ body: schemas.updateIncident }), as
                     "INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id, timestamp) VALUES (?, ?, 'SEVERITY_DOWNGRADED', 'incident', ?, ?, ?, NOW())",
                     [
                         require('uuid').v4(),
-const logger = require('../lib/logger');
                         req.user.id,
                         req.params.id,
                         JSON.stringify({

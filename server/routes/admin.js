@@ -16,6 +16,7 @@ const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const logger = require('../lib/logger');
 
 router.use(authMiddleware);
 router.use(requirePermission('org:user_create'));
@@ -580,7 +581,6 @@ function getDBSize() {
         const fs = require('fs');
         const path = require('path');
         const { safeParse } = require('../utils/safe-json');
-const logger = require('../lib/logger');
         const dbPath = path.join(__dirname, '..', 'data', 'trustchecker.db');
         if (fs.existsSync(dbPath)) {
             return Math.round((fs.statSync(dbPath).size / 1024 / 1024) * 100) / 100;

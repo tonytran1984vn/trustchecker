@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 /**
  * SCM Risk Model Governance API
  * Model versioning, change requests, deployment, rollback, drift detection
@@ -505,7 +506,6 @@ router.put('/models/:id/status', authMiddleware, async (req, res) => {
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES ($1, $2, $3, $4, $5, $6)`,
             [
                 require('uuid').v4(),
-const logger = require('../lib/logger');
                 req.user?.id,
                 'MODEL_STATUS_CHANGED',
                 'risk_model',

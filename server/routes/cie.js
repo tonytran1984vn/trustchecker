@@ -28,7 +28,6 @@ const { v4: uuidv4 } = require('uuid');
 let db;
 function getDb() {
     if (!db) db = require('../db');
-const { orgGuard } = require('../middleware/org-middleware');
     return db;
 }
 
@@ -395,6 +394,7 @@ router.get('/overview', async (req, res) => {
 const cieRoles = require('../engines/infrastructure/cie-role-engine');
 const { withTransaction } = require('../middleware/transaction');
 const logger = require('../lib/logger');
+const { orgGuard } = require('../middleware/org-middleware');
 
 // GET /api/cie/roles — All roles (platform + company)
 router.get('/roles', (req, res) => {

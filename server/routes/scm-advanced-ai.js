@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 /**
  * Advanced SCM AI Routes — Enterprise Analytics API
  * Holt-Winters forecasting, Monte Carlo simulation, causal analysis,
@@ -113,7 +114,6 @@ router.post('/monte-carlo', async (req, res) => {
             logger.warn('Python engine failed, falling back to JS:', workerErr.message);
             const advancedAI = require('../engines/intelligence/advanced-scm-ai');
             const { withTransaction } = require('../middleware/transaction');
-const logger = require('../lib/logger');
             result = advancedAI.monteCarloRisk(params, simCount);
         }
 

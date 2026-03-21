@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 // [MIGRATED] Use req.services.product for new logic
 const { cacheInvalidate } = require('../middleware/cache-invalidate');
 
@@ -850,7 +851,6 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
             const PDFDocument = require('pdfkit');
             const { withTransaction } = require('../middleware/transaction');
             const { checkAbuse } = require('../middleware/abuse-detection');
-const logger = require('../lib/logger');
             const doc = new PDFDocument({ size: 'A4', margin: 40 });
             const buffers = [];
 

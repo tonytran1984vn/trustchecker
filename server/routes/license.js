@@ -27,6 +27,7 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { authMiddleware, requirePlatformAdmin } = require('../auth');
+const logger = require('../lib/logger');
 
 // All management routes require platform admin authentication
 router.use('/activate', authMiddleware, requirePlatformAdmin());
@@ -46,7 +47,6 @@ async function loadKeys() {
     const keyDir = path.join(__dirname, '..', '..', 'certs');
     const fsp = require('fs').promises;
     const { withTransaction } = require('../middleware/transaction');
-const logger = require('../lib/logger');
 
     try {
         const pubKeyPath = process.env.LICENSE_PUBLIC_KEY_PATH || path.join(keyDir, 'license-public.pem');

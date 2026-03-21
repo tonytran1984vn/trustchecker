@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 const { safeError } = require('../utils/safe-error');
 /**
  * System Routes — Backup, Restore, Seed, and System Info
@@ -324,7 +325,6 @@ router.get('/logs', async (req, res) => {
     try {
         const { requestLogger } = require('../middleware/security');
         const { withTransaction } = require('../middleware/transaction');
-const logger = require('../lib/logger');
         const { limit = 50 } = req.query;
         res.json({
             entries: requestLogger.getEntries(Number(limit)),

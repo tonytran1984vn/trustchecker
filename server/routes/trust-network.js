@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 /**
  * Trust Network Routes v1.0
  * Transform TrustChecker from a tool into a supply chain trust network.
@@ -227,7 +228,6 @@ router.post('/invite', async function (req, res) {
         // Send email (use template engine)
         try {
             const emailTemplates = require('../engines/infrastructure/emailTemplates');
-const logger = require('../lib/logger');
             const html = emailTemplates.supplierInvite(req.user.username, inviterOrg, company_name, joinUrl, message);
             // In production, use real email service
             eventBus.emit('email:send', {

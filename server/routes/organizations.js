@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 /**
  * Organization Management Routes
  * Multi-org org CRUD, member management, and Enterprise provisioning.
@@ -120,7 +121,6 @@ router.post('/', requireSuperAdmin(), async (req, res) => {
 
         if (!ownerUser) {
             const bcrypt = require('bcryptjs');
-const logger = require('../lib/logger');
             const ownerId = uuidv4();
             const displayName = owner_name || owner_email.split('@')[0];
             const passwordHash = await bcrypt.hash(tempPassword, 12);

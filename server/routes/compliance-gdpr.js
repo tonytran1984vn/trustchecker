@@ -16,6 +16,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 router.use(authMiddleware);
 router.use(orgGuard());
@@ -355,7 +356,6 @@ router.delete('/gdpr/delete', async (req, res) => {
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const bcrypt = require('bcryptjs');
-const logger = require('../lib/logger');
         const passwordValid = await bcrypt.compare(password, user.password_hash);
         if (!passwordValid) {
             return res.status(401).json({ error: 'Invalid password' });

@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 // ─── Public Insight Dashboard Routes ─────────────────────────────────────────
 // No authentication required – read-only aggregate statistics
 const express = require('express');
@@ -511,7 +512,6 @@ router.post('/check', async (req, res) => {
         // Create scan event for this check
         const scanId = require('uuid').v4();
         const { withTransaction } = require('../middleware/transaction');
-const logger = require('../lib/logger');
         await db.run(
             `
             INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, ip_address, user_agent, result, scanned_at)

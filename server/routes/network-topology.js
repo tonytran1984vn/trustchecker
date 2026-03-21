@@ -12,6 +12,7 @@ const { authMiddleware, requirePermission } = require('../auth');
 const network = require('../engines/intelligence/network-topology-engine');
 const { v4: uuidv4 } = require('uuid');
 const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 router.use(authMiddleware);
 router.use(orgGuard());
@@ -58,7 +59,6 @@ function requireConstitutionalWithAudit(action) {
         if (!req.user) return res.status(401).json({ error: 'Authentication required' });
         const constitutionalRBAC = require('../engines/governance-module').constitutionalRbac;
         const { withTransaction } = require('../middleware/transaction');
-const logger = require('../lib/logger');
         const result = constitutionalRBAC.enforce(req.user.role, action);
         logConstitutionalAction(req, action, result);
         if (!result.allowed) {

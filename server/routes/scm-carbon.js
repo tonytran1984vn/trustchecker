@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 /**
  * Carbon & ESG Routes v3.0 — Cross-Cutting ESG Governance Intelligence
  * Product carbon passports, partner ESG leaderboard, GRI reporting,
@@ -1377,7 +1378,6 @@ router.put('/factors/:id', requirePermission('esg:manage'), async (req, res) => 
         // Audit log
         const { v4: uuidv4 } = require('uuid');
         const { withTransaction } = require('../middleware/transaction');
-const logger = require('../lib/logger');
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
             VALUES (?, ?, 'emission_factor_updated', 'emission_factor', ?, ?, NOW())
