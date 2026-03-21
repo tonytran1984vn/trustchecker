@@ -59,7 +59,7 @@ async function meterUsage(userId, type, count = 1, wss = null) {
 
         await db.prepare(`
             INSERT INTO usage_records (id, user_id, type, count, unit_cost, period, billed_amount, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
         `).run(id, userId, type, count, unitCost, period, Math.round(count * unitCost * 100) / 100);
 
         // Invalidate cache

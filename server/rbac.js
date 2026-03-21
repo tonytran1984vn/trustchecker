@@ -124,7 +124,7 @@ async function getUserPermissions(userId) {
     JOIN rbac_role_permissions rp ON rp.role_id = ur.role_id
     JOIN rbac_permissions p ON p.id = rp.permission_id
     WHERE ur.user_id = ?
-      AND (ur.expires_at IS NULL OR ur.expires_at > datetime('now'))
+      AND (ur.expires_at IS NULL OR ur.expires_at > NOW())
   `, [userId]);
 
     const perms = new Set(rows.map(r => r.perm));

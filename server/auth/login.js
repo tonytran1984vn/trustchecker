@@ -141,7 +141,7 @@ router.post('/login', validate(schemas.login), async (req, res) => {
                     return res.status(401).json({ error: 'Invalid MFA code' });
                 }
 
-                await db.prepare("UPDATE users SET last_login = datetime('now'), failed_attempts = 0 WHERE id = ?").run(user.id);
+                await db.prepare("UPDATE users SET last_login = NOW(), failed_attempts = 0 WHERE id = ?").run(user.id);
                 const sessionId = await createSession(user.id, req);
                 const { accessToken, refreshToken } = await generateTokenPair(user, sessionId);
 
@@ -232,7 +232,7 @@ router.post('/login', validate(schemas.login), async (req, res) => {
         }
 
         // Issue tokens directly
-        await db.prepare("UPDATE users SET last_login = datetime('now'), failed_attempts = 0, locked_until = NULL WHERE id = ?").run(user.id);
+        await db.prepare("UPDATE users SET last_login = NOW(), failed_attempts = 0, locked_until = NULL WHERE id = ?").run(user.id);
         await enrichUserWithOrg(user);
 
         // P3: IP Anomaly Detection

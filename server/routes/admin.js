@@ -106,7 +106,7 @@ router.get('/overview', async (req, res) => {
             user_growth_30d: userGrowth,
             scan_trend_14d: scanTrend,
             paid_plans: paidPlans,
-            system_health: { status: 'healthy', uptime: '99.97%', db_size_mb: getDBSize() },
+            system_health: { status: 'healthy', uptime: '99.97%', db_size_mb: await getDBSize() },
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -561,7 +561,7 @@ router.get('/metrics', async (req, res) => {
                 heap_total_mb: Math.round(mem.heapTotal / 1024 / 1024),
             },
             database: {
-                size_mb: getDBSize(),
+                size_mb: await getDBSize(),
                 table_counts: tableSizes,
             },
             performance: {
@@ -576,15 +576,10 @@ router.get('/metrics', async (req, res) => {
     }
 });
 
-function getDBSize() {
+async function getDBSize() {
     try {
-        const fs = require('fs');
-        const path = require('path');
-        const { safeParse } = require('../utils/safe-json');
-        const dbPath = path.join(__dirname, '..', 'data', 'trustchecker.db');
-        if (fs.existsSync(dbPath)) {
-            return Math.round((fs.statSync(dbPath).size / 1024 / 1024) * 100) / 100;
-        }
+        const row = await db.get("SELECT pg_database_size(current_database()) / (1024*1024) as size_mb");
+        return Math.round((row?.size_mb || 0) * 100) / 100;
     } catch (e) {
         logger.warn('[admin] getDBSize failed:', e.message);
     }
