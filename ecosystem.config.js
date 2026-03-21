@@ -3,8 +3,6 @@ module.exports = {
         name: 'trustchecker',
         script: 'server/index.js',
         cwd: '/opt/trustchecker',
-        exec_mode: 'cluster',
-        instances: 4,
         env: {
             NODE_ENV: 'production',
             PORT: 4000,
