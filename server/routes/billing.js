@@ -24,6 +24,7 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const pricing = require('../engines/infrastructure/pricing-engine');
 const { getDetailedUsage, getOverageCharges } = require('../middleware/usage-meter');
+const { orgGuard } = require('../middleware/org-middleware');
 
 // ─── POST /webhook — Webhook receiver with signature verification ────
 router.post('/webhook', async (req, res) => {
@@ -37,7 +38,6 @@ router.post('/webhook', async (req, res) => {
                 return res.status(401).json({ error: 'Missing webhook signature' });
             }
             const crypto = require('crypto');
-const { orgGuard } = require('../middleware/org-middleware');
             const expectedSig = crypto
                 .createHmac('sha256', WEBHOOK_SECRET)
                 .update(JSON.stringify(req.body))
