@@ -54,7 +54,7 @@ async function loadTenant(id) {
   loading = true;
   try {
     const data = await API.get(`/platform/orgs/${id}`);
-    tenant = data.tenant || data;
+    tenant = data.org || data.tenant || data;
     tenantUsers = data.users || [];
     tenantRoles = data.roles || [];
   } catch (e) {
