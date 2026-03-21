@@ -59,7 +59,6 @@ function tenantMiddleware(req, res, next) {
     next();
 }
 
-
 // ─── Require Tenant — Guard Middleware ────────────────────────────────────────
 function requireTenant(req, res, next) {
     if (!req.tenantId && !req.tenantSlug) {
@@ -70,7 +69,6 @@ function requireTenant(req, res, next) {
     }
     next();
 }
-
 
 // ─── Apply RLS to Database Connection ────────────────────────────────────────
 /**
@@ -102,7 +100,6 @@ async function applyTenantContext(db, req) {
         await db.run(`SELECT set_config('app.current_tenant', $1, true)`, [req.tenantId]);
     }
 }
-
 
 // ─── Tenant-Scoped Query Helper ──────────────────────────────────────────────
 /**
@@ -142,7 +139,6 @@ function injectTenantFilter(baseQuery, baseParams = [], tenantId) {
 
     return { query, params: newParams };
 }
-
 
 module.exports = {
     tenantMiddleware,

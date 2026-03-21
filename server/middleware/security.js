@@ -53,7 +53,7 @@ function requestLogger(req, res, next) {
             duration_ms: duration,
             ip: req.ip,
             request_id: req.requestId,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         };
 
         // Log slow requests
@@ -97,9 +97,8 @@ requestLogger.getEntries = (limit = 50) => {
 requestLogger.getMetrics = () => {
     const entries = _getOrderedEntries();
     const last100 = entries.slice(-100);
-    const avgDuration = last100.length > 0
-        ? Math.round(last100.reduce((s, e) => s + e.duration_ms, 0) / last100.length)
-        : 0;
+    const avgDuration =
+        last100.length > 0 ? Math.round(last100.reduce((s, e) => s + e.duration_ms, 0) / last100.length) : 0;
 
     const statusCounts = {};
     entries.forEach(e => {
@@ -111,7 +110,7 @@ requestLogger.getMetrics = () => {
         total_requests: entries.length,
         avg_response_ms: avgDuration,
         status_distribution: statusCounts,
-        slow_requests: entries.filter(e => e.duration_ms > 1000).length
+        slow_requests: entries.filter(e => e.duration_ms > 1000).length,
     };
 };
 

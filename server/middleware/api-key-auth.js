@@ -13,7 +13,9 @@
 const crypto = require('crypto');
 
 let db;
-try { db = require('../db'); } catch(e) {}
+try {
+    db = require('../db');
+} catch (e) {}
 
 // In-memory cache for validated keys (5 min TTL)
 const keyCache = new Map();
@@ -43,7 +45,7 @@ async function ensureTable() {
             )
         `);
         await db.run('CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash) WHERE revoked = false');
-    } catch(e) {
+    } catch (e) {
         // Table may already exist with different schema, proceed anyway
     }
 }
@@ -79,8 +81,9 @@ function generateKey() {
 function apiKeyAuth(options = {}) {
     return async (req, res, next) => {
         // Extract key
-        const apiKey = req.headers['x-api-key']
-            || (req.headers.authorization && req.headers.authorization.startsWith('ApiKey ')
+        const apiKey =
+            req.headers['x-api-key'] ||
+            (req.headers.authorization && req.headers.authorization.startsWith('ApiKey ')
                 ? req.headers.authorization.slice(7)
                 : null);
 
@@ -127,7 +130,8 @@ function apiKeyAuth(options = {}) {
 
             // Cache it
             keyCache.set(hash, {
-                user, apiKey: record,
+                user,
+                apiKey: record,
                 _cachedAt: Date.now(),
             });
 
@@ -138,7 +142,7 @@ function apiKeyAuth(options = {}) {
             req.apiKey = record;
             req.authMethod = 'api_key';
             next();
-        } catch(e) {
+        } catch (e) {
             console.error('[api-key-auth] Error:', e.message);
             return res.status(500).json({ error: 'API key validation failed' });
         }

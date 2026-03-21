@@ -7,29 +7,29 @@
  * Uses CDN-hosted Swagger UI — no npm dependencies needed.
  * ATK-10: Requires auth in production.
  */
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const SPEC = require("../lib/openapi-spec");
+const SPEC = require('../lib/openapi-spec');
 
 // Auth check in production
 router.use((req, res, next) => {
-    if (process.env.NODE_ENV === "production") {
+    if (process.env.NODE_ENV === 'production') {
         const auth = req.headers.authorization;
         if (!auth) {
-            return res.status(401).json({ error: "Authentication required to access API docs" });
+            return res.status(401).json({ error: 'Authentication required to access API docs' });
         }
     }
     next();
 });
 
 // GET /api/docs/spec — raw OpenAPI JSON
-router.get("/spec", (req, res) => {
+router.get('/spec', (req, res) => {
     res.json(SPEC);
 });
 
 // GET /api/docs — Swagger UI via CDN
-router.get("/", (req, res) => {
-    res.setHeader("Content-Type", "text/html");
+router.get('/', (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
     res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>

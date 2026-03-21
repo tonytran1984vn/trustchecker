@@ -8,8 +8,10 @@ const crypto = require('crypto');
 function traceMiddleware() {
     return (req, res, next) => {
         // Accept incoming trace ID (from gateway/client) or generate new
-        req.traceId = req.headers['x-trace-id'] || req.headers['x-request-id'] || 
-                      `tc-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
+        req.traceId =
+            req.headers['x-trace-id'] ||
+            req.headers['x-request-id'] ||
+            `tc-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
 
         // Propagate in response
         res.setHeader('X-Trace-Id', req.traceId);
@@ -21,15 +23,17 @@ function traceMiddleware() {
         res.on('finish', () => {
             const duration = Date.now() - req.startTime;
             if (duration > 1000 || res.statusCode >= 500) {
-                console.warn(JSON.stringify({
-                    trace: req.traceId,
-                    method: req.method,
-                    path: req.path,
-                    status: res.statusCode,
-                    duration_ms: duration,
-                    user: req.user?.id || 'anonymous',
-                    org: req.user?.orgId || null,
-                }));
+                console.warn(
+                    JSON.stringify({
+                        trace: req.traceId,
+                        method: req.method,
+                        path: req.path,
+                        status: res.statusCode,
+                        duration_ms: duration,
+                        user: req.user?.id || 'anonymous',
+                        org: req.user?.orgId || null,
+                    })
+                );
             }
         });
 

@@ -2,7 +2,7 @@
  * Unit Economics + Risk Reserve + Data Sovereignty + Regulatory + SLA Routes
  * Combined route file for infrastructure maturity modules
  * Endpoints: 28 | Mount: /api/economics, /api/reserves, /api/sovereignty, /api/regulatory, /api/sla
- * 
+ *
  * Constitutional Enforcement: ALL mutation endpoints use requireConstitutional()
  * Immutable Deny Logging: Every blocked action → audit_log
  */
@@ -33,19 +33,26 @@ function logConstitutionalAction(req, action, result) {
     // TODO: Write to immutable audit table when available
     try {
         const db = require('../db');
-        db.prepare(`INSERT INTO audit_log (id, action, actor_id, actor_role, resource_type, resource_id, details, ip_address, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(
-                require('uuid').v4(),
-                `CONSTITUTIONAL:${action}`,
-                entry.user_id,
-                entry.role,
-                'constitutional_enforcement',
-                action,
-                JSON.stringify({ allowed: entry.allowed, reason: entry.reason, charter: entry.charter, article: entry.article, separation: entry.separation }),
-                entry.ip,
-                entry.timestamp
-            );
+        db.prepare(
+            `INSERT INTO audit_log (id, action, actor_id, actor_role, resource_type, resource_id, details, ip_address, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+            require('uuid').v4(),
+            `CONSTITUTIONAL:${action}`,
+            entry.user_id,
+            entry.role,
+            'constitutional_enforcement',
+            action,
+            JSON.stringify({
+                allowed: entry.allowed,
+                reason: entry.reason,
+                charter: entry.charter,
+                article: entry.article,
+                separation: entry.separation,
+            }),
+            entry.ip,
+            entry.timestamp
+        );
     } catch (e) {
         console.error('[CONSTITUTIONAL-AUDIT] DB write fallback:', e.message);
     }
@@ -91,7 +98,10 @@ function requireDualKey(action, requiredRoles) {
         const secondRole = req.headers['x-second-approver-role'];
 
         if (!secondApprover || !secondRole) {
-            logConstitutionalAction(req, action, { allowed: false, reason: `Dual-key required: need x-second-approver and x-second-approver-role headers. Required roles: ${requiredRoles.join(' + ')}` });
+            logConstitutionalAction(req, action, {
+                allowed: false,
+                reason: `Dual-key required: need x-second-approver and x-second-approver-role headers. Required roles: ${requiredRoles.join(' + ')}`,
+            });
             return res.status(403).json({
                 error: 'Dual-key authorization required',
                 code: 'DUAL_KEY_REQUIRED',
@@ -122,7 +132,12 @@ function requireDualKey(action, requiredRoles) {
             reason: `Dual-key: ${req.user.role} + ${secondRole}`,
         });
 
-        req._dual_key = { first: req.user.id, second: secondApprover, first_role: req.user.role, second_role: secondRole };
+        req._dual_key = {
+            first: req.user.id,
+            second: secondApprover,
+            first_role: req.user.role,
+            second_role: secondRole,
+        };
         next();
     };
 }
@@ -168,29 +183,24 @@ router.get('/reserves/policy', (req, res) => {
 });
 
 // MUTATION: contribute to reserves → constitutional check
-router.post('/reserves/contribute',
-    requireConstitutionalWithAudit('monetization.treasury.payout'),
-    (req, res) => {
-        const { total_revenue, breakdown } = req.body;
-        if (!total_revenue) return res.status(400).json({ error: 'total_revenue required' });
-        res.json(reserves.contribute(total_revenue, breakdown));
-    }
-);
+router.post('/reserves/contribute', requireConstitutionalWithAudit('monetization.treasury.payout'), (req, res) => {
+    const { total_revenue, breakdown } = req.body;
+    if (!total_revenue) return res.status(400).json({ error: 'total_revenue required' });
+    res.json(reserves.contribute(total_revenue, breakdown));
+});
 
 // MUTATION: file claim → constitutional check
-router.post('/reserves/claim',
-    requireConstitutionalWithAudit('monetization.reserve.withdraw'),
-    (req, res) => {
-        const { reserve_id, amount, reason, evidence } = req.body;
-        if (!reserve_id || !amount) return res.status(400).json({ error: 'reserve_id and amount required' });
-        const result = reserves.fileClaim(reserve_id, amount, reason, req.user?.id || 'unknown', evidence);
-        if (result.error) return res.status(400).json(result);
-        res.status(201).json(result);
-    }
-);
+router.post('/reserves/claim', requireConstitutionalWithAudit('monetization.reserve.withdraw'), (req, res) => {
+    const { reserve_id, amount, reason, evidence } = req.body;
+    if (!reserve_id || !amount) return res.status(400).json({ error: 'reserve_id and amount required' });
+    const result = reserves.fileClaim(reserve_id, amount, reason, req.user?.id || 'unknown', evidence);
+    if (result.error) return res.status(400).json(result);
+    res.status(201).json(result);
+});
 
 // MUTATION: resolve claim → constitutional + DUAL-KEY
-router.put('/reserves/claim/:id/resolve',
+router.put(
+    '/reserves/claim/:id/resolve',
     requireConstitutionalWithAudit('monetization.reserve.withdraw'),
     requireDualKey('monetization.reserve.withdraw', ['risk_committee', 'compliance_officer']),
     (req, res) => {
@@ -211,7 +221,10 @@ router.get('/reserves/claims', (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 // DATA SOVEREIGNTY — /sovereignty (read-heavy, routing is auto)
 // ═══════════════════════════════════════════════════════════════════
-const sovereignty = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was data-sovereignty-engine
+const sovereignty = new Proxy(
+    {},
+    { get: (_, fn) => () => ({ status: 'archived', message: fn + ' has been archived' }) }
+); // ARCHIVED: was data-sovereignty-engine
 
 router.get('/sovereignty/zones', (req, res) => {
     res.json(sovereignty.getZones());
@@ -264,7 +277,7 @@ router.get('/regulatory/sanctions/:country', (req, res) => {
 // ENTERPRISE SLA — /sla
 // MUTATION: contracts, credit → Constitutional
 // ═══════════════════════════════════════════════════════════════════
-const sla = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was enterprise-sla-engine
+const sla = new Proxy({}, { get: (_, fn) => () => ({ status: 'archived', message: fn + ' has been archived' }) }); // ARCHIVED: was enterprise-sla-engine
 const { withTransaction } = require('../middleware/transaction');
 
 router.get('/sla/tiers', (req, res) => {
@@ -272,16 +285,13 @@ router.get('/sla/tiers', (req, res) => {
 });
 
 // MUTATION: create SLA contract → constitutional check (policy domain)
-router.post('/sla/contracts',
-    requireConstitutionalWithAudit('monetization.sla_credit.calculate'),
-    (req, res) => {
-        const { org_id, plan, custom_terms } = req.body;
-        if (!org_id || !plan) return res.status(400).json({ error: 'org_id and plan required' });
-        const result = sla.createContract(org_id, plan, custom_terms);
-        if (result.error) return res.status(400).json(result);
-        res.status(201).json(result);
-    }
-);
+router.post('/sla/contracts', requireConstitutionalWithAudit('monetization.sla_credit.calculate'), (req, res) => {
+    const { org_id, plan, custom_terms } = req.body;
+    if (!org_id || !plan) return res.status(400).json({ error: 'org_id and plan required' });
+    const result = sla.createContract(org_id, plan, custom_terms);
+    if (result.error) return res.status(400).json(result);
+    res.status(201).json(result);
+});
 
 router.get('/sla/contracts', requirePermission('admin:manage'), (req, res) => {
     res.json({ contracts: sla.getAllContracts() });
@@ -296,14 +306,11 @@ router.post('/sla/measure', (req, res) => {
 });
 
 // MUTATION: calculate credit → constitutional check
-router.post('/sla/credit',
-    requireConstitutionalWithAudit('monetization.sla_credit.calculate'),
-    (req, res) => {
-        const { org_id, period, monthly_bill } = req.body;
-        if (!org_id || !monthly_bill) return res.status(400).json({ error: 'org_id and monthly_bill required' });
-        res.json(sla.calculateCredit(org_id, period || new Date().toISOString().slice(0, 7), monthly_bill));
-    }
-);
+router.post('/sla/credit', requireConstitutionalWithAudit('monetization.sla_credit.calculate'), (req, res) => {
+    const { org_id, period, monthly_bill } = req.body;
+    if (!org_id || !monthly_bill) return res.status(400).json({ error: 'org_id and monthly_bill required' });
+    res.json(sla.calculateCredit(org_id, period || new Date().toISOString().slice(0, 7), monthly_bill));
+});
 
 router.get('/sla/compliance/:orgId', (req, res) => {
     const result = sla.getComplianceReport(req.params.orgId);

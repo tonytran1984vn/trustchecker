@@ -5,8 +5,8 @@
 const metrics = {
     requests: 0,
     errors: 0,
-    latencies: [],  // last 1000 latencies
-    byPath: {},     // path → { count, errors, totalMs }
+    latencies: [], // last 1000 latencies
+    byPath: {}, // path → { count, errors, totalMs }
     startTime: Date.now(),
 };
 

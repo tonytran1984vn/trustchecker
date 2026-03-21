@@ -1,0 +1,381 @@
+/* Stat Cards, Buttons, Inputs, Tables, Badges */
+/* ─── Stat Cards ────────────────────────────────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.stat-card:hover::before {
+  opacity: 1;
+}
+
+.stat-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+}
+
+.stat-card.cyan::after {
+  background: linear-gradient(90deg, var(--cyan), rgba(0, 240, 255, 0.4));
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.3);
+}
+
+.stat-card.violet::after {
+  background: linear-gradient(90deg, var(--violet), rgba(139, 92, 246, 0.4));
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.3);
+}
+
+.stat-card.emerald::after {
+  background: linear-gradient(90deg, var(--emerald), rgba(16, 185, 129, 0.4));
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+}
+
+.stat-card.amber::after {
+  background: linear-gradient(90deg, var(--amber), rgba(245, 158, 11, 0.4));
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+}
+
+.stat-card.rose::after {
+  background: linear-gradient(90deg, var(--rose), rgba(244, 63, 94, 0.4));
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.3);
+}
+
+.stat-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  border-color: var(--border-hover);
+}
+
+.stat-card.cyan:hover {
+  box-shadow: var(--shadow-md), 0 0 24px rgba(0, 240, 255, 0.12);
+}
+
+.stat-card.violet:hover {
+  box-shadow: var(--shadow-md), 0 0 24px rgba(139, 92, 246, 0.12);
+}
+
+.stat-card.emerald:hover {
+  box-shadow: var(--shadow-md), 0 0 24px rgba(16, 185, 129, 0.12);
+}
+
+.stat-card.amber:hover {
+  box-shadow: var(--shadow-md), 0 0 24px rgba(245, 158, 11, 0.12);
+}
+
+.stat-card.rose:hover {
+  box-shadow: var(--shadow-md), 0 0 24px rgba(244, 63, 94, 0.12);
+}
+
+.stat-card .stat-icon {
+  font-size: 1.5rem;
+  margin-bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: transform 0.3s ease;
+}
+
+.stat-card:hover .stat-icon {
+  transform: scale(1.1) rotate(-3deg);
+}
+
+.stat-card.cyan .stat-icon {
+  background: rgba(0, 240, 255, 0.08);
+  color: var(--cyan);
+}
+
+.stat-card.violet .stat-icon {
+  background: rgba(139, 92, 246, 0.08);
+  color: var(--violet);
+}
+
+.stat-card.emerald .stat-icon {
+  background: rgba(16, 185, 129, 0.08);
+  color: var(--emerald);
+}
+
+.stat-card.amber .stat-icon {
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--amber);
+}
+
+.stat-card.rose .stat-icon {
+  background: rgba(244, 63, 94, 0.08);
+  color: var(--rose);
+}
+
+.stat-card .stat-value {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.stat-card .stat-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-card .stat-change {
+  font-size: 0.7rem;
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+.stat-card .stat-change.up {
+  color: var(--emerald);
+}
+
+.stat-card .stat-change.down {
+  color: var(--rose);
+}
+
+/* ─── Buttons ───────────────────────────────────────────────── */
+.btn {
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0) scale(0.97);
+  transition-duration: 0.1s;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #06b6d4, #0ea5e9);
+  border: none;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #0ea5e9, #06b6d4);
+  box-shadow: 0 4px 16px rgba(6, 182, 212, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-danger {
+  border-color: var(--rose);
+  color: var(--rose);
+}
+
+.btn-danger:hover {
+  background: var(--rose-glow);
+}
+
+.btn-sm {
+  padding: 5px 12px;
+  font-size: 0.75rem;
+}
+
+/* ─── Inputs ────────────────────────────────────────────────── */
+.input-group {
+  margin-bottom: 14px;
+}
+
+.input-group label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-family: inherit;
+  transition: var(--transition);
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px var(--cyan-glow);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ─── Tables ────────────────────────────────────────────────── */
+.table-container {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  padding: 11px 14px;
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+th::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.1), transparent);
+}
+
+td {
+  padding: 11px 14px;
+  font-size: 0.82rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.012);
+}
+
+tr:hover td {
+  background: rgba(0, 240, 255, 0.03);
+  color: var(--text-primary);
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+/* ─── Badges ────────────────────────────────────────────────── */
+.badge {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.badge.valid {
+  background: var(--emerald-glow);
+  color: var(--emerald);
+}
+
+.badge.warning {
+  background: var(--amber-glow);
+  color: var(--amber);
+}
+
+.badge.suspicious {
+  background: var(--rose-glow);
+  color: var(--rose);
+}
+
+.badge.counterfeit {
+  background: var(--rose-glow);
+  color: var(--rose);
+}
+
+.badge.critical {
+  background: var(--rose-glow);
+  color: var(--rose);
+}
+
+.badge.high {
+  background: var(--amber-glow);
+  color: var(--amber);
+}
+
+.badge.medium {
+  background: var(--violet-glow);
+  color: var(--violet);
+}
+
+.badge.low {
+  background: var(--cyan-glow);
+  color: var(--cyan);
+}
+
+.badge.open {
+  background: var(--amber-glow);
+  color: var(--amber);
+}
+
+.badge.sealed {
+  background: var(--emerald-glow);
+  color: var(--emerald);
+}

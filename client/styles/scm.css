@@ -1,0 +1,530 @@
+/* SCM Health, Partner Cards, Inventory, Logistics */
+/* ═══════════════════════════════════════════════════════════════
+   SCM MODULE – Supply Chain Management Styles
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── SCM Health Panel ──────────────────────────────────────── */
+.scm-health {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.scm-health-item {
+  text-align: center;
+  padding: 20px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  transition: var(--transition);
+}
+
+.scm-health-item:hover {
+  border-color: var(--border-hover);
+  background: rgba(0, 240, 255, 0.03);
+}
+
+.scm-health-value {
+  font-size: 2rem;
+  font-weight: 900;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.2;
+}
+
+.scm-health-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ─── SCM Partner Cards ─────────────────────────────────────── */
+.partner-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  transition: var(--transition);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.partner-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--gradient-accent);
+  opacity: 0;
+  transition: var(--transition);
+}
+
+.partner-card:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md), 0 0 20px rgba(0, 240, 255, 0.06);
+}
+
+.partner-card:hover::before {
+  opacity: 1;
+}
+
+.partner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.partner-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.partner-type {
+  font-size: 0.72rem;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.partner-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.partner-trust {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.partner-trust-score {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+.partner-trust-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.partner-email {
+  margin-top: 8px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Partner type indicators */
+.partner-card[data-type="manufacturer"] {
+  border-left: 3px solid var(--cyan);
+}
+
+.partner-card[data-type="distributor"] {
+  border-left: 3px solid var(--violet);
+}
+
+.partner-card[data-type="logistics"] {
+  border-left: 3px solid var(--amber);
+}
+
+.partner-card[data-type="retailer"] {
+  border-left: 3px solid var(--emerald);
+}
+
+.partner-card[data-type="3pl"] {
+  border-left: 3px solid var(--amber);
+}
+
+/* ─── SCM Inventory ─────────────────────────────────────────── */
+.stock-bar {
+  position: relative;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  overflow: visible;
+  margin-top: 4px;
+}
+
+.stock-bar .stock-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.stock-bar .stock-fill.normal {
+  background: var(--emerald);
+}
+
+.stock-bar .stock-fill.low {
+  background: var(--rose);
+}
+
+.stock-bar .stock-fill.high {
+  background: var(--amber);
+}
+
+.stock-bar .stock-fill::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 14px;
+  background: inherit;
+  border-radius: 2px;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.stock-qty {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+}
+
+.stock-qty.normal {
+  color: var(--emerald);
+}
+
+.stock-qty.low {
+  color: var(--rose);
+}
+
+.stock-qty.high {
+  color: var(--amber);
+}
+
+/* AI Forecast panel */
+.forecast-panel {
+  border-radius: var(--radius-md);
+  padding: 14px;
+  background: rgba(0, 240, 255, 0.04);
+  border: 1px solid rgba(0, 240, 255, 0.1);
+  margin-bottom: 12px;
+}
+
+.forecast-panel .forecast-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+}
+
+.forecast-alert {
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ─── SCM Logistics ─────────────────────────────────────────── */
+.shipment-tracking {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--cyan);
+  letter-spacing: 0.3px;
+}
+
+.shipment-eta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.shipment-eta.future {
+  color: var(--emerald);
+  font-weight: 600;
+}
+
+.shipment-eta.past {
+  color: var(--text-muted);
+}
+
+.shipment-eta.overdue {
+  color: var(--rose);
+  font-weight: 700;
+}
+
+/* Shipment status badge colors */
+.badge.in_transit,
+.badge.in-transit {
+  background: var(--amber-glow);
+  color: var(--amber);
+}
+
+.badge.delivered {
+  background: var(--emerald-glow);
+  color: var(--emerald);
+}
+
+.badge.pending {
+  background: var(--rose-glow);
+  color: var(--rose);
+}
+
+.badge.processing {
+  background: var(--violet-glow);
+  color: var(--violet);
+}
+
+/* SLA Violation row */
+tr.sla-breached td {
+  background: rgba(244, 63, 94, 0.06) !important;
+}
+
+tr.sla-breached:hover td {
+  background: rgba(244, 63, 94, 0.1) !important;
+}
+
+/* ─── AI Optimization Panel ─────────────────────────────────── */
+.ai-panel {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: rgba(139, 92, 246, 0.04);
+  border: 1px solid rgba(139, 92, 246, 0.12);
+  margin-bottom: 16px;
+}
+
+.ai-panel-title {
+  font-weight: 700;
+  margin-bottom: 8px;
+  font-size: 0.88rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-panel-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.ai-panel-grid .label {
+  color: var(--text-muted);
+}
+
+/* ─── SCM Leak Monitor ─────────────────────────────────────── */
+.leak-scan-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.15), rgba(244, 63, 94, 0.05));
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  border-radius: var(--radius-sm);
+  color: var(--rose);
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.leak-scan-btn:hover {
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.25), rgba(244, 63, 94, 0.1));
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(244, 63, 94, 0.15);
+}
+
+.leak-platform-bar .factor-bar .fill {
+  background: linear-gradient(90deg, var(--rose), var(--amber)) !important;
+}
+
+/* ─── SCM TrustGraph ────────────────────────────────────────── */
+.risk-pills {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  padding: 20px;
+  flex-wrap: wrap;
+}
+
+.risk-pill {
+  text-align: center;
+  padding: 14px 28px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  transition: var(--transition);
+  min-width: 100px;
+}
+
+.risk-pill:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.risk-pill-value {
+  font-size: 1.5rem;
+  font-weight: 900;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.2;
+}
+
+.risk-pill-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+.risk-pill.critical {
+  border-color: rgba(244, 63, 94, 0.3);
+}
+
+.risk-pill.critical .risk-pill-value {
+  color: var(--rose);
+}
+
+.risk-pill.high {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.risk-pill.high .risk-pill-value {
+  color: var(--amber);
+}
+
+.risk-pill.medium {
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.risk-pill.medium .risk-pill-value {
+  color: var(--violet);
+}
+
+.risk-pill.low {
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.risk-pill.low .risk-pill-value {
+  color: var(--emerald);
+}
+
+/* Toxic row highlight in TrustGraph table */
+tr.toxic-node td {
+  background: rgba(244, 63, 94, 0.06) !important;
+  position: relative;
+}
+
+tr.toxic-node td:first-child::before {
+  content: '☠️';
+  margin-right: 4px;
+}
+
+tr.toxic-node:hover td {
+  background: rgba(244, 63, 94, 0.1) !important;
+}
+
+/* Graph node type badges */
+.badge.manufacturer {
+  background: var(--cyan-glow);
+  color: var(--cyan);
+}
+
+.badge.distributor {
+  background: var(--violet-glow);
+  color: var(--violet);
+}
+
+.badge.logistics {
+  background: var(--amber-glow);
+  color: var(--amber);
+}
+
+.badge.retailer {
+  background: var(--emerald-glow);
+  color: var(--emerald);
+}
+
+.badge.oem {
+  background: rgba(99, 102, 241, 0.15);
+  color: rgb(99, 102, 241);
+}
+
+/* ─── Connector Status Cards ────────────────────────────────── */
+.connector-card {
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  transition: var(--transition);
+}
+
+.connector-card:hover {
+  border-color: var(--border-hover);
+}
+
+.connector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.connector-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.connector-detail {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ─── SCM Animations ────────────────────────────────────────── */
+@keyframes glowPulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.1);
+  }
+
+  50% {
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+  }
+}
+
+@keyframes slideFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.scm-animate {
+  animation: slideFadeIn 0.4s ease forwards;
+}
+
+.scm-animate:nth-child(2) {
+  animation-delay: 0.05s;
+}
+
+.scm-animate:nth-child(3) {
+  animation-delay: 0.1s;
+}
+
+.scm-animate:nth-child(4) {
+  animation-delay: 0.15s;

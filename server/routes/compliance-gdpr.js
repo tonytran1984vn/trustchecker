@@ -6,8 +6,8 @@ const { safeError } = require('../utils/safe-error');
 const { withTransaction } = require('../middleware/transaction');
 
 function _safeId(name) {
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error("Invalid identifier: " + name);
-  return name;
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error('Invalid identifier: ' + name);
+    return name;
 }
 
 const express = require('express');
@@ -22,7 +22,10 @@ router.use(authMiddleware);
 router.get('/policies', requirePermission('compliance:manage'), async (req, res) => {
     try {
         const orgId = req.user.orgId;
-        const policies = await db.all('SELECT * FROM data_retention_policies WHERE org_id = $1 ORDER BY created_at DESC LIMIT 1000', [orgId]);
+        const policies = await db.all(
+            'SELECT * FROM data_retention_policies WHERE org_id = $1 ORDER BY created_at DESC LIMIT 1000',
+            [orgId]
+        );
 
         // If no policies, return defaults
         if (policies.length === 0) {
@@ -47,26 +50,58 @@ router.get('/policies', requirePermission('compliance:manage'), async (req, res)
 router.post('/policies', requirePermission('compliance:manage'), async (req, res) => {
     try {
         const { table_name, retention_days, action } = req.body;
-        if (!table_name || !retention_days) return res.status(400).json({ error: 'table_name and retention_days required' });
+        if (!table_name || !retention_days)
+            return res.status(400).json({ error: 'table_name and retention_days required' });
 
         const validActions = ['archive', 'delete', 'anonymize'];
-        const validTables = ['scan_events', 'audit_log', 'fraud_alerts', 'support_tickets', 'usage_metrics',
-            'webhook_events', 'supply_chain_events', 'leak_alerts', 'anomaly_detections', 'ticket_messages'];
+        const validTables = [
+            'scan_events',
+            'audit_log',
+            'fraud_alerts',
+            'support_tickets',
+            'usage_metrics',
+            'webhook_events',
+            'supply_chain_events',
+            'leak_alerts',
+            'anomaly_detections',
+            'ticket_messages',
+        ];
 
-        if (!validTables.includes(table_name)) return res.status(400).json({ error: `Invalid table. Choose: ${validTables.join(', ')}` });
+        if (!validTables.includes(table_name))
+            return res.status(400).json({ error: `Invalid table. Choose: ${validTables.join(', ')}` });
 
         // Upsert: check if policy exists
         const orgId = req.user.orgId;
-        const existing = await db.get('SELECT * FROM data_retention_policies WHERE table_name = $1 AND org_id = $2', [table_name, orgId]);
+        const existing = await db.get('SELECT * FROM data_retention_policies WHERE table_name = $1 AND org_id = $2', [
+            table_name,
+            orgId,
+        ]);
         if (existing) {
-            await db.prepare('UPDATE data_retention_policies SET retention_days = ?, action = ? WHERE id = ?')
+            await db
+                .prepare('UPDATE data_retention_policies SET retention_days = ?, action = ? WHERE id = ?')
                 .run(retention_days, validActions.includes(action) ? action : 'archive', existing.id);
-            return res.json({ id: existing.id, table_name, retention_days, action: action || 'archive', updated: true });
+            return res.json({
+                id: existing.id,
+                table_name,
+                retention_days,
+                action: action || 'archive',
+                updated: true,
+            });
         }
 
         const id = uuidv4();
-        await db.prepare('INSERT INTO data_retention_policies (id, table_name, retention_days, action, created_by, org_id) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(id, table_name, retention_days, validActions.includes(action) ? action : 'archive', req.user.id, orgId);
+        await db
+            .prepare(
+                'INSERT INTO data_retention_policies (id, table_name, retention_days, action, created_by, org_id) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                id,
+                table_name,
+                retention_days,
+                validActions.includes(action) ? action : 'archive',
+                req.user.id,
+                orgId
+            );
 
         res.status(201).json({ id, table_name, retention_days, action: action || 'archive' });
     } catch (e) {
@@ -78,18 +113,35 @@ router.post('/policies', requirePermission('compliance:manage'), async (req, res
 router.post('/policies/execute', requirePermission('compliance:manage'), async (req, res) => {
     try {
         const orgId = req.user.orgId;
-        const policies = await db.all("SELECT * FROM data_retention_policies WHERE is_active = 1 AND org_id = $1", [orgId]);
+        const policies = await db.all('SELECT * FROM data_retention_policies WHERE is_active = 1 AND org_id = $1', [
+            orgId,
+        ]);
         const results = [];
 
         for (const policy of policies) {
             try {
                 // Validate table name against allowlist (Fix: dynamic table name in SQL)
-                const validTables = ['scan_events', 'audit_log', 'fraud_alerts', 'support_tickets',
-                    'usage_metrics', 'webhook_events', 'supply_chain_events', 'leak_alerts',
-                    'anomaly_detections', 'ticket_messages'];
+                const validTables = [
+                    'scan_events',
+                    'audit_log',
+                    'fraud_alerts',
+                    'support_tickets',
+                    'usage_metrics',
+                    'webhook_events',
+                    'supply_chain_events',
+                    'leak_alerts',
+                    'anomaly_detections',
+                    'ticket_messages',
+                ];
                 if (!validTables.includes(policy.table_name)) {
-                    results.push({ table: policy.table_name, action: policy.action, affected: 0, status: 'error', error: 'Invalid table name' });
-                    continue;  // was 'return' — would abort entire loop
+                    results.push({
+                        table: policy.table_name,
+                        action: policy.action,
+                        affected: 0,
+                        status: 'error',
+                        error: 'Invalid table name',
+                    });
+                    continue; // was 'return' — would abort entire loop
                 }
 
                 const cutoff = new Date(Date.now() - policy.retention_days * 86400000).toISOString();
@@ -110,37 +162,64 @@ router.post('/policies/execute', requirePermission('compliance:manage'), async (
                 };
                 const dateCol = VALID_DATE_COLUMNS[policy.table_name];
                 if (!dateCol) {
-                    results.push({ table: policy.table_name, action: policy.action, affected: 0, status: 'error', error: 'Unknown date column for table' });
+                    results.push({
+                        table: policy.table_name,
+                        action: policy.action,
+                        affected: 0,
+                        status: 'error',
+                        error: 'Unknown date column for table',
+                    });
                     continue;
                 }
 
                 if (policy.action === 'delete') {
-                    const count = await db.get(`SELECT COUNT(*) as c FROM ${_safeId(policy.table_name)} WHERE ${_safeId(dateCol)} < ?`, [cutoff]);
+                    const count = await db.get(
+                        `SELECT COUNT(*) as c FROM ${_safeId(policy.table_name)} WHERE ${_safeId(dateCol)} < ?`,
+                        [cutoff]
+                    );
                     affected = count?.c || 0;
                     if (affected > 0) {
-                        await db.run(`DELETE FROM ${_safeId(policy.table_name)} WHERE ${_safeId(dateCol)} < ?`, [cutoff]);
+                        await db.run(`DELETE FROM ${_safeId(policy.table_name)} WHERE ${_safeId(dateCol)} < ?`, [
+                            cutoff,
+                        ]);
                     }
                 } else if (policy.action === 'archive') {
                     // Count what would be archived (simulate)
-                    const count = await db.get(`SELECT COUNT(*) as c FROM ${_safeId(policy.table_name)} WHERE ${_safeId(dateCol)} < ?`, [cutoff]);
+                    const count = await db.get(
+                        `SELECT COUNT(*) as c FROM ${_safeId(policy.table_name)} WHERE ${_safeId(dateCol)} < ?`,
+                        [cutoff]
+                    );
                     affected = count?.c || 0;
                     // In production, would move to archive table
                 } else if (policy.action === 'anonymize') {
-                    const count = await db.get(`SELECT COUNT(*) as c FROM ${_safeId(policy.table_name)} WHERE ${_safeId(dateCol)} < ?`, [cutoff]);
+                    const count = await db.get(
+                        `SELECT COUNT(*) as c FROM ${_safeId(policy.table_name)} WHERE ${_safeId(dateCol)} < ?`,
+                        [cutoff]
+                    );
                     affected = count?.c || 0;
                 }
 
                 // Update policy execution
-                await db.prepare("UPDATE data_retention_policies SET last_run = NOW(), records_affected = ? WHERE id = ?")
+                await db
+                    .prepare('UPDATE data_retention_policies SET last_run = NOW(), records_affected = ? WHERE id = ?')
                     .run(affected, policy.id);
 
                 results.push({ table: policy.table_name, action: policy.action, affected, status: 'success' });
             } catch (err) {
-                results.push({ table: policy.table_name, action: policy.action, affected: 0, status: 'error', error: 'Execution failed' });
+                results.push({
+                    table: policy.table_name,
+                    action: policy.action,
+                    affected: 0,
+                    status: 'error',
+                    error: 'Execution failed',
+                });
             }
         }
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
             .run(uuidv4(), req.user.id, 'RETENTION_EXECUTED', 'system', 'retention', JSON.stringify({ results }));
 
         res.json({ executed: results.length, results });
@@ -154,18 +233,73 @@ router.get('/gdpr/export', async (req, res) => {
     try {
         const userId = req.user.id;
         const orgId = req.user.orgId;
-        const user = await db.get('SELECT id, username, email, role, company, created_at, last_login FROM users WHERE id = $1', [userId]);
+        const user = await db.get(
+            'SELECT id, username, email, role, company, created_at, last_login FROM users WHERE id = $1',
+            [userId]
+        );
 
-        let scans = [], tickets = [], auditLog = [], sessions = [], billing = null, invoices = [];
+        let scans = [],
+            tickets = [],
+            auditLog = [],
+            sessions = [],
+            billing = null,
+            invoices = [];
 
-        try { scans = await db.all('SELECT id, result, fraud_score, trust_score, scanned_at FROM scan_events WHERE user_id = $1 ORDER BY scanned_at DESC LIMIT 100', [userId]); } catch (e) {
-            try { scans = await db.all('SELECT id, result, fraud_score, trust_score, scanned_at FROM scan_events WHERE org_id = $1 ORDER BY scanned_at DESC LIMIT 100', [orgId]); } catch (e2) { /* skip */ }
+        try {
+            scans = await db.all(
+                'SELECT id, result, fraud_score, trust_score, scanned_at FROM scan_events WHERE user_id = $1 ORDER BY scanned_at DESC LIMIT 100',
+                [userId]
+            );
+        } catch (e) {
+            try {
+                scans = await db.all(
+                    'SELECT id, result, fraud_score, trust_score, scanned_at FROM scan_events WHERE org_id = $1 ORDER BY scanned_at DESC LIMIT 100',
+                    [orgId]
+                );
+            } catch (e2) {
+                /* skip */
+            }
         }
-        try { tickets = await db.all('SELECT id, subject, status, priority, created_at FROM support_tickets WHERE user_id = $1', [userId]); } catch (e) { /* skip */ }
-        try { auditLog = await db.all('SELECT id, action, entity_type, entity_id, timestamp FROM audit_log WHERE actor_id = $1 ORDER BY timestamp DESC LIMIT 200', [userId]); } catch (e) { /* skip */ }
-        try { sessions = await db.all('SELECT id, ip_address, user_agent, created_at FROM sessions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1000', [userId]); } catch (e) { /* skip */ }
-        try { billing = await db.get("SELECT id, plan_name, status, scan_limit, api_limit, created_at FROM billing_plans WHERE user_id = $1 AND status = 'active'", [userId]); } catch (e) { /* skip */ }
-        try { invoices = await db.all('SELECT id, plan_name, amount, status, period_start, period_end FROM invoices WHERE user_id = $1', [userId]); } catch (e) { /* skip */ }
+        try {
+            tickets = await db.all(
+                'SELECT id, subject, status, priority, created_at FROM support_tickets WHERE user_id = $1',
+                [userId]
+            );
+        } catch (e) {
+            /* skip */
+        }
+        try {
+            auditLog = await db.all(
+                'SELECT id, action, entity_type, entity_id, timestamp FROM audit_log WHERE actor_id = $1 ORDER BY timestamp DESC LIMIT 200',
+                [userId]
+            );
+        } catch (e) {
+            /* skip */
+        }
+        try {
+            sessions = await db.all(
+                'SELECT id, ip_address, user_agent, created_at FROM sessions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1000',
+                [userId]
+            );
+        } catch (e) {
+            /* skip */
+        }
+        try {
+            billing = await db.get(
+                "SELECT id, plan_name, status, scan_limit, api_limit, created_at FROM billing_plans WHERE user_id = $1 AND status = 'active'",
+                [userId]
+            );
+        } catch (e) {
+            /* skip */
+        }
+        try {
+            invoices = await db.all(
+                'SELECT id, plan_name, amount, status, period_start, period_end FROM invoices WHERE user_id = $1',
+                [userId]
+            );
+        } catch (e) {
+            /* skip */
+        }
 
         const exportData = {
             export_type: 'GDPR Data Subject Access Request',
@@ -177,13 +311,26 @@ router.get('/gdpr/export', async (req, res) => {
             support_tickets: tickets,
             audit_log: auditLog,
             sessions,
-            billing: { plan: billing, invoices }
+            billing: { plan: billing, invoices },
         };
 
         try {
-            await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
-                .run(uuidv4(), userId, 'GDPR_DATA_EXPORT', 'user', userId, JSON.stringify({ records_exported: auditLog.length + scans.length + tickets.length }), orgId);
-        } catch (e) { console.warn('[gdpr] audit log insert failed:', e.message); }
+            await db
+                .prepare(
+                    'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+                )
+                .run(
+                    uuidv4(),
+                    userId,
+                    'GDPR_DATA_EXPORT',
+                    'user',
+                    userId,
+                    JSON.stringify({ records_exported: auditLog.length + scans.length + tickets.length }),
+                    orgId
+                );
+        } catch (e) {
+            console.warn('[gdpr] audit log insert failed:', e.message);
+        }
 
         res.json(exportData);
     } catch (e) {
@@ -215,7 +362,10 @@ router.delete('/gdpr/delete', async (req, res) => {
         const anonEmail = `deleted_${Date.now()}@anonymized.local`;
         const anonName = `Deleted User ${userId.substring(0, 8)}`;
 
-        await db.prepare("UPDATE users SET email = ?, username = ?, company = 'DELETED', mfa_enabled = 0, mfa_secret = NULL WHERE id = ?")
+        await db
+            .prepare(
+                "UPDATE users SET email = ?, username = ?, company = 'DELETED', mfa_enabled = 0, mfa_secret = NULL WHERE id = ?"
+            )
             .run(anonEmail, anonName, userId);
 
         // Clear sessions
@@ -226,16 +376,28 @@ router.delete('/gdpr/delete', async (req, res) => {
 
         // Clear tickets
         await db.run('DELETE FROM ticket_messages WHERE sender_id = ?', [userId]);
-        await db.prepare("UPDATE support_tickets SET user_id = 'ANONYMIZED', description = '[REDACTED]' WHERE user_id = ?").run(userId);
+        await db
+            .prepare("UPDATE support_tickets SET user_id = 'ANONYMIZED', description = '[REDACTED]' WHERE user_id = ?")
+            .run(userId);
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), 'SYSTEM', 'GDPR_DELETION', 'user', userId, JSON.stringify({ anonymized: true, timestamp: new Date().toISOString() }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                'SYSTEM',
+                'GDPR_DELETION',
+                'user',
+                userId,
+                JSON.stringify({ anonymized: true, timestamp: new Date().toISOString() })
+            );
 
         res.json({
             status: 'completed',
             message: 'Your personal data has been anonymized per GDPR Article 17',
             actions: ['Profile anonymized', 'Sessions cleared', 'Audit log anonymized', 'Support tickets redacted'],
-            note: 'Blockchain seals are retained for integrity but are not linked to your identity'
+            note: 'Blockchain seals are retained for integrity but are not linked to your identity',
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -245,11 +407,18 @@ router.delete('/gdpr/delete', async (req, res) => {
 // ─── GET /gdpr/consent — Consent status ─────────────────────
 router.get('/gdpr/consent', async (req, res) => {
     try {
-        const consent = await db.get("SELECT details FROM audit_log WHERE actor_id = $1 AND action = 'CONSENT_GIVEN' ORDER BY timestamp DESC LIMIT 1", [req.user.id]);
+        const consent = await db.get(
+            "SELECT details FROM audit_log WHERE actor_id = $1 AND action = 'CONSENT_GIVEN' ORDER BY timestamp DESC LIMIT 1",
+            [req.user.id]
+        );
 
         let consentDetails = null;
         if (consent?.details) {
-            try { consentDetails = JSON.parse(consent.details); } catch (e) { consentDetails = { raw: consent.details }; }
+            try {
+                consentDetails = JSON.parse(consent.details);
+            } catch (e) {
+                consentDetails = { raw: consent.details };
+            }
         }
 
         res.json({
@@ -257,10 +426,14 @@ router.get('/gdpr/consent', async (req, res) => {
             consent_status: consent ? 'given' : 'pending',
             consent_details: consentDetails,
             required_consents: [
-                { type: 'data_processing', description: 'Processing of personal data for authentication and service delivery', required: true },
+                {
+                    type: 'data_processing',
+                    description: 'Processing of personal data for authentication and service delivery',
+                    required: true,
+                },
                 { type: 'analytics', description: 'Usage analytics to improve the platform', required: false },
-                { type: 'marketing', description: 'Marketing communications', required: false }
-            ]
+                { type: 'marketing', description: 'Marketing communications', required: false },
+            ],
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -272,14 +445,30 @@ router.post('/gdpr/consent', async (req, res) => {
     try {
         const { data_processing, analytics, marketing } = req.body;
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'CONSENT_GIVEN', 'user', req.user.id,
-                JSON.stringify({ data_processing: !!data_processing, analytics: !!analytics, marketing: !!marketing, timestamp: new Date().toISOString(), ip: req.ip }), req.user.orgId);
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'CONSENT_GIVEN',
+                'user',
+                req.user.id,
+                JSON.stringify({
+                    data_processing: !!data_processing,
+                    analytics: !!analytics,
+                    marketing: !!marketing,
+                    timestamp: new Date().toISOString(),
+                    ip: req.ip,
+                }),
+                req.user.orgId
+            );
 
         res.json({
             status: 'recorded',
             consents: { data_processing: !!data_processing, analytics: !!analytics, marketing: !!marketing },
-            recorded_at: new Date().toISOString()
+            recorded_at: new Date().toISOString(),
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -291,16 +480,25 @@ router.get('/report', requirePermission('compliance:manage'), async (req, res) =
     try {
         const orgId = req.user.orgId;
         const totalUsers = (await db.get('SELECT COUNT(*) as c FROM users WHERE org_id = $1', [orgId]))?.c || 0;
-        const consented = (await db.get("SELECT COUNT(DISTINCT actor_id) as c FROM audit_log WHERE action = 'CONSENT_GIVEN'"))?.c || 0;
+        const consented =
+            (await db.get("SELECT COUNT(DISTINCT actor_id) as c FROM audit_log WHERE action = 'CONSENT_GIVEN'"))?.c ||
+            0;
         const exports = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE action = 'GDPR_DATA_EXPORT'"))?.c || 0;
         const deletions = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE action = 'GDPR_DELETION'"))?.c || 0;
-        const retentionPolicies = await db.all('SELECT * FROM data_retention_policies WHERE is_active = 1 AND org_id = $1', [orgId]);
+        const retentionPolicies = await db.all(
+            'SELECT * FROM data_retention_policies WHERE is_active = 1 AND org_id = $1',
+            [orgId]
+        );
         const auditEntries = (await db.get('SELECT COUNT(*) as c FROM audit_log WHERE org_id = $1', [orgId]))?.c || 0;
 
         res.json({
             report_type: 'GDPR Compliance Report',
             generated_at: new Date().toISOString(),
-            user_statistics: { total_users: totalUsers, consented_users: consented, consent_rate: totalUsers > 0 ? Math.round((consented / totalUsers) * 100) + '%' : 'N/A' },
+            user_statistics: {
+                total_users: totalUsers,
+                consented_users: consented,
+                consent_rate: totalUsers > 0 ? Math.round((consented / totalUsers) * 100) + '%' : 'N/A',
+            },
             data_subject_requests: { exports, deletions },
             data_retention: { active_policies: retentionPolicies.length, policies: retentionPolicies },
             audit: { total_entries: auditEntries },
@@ -311,8 +509,8 @@ router.get('/report', requirePermission('compliance:manage'), async (req, res) =
                 consent_management: consented > 0 ? 'compliant' : 'needs_attention',
                 data_retention: retentionPolicies.length > 0 ? 'compliant' : 'needs_attention',
                 encryption: 'compliant (bcrypt + SHA-256)',
-                breach_notification: 'monitoring_active'
-            }
+                breach_notification: 'monitoring_active',
+            },
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -323,22 +521,49 @@ router.get('/report', requirePermission('compliance:manage'), async (req, res) =
 router.get('/stats', async (req, res) => {
     try {
         const orgId = req.user.orgId;
-        const totalPolicies = (await db.get('SELECT COUNT(*) as c FROM data_retention_policies WHERE org_id = $1', [orgId]))?.c || 0;
-        const activePolicies = (await db.get("SELECT COUNT(*) as c FROM data_retention_policies WHERE is_active = 1 AND org_id = $1", [orgId]))?.c || 0;
+        const totalPolicies =
+            (await db.get('SELECT COUNT(*) as c FROM data_retention_policies WHERE org_id = $1', [orgId]))?.c || 0;
+        const activePolicies =
+            (
+                await db.get('SELECT COUNT(*) as c FROM data_retention_policies WHERE is_active = 1 AND org_id = $1', [
+                    orgId,
+                ])
+            )?.c || 0;
         const auditEntries = (await db.get('SELECT COUNT(*) as c FROM audit_log WHERE org_id = $1', [orgId]))?.c || 0;
 
         let complianceRecords = 0;
         let frameworks = [];
         try {
-            complianceRecords = (await db.get('SELECT COUNT(*) as c FROM compliance_records WHERE org_id = $1', [orgId]))?.c || 0;
-            frameworks = await db.all('SELECT framework, status, COUNT(*) as count FROM compliance_records WHERE org_id = $1 GROUP BY framework, status', [orgId]);
-        } catch (e) { /* table may not exist */ }
+            complianceRecords =
+                (await db.get('SELECT COUNT(*) as c FROM compliance_records WHERE org_id = $1', [orgId]))?.c || 0;
+            frameworks = await db.all(
+                'SELECT framework, status, COUNT(*) as count FROM compliance_records WHERE org_id = $1 GROUP BY framework, status',
+                [orgId]
+            );
+        } catch (e) {
+            /* table may not exist */
+        }
 
-        let gdprExports = 0, gdprDeletions = 0;
+        let gdprExports = 0,
+            gdprDeletions = 0;
         try {
-            gdprExports = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE (action = 'GDPR_EXPORT' OR action = 'GDPR_DATA_EXPORT') AND org_id = $1", [orgId]))?.c || 0;
-            gdprDeletions = (await db.get("SELECT COUNT(*) as c FROM audit_log WHERE (action = 'GDPR_DELETION' OR action = 'GDPR_DATA_DELETION') AND org_id = $1", [orgId]))?.c || 0;
-        } catch (e) { console.warn('[compliance] GDPR stats query skipped:', e.message); }
+            gdprExports =
+                (
+                    await db.get(
+                        "SELECT COUNT(*) as c FROM audit_log WHERE (action = 'GDPR_EXPORT' OR action = 'GDPR_DATA_EXPORT') AND org_id = $1",
+                        [orgId]
+                    )
+                )?.c || 0;
+            gdprDeletions =
+                (
+                    await db.get(
+                        "SELECT COUNT(*) as c FROM audit_log WHERE (action = 'GDPR_DELETION' OR action = 'GDPR_DATA_DELETION') AND org_id = $1",
+                        [orgId]
+                    )
+                )?.c || 0;
+        } catch (e) {
+            console.warn('[compliance] GDPR stats query skipped:', e.message);
+        }
 
         res.json({
             total_policies: totalPolicies,
@@ -348,7 +573,7 @@ router.get('/stats', async (req, res) => {
             gdpr: { exports: gdprExports, deletions: gdprDeletions },
             audit_entries: auditEntries,
             compliance_score: activePolicies > 0 ? 85 : 40,
-            status: activePolicies > 0 ? 'compliant' : 'needs_attention'
+            status: activePolicies > 0 ? 'compliant' : 'needs_attention',
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -360,14 +585,41 @@ router.get('/records', async (req, res) => {
     try {
         let records = [];
         try {
-            records = await db.all('SELECT * FROM compliance_records WHERE org_id = $1 ORDER BY created_at DESC LIMIT 100', [req.user.orgId]);
+            records = await db.all(
+                'SELECT * FROM compliance_records WHERE org_id = $1 ORDER BY created_at DESC LIMIT 100',
+                [req.user.orgId]
+            );
         } catch (e) {
             // Table may not exist — return simulated data
             records = [
-                { id: 'cr-1', framework: 'GDPR', requirement: 'Data Processing Records', status: 'compliant', last_audit: new Date().toISOString() },
-                { id: 'cr-2', framework: 'GDPR', requirement: 'Data Subject Rights', status: 'compliant', last_audit: new Date().toISOString() },
-                { id: 'cr-3', framework: 'ISO 27001', requirement: 'Access Control', status: 'compliant', last_audit: new Date().toISOString() },
-                { id: 'cr-4', framework: 'SOC 2', requirement: 'Encryption at Rest', status: 'in_progress', last_audit: new Date().toISOString() },
+                {
+                    id: 'cr-1',
+                    framework: 'GDPR',
+                    requirement: 'Data Processing Records',
+                    status: 'compliant',
+                    last_audit: new Date().toISOString(),
+                },
+                {
+                    id: 'cr-2',
+                    framework: 'GDPR',
+                    requirement: 'Data Subject Rights',
+                    status: 'compliant',
+                    last_audit: new Date().toISOString(),
+                },
+                {
+                    id: 'cr-3',
+                    framework: 'ISO 27001',
+                    requirement: 'Access Control',
+                    status: 'compliant',
+                    last_audit: new Date().toISOString(),
+                },
+                {
+                    id: 'cr-4',
+                    framework: 'SOC 2',
+                    requirement: 'Encryption at Rest',
+                    status: 'in_progress',
+                    last_audit: new Date().toISOString(),
+                },
             ];
         }
         res.json({ records, total: records.length });
@@ -380,15 +632,39 @@ router.get('/records', async (req, res) => {
 router.get('/retention', async (req, res) => {
     try {
         const orgId = req.user.orgId;
-        const policies = await db.all('SELECT * FROM data_retention_policies WHERE org_id = $1 ORDER BY created_at DESC LIMIT 1000', [orgId]);
+        const policies = await db.all(
+            'SELECT * FROM data_retention_policies WHERE org_id = $1 ORDER BY created_at DESC LIMIT 1000',
+            [orgId]
+        );
         if (policies.length === 0) {
             return res.json({
                 policies: [
-                    { id: 'default-1', table_name: 'audit_log', retention_days: 365, action: 'archive', is_active: true, is_default: true },
-                    { id: 'default-2', table_name: 'scan_events', retention_days: 180, action: 'delete', is_active: true, is_default: true },
-                    { id: 'default-3', table_name: 'fraud_alerts', retention_days: 730, action: 'archive', is_active: true, is_default: true },
+                    {
+                        id: 'default-1',
+                        table_name: 'audit_log',
+                        retention_days: 365,
+                        action: 'archive',
+                        is_active: true,
+                        is_default: true,
+                    },
+                    {
+                        id: 'default-2',
+                        table_name: 'scan_events',
+                        retention_days: 180,
+                        action: 'delete',
+                        is_active: true,
+                        is_default: true,
+                    },
+                    {
+                        id: 'default-3',
+                        table_name: 'fraud_alerts',
+                        retention_days: 730,
+                        action: 'archive',
+                        is_active: true,
+                        is_default: true,
+                    },
                 ],
-                total: 3
+                total: 3,
             });
         }
         res.json({ policies, total: policies.length });
@@ -544,10 +820,10 @@ router.get('/certifications/:id', (req, res) => {
                 summary: trust_services_criteria
                     ? `${trust_services_criteria.length} criteria, all compliant`
                     : annex_a_controls
-                        ? `${annex_a_controls.implemented}/${annex_a_controls.applicable} controls implemented`
-                        : gs1_standards_supported
-                            ? `${gs1_standards_supported.length} GS1 standards supported`
-                            : null,
+                      ? `${annex_a_controls.implemented}/${annex_a_controls.applicable} controls implemented`
+                      : gs1_standards_supported
+                        ? `${gs1_standards_supported.length} GS1 standards supported`
+                        : null,
             },
         });
     }
@@ -556,10 +832,9 @@ router.get('/certifications/:id', (req, res) => {
 // ─── GET /certifications/readiness — Plan-based readiness assessment ─
 router.get('/certifications/readiness', async (req, res) => {
     try {
-        const plan = await db.get(
-            "SELECT plan_name FROM billing_plans WHERE user_id = ? AND status = 'active'",
-            [req.user.id]
-        );
+        const plan = await db.get("SELECT plan_name FROM billing_plans WHERE user_id = ? AND status = 'active'", [
+            req.user.id,
+        ]);
         const planName = plan?.plan_name || 'free';
 
         const readiness = Object.entries(CERTIFICATIONS).map(([id, cert]) => {
@@ -587,9 +862,10 @@ router.get('/certifications/readiness', async (req, res) => {
             plan: planName,
             readiness,
             compliance_score: complianceScore,
-            recommendation: complianceScore < 100
-                ? `Upgrade to access ${totalCount - availableCount} more certifications`
-                : 'Full compliance coverage on your current plan',
+            recommendation:
+                complianceScore < 100
+                    ? `Upgrade to access ${totalCount - availableCount} more certifications`
+                    : 'Full compliance coverage on your current plan',
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);

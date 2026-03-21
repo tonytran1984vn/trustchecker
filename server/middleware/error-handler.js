@@ -11,19 +11,21 @@ function errorHandler() {
         const traceId = req.traceId || req.headers['x-request-id'] || 'unknown';
 
         // Log full error details
-        console.error(JSON.stringify({
-            level: 'error',
-            type: 'unhandled_error',
-            trace: traceId,
-            method: req.method,
-            path: req.path,
-            status,
-            error: err.message,
-            stack: isProduction ? undefined : err.stack,
-            user: req.user?.id || null,
-            org: req.user?.orgId || null,
-            timestamp: new Date().toISOString(),
-        }));
+        console.error(
+            JSON.stringify({
+                level: 'error',
+                type: 'unhandled_error',
+                trace: traceId,
+                method: req.method,
+                path: req.path,
+                status,
+                error: err.message,
+                stack: isProduction ? undefined : err.stack,
+                user: req.user?.id || null,
+                org: req.user?.orgId || null,
+                timestamp: new Date().toISOString(),
+            })
+        );
 
         // Sanitized response
         res.status(status).json({

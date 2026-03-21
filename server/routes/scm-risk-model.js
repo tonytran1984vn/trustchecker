@@ -11,7 +11,6 @@ const { authMiddleware, requireRole, requirePermission } = require('../auth');
 
 const router = express.Router();
 
-
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
 
@@ -21,7 +20,12 @@ router.get('/models', authMiddleware, async (req, res) => {
         let query = 'SELECT * FROM risk_models';
         query += ' ORDER BY created_at DESC';
         const models = await db.prepare(query).all();
-        res.json({ models: models.map(m => ({ ...m, weights: typeof m.weights === 'string' ? JSON.parse(m.weights || '{}') : (m.weights || {}) })) });
+        res.json({
+            models: models.map(m => ({
+                ...m,
+                weights: typeof m.weights === 'string' ? JSON.parse(m.weights || '{}') : m.weights || {},
+            })),
+        });
     } catch (err) {
         console.error('List models error:', err);
         res.status(500).json({ error: 'Failed to fetch models' });
@@ -35,7 +39,10 @@ router.get('/models/production', authMiddleware, async (req, res) => {
             SELECT * FROM risk_models WHERE status = 'production' LIMIT 1
         `);
         if (!model) return res.status(404).json({ error: 'No production model found' });
-        res.json({ ...model, weights: typeof model.weights === 'string' ? JSON.parse(model.weights || '{}') : (model.weights || {}) });
+        res.json({
+            ...model,
+            weights: typeof model.weights === 'string' ? JSON.parse(model.weights || '{}') : model.weights || {},
+        });
     } catch (err) {
         console.error('Get production model error:', err);
         res.status(500).json({ error: 'Failed to fetch production model' });
@@ -48,17 +55,32 @@ router.post('/models', authMiddleware, async (req, res) => {
         const { version, weights, factors, fp_rate, tp_rate, change_summary, test_dataset } = req.body;
         const id = uuidv4();
         const orgId = req.user?.org_id || req.user?.orgId || null;
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO risk_models (id, version, status, weights, factors, fp_rate, tp_rate, change_summary, test_dataset, org_id, created_at)
             VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, NOW())
-        `, [id, version, JSON.stringify(weights || {}), factors || 12,
-            fp_rate || '', tp_rate || '', change_summary || '', test_dataset || '', orgId]);
+        `,
+            [
+                id,
+                version,
+                JSON.stringify(weights || {}),
+                factors || 12,
+                fp_rate || '',
+                tp_rate || '',
+                change_summary || '',
+                test_dataset || '',
+                orgId,
+            ]
+        );
 
         // Log audit
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
             VALUES (?, ?, 'model_created', 'risk_model', ?, ?, NOW())
-        `, [uuidv4(), req.user?.id || 'system', id, JSON.stringify({ version })]);
+        `,
+            [uuidv4(), req.user?.id || 'system', id, JSON.stringify({ version })]
+        );
 
         res.status(201).json({ id, version, status: 'draft' });
     } catch (err) {
@@ -71,10 +93,13 @@ router.post('/models', authMiddleware, async (req, res) => {
 router.post('/models/:id/sandbox', authMiddleware, requirePermission('risk_model:manage'), async (req, res) => {
     try {
         await db.run(`UPDATE risk_models SET status = 'sandbox' WHERE id = ? AND status = 'draft'`, [req.params.id]);
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
             VALUES (?, ?, 'model_to_sandbox', 'risk_model', ?, '{}', NOW())
-        `, [uuidv4(), req.user?.id || 'system', req.params.id]);
+        `,
+            [uuidv4(), req.user?.id || 'system', req.params.id]
+        );
         res.json({ id: req.params.id, status: 'sandbox' });
     } catch (err) {
         console.error('Sandbox model error:', err);
@@ -103,20 +128,34 @@ router.post('/models/:id/deploy', authMiddleware, requireRole('risk_officer'), a
         }
 
         // Archive current production
-        await db.run(`UPDATE risk_models SET status = 'archived' WHERE status = 'production' AND org_id = ?`, [req.orgId]);
-
-        // Sanitize fields for approved_by (M-4: prevent injection via user fields)
-        const safeUser = String(req.user?.email || req.user?.username || 'unknown').replace(/[^a-zA-Z0-9@._-]/g, '').slice(0, 64);
-        const safeSigner = String(compliance_co_signer).replace(/[^a-zA-Z0-9@._-]/g, '').slice(0, 64);
-        await db.run(`UPDATE risk_models SET status = 'production', deployed_at = NOW(), approved_by = ? WHERE id = ?`, [
-            `${safeUser} + ${safeSigner}`, req.params.id
+        await db.run(`UPDATE risk_models SET status = 'archived' WHERE status = 'production' AND org_id = ?`, [
+            req.orgId,
         ]);
 
-        await db.run(`
+        // Sanitize fields for approved_by (M-4: prevent injection via user fields)
+        const safeUser = String(req.user?.email || req.user?.username || 'unknown')
+            .replace(/[^a-zA-Z0-9@._-]/g, '')
+            .slice(0, 64);
+        const safeSigner = String(compliance_co_signer)
+            .replace(/[^a-zA-Z0-9@._-]/g, '')
+            .slice(0, 64);
+        await db.run(
+            `UPDATE risk_models SET status = 'production', deployed_at = NOW(), approved_by = ? WHERE id = ?`,
+            [`${safeUser} + ${safeSigner}`, req.params.id]
+        );
+
+        await db.run(
+            `
             INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
             VALUES (?, ?, 'model_deployed', 'risk_model', ?, ?, NOW())
-        `, [uuidv4(), req.user?.id || 'system', req.params.id,
-            JSON.stringify({ version: model.version, co_signer: compliance_co_signer })]);
+        `,
+            [
+                uuidv4(),
+                req.user?.id || 'system',
+                req.params.id,
+                JSON.stringify({ version: model.version, co_signer: compliance_co_signer }),
+            ]
+        );
 
         res.json({ id: req.params.id, status: 'production', deployed: true });
     } catch (err) {
@@ -130,27 +169,42 @@ router.post('/models/:id/deploy', authMiddleware, requireRole('risk_officer'), a
 router.post('/models/:id/rollback', authMiddleware, requireRole('risk_officer'), async (req, res) => {
     try {
         const { compliance_approver, reason } = req.body;
-        if (!compliance_approver) return res.status(403).json({ error: '4-Eyes approval required: compliance_approver missing' });
+        if (!compliance_approver)
+            return res.status(403).json({ error: '4-Eyes approval required: compliance_approver missing' });
         if (!reason) return res.status(400).json({ error: 'Rollback reason required' });
 
         const target = await db.get('SELECT * FROM risk_models WHERE id = ?', [req.params.id]);
         if (!target) return res.status(404).json({ error: 'Model not found' });
 
         // Archive current production
-        await db.run(`UPDATE risk_models SET status = 'archived' WHERE status = 'production' AND org_id = ?`, [req.orgId]);
-
-        // Sanitize fields for approved_by (M-4: prevent injection)
-        const safeUser = String(req.user?.email || '').replace(/[^a-zA-Z0-9@._-]/g, '').slice(0, 64);
-        const safeApprover = String(compliance_approver).replace(/[^a-zA-Z0-9@._-]/g, '').slice(0, 64);
-        await db.run(`UPDATE risk_models SET status = 'production', deployed_at = NOW(), approved_by = ? WHERE id = ?`, [
-            `ROLLBACK: ${safeUser} + ${safeApprover}`, req.params.id
+        await db.run(`UPDATE risk_models SET status = 'archived' WHERE status = 'production' AND org_id = ?`, [
+            req.orgId,
         ]);
 
-        await db.run(`
+        // Sanitize fields for approved_by (M-4: prevent injection)
+        const safeUser = String(req.user?.email || '')
+            .replace(/[^a-zA-Z0-9@._-]/g, '')
+            .slice(0, 64);
+        const safeApprover = String(compliance_approver)
+            .replace(/[^a-zA-Z0-9@._-]/g, '')
+            .slice(0, 64);
+        await db.run(
+            `UPDATE risk_models SET status = 'production', deployed_at = NOW(), approved_by = ? WHERE id = ?`,
+            [`ROLLBACK: ${safeUser} + ${safeApprover}`, req.params.id]
+        );
+
+        await db.run(
+            `
             INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
             VALUES (?, ?, 'model_rollback', 'risk_model', ?, ?, NOW())
-        `, [uuidv4(), req.user?.id || 'system', req.params.id,
-            JSON.stringify({ version: target.version, reason, approver: compliance_approver })]);
+        `,
+            [
+                uuidv4(),
+                req.user?.id || 'system',
+                req.params.id,
+                JSON.stringify({ version: target.version, reason, approver: compliance_approver }),
+            ]
+        );
 
         res.json({ id: req.params.id, status: 'production', rollback: true, reason });
     } catch (err) {
@@ -177,13 +231,23 @@ router.get('/models/compare', authMiddleware, async (req, res) => {
             factor: f,
             value_a: weightsA[f] ?? null,
             value_b: weightsB[f] ?? null,
-            delta: weightsA[f] && weightsB[f] ? (weightsB[f] - weightsA[f]).toFixed(4) : 'N/A'
+            delta: weightsA[f] && weightsB[f] ? (weightsB[f] - weightsA[f]).toFixed(4) : 'N/A',
         }));
 
         res.json({
-            model_a: { version: modelA.version, status: modelA.status, fp_rate: modelA.fp_rate, tp_rate: modelA.tp_rate },
-            model_b: { version: modelB.version, status: modelB.status, fp_rate: modelB.fp_rate, tp_rate: modelB.tp_rate },
-            comparison
+            model_a: {
+                version: modelA.version,
+                status: modelA.status,
+                fp_rate: modelA.fp_rate,
+                tp_rate: modelA.tp_rate,
+            },
+            model_b: {
+                version: modelB.version,
+                status: modelB.status,
+                fp_rate: modelB.fp_rate,
+                tp_rate: modelB.tp_rate,
+            },
+            comparison,
         });
     } catch (err) {
         console.error('Compare models error:', err);
@@ -201,10 +265,41 @@ router.get('/models/drift', authMiddleware, async (req, res) => {
         const orgId = req.user?.org_id || req.user?.orgId;
         const orgF = orgId ? ' AND org_id = ?' : '';
         const orgP = orgId ? [orgId] : [];
-        const totalScans = (await db.prepare('SELECT COUNT(*) as c FROM scan_events WHERE scanned_at > (NOW() - interval \'30 days\')' + orgF).get(...orgP))?.c || 0;
-        const highRisk = (await db.prepare('SELECT COUNT(*) as c FROM scan_events WHERE fraud_score > 60 AND scanned_at > (NOW() - interval \'30 days\')' + orgF).get(...orgP))?.c || 0;
-        const fpCases = (await db.prepare('SELECT COUNT(*) as c FROM fraud_alerts WHERE status = \'resolved\' AND created_at > (NOW() - interval \'30 days\')' + orgF).get(...orgP))?.c || 0;
-        const avgErs = (await db.prepare('SELECT AVG(fraud_score) as avg FROM scan_events WHERE scanned_at > (NOW() - interval \'30 days\')' + orgF).get(...orgP))?.avg || 0;
+        const totalScans =
+            (
+                await db
+                    .prepare(
+                        "SELECT COUNT(*) as c FROM scan_events WHERE scanned_at > (NOW() - interval '30 days')" + orgF
+                    )
+                    .get(...orgP)
+            )?.c || 0;
+        const highRisk =
+            (
+                await db
+                    .prepare(
+                        "SELECT COUNT(*) as c FROM scan_events WHERE fraud_score > 60 AND scanned_at > (NOW() - interval '30 days')" +
+                            orgF
+                    )
+                    .get(...orgP)
+            )?.c || 0;
+        const fpCases =
+            (
+                await db
+                    .prepare(
+                        "SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'resolved' AND created_at > (NOW() - interval '30 days')" +
+                            orgF
+                    )
+                    .get(...orgP)
+            )?.c || 0;
+        const avgErs =
+            (
+                await db
+                    .prepare(
+                        "SELECT AVG(fraud_score) as avg FROM scan_events WHERE scanned_at > (NOW() - interval '30 days')" +
+                            orgF
+                    )
+                    .get(...orgP)
+            )?.avg || 0;
 
         const fpRate = totalScans > 0 ? ((fpCases / totalScans) * 100).toFixed(1) : '0';
         const tpRate = totalScans > 0 ? (((highRisk - fpCases) / Math.max(highRisk, 1)) * 100).toFixed(1) : '0';
@@ -220,8 +315,13 @@ router.get('/models/drift', authMiddleware, async (req, res) => {
             drift_metrics: [
                 { metric: 'FP Rate', baseline: production.fp_rate, current: fpRate + '%', status: 'ok' },
                 { metric: 'TP Rate', baseline: production.tp_rate, current: tpRate + '%', status: 'ok' },
-                { metric: 'Avg ERS', baseline: '24.3', current: avgErs.toFixed(1), status: avgErs > 30 ? 'warn' : 'ok' }
-            ]
+                {
+                    metric: 'Avg ERS',
+                    baseline: '24.3',
+                    current: avgErs.toFixed(1),
+                    status: avgErs > 30 ? 'warn' : 'ok',
+                },
+            ],
         });
     } catch (err) {
         console.error('Model drift error:', err);
@@ -233,9 +333,13 @@ router.get('/models/drift', authMiddleware, async (req, res) => {
 router.get('/model-changes', authMiddleware, async (req, res) => {
     try {
         const { status } = req.query;
-        let query = 'SELECT mcr.*, rm.version as model_version FROM model_change_requests mcr LEFT JOIN risk_models rm ON mcr.model_id = rm.id';
+        let query =
+            'SELECT mcr.*, rm.version as model_version FROM model_change_requests mcr LEFT JOIN risk_models rm ON mcr.model_id = rm.id';
         const params = [];
-        if (status) { query += ' WHERE mcr.status = ?'; params.push(status); }
+        if (status) {
+            query += ' WHERE mcr.status = ?';
+            params.push(status);
+        }
         query += ' ORDER BY mcr.created_at DESC';
         const changes = await db.prepare(query).all(...params);
         res.json({ changes });
@@ -250,16 +354,30 @@ router.post('/model-changes', authMiddleware, async (req, res) => {
     try {
         const { model_id, factor, current_value, proposed_value, reason, impact } = req.body;
         const id = uuidv4();
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO model_change_requests (id, model_id, factor, current_value, proposed_value, reason, impact, requested_by, status, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
-        `, [id, model_id || null, factor, current_value || '', proposed_value || '',
-            reason || '', impact || '', req.user?.email || req.user?.username || '']);
+        `,
+            [
+                id,
+                model_id || null,
+                factor,
+                current_value || '',
+                proposed_value || '',
+                reason || '',
+                impact || '',
+                req.user?.email || req.user?.username || '',
+            ]
+        );
 
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
             VALUES (?, ?, 'model_change_proposed', 'model_change', ?, ?, NOW())
-        `, [uuidv4(), req.user?.id || 'system', id, JSON.stringify({ factor, proposed_value })]);
+        `,
+            [uuidv4(), req.user?.id || 'system', id, JSON.stringify({ factor, proposed_value })]
+        );
 
         res.status(201).json({ id, factor, status: 'pending' });
     } catch (err) {
@@ -276,14 +394,20 @@ router.patch('/model-changes/:id', authMiddleware, requirePermission('risk_model
             return res.status(400).json({ error: 'Status must be approved or rejected' });
         }
 
-        await db.run(`
+        await db.run(
+            `
             UPDATE model_change_requests SET status = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ?
-        `, [status, req.user?.email || req.user?.username || '', req.params.id]);
+        `,
+            [status, req.user?.email || req.user?.username || '', req.params.id]
+        );
 
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
             VALUES (?, ?, ?, 'model_change', ?, ?, NOW())
-        `, [uuidv4(), req.user?.id || 'system', `model_change_${status}`, req.params.id, JSON.stringify({ status })]);
+        `,
+            [uuidv4(), req.user?.id || 'system', `model_change_${status}`, req.params.id, JSON.stringify({ status })]
+        );
 
         res.json({ id: req.params.id, status });
     } catch (err) {
@@ -300,15 +424,19 @@ router.get('/rules-config', authMiddleware, async (req, res) => {
         try {
             const orgId = req.user?.org_id || req.user?.orgId;
             if (orgId) {
-                rules = await db.prepare(
-                    'SELECT id, category, rule_key, rule_value, description, updated_at FROM risk_rules_config WHERE org_id = ? ORDER BY category, rule_key LIMIT 1000'
-                ).all(orgId);
+                rules = await db
+                    .prepare(
+                        'SELECT id, category, rule_key, rule_value, description, updated_at FROM risk_rules_config WHERE org_id = ? ORDER BY category, rule_key LIMIT 1000'
+                    )
+                    .all(orgId);
             }
         } catch (e) {
             // risk_rules_config doesn't exist — fall back to channel_rules
-            rules = await db.prepare(
-                'SELECT id, name, logic, severity, auto_action, is_active, triggers_30d, created_at FROM channel_rules ORDER BY created_at DESC LIMIT 1000'
-            ).all();
+            rules = await db
+                .prepare(
+                    'SELECT id, name, logic, severity, auto_action, is_active, triggers_30d, created_at FROM channel_rules ORDER BY created_at DESC LIMIT 1000'
+                )
+                .all();
         }
 
         // Group by category or severity
@@ -332,9 +460,9 @@ router.put('/rules-config/:id', authMiddleware, async (req, res) => {
         if (rule_value === undefined) return res.status(400).json({ error: 'rule_value required' });
 
         const orgId = req.user?.org_id || req.user?.orgId;
-        await db.prepare(
-            "UPDATE risk_rules_config SET rule_value = ?, updated_at = NOW() WHERE id = ? AND org_id = ?"
-        ).run(rule_value, req.params.id, orgId);
+        await db
+            .prepare('UPDATE risk_rules_config SET rule_value = ?, updated_at = NOW() WHERE id = ? AND org_id = ?')
+            .run(rule_value, req.params.id, orgId);
 
         res.json({ id: req.params.id, rule_value, status: 'updated' });
     } catch (err) {
@@ -363,7 +491,9 @@ router.put('/models/:id/status', authMiddleware, async (req, res) => {
 
         const updates = [`status = $1`];
         const params = [status];
-        if (status === 'production') { updates.push(`deployed_at = NOW()`); }
+        if (status === 'production') {
+            updates.push(`deployed_at = NOW()`);
+        }
         params.push(req.params.id);
 
         await db.run(`UPDATE risk_models SET ${updates.join(', ')} WHERE id = $${params.length}`, params);
@@ -371,8 +501,14 @@ router.put('/models/:id/status', authMiddleware, async (req, res) => {
         // Audit
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES ($1, $2, $3, $4, $5, $6)`,
-            [require('uuid').v4(), req.user?.id, 'MODEL_STATUS_CHANGED', 'risk_model', req.params.id,
-            JSON.stringify({ old_status: model.status, new_status: status, version: model.version })]
+            [
+                require('uuid').v4(),
+                req.user?.id,
+                'MODEL_STATUS_CHANGED',
+                'risk_model',
+                req.params.id,
+                JSON.stringify({ old_status: model.status, new_status: status, version: model.version }),
+            ]
         );
 
         res.json({ id: req.params.id, old_status: model.status, status, message: 'Status updated' });
@@ -383,4 +519,3 @@ router.put('/models/:id/status', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
-

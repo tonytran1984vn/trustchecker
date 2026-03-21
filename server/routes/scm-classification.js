@@ -11,7 +11,6 @@ const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();
 
-
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
 
@@ -63,7 +62,11 @@ function classifyDuplicate(scanEvent, previousScan, routeGeoFence) {
     else {
         classification = 'unclassified';
         confidence = 0.3;
-        signals.push('Ambiguous pattern', `Gap: ${Math.round(timeGapHours * 60)}min`, sameDevice ? 'Same device' : 'Different device');
+        signals.push(
+            'Ambiguous pattern',
+            `Gap: ${Math.round(timeGapHours * 60)}min`,
+            sameDevice ? 'Same device' : 'Different device'
+        );
     }
 
     return { classification, confidence, signals };
@@ -77,8 +80,14 @@ router.get('/duplicates', authMiddleware, async (req, res) => {
         let query = `SELECT dc.* FROM duplicate_classifications dc`;
         const params = [];
         const conditions = [];
-        if (orgId && req.user?.role !== 'super_admin') { conditions.push('(dc.org_id = ? OR dc.org_id IS NULL)'); params.push(orgId); }
-        if (classification) { conditions.push('dc.classification = ?'); params.push(classification); }
+        if (orgId && req.user?.role !== 'super_admin') {
+            conditions.push('(dc.org_id = ? OR dc.org_id IS NULL)');
+            params.push(orgId);
+        }
+        if (classification) {
+            conditions.push('dc.classification = ?');
+            params.push(classification);
+        }
         if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
         query += ' ORDER BY dc.created_at DESC LIMIT ?';
         params.push(Math.min(parseInt(limit) || 50, 200));
@@ -87,9 +96,12 @@ router.get('/duplicates', authMiddleware, async (req, res) => {
         res.json({
             classifications: (dups || []).map(d => ({
                 ...d,
-                signals: typeof d.signals === 'string' ? JSON.parse(d.signals || '[]') : (d.signals || []),
-                geo_data: typeof (d.geo_data || d.geoData) === 'string' ? JSON.parse(d.geo_data || d.geoData || '{}') : (d.geo_data || d.geoData || {})
-            }))
+                signals: typeof d.signals === 'string' ? JSON.parse(d.signals || '[]') : d.signals || [],
+                geo_data:
+                    typeof (d.geo_data || d.geoData) === 'string'
+                        ? JSON.parse(d.geo_data || d.geoData || '{}')
+                        : d.geo_data || d.geoData || {},
+            })),
         });
     } catch (err) {
         console.error('List duplicates error:', err);
@@ -101,11 +113,36 @@ router.get('/duplicates', authMiddleware, async (req, res) => {
 router.get('/duplicates/stats', authMiddleware, async (req, res) => {
     try {
         const orgId = req.user?.orgId;
-        const total = (await db.get('SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1', [orgId]))?.c || 0;
-        const curiosity = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1 AND classification = 'curiosity'", [orgId]))?.c || 0;
-        const leakage = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1 AND classification = 'leakage'", [orgId]))?.c || 0;
-        const counterfeit = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1 AND classification = 'counterfeit'", [orgId]))?.c || 0;
-        const unclassified = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1 AND classification = 'unclassified'", [orgId]))?.c || 0;
+        const total =
+            (await db.get('SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1', [orgId]))?.c || 0;
+        const curiosity =
+            (
+                await db.get(
+                    "SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1 AND classification = 'curiosity'",
+                    [orgId]
+                )
+            )?.c || 0;
+        const leakage =
+            (
+                await db.get(
+                    "SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1 AND classification = 'leakage'",
+                    [orgId]
+                )
+            )?.c || 0;
+        const counterfeit =
+            (
+                await db.get(
+                    "SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1 AND classification = 'counterfeit'",
+                    [orgId]
+                )
+            )?.c || 0;
+        const unclassified =
+            (
+                await db.get(
+                    "SELECT COUNT(*) as c FROM duplicate_classifications WHERE org_id = $1 AND classification = 'unclassified'",
+                    [orgId]
+                )
+            )?.c || 0;
 
         const totalScans = (await db.get('SELECT COUNT(*) as c FROM scan_events WHERE org_id = $1', [orgId]))?.c || 1;
         const rawDupRate = total > 0 ? ((total / totalScans) * 100).toFixed(1) : '0';
@@ -114,14 +151,30 @@ router.get('/duplicates/stats', authMiddleware, async (req, res) => {
         res.json({
             total,
             breakdown: {
-                curiosity: { count: curiosity, pct: total > 0 ? ((curiosity / total) * 100).toFixed(1) + '%' : '0%', action: 'Exclude from risk KPIs' },
-                leakage: { count: leakage, pct: total > 0 ? ((leakage / total) * 100).toFixed(1) + '%' : '0%', action: 'Flag distributor → Ops' },
-                counterfeit: { count: counterfeit, pct: total > 0 ? ((counterfeit / total) * 100).toFixed(1) + '%' : '0%', action: 'Lock batch → Risk → CEO' },
-                unclassified: { count: unclassified, pct: total > 0 ? ((unclassified / total) * 100).toFixed(1) + '%' : '0%', action: 'Queue for analyst review' }
+                curiosity: {
+                    count: curiosity,
+                    pct: total > 0 ? ((curiosity / total) * 100).toFixed(1) + '%' : '0%',
+                    action: 'Exclude from risk KPIs',
+                },
+                leakage: {
+                    count: leakage,
+                    pct: total > 0 ? ((leakage / total) * 100).toFixed(1) + '%' : '0%',
+                    action: 'Flag distributor → Ops',
+                },
+                counterfeit: {
+                    count: counterfeit,
+                    pct: total > 0 ? ((counterfeit / total) * 100).toFixed(1) + '%' : '0%',
+                    action: 'Lock batch → Risk → CEO',
+                },
+                unclassified: {
+                    count: unclassified,
+                    pct: total > 0 ? ((unclassified / total) * 100).toFixed(1) + '%' : '0%',
+                    action: 'Queue for analyst review',
+                },
             },
             raw_duplicate_rate: rawDupRate + '%',
             adjusted_risk_rate: adjustedRate + '%',
-            total_scans: totalScans
+            total_scans: totalScans,
         });
     } catch (err) {
         console.error('Duplicate stats error:', err);
@@ -149,10 +202,23 @@ router.post('/duplicates/classify', authMiddleware, async (req, res) => {
         await db.run(
             `INSERT INTO duplicate_classifications (id, scan_event_id, code_data, classification, confidence, signals, geo_data, device_hash, time_gap, classified_by, org_id, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'system', ?, NOW())`,
-            [id, scan_event_id, code_data || scan.qr_code_id || '',
-                result.classification, result.confidence, JSON.stringify(result.signals),
-                JSON.stringify({ city: scan.geo_city, country: scan.geo_country, lat: scan.latitude, lng: scan.longitude }),
-                scan.device_fingerprint || '', timeGap, req.user?.orgId || null]
+            [
+                id,
+                scan_event_id,
+                code_data || scan.qr_code_id || '',
+                result.classification,
+                result.confidence,
+                JSON.stringify(result.signals),
+                JSON.stringify({
+                    city: scan.geo_city,
+                    country: scan.geo_country,
+                    lat: scan.latitude,
+                    lng: scan.longitude,
+                }),
+                scan.device_fingerprint || '',
+                timeGap,
+                req.user?.orgId || null,
+            ]
         );
 
         res.status(201).json({ id, ...result, time_gap_seconds: timeGap });
@@ -195,26 +261,36 @@ router.get('/benchmark', authMiddleware, requirePlatformAdmin(), async (req, res
         const avgErs = (await db.get('SELECT AVG(fraud_score) as avg FROM scan_events'))?.avg || 0;
 
         const totalDups = (await db.get('SELECT COUNT(*) as c FROM duplicate_classifications'))?.c || 0;
-        const curiosity = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'curiosity'"))?.c || 0;
-        const leakage = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'leakage'"))?.c || 0;
-        const counterfeit = (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'counterfeit'"))?.c || 0;
+        const curiosity =
+            (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'curiosity'"))
+                ?.c || 0;
+        const leakage =
+            (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'leakage'"))?.c ||
+            0;
+        const counterfeit =
+            (await db.get("SELECT COUNT(*) as c FROM duplicate_classifications WHERE classification = 'counterfeit'"))
+                ?.c || 0;
 
-        const model = await db.get("SELECT version, fp_rate, tp_rate FROM risk_models WHERE status = 'production' LIMIT 1");
+        const model = await db.get(
+            "SELECT version, fp_rate, tp_rate FROM risk_models WHERE status = 'production' LIMIT 1"
+        );
 
         res.json({
             platform_overview: {
                 total_orgs: totalOrgs,
                 total_scans: totalScans,
                 total_fraud_alerts: totalFraud,
-                avg_ers: (avgErs || 0).toFixed ? avgErs.toFixed(1) : '0'
+                avg_ers: (avgErs || 0).toFixed ? avgErs.toFixed(1) : '0',
             },
             duplicate_breakdown: {
                 total: totalDups,
-                curiosity, leakage, counterfeit,
+                curiosity,
+                leakage,
+                counterfeit,
                 raw_rate: totalScans > 0 ? ((totalDups / totalScans) * 100).toFixed(1) + '%' : '0%',
-                adjusted_rate: totalScans > 0 ? (((counterfeit + leakage) / totalScans) * 100).toFixed(1) + '%' : '0%'
+                adjusted_rate: totalScans > 0 ? (((counterfeit + leakage) / totalScans) * 100).toFixed(1) + '%' : '0%',
             },
-            model: model || { version: 'N/A', fp_rate: 'N/A', tp_rate: 'N/A' }
+            model: model || { version: 'N/A', fp_rate: 'N/A', tp_rate: 'N/A' },
         });
     } catch (err) {
         console.error('Benchmark error:', err);

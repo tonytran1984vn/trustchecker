@@ -5,8 +5,8 @@ const { safeError } = require('../utils/safe-error');
  */
 
 function _safeId(name) {
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error("Invalid identifier: " + name);
-  return name;
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error('Invalid identifier: ' + name);
+    return name;
 }
 
 const express = require('express');
@@ -21,7 +21,9 @@ router.use(requirePermission('settings:update'));
 // ─── GET /info — Full system info ────────────────────────────
 router.get('/info', async (req, res) => {
     try {
-        const tables = await db.all("SELECT table_name::TEXT as name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1000");
+        const tables = await db.all(
+            "SELECT table_name::TEXT as name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1000"
+        );
         const tableDetails = [];
         for (const t of tables) {
             try {
@@ -44,14 +46,14 @@ router.get('/info', async (req, res) => {
                     heap_used_mb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
                     heap_total_mb: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
                 },
-                pid: process.pid
+                pid: process.pid,
             },
             database: {
                 tables: tableDetails,
                 total_tables: tables.length,
-                total_rows: tableDetails.reduce((s, t) => s + Math.max(0, t.rows), 0)
+                total_rows: tableDetails.reduce((s, t) => s + Math.max(0, t.rows), 0),
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -65,11 +67,41 @@ router.post('/seed', async (req, res) => {
 
         // Seed products
         const products = [
-            { name: 'Premium Watch Collection', sku: 'DEMO-WATCH-001', category: 'Luxury', manufacturer: 'SwissTime Ltd', origin_country: 'Switzerland' },
-            { name: 'Organic Green Tea', sku: 'DEMO-TEA-001', category: 'Food & Beverage', manufacturer: 'TeaHouse Asia', origin_country: 'Japan' },
-            { name: 'Pharmaceutical Grade Insulin', sku: 'DEMO-PHARMA-001', category: 'Pharmaceutical', manufacturer: 'MedCorp', origin_country: 'Germany' },
-            { name: 'Designer Leather Handbag', sku: 'DEMO-FASHION-001', category: 'Fashion', manufacturer: 'Luxe Fashion House', origin_country: 'Italy' },
-            { name: 'Electric Vehicle Battery Pack', sku: 'DEMO-AUTO-001', category: 'Automotive', manufacturer: 'VoltPower Inc', origin_country: 'South Korea' },
+            {
+                name: 'Premium Watch Collection',
+                sku: 'DEMO-WATCH-001',
+                category: 'Luxury',
+                manufacturer: 'SwissTime Ltd',
+                origin_country: 'Switzerland',
+            },
+            {
+                name: 'Organic Green Tea',
+                sku: 'DEMO-TEA-001',
+                category: 'Food & Beverage',
+                manufacturer: 'TeaHouse Asia',
+                origin_country: 'Japan',
+            },
+            {
+                name: 'Pharmaceutical Grade Insulin',
+                sku: 'DEMO-PHARMA-001',
+                category: 'Pharmaceutical',
+                manufacturer: 'MedCorp',
+                origin_country: 'Germany',
+            },
+            {
+                name: 'Designer Leather Handbag',
+                sku: 'DEMO-FASHION-001',
+                category: 'Fashion',
+                manufacturer: 'Luxe Fashion House',
+                origin_country: 'Italy',
+            },
+            {
+                name: 'Electric Vehicle Battery Pack',
+                sku: 'DEMO-AUTO-001',
+                category: 'Automotive',
+                manufacturer: 'VoltPower Inc',
+                origin_country: 'South Korea',
+            },
         ];
 
         let pCount = 0;
@@ -77,13 +109,17 @@ router.post('/seed', async (req, res) => {
             const existing = await db.get('SELECT id FROM products WHERE sku = ?', [p.sku]);
             if (!existing) {
                 const id = uuidv4();
-                await db.prepare('INSERT INTO products (id, name, sku, category, manufacturer, origin_country, trust_score) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                await db
+                    .prepare(
+                        'INSERT INTO products (id, name, sku, category, manufacturer, origin_country, trust_score) VALUES (?, ?, ?, ?, ?, ?, ?)'
+                    )
                     .run(id, p.name, p.sku, p.category, p.manufacturer, p.origin_country, 85 + Math.random() * 15); // Math.random OK for demo seed
 
                 // Auto-generate QR
                 const qrId = uuidv4();
                 const qrData = `TC-${p.sku}-${Date.now()}`;
-                await db.prepare('INSERT INTO qr_codes (id, product_id, qr_data) VALUES (?, ?, ?)')
+                await db
+                    .prepare('INSERT INTO qr_codes (id, product_id, qr_data) VALUES (?, ?, ?)')
                     .run(qrId, id, qrData);
                 pCount++;
             }
@@ -92,17 +128,32 @@ router.post('/seed', async (req, res) => {
 
         // Seed partners
         const partners = [
-            { name: 'Global Distributors Inc', type: 'distributor', country: 'US', region: 'North America', trust_score: 88 },
-            { name: 'Asia Pacific Logistics', type: 'logistics', country: 'SG', region: 'Asia Pacific', trust_score: 92 },
+            {
+                name: 'Global Distributors Inc',
+                type: 'distributor',
+                country: 'US',
+                region: 'North America',
+                trust_score: 88,
+            },
+            {
+                name: 'Asia Pacific Logistics',
+                type: 'logistics',
+                country: 'SG',
+                region: 'Asia Pacific',
+                trust_score: 92,
+            },
             { name: 'Euro Retail Alliance', type: 'retailer', country: 'DE', region: 'Europe', trust_score: 75 },
             { name: 'Warehouse Solutions Ltd', type: 'warehouse', country: 'UK', region: 'Europe', trust_score: 80 },
         ];
 
         let ptCount = 0;
         for (const p of partners) {
-            const existing = await db.get("SELECT id FROM partners WHERE name = ?", [p.name]);
+            const existing = await db.get('SELECT id FROM partners WHERE name = ?', [p.name]);
             if (!existing) {
-                await db.prepare('INSERT INTO partners (id, name, type, country, region, trust_score, kyc_status) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                await db
+                    .prepare(
+                        'INSERT INTO partners (id, name, type, country, region, trust_score, kyc_status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+                    )
                     .run(uuidv4(), p.name, p.type, p.country, p.region, p.trust_score, 'verified');
                 ptCount++;
             }
@@ -118,9 +169,12 @@ router.post('/seed', async (req, res) => {
 
         let bCount = 0;
         for (const b of businesses) {
-            const existing = await db.get("SELECT id FROM kyc_businesses WHERE registration_number = ?", [b.reg]);
+            const existing = await db.get('SELECT id FROM kyc_businesses WHERE registration_number = ?', [b.reg]);
             if (!existing) {
-                await db.prepare('INSERT INTO kyc_businesses (id, name, registration_number, country, industry, verification_status) VALUES (?, ?, ?, ?, ?, ?)')
+                await db
+                    .prepare(
+                        'INSERT INTO kyc_businesses (id, name, registration_number, country, industry, verification_status) VALUES (?, ?, ?, ?, ?, ?)'
+                    )
                     .run(uuidv4(), b.name, b.reg, b.country, b.industry, 'verified');
                 bCount++;
             }
@@ -139,7 +193,9 @@ router.post('/seed', async (req, res) => {
 // ─── POST /backup — Export database snapshot ─────────────────
 router.post('/backup', async (req, res) => {
     try {
-        const tables = await db.all("SELECT table_name::TEXT as name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1000");
+        const tables = await db.all(
+            "SELECT table_name::TEXT as name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1000"
+        );
         const backup = {};
         let totalRows = 0;
 
@@ -148,7 +204,9 @@ router.post('/backup', async (req, res) => {
                 const rows = await db.all(`SELECT * FROM ${_safeId(t.name)}`);
                 backup[t.name] = rows;
                 totalRows += rows.length;
-            } catch (e) { console.warn(`[system] Backup skip table '${_safeId(t.name)}':`, e.message); }
+            } catch (e) {
+                console.warn(`[system] Backup skip table '${_safeId(t.name)}':`, e.message);
+            }
         }
 
         res.json({
@@ -157,7 +215,7 @@ router.post('/backup', async (req, res) => {
             tables: Object.keys(backup).length,
             total_rows: totalRows,
             data: backup,
-            note: 'Store this JSON securely. Use POST /api/system/restore to restore.'
+            note: 'Store this JSON securely. Use POST /api/system/restore to restore.',
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -174,10 +232,28 @@ router.post('/restore', async (req, res) => {
 
         let restored = 0;
         // Whitelist of tables allowed for restore (BUG-05 fix: prevent SQL injection)
-        const ALLOWED_TABLES = new Set(['users', 'products', 'qr_codes', 'scan_events', 'partners', 'shipments',
-            'batches', 'inventory', 'supply_chain_events', 'blockchain_seals', 'evidence_items',
-            'fraud_alerts', 'billing_plans', 'audit_log', 'support_tickets', 'nft_certificates',
-            'anomaly_detections', 'certifications', 'compliance_records', 'invoices']);
+        const ALLOWED_TABLES = new Set([
+            'users',
+            'products',
+            'qr_codes',
+            'scan_events',
+            'partners',
+            'shipments',
+            'batches',
+            'inventory',
+            'supply_chain_events',
+            'blockchain_seals',
+            'evidence_items',
+            'fraud_alerts',
+            'billing_plans',
+            'audit_log',
+            'support_tickets',
+            'nft_certificates',
+            'anomaly_detections',
+            'certifications',
+            'compliance_records',
+            'invoices',
+        ]);
         // Allowed column name pattern (alphanumeric + underscore only)
         const SAFE_COL = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
@@ -188,7 +264,10 @@ router.post('/restore', async (req, res) => {
                 continue;
             }
             try {
-                const exists = await db.get("SELECT table_name::TEXT as name FROM information_schema.tables WHERE table_schema='public' AND table_name = $1", [table]);
+                const exists = await db.get(
+                    "SELECT table_name::TEXT as name FROM information_schema.tables WHERE table_schema='public' AND table_name = $1",
+                    [table]
+                );
                 if (!exists) continue;
 
                 for (const row of rows) {
@@ -218,7 +297,9 @@ router.delete('/purge', async (req, res) => {
             return res.status(400).json({ error: 'Send { confirm: "DELETE_ALL_DATA" } to purge all data' });
         }
 
-        const tables = await db.all("SELECT table_name::TEXT as name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1000");
+        const tables = await db.all(
+            "SELECT table_name::TEXT as name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1000"
+        );
         const results = {};
 
         for (const t of tables) {
@@ -227,7 +308,9 @@ router.delete('/purge', async (req, res) => {
                 const before = (await db.get(`SELECT COUNT(*) as c FROM ${_safeId(t.name)}`))?.c || 0;
                 await db.run(`DELETE FROM ${_safeId(t.name)}`);
                 results[t.name] = before;
-            } catch (e) { console.warn(`[system] Purge skip table '${_safeId(t.name)}':`, e.message); }
+            } catch (e) {
+                console.warn(`[system] Purge skip table '${_safeId(t.name)}':`, e.message);
+            }
         }
 
         res.json({ message: 'Data purged (users preserved)', tables_cleared: results });
@@ -240,11 +323,11 @@ router.delete('/purge', async (req, res) => {
 router.get('/logs', async (req, res) => {
     try {
         const { requestLogger } = require('../middleware/security');
-const { withTransaction } = require('../middleware/transaction');
+        const { withTransaction } = require('../middleware/transaction');
         const { limit = 50 } = req.query;
         res.json({
             entries: requestLogger.getEntries(Number(limit)),
-            metrics: requestLogger.getMetrics()
+            metrics: requestLogger.getMetrics(),
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);

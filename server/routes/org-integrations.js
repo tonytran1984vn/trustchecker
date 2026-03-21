@@ -21,35 +21,68 @@ function encrypt(text) {
 }
 function decrypt(text) {
     if (!text || !text.includes(':')) return '';
-    try { const [ivHex, enc] = text.split(':'); const d = crypto.createDecipheriv('aes-256-cbc', CIPHER_KEY, Buffer.from(ivHex, 'hex')); return d.update(enc, 'hex', 'utf8') + d.final('utf8'); } catch { return ''; }
+    try {
+        const [ivHex, enc] = text.split(':');
+        const d = crypto.createDecipheriv('aes-256-cbc', CIPHER_KEY, Buffer.from(ivHex, 'hex'));
+        return d.update(enc, 'hex', 'utf8') + d.final('utf8');
+    } catch {
+        return '';
+    }
 }
-function mask(val) { return (!val || val.length < 8) ? '••••••••' : val.substring(0, 4) + '••••' + val.substring(val.length - 4); }
+function mask(val) {
+    return !val || val.length < 8 ? '••••••••' : val.substring(0, 4) + '••••' + val.substring(val.length - 4);
+}
 
 // ─── Schema: Tenant-level integration categories ────────────────
 const TENANT_SCHEMA = {
     webhooks: {
-        label: 'Outgoing Webhooks', icon: '🔗',
+        label: 'Outgoing Webhooks',
+        icon: '🔗',
         description: 'Send real-time event notifications to your systems (Slack, Teams, ERP)',
         settings: [
             { key: 'url', label: 'Webhook URL', secret: false, placeholder: 'https://hooks.slack.com/services/...' },
             { key: 'secret', label: 'Signing Secret', secret: true, placeholder: 'Auto-generated or custom' },
-            { key: 'events', label: 'Events (comma-separated)', secret: false, placeholder: 'scan.completed, fraud.detected, shipment.delivered' },
+            {
+                key: 'events',
+                label: 'Events (comma-separated)',
+                secret: false,
+                placeholder: 'scan.completed, fraud.detected, shipment.delivered',
+            },
             { key: 'enabled', label: 'Enabled', secret: false, placeholder: 'true / false' },
-        ]
+        ],
     },
     api_keys: {
-        label: 'API Keys', icon: '🔑',
+        label: 'API Keys',
+        icon: '🔑',
         description: 'Generate API keys for your dev team to access TrustChecker APIs',
         settings: [
-            { key: 'primary_key', label: 'Primary API Key', secret: true, placeholder: 'Auto-generated', readonly: true },
-            { key: 'secondary_key', label: 'Secondary API Key', secret: true, placeholder: 'Auto-generated', readonly: true },
+            {
+                key: 'primary_key',
+                label: 'Primary API Key',
+                secret: true,
+                placeholder: 'Auto-generated',
+                readonly: true,
+            },
+            {
+                key: 'secondary_key',
+                label: 'Secondary API Key',
+                secret: true,
+                placeholder: 'Auto-generated',
+                readonly: true,
+            },
             { key: 'rate_limit', label: 'Rate Limit (req/min)', secret: false, placeholder: '1000' },
-            { key: 'allowed_ips', label: 'Allowed IPs (comma-separated)', secret: false, placeholder: '0.0.0.0/0 (all)' },
+            {
+                key: 'allowed_ips',
+                label: 'Allowed IPs (comma-separated)',
+                secret: false,
+                placeholder: '0.0.0.0/0 (all)',
+            },
             { key: 'enabled', label: 'Enabled', secret: false, placeholder: 'true / false' },
-        ]
+        ],
     },
     smtp: {
-        label: 'Email / SMTP', icon: '📧',
+        label: 'Email / SMTP',
+        icon: '📧',
         description: 'Send alerts and notifications from your own email domain',
         settings: [
             { key: 'host', label: 'SMTP Host', secret: false, placeholder: 'smtp.gmail.com' },
@@ -58,10 +91,11 @@ const TENANT_SCHEMA = {
             { key: 'password', label: 'Password', secret: true, placeholder: '' },
             { key: 'from_name', label: 'From Name', secret: false, placeholder: 'Your Company Alerts' },
             { key: 'enabled', label: 'Enabled', secret: false, placeholder: 'true / false' },
-        ]
+        ],
     },
     carrier: {
-        label: 'Carrier APIs (Logistics)', icon: '🚚',
+        label: 'Carrier APIs (Logistics)',
+        icon: '🚚',
         description: 'Connect your carrier accounts for real-time shipment tracking',
         settings: [
             { key: 'fedex_api_key', label: 'FedEx API Key', secret: true, placeholder: 'l7xx...' },
@@ -71,21 +105,27 @@ const TENANT_SCHEMA = {
             { key: 'ups_client_secret', label: 'UPS Client Secret', secret: true, placeholder: '' },
             { key: 'default_carrier', label: 'Default Carrier', secret: false, placeholder: 'fedex / dhl / ups' },
             { key: 'enabled', label: 'Enabled', secret: false, placeholder: 'true / false' },
-        ]
+        ],
     },
     erp: {
-        label: 'ERP / WMS Connector', icon: '🏭',
+        label: 'ERP / WMS Connector',
+        icon: '🏭',
         description: 'Sync inventory, orders and shipments with your ERP system',
         settings: [
-            { key: 'provider', label: 'ERP Provider', secret: false, placeholder: 'sap / oracle / netsuite / odoo / custom' },
+            {
+                key: 'provider',
+                label: 'ERP Provider',
+                secret: false,
+                placeholder: 'sap / oracle / netsuite / odoo / custom',
+            },
             { key: 'api_url', label: 'API Base URL', secret: false, placeholder: 'https://erp.yourcompany.com/api' },
             { key: 'api_key', label: 'API Key', secret: true, placeholder: '' },
             { key: 'api_secret', label: 'API Secret', secret: true, placeholder: '' },
             { key: 'sync_interval', label: 'Sync Interval (minutes)', secret: false, placeholder: '15' },
             { key: 'sync_entities', label: 'Sync Entities', secret: false, placeholder: 'products, orders, shipments' },
             { key: 'enabled', label: 'Enabled', secret: false, placeholder: 'true / false' },
-        ]
-    }
+        ],
+    },
 };
 
 module.exports = function (db) {
@@ -113,12 +153,16 @@ module.exports = function (db) {
                 let val = row.setting_value;
                 if (row.is_secret && val) val = mask(decrypt(val));
                 result[row.category][row.setting_key] = {
-                    value: val, is_secret: !!row.is_secret,
-                    updated_at: row.updated_at, updated_by: row.updated_by
+                    value: val,
+                    is_secret: !!row.is_secret,
+                    updated_at: row.updated_at,
+                    updated_by: row.updated_by,
                 };
             }
             res.json(result);
-        } catch (e) { res.status(500).json({ error: e.message }); }
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
     });
 
     // PUT /:category — Upsert settings for a category (org-scoped)
@@ -177,7 +221,9 @@ module.exports = function (db) {
             }
 
             res.json({ message: `Updated ${updated.length} settings for ${schema.label}`, updated });
-        } catch (e) { res.status(500).json({ error: e.message }); }
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
     });
 
     // DELETE /:category — Clear all settings for a category (org-scoped)
@@ -185,9 +231,14 @@ module.exports = function (db) {
         try {
             const orgId = req.user?.org_id || req.user?.orgId;
             if (!orgId) return res.status(400).json({ error: 'No organization' });
-            await db.run('DELETE FROM tenant_integrations WHERE org_id = ? AND category = ?', [orgId, req.params.category]);
+            await db.run('DELETE FROM tenant_integrations WHERE org_id = ? AND category = ?', [
+                orgId,
+                req.params.category,
+            ]);
             res.json({ ok: true });
-        } catch (e) { res.status(500).json({ error: e.message }); }
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
     });
 
     // POST /api-keys/regenerate — Regenerate API keys
@@ -203,7 +254,10 @@ module.exports = function (db) {
                     [orgId, 'api_keys', keyName]
                 );
                 if (existing) {
-                    await db.run('UPDATE tenant_integrations SET setting_value = ?, updated_at = NOW() WHERE id = ?', [encrypt(apiKey), existing.id]);
+                    await db.run('UPDATE tenant_integrations SET setting_value = ?, updated_at = NOW() WHERE id = ?', [
+                        encrypt(apiKey),
+                        existing.id,
+                    ]);
                 } else {
                     await db.run(
                         'INSERT INTO tenant_integrations (id, org_id, category, setting_key, setting_value, is_secret, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -213,7 +267,9 @@ module.exports = function (db) {
                 keys[keyName] = apiKey;
             }
             res.json({ message: 'API keys regenerated', keys });
-        } catch (e) { res.status(500).json({ error: e.message }); }
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
     });
 
     return router;

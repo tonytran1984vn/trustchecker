@@ -38,7 +38,7 @@ router.post('/mint', requirePermission('nft:mint'), async (req, res) => {
             type: certificate_type || 'authenticity',
             issuer: 'TrustChecker',
             issued_at: new Date().toISOString(),
-            chain: 'TrustChain (simulated)'
+            chain: 'TrustChain (simulated)',
         };
         const metadataHash = crypto.createHash('sha256').update(JSON.stringify(metadata)).digest('hex');
 
@@ -47,22 +47,46 @@ router.post('/mint', requirePermission('nft:mint'), async (req, res) => {
 
         const expiresAt = expires_in_days ? new Date(Date.now() + expires_in_days * 86400000).toISOString() : null;
 
-        await db.run(`
+        await db.run(
+            `
       INSERT INTO nft_certificates (id, token_id, product_id, entity_type, entity_id, certificate_type, owner, metadata_hash, blockchain_seal_id, expires_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, tokenId, product_id || null, targetType, targetId, certificate_type || 'authenticity',
-            req.user.id, metadataHash, seal.seal_id, expiresAt]);
+    `,
+            [
+                id,
+                tokenId,
+                product_id || null,
+                targetType,
+                targetId,
+                certificate_type || 'authenticity',
+                req.user.id,
+                metadataHash,
+                seal.seal_id,
+                expiresAt,
+            ]
+        );
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'NFT_MINTED', 'nft', id, JSON.stringify({ token_id: tokenId, product_id, certificate_type }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'NFT_MINTED',
+                'nft',
+                id,
+                JSON.stringify({ token_id: tokenId, product_id, certificate_type })
+            );
 
         res.status(201).json({
-            id, token_id: tokenId,
+            id,
+            token_id: tokenId,
             metadata_hash: metadataHash,
             blockchain_seal: seal,
             certificate_type: certificate_type || 'authenticity',
             status: 'active',
-            expires_at: expiresAt
+            expires_at: expiresAt,
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -73,12 +97,22 @@ router.post('/mint', requirePermission('nft:mint'), async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         const { product_id, owner, status = 'active', limit = 50 } = req.query;
-        let sql = 'SELECT nc.*, p.name as product_name FROM nft_certificates nc LEFT JOIN products p ON nc.product_id = p.id WHERE 1=1';
+        let sql =
+            'SELECT nc.*, p.name as product_name FROM nft_certificates nc LEFT JOIN products p ON nc.product_id = p.id WHERE 1=1';
         const params = [];
 
-        if (product_id) { sql += ' AND nc.product_id = ?'; params.push(product_id); }
-        if (owner) { sql += ' AND nc.owner = ?'; params.push(owner); }
-        if (status) { sql += ' AND nc.status = ?'; params.push(status); }
+        if (product_id) {
+            sql += ' AND nc.product_id = ?';
+            params.push(product_id);
+        }
+        if (owner) {
+            sql += ' AND nc.owner = ?';
+            params.push(owner);
+        }
+        if (status) {
+            sql += ' AND nc.status = ?';
+            params.push(status);
+        }
 
         sql += ' ORDER BY nc.minted_at DESC LIMIT ?';
         params.push(Math.min(Number(limit) || 20, 100));
@@ -92,16 +126,21 @@ router.get('/', async (req, res) => {
 // ─── GET /:id — Get certificate detail ──────────────────────
 router.get('/:id', async (req, res) => {
     try {
-        const cert = await db.get('SELECT nc.*, p.name as product_name FROM nft_certificates nc LEFT JOIN products p ON nc.product_id = p.id WHERE nc.id = ?', [req.params.id]);
+        const cert = await db.get(
+            'SELECT nc.*, p.name as product_name FROM nft_certificates nc LEFT JOIN products p ON nc.product_id = p.id WHERE nc.id = ?',
+            [req.params.id]
+        );
         if (!cert) return res.status(404).json({ error: 'Certificate not found' });
 
-        const seal = cert.blockchain_seal_id ? await db.get('SELECT * FROM blockchain_seals WHERE id = ? LIMIT 1000', [cert.blockchain_seal_id]) : null;
+        const seal = cert.blockchain_seal_id
+            ? await db.get('SELECT * FROM blockchain_seals WHERE id = ? LIMIT 1000', [cert.blockchain_seal_id])
+            : null;
 
         res.json({
             certificate: cert,
             blockchain: seal,
             transfer_history: JSON.parse(cert.transfer_history || '[]'),
-            is_valid: cert.status === 'active' && (!cert.expires_at || new Date(cert.expires_at) > new Date())
+            is_valid: cert.status === 'active' && (!cert.expires_at || new Date(cert.expires_at) > new Date()),
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -114,7 +153,9 @@ router.get('/:id/verify', async (req, res) => {
         const cert = await db.get('SELECT * FROM nft_certificates WHERE id = ?', [req.params.id]);
         if (!cert) return res.status(404).json({ error: 'Certificate not found' });
 
-        const seal = cert.blockchain_seal_id ? await db.get('SELECT * FROM blockchain_seals WHERE id = ?', [cert.blockchain_seal_id]) : null;
+        const seal = cert.blockchain_seal_id
+            ? await db.get('SELECT * FROM blockchain_seals WHERE id = ?', [cert.blockchain_seal_id])
+            : null;
 
         // Verify hash integrity by comparing stored hash against blockchain seal
         // (Don't recompute — mint-time metadata uses JS Date which differs from SQLite datetime)
@@ -133,7 +174,7 @@ router.get('/:id/verify', async (req, res) => {
             expired: !!isExpired,
             revoked: isRevoked,
             status: isRevoked ? 'revoked' : isExpired ? 'expired' : hashValid ? 'valid' : 'tampered',
-            verified_at: new Date().toISOString()
+            verified_at: new Date().toISOString(),
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -162,17 +203,32 @@ router.post('/:id/transfer', requireRole('operator'), async (req, res) => {
             from: cert.owner,
             to: to_user_id,
             transferred_at: new Date().toISOString(),
-            transferred_by: req.user.id
+            transferred_by: req.user.id,
         });
 
-        await db.prepare('UPDATE nft_certificates SET owner = ?, transfer_history = ? WHERE id = ?')
+        await db
+            .prepare('UPDATE nft_certificates SET owner = ?, transfer_history = ? WHERE id = ?')
             .run(to_user_id, JSON.stringify(history), req.params.id);
 
         // Blockchain seal for transfer
-        const seal = await blockchainEngine.seal('NFTTransferred', req.params.id, { from: cert.owner, to: to_user_id, token_id: cert.token_id });
+        const seal = await blockchainEngine.seal('NFTTransferred', req.params.id, {
+            from: cert.owner,
+            to: to_user_id,
+            token_id: cert.token_id,
+        });
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'NFT_TRANSFERRED', 'nft', req.params.id, JSON.stringify({ from: cert.owner, to: to_user_id }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'NFT_TRANSFERRED',
+                'nft',
+                req.params.id,
+                JSON.stringify({ from: cert.owner, to: to_user_id })
+            );
 
         res.json({ id: req.params.id, new_owner: to_user_id, transfer_seal: seal, history });
     } catch (e) {
@@ -191,8 +247,18 @@ router.post('/:id/revoke', requirePermission('nft:manage'), async (req, res) => 
 
         const seal = await blockchainEngine.seal('NFTRevoked', req.params.id, { token_id: cert.token_id, reason });
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'NFT_REVOKED', 'nft', req.params.id, JSON.stringify({ reason, token_id: cert.token_id }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'NFT_REVOKED',
+                'nft',
+                req.params.id,
+                JSON.stringify({ reason, token_id: cert.token_id })
+            );
 
         res.json({ id: req.params.id, status: 'revoked', reason, revoke_seal: seal });
     } catch (e) {

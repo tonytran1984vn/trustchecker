@@ -12,7 +12,7 @@ function requireSuperAdmin() {
         if (req.user.role !== 'super_admin') {
             return res.status(403).json({
                 error: 'Super Admin access required',
-                code: 'SUPER_ADMIN_ONLY'
+                code: 'SUPER_ADMIN_ONLY',
             });
         }
         next();

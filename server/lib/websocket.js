@@ -24,7 +24,7 @@ const url = require('url');
 class RealtimeServer {
     constructor() {
         this.wss = null;
-        this.clients = new Map();  // userId -> Set<ws>
+        this.clients = new Map(); // userId -> Set<ws>
         this.orgClients = new Map(); // orgId -> Set<ws>
         this._pingInterval = null;
     }
@@ -68,7 +68,7 @@ class RealtimeServer {
         let user;
         try {
             user = jwt.verify(token, process.env.JWT_SECRET || 'fallback');
-        } catch(e) {
+        } catch (e) {
             ws.close(4002, 'Invalid token');
             return;
         }
@@ -87,13 +87,17 @@ class RealtimeServer {
         }
 
         // Send welcome
-        ws.send(JSON.stringify({
-            type: 'connected',
-            userId: ws._userId,
-            timestamp: new Date().toISOString(),
-        }));
+        ws.send(
+            JSON.stringify({
+                type: 'connected',
+                userId: ws._userId,
+                timestamp: new Date().toISOString(),
+            })
+        );
 
-        ws.on('pong', () => { ws._isAlive = true; });
+        ws.on('pong', () => {
+            ws._isAlive = true;
+        });
 
         ws.on('close', () => {
             this.clients.get(ws._userId)?.delete(ws);
@@ -104,7 +108,9 @@ class RealtimeServer {
             }
         });
 
-        ws.on('error', () => { ws.terminate(); });
+        ws.on('error', () => {
+            ws.terminate();
+        });
     }
 
     /**

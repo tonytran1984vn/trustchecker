@@ -1,9 +1,9 @@
 /**
  * Risk Intelligence API Routes — V21.6
- * 
+ *
  * Exposes Risk Engine V20-V21.6 functions as REST endpoints.
  * Auth: JWT (authMiddleware) OR API key (apiKeyAuth)
- * 
+ *
  * Endpoints:
  *   /api/risk-intel/trust/*     — Trust network & contract
  *   /api/risk-intel/org/*       — Org credibility & incentives
@@ -23,13 +23,19 @@ const router = express.Router();
 // ─── Auth: direct DB API key lookup OR fallback to JWT ───
 const crypto = require('crypto');
 let authMw;
-try { authMw = require('../auth').authMiddleware; } catch(e) { authMw = (req, res, next) => next(); }
+try {
+    authMw = require('../auth').authMiddleware;
+} catch (e) {
+    authMw = (req, res, next) => next();
+}
 
 async function riskIntelAuth(req, res, next) {
     // Check API key first
-    const apiKey = req.headers['x-api-key']
-        || (req.headers.authorization && req.headers.authorization.startsWith('ApiKey ')
-            ? req.headers.authorization.slice(7) : null);
+    const apiKey =
+        req.headers['x-api-key'] ||
+        (req.headers.authorization && req.headers.authorization.startsWith('ApiKey ')
+            ? req.headers.authorization.slice(7)
+            : null);
 
     if (apiKey) {
         try {
@@ -37,7 +43,8 @@ async function riskIntelAuth(req, res, next) {
             const row = await db.get(
                 `SELECT ak.org_id, ak.name, ak.scopes, o.name as org_name
                  FROM api_keys ak JOIN organizations o ON o.id = ak.org_id::text
-                 WHERE ak.key_hash = $1 AND ak.revoked = false`, [hash]
+                 WHERE ak.key_hash = $1 AND ak.revoked = false`,
+                [hash]
             );
             if (row) {
                 req.user = { id: 'api-key', org_id: row.org_id, role: 'api_key', api_key_name: row.name };
@@ -45,7 +52,9 @@ async function riskIntelAuth(req, res, next) {
                 db.run('UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = $1', [hash]).catch(() => {});
                 return next();
             }
-        } catch(e) { console.error('[risk-intel-auth]', e.message); }
+        } catch (e) {
+            console.error('[risk-intel-auth]', e.message);
+        }
         return res.status(401).json({ error: 'Invalid API key' });
     }
 
@@ -59,11 +68,16 @@ router.get('/public-status', (req, res) => {
         const awareness = R.systemSelfAwareness();
         const confidence = R.networkConfidence();
         res.json({
-            engine_version: '21.6', protocol_version: '21.5',
-            health: awareness.status, confidence: confidence.confidence,
-            maturity: confidence.mature, uptime: process.uptime(),
+            engine_version: '21.6',
+            protocol_version: '21.5',
+            health: awareness.status,
+            confidence: confidence.confidence,
+            maturity: confidence.mature,
+            uptime: process.uptime(),
         });
-    } catch(err) { res.status(500).json({ error: 'Engine unavailable' }); }
+    } catch (err) {
+        res.status(500).json({ error: 'Engine unavailable' });
+    }
 });
 
 router.use(riskIntelAuth);
@@ -85,16 +99,16 @@ router.post('/trust/share', async (req, res) => {
             return res.status(400).json({ error: 'actor_id and trust_score required' });
         }
         const orgId = getOrg(req);
-        
+
         // Engine in-memory
         const result = R.trustNetworkShare(orgId, actor_id, trust_score);
-        
+
         // Persist to DB
         await db.run(
             `INSERT INTO trust_network_data (org_id, actor_id, trust_score, metadata) VALUES ($1, $2, $3, $4)`,
             [orgId, actor_id, trust_score, JSON.stringify(metadata || {})]
         );
-        
+
         res.json({ success: true, ...result });
     } catch (err) {
         console.error('Trust share error:', err.message);
@@ -106,13 +120,13 @@ router.post('/trust/share', async (req, res) => {
 router.get('/trust/query/:actorId', async (req, res) => {
     try {
         const result = R.trustNetworkQuery(req.params.actorId);
-        
+
         // Also check DB for persisted data
         const dbData = await db.all(
             `SELECT org_id, trust_score, created_at FROM trust_network_data WHERE actor_id = $1 ORDER BY created_at DESC LIMIT 20`,
             [req.params.actorId]
         );
-        
+
         res.json({ ...result, persisted_records: dbData.length, history: dbData });
     } catch (err) {
         res.status(500).json({ error: 'Failed to query trust network' });
@@ -165,9 +179,9 @@ router.post('/org/credibility', async (req, res) => {
     try {
         const orgId = req.body.org_id || getOrg(req);
         const { accurate, agreed } = req.body;
-        
+
         const result = R.orgCredibility(orgId, accurate !== false, agreed !== false);
-        
+
         // Persist
         await db.run(
             `INSERT INTO org_credibility (org_id, total_reports, accurate, agreed, false_positives, credibility_score)
@@ -180,7 +194,7 @@ router.post('/org/credibility', async (req, res) => {
                 updated_at = NOW()`,
             [orgId, accurate !== false ? 1 : 0, agreed !== false ? 1 : 0, 0, result.credibility_score]
         );
-        
+
         res.json(result);
     } catch (err) {
         console.error('Org credibility error:', err.message);
@@ -245,9 +259,9 @@ router.post('/insight/cross-org', async (req, res) => {
     try {
         const { actor_id } = req.body;
         if (!actor_id) return res.status(400).json({ error: 'actor_id required' });
-        
+
         const result = R.networkInsight('cross_org_alert', { actor_id });
-        
+
         // Persist if found
         if (result.orgs >= 2) {
             await db.run(
@@ -255,7 +269,7 @@ router.post('/insight/cross-org', async (req, res) => {
                 ['cross_org_alert', actor_id, result.severity, JSON.stringify(result), getOrg(req)]
             );
         }
-        
+
         res.json(result);
     } catch (err) {
         res.status(500).json({ error: 'Failed to check cross-org alert' });
@@ -267,17 +281,25 @@ router.post('/insight/geo-anomaly', async (req, res) => {
     try {
         const { batch_id, locations, time_window_hours } = req.body;
         if (!batch_id || !locations) return res.status(400).json({ error: 'batch_id and locations required' });
-        
+
         const result = R.networkInsight('geographic_anomaly', {
-            batch_id, locations, time_window_hours: time_window_hours || 24
+            batch_id,
+            locations,
+            time_window_hours: time_window_hours || 24,
         });
-        
+
         // Persist
         await db.run(
             `INSERT INTO network_insights (type, batch_id, severity, data, org_id) VALUES ($1, $2, $3, $4, $5)`,
-            ['geographic_anomaly', batch_id, result.suspicious ? 'critical' : 'info', JSON.stringify(result), getOrg(req)]
+            [
+                'geographic_anomaly',
+                batch_id,
+                result.suspicious ? 'critical' : 'info',
+                JSON.stringify(result),
+                getOrg(req),
+            ]
         );
-        
+
         res.json(result);
     } catch (err) {
         res.status(500).json({ error: 'Failed to check geo anomaly' });
@@ -319,7 +341,7 @@ router.post('/roi/record', async (req, res) => {
     try {
         const { decision, value } = req.body;
         const result = R.roiDashboard('record', { decision, value: value || 100 });
-        
+
         const orgId = getOrg(req);
         // Upsert ROI tracker
         const isBlock = decision === 'block' || decision === 'HARD_BLOCK';
@@ -332,9 +354,9 @@ router.post('/roi/record', async (req, res) => {
                 blocked_value = roi_tracker.blocked_value + $3,
                 passed_value = roi_tracker.passed_value + $4,
                 updated_at = NOW()`,
-            [orgId, isBlock ? 1 : 0, isBlock ? (value || 100) : 0, isBlock ? 0 : (value || 100)]
+            [orgId, isBlock ? 1 : 0, isBlock ? value || 100 : 0, isBlock ? 0 : value || 100]
         );
-        
+
         res.json({ success: true, ...result });
     } catch (err) {
         res.status(500).json({ error: 'Failed to record ROI data' });
@@ -345,14 +367,14 @@ router.post('/roi/record', async (req, res) => {
 router.get('/roi/report', async (req, res) => {
     try {
         const inMemory = R.roiDashboard('report');
-        
+
         // Also get persistent data
         const orgId = getOrg(req);
         const dbData = await db.get(
             `SELECT total_scans, fraud_detected, blocked_value, passed_value, baseline_loss_rate FROM roi_tracker WHERE org_id = $1`,
             [orgId]
         );
-        
+
         res.json({
             live: inMemory,
             persisted: dbData || { total_scans: 0, fraud_detected: 0, blocked_value: 0 },
@@ -371,15 +393,15 @@ router.post('/market/record', async (req, res) => {
     try {
         const { region, category, risk_score, is_fraud } = req.body;
         if (!region) return res.status(400).json({ error: 'region required' });
-        
+
         const result = R.marketIntelligence('record', { region, category, risk_score, is_fraud });
-        
+
         // Persist
         await db.run(
             `INSERT INTO market_data (region, category, risk_score, is_fraud, org_id) VALUES ($1, $2, $3, $4, $5)`,
             [region, category || 'default', risk_score || 0, is_fraud || false, getOrg(req)]
         );
-        
+
         res.json(result);
     } catch (err) {
         res.status(500).json({ error: 'Failed to record market data' });
@@ -390,7 +412,7 @@ router.post('/market/record', async (req, res) => {
 router.get('/market/report', async (req, res) => {
     try {
         const inMemory = R.marketIntelligence('report');
-        
+
         // Get persistent hotspots
         const hotspots = await db.all(
             `SELECT region, COUNT(*) as scans,
@@ -399,7 +421,7 @@ router.get('/market/report', async (req, res) => {
              FROM market_data
              GROUP BY region ORDER BY fraud_count DESC LIMIT 20`
         );
-        
+
         res.json({
             live: inMemory,
             persisted_hotspots: hotspots,
@@ -416,7 +438,7 @@ router.get('/status', (req, res) => {
         const confidence = R.networkConfidence();
         const trust = R.getTrustNetwork();
         const cred = R.getOrgCredibility();
-        
+
         res.json({
             engine_version: '21.6',
             protocol_version: '21.5',
@@ -451,7 +473,13 @@ router.post('/keys/create', async (req, res) => {
             [orgId, hash, prefix, name || 'Default', scopes || ['*'], rate_limit || 60]
         );
 
-        res.json({ success: true, api_key: rawKey, prefix, name: name || 'Default', warning: 'Save this key — it cannot be retrieved again' });
+        res.json({
+            success: true,
+            api_key: rawKey,
+            prefix,
+            name: name || 'Default',
+            warning: 'Save this key — it cannot be retrieved again',
+        });
     } catch (err) {
         console.error('Key create error:', err.message);
         res.status(500).json({ error: 'Failed to create API key' });
@@ -477,10 +505,10 @@ router.get('/keys', async (req, res) => {
 router.delete('/keys/:id', async (req, res) => {
     try {
         const orgId = getOrg(req);
-        await db.run(
-            `UPDATE api_keys SET revoked = true, updated_at = NOW() WHERE id = $1 AND org_id = $2`,
-            [req.params.id, orgId]
-        );
+        await db.run(`UPDATE api_keys SET revoked = true, updated_at = NOW() WHERE id = $1 AND org_id = $2`, [
+            req.params.id,
+            orgId,
+        ]);
         res.json({ success: true, message: 'API key revoked' });
     } catch (err) {
         res.status(500).json({ error: 'Failed to revoke API key' });

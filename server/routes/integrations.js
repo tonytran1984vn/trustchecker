@@ -21,9 +21,13 @@ router.use(authMiddleware);
 router.use(requirePermission('settings:update'));
 
 // Encryption for API keys at rest — MUST set ENCRYPTION_KEY in production
-const ENCRYPTION_KEY_SOURCE = process.env.ENCRYPTION_KEY || (process.env.NODE_ENV === 'production'
-    ? (() => { throw new Error('ENCRYPTION_KEY env var is required in production'); })()
-    : 'trustchecker-settings-key-DEV-ONLY');
+const ENCRYPTION_KEY_SOURCE =
+    process.env.ENCRYPTION_KEY ||
+    (process.env.NODE_ENV === 'production'
+        ? (() => {
+              throw new Error('ENCRYPTION_KEY env var is required in production');
+          })()
+        : 'trustchecker-settings-key-DEV-ONLY');
 if (!process.env.ENCRYPTION_KEY) {
     console.warn('⚠️  ENCRYPTION_KEY not set — using dev fallback. Set ENCRYPTION_KEY env var for production!');
 }
@@ -69,18 +73,28 @@ const INTEGRATION_SCHEMA = {
             { key: 'secret_key', label: 'Secret Key', secret: true, placeholder: 'sk_live_...' },
             { key: 'webhook_secret', label: 'Webhook Secret', secret: true, placeholder: 'whsec_...' },
             { key: 'enabled', label: 'Enabled', secret: false, placeholder: 'true / false' },
-        ]
+        ],
     },
     google_oauth: {
         label: 'Google OAuth',
         icon: '🔐',
         description: 'Allow users to sign in with their Google accounts',
         settings: [
-            { key: 'client_id', label: 'Client ID', secret: false, placeholder: '123456789.apps.googleusercontent.com' },
+            {
+                key: 'client_id',
+                label: 'Client ID',
+                secret: false,
+                placeholder: '123456789.apps.googleusercontent.com',
+            },
             { key: 'client_secret', label: 'Client Secret', secret: true, placeholder: 'GOCSPX-...' },
-            { key: 'redirect_uri', label: 'Redirect URI', secret: false, placeholder: 'https://yourdomain.com/auth/google/callback' },
+            {
+                key: 'redirect_uri',
+                label: 'Redirect URI',
+                secret: false,
+                placeholder: 'https://yourdomain.com/auth/google/callback',
+            },
             { key: 'enabled', label: 'Enabled', secret: false, placeholder: 'true / false' },
-        ]
+        ],
     },
     github_oauth: {
         label: 'GitHub OAuth',
@@ -89,21 +103,31 @@ const INTEGRATION_SCHEMA = {
         settings: [
             { key: 'client_id', label: 'Client ID', secret: false, placeholder: 'Iv1.abc123...' },
             { key: 'client_secret', label: 'Client Secret', secret: true, placeholder: 'ghp_...' },
-            { key: 'redirect_uri', label: 'Redirect URI', secret: false, placeholder: 'https://yourdomain.com/auth/github/callback' },
+            {
+                key: 'redirect_uri',
+                label: 'Redirect URI',
+                secret: false,
+                placeholder: 'https://yourdomain.com/auth/github/callback',
+            },
             { key: 'enabled', label: 'Enabled', secret: false, placeholder: 'true / false' },
-        ]
+        ],
     },
     ethereum: {
         label: 'Ethereum / Polygon',
         icon: '⛓️',
         description: 'Anchor evidence hashes on-chain for immutable proof',
         settings: [
-            { key: 'rpc_url', label: 'RPC URL (Infura/Alchemy)', secret: false, placeholder: 'https://mainnet.infura.io/v3/YOUR_KEY' },
+            {
+                key: 'rpc_url',
+                label: 'RPC URL (Infura/Alchemy)',
+                secret: false,
+                placeholder: 'https://mainnet.infura.io/v3/YOUR_KEY',
+            },
             { key: 'private_key', label: 'Wallet Private Key', secret: true, placeholder: '0x...' },
             { key: 'contract_address', label: 'Smart Contract Address', secret: false, placeholder: '0x...' },
             { key: 'chain_id', label: 'Chain ID', secret: false, placeholder: '1 (mainnet) / 137 (polygon)' },
             { key: 'enabled', label: 'Enabled', secret: false, placeholder: 'true / false' },
-        ]
+        ],
     },
     carrier_api: {
         label: 'Carrier APIs (Logistics)',
@@ -116,7 +140,7 @@ const INTEGRATION_SCHEMA = {
             { key: 'ups_client_id', label: 'UPS Client ID', secret: false, placeholder: '' },
             { key: 'ups_client_secret', label: 'UPS Client Secret', secret: true, placeholder: '' },
             { key: 'enabled', label: 'Enabled', secret: false, placeholder: 'true / false' },
-        ]
+        ],
     },
     kyc_provider: {
         label: 'KYC Provider (Veriff/Onfido)',
@@ -126,9 +150,14 @@ const INTEGRATION_SCHEMA = {
             { key: 'provider', label: 'Provider', secret: false, placeholder: 'veriff / onfido' },
             { key: 'api_key', label: 'API Key', secret: true, placeholder: '' },
             { key: 'api_secret', label: 'API Secret', secret: true, placeholder: '' },
-            { key: 'webhook_url', label: 'Webhook URL', secret: false, placeholder: 'https://yourdomain.com/api/kyc/webhook' },
+            {
+                key: 'webhook_url',
+                label: 'Webhook URL',
+                secret: false,
+                placeholder: 'https://yourdomain.com/api/kyc/webhook',
+            },
             { key: 'enabled', label: 'Enabled', secret: false, placeholder: 'true / false' },
-        ]
+        ],
     },
     smtp: {
         label: 'Email / SMTP',
@@ -141,7 +170,7 @@ const INTEGRATION_SCHEMA = {
             { key: 'password', label: 'Password', secret: true, placeholder: '' },
             { key: 'from_name', label: 'From Name', secret: false, placeholder: 'TrustChecker' },
             { key: 'enabled', label: 'Enabled', secret: false, placeholder: 'true / false' },
-        ]
+        ],
     },
     webhook: {
         label: 'Outgoing Webhooks',
@@ -150,24 +179,29 @@ const INTEGRATION_SCHEMA = {
         settings: [
             { key: 'url', label: 'Webhook URL', secret: false, placeholder: 'https://hooks.slack.com/services/...' },
             { key: 'secret', label: 'Signing Secret', secret: true, placeholder: '' },
-            { key: 'events', label: 'Events (comma-separated)', secret: false, placeholder: 'scan.completed, fraud.detected, evidence.created' },
+            {
+                key: 'events',
+                label: 'Events (comma-separated)',
+                secret: false,
+                placeholder: 'scan.completed, fraud.detected, evidence.created',
+            },
             { key: 'enabled', label: 'Enabled', secret: false, placeholder: 'true / false' },
-        ]
-    }
+        ],
+    },
 };
 
 module.exports = function (db) {
     // GET /api/integrations/schema — Return available integration categories
     router.get('/schema', async (req, res) => {
-    try {
+        try {
             const schema = {};
             for (const [cat, def] of Object.entries(INTEGRATION_SCHEMA)) {
                 schema[cat] = { ...def, settings: def.settings.map(s => ({ ...s })) };
             }
             res.json(schema);
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
+        } catch (e) {
+            safeError(res, 'Operation failed', e);
+        }
     });
 
     // GET /api/integrations — Get all settings (mask secrets)
@@ -186,7 +220,7 @@ module.exports = function (db) {
                     value: val,
                     is_secret: !!row.is_secret,
                     updated_at: row.updated_at,
-                    updated_by: row.updated_by
+                    updated_by: row.updated_by,
                 };
             }
             res.json(result);
@@ -212,19 +246,31 @@ module.exports = function (db) {
                 if (def.secret && val.includes('••••')) continue;
 
                 const storedValue = def.secret ? encrypt(val) : val;
-                const existing = await db.get(
-                    'SELECT id FROM system_settings WHERE category = ? AND setting_key = ?',
-                    [category, def.key]
-                );
+                const existing = await db.get('SELECT id FROM system_settings WHERE category = ? AND setting_key = ?', [
+                    category,
+                    def.key,
+                ]);
 
                 if (existing) {
-                    await db.prepare(
-                        'UPDATE system_settings SET setting_value = ?, is_secret = ?, updated_by = ?, updated_at = NOW() WHERE id = ?'
-                    ).run(storedValue, def.secret ? 1 : 0, req.user.username, existing.id);
+                    await db
+                        .prepare(
+                            'UPDATE system_settings SET setting_value = ?, is_secret = ?, updated_by = ?, updated_at = NOW() WHERE id = ?'
+                        )
+                        .run(storedValue, def.secret ? 1 : 0, req.user.username, existing.id);
                 } else {
-                    await db.prepare(
-                        'INSERT INTO system_settings (id, category, setting_key, setting_value, is_secret, description, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)'
-                    ).run(uuidv4(), category, def.key, storedValue, def.secret ? 1 : 0, def.label, req.user.username);
+                    await db
+                        .prepare(
+                            'INSERT INTO system_settings (id, category, setting_key, setting_value, is_secret, description, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)'
+                        )
+                        .run(
+                            uuidv4(),
+                            category,
+                            def.key,
+                            storedValue,
+                            def.secret ? 1 : 0,
+                            def.label,
+                            req.user.username
+                        );
                 }
                 updated.push(def.key);
             }
@@ -281,9 +327,10 @@ module.exports = function (db) {
                         : { status: 'error', message: 'Invalid RPC URL' };
                     break;
                 case 'smtp':
-                    testResult = settings.host && settings.port
-                        ? { status: 'ok', message: `SMTP endpoint ${settings.host}:${settings.port} configured` }
-                        : { status: 'error', message: 'Missing SMTP host or port' };
+                    testResult =
+                        settings.host && settings.port
+                            ? { status: 'ok', message: `SMTP endpoint ${settings.host}:${settings.port} configured` }
+                            : { status: 'error', message: 'Missing SMTP host or port' };
                     break;
                 default:
                     testResult = { status: 'ok', message: 'Configuration saved (no live test available)' };

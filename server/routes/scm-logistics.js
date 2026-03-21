@@ -13,7 +13,6 @@ const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();
 
-
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
 
@@ -24,17 +23,35 @@ router.post('/shipments', authMiddleware, requirePermission('logistics:create'),
         if (!batch_id) return res.status(400).json({ error: 'batch_id is required' });
 
         const id = uuidv4();
-        await db.run(`
+        await db.run(
+            `
       INSERT INTO shipments (id, batch_id, from_partner_id, to_partner_id, carrier, tracking_number, status, estimated_delivery)
       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
-    `, [id, batch_id, from_partner_id || null, to_partner_id || null, carrier || '', tracking_number || `TRK-${Date.now()}`, estimated_delivery || null]);
+    `,
+            [
+                id,
+                batch_id,
+                from_partner_id || null,
+                to_partner_id || null,
+                carrier || '',
+                tracking_number || `TRK-${Date.now()}`,
+                estimated_delivery || null,
+            ]
+        );
 
         // Create ship event
-        const seal = await blockchainEngine.seal('Shipment', id, { batch_id, from: from_partner_id, to: to_partner_id });
-        await db.run(`
+        const seal = await blockchainEngine.seal('Shipment', id, {
+            batch_id,
+            from: from_partner_id,
+            to: to_partner_id,
+        });
+        await db.run(
+            `
       INSERT INTO supply_chain_events (id, event_type, batch_id, partner_id, details, blockchain_seal_id)
       VALUES (?, 'ship', ?, ?, ?, ?)
-    `, [uuidv4(), batch_id, from_partner_id || null, JSON.stringify({ shipment_id: id, carrier }), seal.seal_id]);
+    `,
+            [uuidv4(), batch_id, from_partner_id || null, JSON.stringify({ shipment_id: id, carrier }), seal.seal_id]
+        );
 
         eventBus.emitEvent('ShipmentCreated', { id, batch_id, carrier });
         res.status(201).json({ id, tracking_number: tracking_number || `TRK-${Date.now()}`, blockchain_seal: seal });
@@ -59,8 +76,14 @@ router.get('/shipments', async (req, res) => {
     `;
         const params = [];
         const conditions = [];
-        if (orgId) { conditions.push('(fp.org_id = ? OR tp.org_id = ?)'); params.push(orgId, orgId); }
-        if (status) { conditions.push('s.status = ?'); params.push(status); }
+        if (orgId) {
+            conditions.push('(fp.org_id = ? OR tp.org_id = ?)');
+            params.push(orgId, orgId);
+        }
+        if (status) {
+            conditions.push('s.status = ?');
+            params.push(status);
+        }
         if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
         query += ' ORDER BY s.created_at DESC LIMIT ?';
         params.push(Math.min(Number(limit) || 20, 100));
@@ -80,7 +103,11 @@ router.put('/shipments/:id/update', authMiddleware, requireRole('operator'), asy
 
         // Update GPS trail
         let trail = [];
-        try { trail = JSON.parse(shipment.gps_trail || '[]'); } catch (e) { trail = []; }
+        try {
+            trail = JSON.parse(shipment.gps_trail || '[]');
+        } catch (e) {
+            trail = [];
+        }
         if (current_lat && current_lng) {
             trail.push({ lat: current_lat, lng: current_lng, timestamp: new Date().toISOString() });
         }
@@ -88,17 +115,30 @@ router.put('/shipments/:id/update', authMiddleware, requireRole('operator'), asy
         const newStatus = status || shipment.status;
         const actualDelivery = newStatus === 'delivered' ? new Date().toISOString() : shipment.actual_delivery;
 
-        await db.run(`
+        await db.run(
+            `
       UPDATE shipments SET status = ?, current_lat = ?, current_lng = ?, gps_trail = ?, actual_delivery = ?, updated_at = NOW()
       WHERE id = ?
-    `, [newStatus, current_lat || shipment.current_lat, current_lng || shipment.current_lng, JSON.stringify(trail), actualDelivery, req.params.id]);
+    `,
+            [
+                newStatus,
+                current_lat || shipment.current_lat,
+                current_lng || shipment.current_lng,
+                JSON.stringify(trail),
+                actualDelivery,
+                req.params.id,
+            ]
+        );
 
         // Record event
         if (newStatus === 'delivered') {
-            await db.run(`
+            await db.run(
+                `
         INSERT INTO supply_chain_events (id, event_type, batch_id, partner_id, details)
         VALUES (?, 'receive', ?, ?, ?)
-      `, [uuidv4(), shipment.batch_id, shipment.to_partner_id, JSON.stringify({ shipment_id: req.params.id })]);
+      `,
+                [uuidv4(), shipment.batch_id, shipment.to_partner_id, JSON.stringify({ shipment_id: req.params.id })]
+            );
 
             // Check SLA
             _checkSLA(shipment, actualDelivery);
@@ -117,18 +157,26 @@ router.post('/shipments/:id/iot', async (req, res) => {
         const { sensor_type, value, unit, threshold_min, threshold_max } = req.body;
         if (value === undefined) return res.status(400).json({ error: 'value is required' });
 
-        const tMin = threshold_min !== undefined ? threshold_min : (sensor_type === 'temperature' ? -5 : 20);
-        const tMax = threshold_max !== undefined ? threshold_max : (sensor_type === 'temperature' ? 25 : 80);
+        const tMin = threshold_min !== undefined ? threshold_min : sensor_type === 'temperature' ? -5 : 20;
+        const tMax = threshold_max !== undefined ? threshold_max : sensor_type === 'temperature' ? 25 : 80;
         const alertTriggered = value < tMin || value > tMax ? 1 : 0;
 
         const id = uuidv4();
-        await db.run(`
+        await db.run(
+            `
       INSERT INTO iot_readings (id, shipment_id, sensor_type, value, unit, threshold_min, threshold_max, alert_triggered)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, req.params.id, sensor_type || 'temperature', value, unit || 'C', tMin, tMax, alertTriggered]);
+    `,
+            [id, req.params.id, sensor_type || 'temperature', value, unit || 'C', tMin, tMax, alertTriggered]
+        );
 
         if (alertTriggered) {
-            eventBus.emitEvent('IoTAlert', { shipment_id: req.params.id, sensor_type, value, threshold: `${tMin}-${tMax}` });
+            eventBus.emitEvent('IoTAlert', {
+                shipment_id: req.params.id,
+                sensor_type,
+                value,
+                threshold: `${tMin}-${tMax}`,
+            });
         }
 
         res.status(201).json({ id, alert_triggered: !!alertTriggered, value, threshold: { min: tMin, max: tMax } });
@@ -140,8 +188,14 @@ router.post('/shipments/:id/iot', async (req, res) => {
 // ─── GET /api/scm/shipments/:id/iot-alerts – IoT threshold violations ────────
 router.get('/shipments/:id/iot-alerts', async (req, res) => {
     try {
-        const alerts = await db.all('SELECT * FROM iot_readings WHERE shipment_id = ? AND alert_triggered = 1 ORDER BY recorded_at DESC LIMIT 1000', [req.params.id]);
-        const allReadings = await db.all('SELECT * FROM iot_readings WHERE shipment_id = ? ORDER BY recorded_at DESC LIMIT 100', [req.params.id]);
+        const alerts = await db.all(
+            'SELECT * FROM iot_readings WHERE shipment_id = ? AND alert_triggered = 1 ORDER BY recorded_at DESC LIMIT 1000',
+            [req.params.id]
+        );
+        const allReadings = await db.all(
+            'SELECT * FROM iot_readings WHERE shipment_id = ? ORDER BY recorded_at DESC LIMIT 100',
+            [req.params.id]
+        );
         res.json({ alerts, all_readings: allReadings });
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch IoT alerts' });
@@ -151,14 +205,27 @@ router.get('/shipments/:id/iot-alerts', async (req, res) => {
 // ─── POST /api/scm/sla – Define SLA ─────────────────────────────────────────
 router.post('/sla', authMiddleware, requirePermission('logistics:manage'), async (req, res) => {
     try {
-        const { partner_id, sla_type, metric, threshold_value, threshold_unit, penalty_amount, penalty_currency } = req.body;
+        const { partner_id, sla_type, metric, threshold_value, threshold_unit, penalty_amount, penalty_currency } =
+            req.body;
         if (!partner_id) return res.status(400).json({ error: 'partner_id required' });
 
         const id = uuidv4();
-        await db.run(`
+        await db.run(
+            `
       INSERT INTO sla_definitions (id, partner_id, sla_type, metric, threshold_value, threshold_unit, penalty_amount, penalty_currency)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [id, partner_id, sla_type || 'delivery', metric || 'delivery_time', threshold_value || 48, threshold_unit || 'hours', penalty_amount || 0, penalty_currency || 'USD']);
+    `,
+            [
+                id,
+                partner_id,
+                sla_type || 'delivery',
+                metric || 'delivery_time',
+                threshold_value || 48,
+                threshold_unit || 'hours',
+                penalty_amount || 0,
+                penalty_currency || 'USD',
+            ]
+        );
 
         res.status(201).json({ id, sla_type: sla_type || 'delivery' });
     } catch (err) {
@@ -207,7 +274,8 @@ router.get('/optimization', async (req, res) => {
 
 // ── Helper: Check SLA on delivery ────────────────────────────────────────────
 async function _checkSLA(shipment, actualDelivery) {
-    const slas = await db.prepare('SELECT * FROM sla_definitions WHERE partner_id = ? AND status = \'active\'')
+    const slas = await db
+        .prepare("SELECT * FROM sla_definitions WHERE partner_id = ? AND status = 'active'")
         .all(shipment.from_partner_id || shipment.to_partner_id);
 
     for (const sla of slas) {
@@ -218,12 +286,28 @@ async function _checkSLA(shipment, actualDelivery) {
 
             if (delayHours > sla.threshold_value) {
                 const id = uuidv4();
-                await db.run(`
+                await db.run(
+                    `
           INSERT INTO sla_violations (id, sla_id, partner_id, shipment_id, violation_type, actual_value, threshold_value, penalty_amount)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `, [id, sla.id, shipment.from_partner_id || shipment.to_partner_id, shipment.id, 'late_delivery', delayHours, sla.threshold_value, sla.penalty_amount]);
+        `,
+                    [
+                        id,
+                        sla.id,
+                        shipment.from_partner_id || shipment.to_partner_id,
+                        shipment.id,
+                        'late_delivery',
+                        delayHours,
+                        sla.threshold_value,
+                        sla.penalty_amount,
+                    ]
+                );
 
-                eventBus.emitEvent('SLAViolation', { sla_id: sla.id, delay_hours: delayHours, penalty: sla.penalty_amount });
+                eventBus.emitEvent('SLAViolation', {
+                    sla_id: sla.id,
+                    delay_hours: delayHours,
+                    penalty: sla.penalty_amount,
+                });
             }
         }
     }

@@ -12,7 +12,6 @@ const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();
 
-
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
 
@@ -24,11 +23,13 @@ router.use(authMiddleware);
 router.get('/features', authMiddleware, async (req, res) => {
     try {
         const features = await db.all('SELECT * FROM feature_store ORDER BY category, name LIMIT 1000');
-        res.json(features.map(f => ({
-            ...f,
-            config: JSON.parse(f.config || '{}'),
-            stats: JSON.parse(f.stats || '{}')
-        })));
+        res.json(
+            features.map(f => ({
+                ...f,
+                config: JSON.parse(f.config || '{}'),
+                stats: JSON.parse(f.stats || '{}'),
+            }))
+        );
     } catch (err) {
         console.error('List features error:', err);
         res.status(500).json({ error: 'Failed to fetch features' });
@@ -40,11 +41,21 @@ router.post('/features', authMiddleware, requirePermission('risk_model:manage'),
     try {
         const { name, category, data_type, source, extraction_logic, config } = req.body;
         const id = uuidv4();
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO feature_store (id, name, category, data_type, source, extraction_logic, config, stats, status, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, '{}', 'active', NOW(), NOW())
-        `, [id, name, category || 'behavioral', data_type || 'float',
-            source || 'scan_events', extraction_logic || '', JSON.stringify(config || {})]);
+        `,
+            [
+                id,
+                name,
+                category || 'behavioral',
+                data_type || 'float',
+                source || 'scan_events',
+                extraction_logic || '',
+                JSON.stringify(config || {}),
+            ]
+        );
         res.status(201).json({ id, name, status: 'active' });
     } catch (err) {
         console.error('Create feature error:', err);
@@ -82,7 +93,7 @@ router.get('/performance', authMiddleware, async (req, res) => {
             confusion_matrix: JSON.parse(latest.confusion_matrix || '{}'),
             roc_curve: JSON.parse(latest.roc_curve || '[]'),
             per_factor: JSON.parse(latest.per_factor || '[]'),
-            thresholds: JSON.parse(latest.thresholds || '[]')
+            thresholds: JSON.parse(latest.thresholds || '[]'),
         });
     } catch (err) {
         console.error('Get performance error:', err);
@@ -106,26 +117,59 @@ router.get('/performance/history', authMiddleware, async (req, res) => {
 // ─── POST /api/scm/ml/performance – Record evaluation result ────────────────
 router.post('/performance', authMiddleware, requirePermission('risk_model:manage'), async (req, res) => {
     try {
-        const { model_version, auc_roc, precision_score, recall, f1_score, fp_rate, tp_rate,
-            dataset_size, dataset_date_range, confusion_matrix, roc_curve, per_factor, thresholds, notes } = req.body;
+        const {
+            model_version,
+            auc_roc,
+            precision_score,
+            recall,
+            f1_score,
+            fp_rate,
+            tp_rate,
+            dataset_size,
+            dataset_date_range,
+            confusion_matrix,
+            roc_curve,
+            per_factor,
+            thresholds,
+            notes,
+        } = req.body;
         const id = uuidv4();
 
         // Mark previous as not latest
         await db.run('UPDATE model_performance SET is_latest = 0 WHERE is_latest = 1');
 
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO model_performance (id, model_version, auc_roc, precision_score, recall, f1_score, fp_rate, tp_rate,
                 dataset_size, dataset_date_range, confusion_matrix, roc_curve, per_factor, thresholds, notes, is_latest, evaluated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())
-        `, [id, model_version, auc_roc || 0, precision_score || 0, recall || 0, f1_score || 0,
-            fp_rate || '', tp_rate || '', dataset_size || 0, dataset_date_range || '',
-            JSON.stringify(confusion_matrix || {}), JSON.stringify(roc_curve || []),
-            JSON.stringify(per_factor || []), JSON.stringify(thresholds || []), notes || '']);
+        `,
+            [
+                id,
+                model_version,
+                auc_roc || 0,
+                precision_score || 0,
+                recall || 0,
+                f1_score || 0,
+                fp_rate || '',
+                tp_rate || '',
+                dataset_size || 0,
+                dataset_date_range || '',
+                JSON.stringify(confusion_matrix || {}),
+                JSON.stringify(roc_curve || []),
+                JSON.stringify(per_factor || []),
+                JSON.stringify(thresholds || []),
+                notes || '',
+            ]
+        );
 
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
             VALUES (?, ?, 'model_evaluation_recorded', 'model_performance', ?, ?, NOW())
-        `, [uuidv4(), req.user?.id || 'system', id, JSON.stringify({ model_version, auc_roc })]);
+        `,
+            [uuidv4(), req.user?.id || 'system', id, JSON.stringify({ model_version, auc_roc })]
+        );
 
         res.status(201).json({ id, model_version, auc_roc, status: 'recorded' });
     } catch (err) {
@@ -142,11 +186,13 @@ router.post('/performance', authMiddleware, requirePermission('risk_model:manage
 router.get('/training', authMiddleware, async (req, res) => {
     try {
         const runs = await db.all('SELECT * FROM training_runs ORDER BY started_at DESC LIMIT 20');
-        res.json(runs.map(r => ({
-            ...r,
-            hyperparams: JSON.parse(r.hyperparams || '{}'),
-            metrics: JSON.parse(r.metrics || '{}')
-        })));
+        res.json(
+            runs.map(r => ({
+                ...r,
+                hyperparams: JSON.parse(r.hyperparams || '{}'),
+                metrics: JSON.parse(r.metrics || '{}'),
+            }))
+        );
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch training runs' });
     }
@@ -159,13 +205,25 @@ router.post('/training', authMiddleware, requirePermission('risk_model:manage'),
         const id = uuidv4();
         const runId = `TR-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}`;
 
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO training_runs (id, run_id, model_version, status, dataset_size, train_split, val_split, test_split,
                 hyperparams, metrics, triggered_by, notes, started_at)
             VALUES (?, ?, ?, 'running', ?, ?, ?, ?, ?, '{}', ?, ?, NOW())
-        `, [id, runId, model_version || 'draft', dataset_size || 0,
-            train_split || 70, val_split || 15, test_split || 15,
-            JSON.stringify(hyperparams || {}), req.user?.email || '', notes || '']);
+        `,
+            [
+                id,
+                runId,
+                model_version || 'draft',
+                dataset_size || 0,
+                train_split || 70,
+                val_split || 15,
+                test_split || 15,
+                JSON.stringify(hyperparams || {}),
+                req.user?.email || '',
+                notes || '',
+            ]
+        );
 
         // Simulate training completion after recording (in production this would be async)
         const _orgId = req.user?.org_id; // DEVSECOPS: capture org context for async operation
@@ -174,10 +232,19 @@ router.post('/training', authMiddleware, requirePermission('risk_model:manage'),
                 const tp = (95 + Math.random() * 4).toFixed(1);
                 const fp = (5 + Math.random() * 5).toFixed(1);
                 const auc = (0.91 + Math.random() * 0.07).toFixed(3);
-                const metrics = { tp_rate: tp + '%', fp_rate: fp + '%', auc_roc: auc, precision: (90 + Math.random() * 8).toFixed(1) + '%' };
-                await db.run(`UPDATE training_runs SET status = 'completed', metrics = ?, completed_at = NOW() WHERE id = ?`, [
-                    JSON.stringify(metrics), id]);
-            } catch (e) { /* silent */ }
+                const metrics = {
+                    tp_rate: tp + '%',
+                    fp_rate: fp + '%',
+                    auc_roc: auc,
+                    precision: (90 + Math.random() * 8).toFixed(1) + '%',
+                };
+                await db.run(
+                    `UPDATE training_runs SET status = 'completed', metrics = ?, completed_at = NOW() WHERE id = ?`,
+                    [JSON.stringify(metrics), id]
+                );
+            } catch (e) {
+                /* silent */
+            }
         }, 2000);
 
         res.status(201).json({ id, run_id: runId, status: 'running', message: 'Training pipeline triggered' });
@@ -190,9 +257,16 @@ router.post('/training', authMiddleware, requirePermission('risk_model:manage'),
 // ─── GET /api/scm/ml/training/:id – Training run detail ────────────────────
 router.get('/training/:id', authMiddleware, async (req, res) => {
     try {
-        const run = await db.get('SELECT * FROM training_runs WHERE id = ? OR run_id = ?', [req.params.id, req.params.id]);
+        const run = await db.get('SELECT * FROM training_runs WHERE id = ? OR run_id = ?', [
+            req.params.id,
+            req.params.id,
+        ]);
         if (!run) return res.status(404).json({ error: 'Training run not found' });
-        res.json({ ...run, hyperparams: JSON.parse(run.hyperparams || '{}'), metrics: JSON.parse(run.metrics || '{}') });
+        res.json({
+            ...run,
+            hyperparams: JSON.parse(run.hyperparams || '{}'),
+            metrics: JSON.parse(run.metrics || '{}'),
+        });
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch training run' });
     }
@@ -209,28 +283,32 @@ router.get('/validation-report', authMiddleware, async (req, res) => {
         res.json({
             report_id: `MVR-${new Date().getFullYear()}-Q${Math.ceil((new Date().getMonth() + 1) / 3)}`,
             generated_at: new Date().toISOString(),
-            model: model ? { version: model.version, deployed_at: model.deployed_at, weights: JSON.parse(model.weights || '{}') } : null,
+            model: model
+                ? { version: model.version, deployed_at: model.deployed_at, weights: JSON.parse(model.weights || '{}') }
+                : null,
             dataset: {
                 total_events: totalScans,
                 fraud_cases: fraudCases,
                 source: 'Production scan events (anonymized)',
-                synthetic_pct: '0%'
+                synthetic_pct: '0%',
             },
-            performance: perf ? {
-                auc_roc: perf.auc_roc,
-                precision: perf.precision_score,
-                recall: perf.recall,
-                f1: perf.f1_score,
-                tp_rate: perf.tp_rate,
-                fp_rate: perf.fp_rate,
-                confusion_matrix: safeParse(perf.confusion_matrix, {})
-            } : null,
+            performance: perf
+                ? {
+                      auc_roc: perf.auc_roc,
+                      precision: perf.precision_score,
+                      recall: perf.recall,
+                      f1: perf.f1_score,
+                      tp_rate: perf.tp_rate,
+                      fp_rate: perf.fp_rate,
+                      confusion_matrix: safeParse(perf.confusion_matrix, {}),
+                  }
+                : null,
             validation_status: 'internal',
             independent_validation: {
                 status: 'pending',
                 requirement: 'Annual external validation by ML audit firm',
-                framework: 'EAS v2.0 Section XIII'
-            }
+                framework: 'EAS v2.0 Section XIII',
+            },
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to generate validation report' });

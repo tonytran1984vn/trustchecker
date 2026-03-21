@@ -6,10 +6,12 @@ const { z } = require('zod');
 
 // ── Common ──────────────────────────────────────────────────────────────────
 const uuid = z.string().uuid('Must be a valid UUID');
-const paginationQuery = z.object({
-    page: z.coerce.number().int().min(1).default(1),
-    limit: z.coerce.number().int().min(1).max(100).default(20),
-}).partial();
+const paginationQuery = z
+    .object({
+        page: z.coerce.number().int().min(1).default(1),
+        limit: z.coerce.number().int().min(1).max(100).default(20),
+    })
+    .partial();
 
 const idParam = z.object({ id: uuid });
 
@@ -34,7 +36,10 @@ const createProduct = z.object({
     category: z.string().max(100).optional(),
     manufacturer: z.string().min(2).max(200).optional(),
     batch_number: z.string().max(100).optional(),
-    origin_country: z.string().regex(/^[A-Z]{2}$/, 'Must be ISO 3166-1 alpha-2 (e.g. VN)').optional(),
+    origin_country: z
+        .string()
+        .regex(/^[A-Z]{2}$/, 'Must be ISO 3166-1 alpha-2 (e.g. VN)')
+        .optional(),
 });
 
 const updateProduct = createProduct.partial();
@@ -59,12 +64,14 @@ const processScan = z.object({
 });
 
 // ── Organization ────────────────────────────────────────────────────────────
-const updateOrg = z.object({
-    name: z.string().min(2).max(200).optional(),
-    domain: z.string().max(200).optional(),
-    industry: z.string().max(100).optional(),
-    size: z.string().max(50).optional(),
-}).refine(data => Object.keys(data).length > 0, 'At least one field required');
+const updateOrg = z
+    .object({
+        name: z.string().min(2).max(200).optional(),
+        domain: z.string().max(200).optional(),
+        industry: z.string().max(100).optional(),
+        size: z.string().max(50).optional(),
+    })
+    .refine(data => Object.keys(data).length > 0, 'At least one field required');
 
 const inviteMember = z.object({
     email: z.string().email(),
@@ -116,7 +123,6 @@ const ingestEPCIS = z.object({
     events: z.array(epcisEvent).min(1).max(1000),
 });
 
-
 // RED-TEAM FIX: Missing qrScan schema (was undefined, caused validate crash)
 const qrScan = {
     body: z.object({
@@ -138,14 +144,16 @@ const createIncident = z.object({
     assignedTo: z.string().uuid().optional(),
 });
 
-const updateIncident = z.object({
-    status: z.enum(['open', 'investigating', 'escalated', 'resolved', 'closed']).optional(),
-    resolution: z.string().max(2000).optional(),
-    rootCause: z.string().max(2000).optional(),
-    assigned_to: z.string().uuid().optional(),
-    severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).optional(),
-    reason: z.string().max(500).optional(),
-}).refine(data => Object.keys(data).length > 0, 'At least one field required');
+const updateIncident = z
+    .object({
+        status: z.enum(['open', 'investigating', 'escalated', 'resolved', 'closed']).optional(),
+        resolution: z.string().max(2000).optional(),
+        rootCause: z.string().max(2000).optional(),
+        assigned_to: z.string().uuid().optional(),
+        severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).optional(),
+        reason: z.string().max(500).optional(),
+    })
+    .refine(data => Object.keys(data).length > 0, 'At least one field required');
 
 const createPurchaseOrder = z.object({
     supplier: z.string().min(1).max(200),
@@ -180,17 +188,27 @@ const onboardSupplier = z.object({
 
 module.exports = {
     qrScan,
-    uuid, paginationQuery, idParam,
-    login, register,
-    createProduct, updateProduct, productQuery,
-    generateQR, processScan,
-    updateOrg, inviteMember,
-    createShipment, addPartner,
+    uuid,
+    paginationQuery,
+    idParam,
+    login,
+    register,
+    createProduct,
+    updateProduct,
+    productQuery,
+    generateQR,
+    processScan,
+    updateOrg,
+    inviteMember,
+    createShipment,
+    addPartner,
     createWebhook,
     createEvidence,
     assignRole,
     ingestEPCIS,
-    createIncident, updateIncident,
-    createPurchaseOrder, createQualityCheck,
+    createIncident,
+    updateIncident,
+    createPurchaseOrder,
+    createQualityCheck,
     onboardSupplier,
 };

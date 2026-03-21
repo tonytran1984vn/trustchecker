@@ -21,8 +21,14 @@ async function withTransaction(db, callback) {
             await client.query('BEGIN');
             const tx = {
                 run: (sql, params) => client.query(sql, params),
-                get: async (sql, params) => { const r = await client.query(sql, params); return r.rows[0]; },
-                all: async (sql, params) => { const r = await client.query(sql, params); return r.rows; },
+                get: async (sql, params) => {
+                    const r = await client.query(sql, params);
+                    return r.rows[0];
+                },
+                all: async (sql, params) => {
+                    const r = await client.query(sql, params);
+                    return r.rows;
+                },
             };
             const result = await callback(tx);
             await client.query('COMMIT');

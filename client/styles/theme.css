@@ -1,0 +1,229 @@
+/* Light theme, Dark theme, Theme Toggle */
+/* ═══════════════════════════════════════════════════════════════
+   Light Theme Overrides
+   ═══════════════════════════════════════════════════════════════ */
+[data-theme="light"] {
+  /* Core palette — clean slate design */
+  --bg-primary: #f0f2f5;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f8f9fb;
+  --bg-input: #f3f4f6;
+  --bg-glass: rgba(255, 255, 255, 0.88);
+
+  /* Accent colors — slightly deeper for light backgrounds */
+  --cyan: #0891b2;
+  --cyan-glow: rgba(8, 145, 178, 0.10);
+  --cyan-muted: #0e7490;
+  --violet: #7c3aed;
+  --violet-glow: rgba(124, 58, 237, 0.08);
+  --emerald: #059669;
+  --emerald-glow: rgba(5, 150, 105, 0.08);
+  --amber: #d97706;
+  --amber-glow: rgba(217, 119, 6, 0.08);
+  --rose: #e11d48;
+  --rose-glow: rgba(225, 29, 72, 0.08);
+
+  /* Text — dark on light */
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+
+  /* Borders — subtle gray */
+  --border: rgba(0, 0, 0, 0.08);
+  --border-hover: rgba(8, 145, 178, 0.25);
+
+  /* Gradients */
+  --gradient-accent: linear-gradient(135deg, #0891b2 0%, #7c3aed 100%);
+  --gradient-card: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.98));
+  --gradient-hero: linear-gradient(160deg, #f0f2f5 0%, #ffffff 40%, #f0f4f8 100%);
+  --gradient-mesh: radial-gradient(ellipse at 20% 0%, rgba(8, 145, 178, 0.05) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 100%, rgba(124, 58, 237, 0.04) 0%, transparent 50%);
+  --gradient-glass: linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.4) 100%);
+  --gradient-border: linear-gradient(135deg, rgba(8, 145, 178, 0.3), rgba(124, 58, 237, 0.3));
+
+  /* Shadows — softer for light */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.1);
+  --shadow-glow: 0 0 20px rgba(8, 145, 178, 0.08);
+  --shadow-glow-lg: 0 0 40px rgba(8, 145, 178, 0.1);
+  --shadow-glass: 0 4px 16px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+
+  /* ── Semantic Colors (light) ── */
+  --color-success: #059669;
+  --color-success-bg: rgba(5, 150, 105, 0.08);
+  --color-success-text: #16a34a;
+  --color-warning: #d97706;
+  --color-warning-bg: rgba(217, 119, 6, 0.08);
+  --color-warning-text: #b45309;
+  --color-danger: #dc2626;
+  --color-danger-bg: rgba(220, 38, 38, 0.07);
+  --color-danger-text: #dc2626;
+  --color-info: #2563eb;
+  --color-info-bg: rgba(37, 99, 235, 0.07);
+  --color-info-text: #1d4ed8;
+  --color-neutral: #6b7280;
+  --color-neutral-bg: rgba(107, 114, 128, 0.08);
+}
+
+/* Light mode ambient glow — softer tints */
+[data-theme="light"] body::before {
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(8, 145, 178, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 100%, rgba(124, 58, 237, 0.03) 0%, transparent 60%);
+}
+
+/* Light mode glassmorphism cards */
+[data-theme="light"] .glass,
+[data-theme="light"] .glass-card {
+  background: rgba(255, 255, 255, 0.65);
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-glass);
+}
+
+[data-theme="light"] .glass-panel {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .sidebar {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 1px 0 24px rgba(0, 0, 0, 0.06), inset -1px 0 0 rgba(0, 0, 0, 0.04);
+}
+
+/* Logo text needs gradient contrast in light mode */
+[data-theme="light"] .sidebar-logo .logo-icon {
+  box-shadow: 0 2px 12px rgba(8, 145, 178, 0.2), 0 0 20px rgba(8, 145, 178, 0.1);
+}
+
+/* Light mode nav active state */
+[data-theme="light"] .nav-item.active {
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.1) 0%, rgba(124, 58, 237, 0.05) 100%);
+  color: var(--cyan);
+}
+
+[data-theme="light"] .nav-item.active::before {
+  background: linear-gradient(180deg, var(--cyan), var(--violet));
+  box-shadow: 0 0 6px rgba(8, 145, 178, 0.3);
+}
+
+[data-theme="light"] .nav-item:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+/* Light mode stat cards depth */
+[data-theme="light"] .stat-card {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="light"] .stat-card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 8px 32px rgba(0, 0, 0, 0.04) !important;
+}
+
+[data-theme="light"] .stat-card .stat-icon {
+  border-color: rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+/* Light mode cards depth */
+[data-theme="light"] .card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* Light mode tables */
+[data-theme="light"] th {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="light"] tr:nth-child(even) td {
+  background: rgba(0, 0, 0, 0.015);
+}
+
+[data-theme="light"] tr:hover td {
+  background: rgba(8, 145, 178, 0.04);
+}
+
+/* Chart tooltips, modals, overlays — light versions */
+[data-theme="light"] .modal-overlay {
+  background: rgba(15, 23, 42, 0.4);
+}
+
+[data-theme="light"] .modal-content {
+  background: #ffffff;
+  border: 1px solid var(--border);
+}
+
+[data-theme="light"] .toast {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+/* Code blocks / pre in light mode */
+[data-theme="light"] pre,
+[data-theme="light"] code {
+  background: #f1f5f9;
+}
+
+/* Scrollbar light */
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ─── Theme Toggle Button ───────────────────────────────────── */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  cursor: pointer;
+  transition: var(--transition);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+  border-color: var(--border-hover);
+  color: var(--cyan);
+  background: var(--bg-card-hover);
+  transform: rotate(15deg);
+}
+
+.theme-toggle svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.3s ease, opacity 0.2s ease;
+}
+
+.theme-toggle .icon-sun {
+  display: none;
+}
+
+.theme-toggle .icon-moon {
+  display: block;
+}
+
+[data-theme="light"] .theme-toggle .icon-sun {
+  display: block;
+}
+
+[data-theme="light"] .theme-toggle .icon-moon {
+  display: none;
+}

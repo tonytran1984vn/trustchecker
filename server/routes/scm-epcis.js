@@ -17,9 +17,15 @@ router.use(authMiddleware);
 router.get('/events', async (req, res) => {
     try {
         const {
-            eventType, bizStep, action, disposition,
-            GE_eventTime, LT_eventTime, MATCH_epc,
-            limit = 50, offset = 0
+            eventType,
+            bizStep,
+            action,
+            disposition,
+            GE_eventTime,
+            LT_eventTime,
+            MATCH_epc,
+            limit = 50,
+            offset = 0,
         } = req.query;
 
         const orgId = req.user?.org_id || req.user?.orgId || null;
@@ -33,25 +39,43 @@ router.get('/events', async (req, res) => {
       LEFT JOIN batches b ON sce.batch_id = b.id
     `;
         const evParams = [];
-        if (orgId) { evQuery += ' WHERE (p.org_id = ? OR pt.org_id = ?)'; evParams.push(orgId, orgId); }
+        if (orgId) {
+            evQuery += ' WHERE (p.org_id = ? OR pt.org_id = ?)';
+            evParams.push(orgId, orgId);
+        }
         evQuery += ' ORDER BY sce.created_at DESC LIMIT ? OFFSET ?';
         evParams.push(parseInt(limit), Math.max(parseInt(offset) || 0, 0));
         const events = await db.prepare(evQuery).all(...evParams);
 
         // Convert to EPCIS format
-        const epcisEvents = events.map(e => epcisEngine.toEpcisEvent(e, {
-            id: e.product_id, name: e.product_name, sku: e.sku
-        }, {
-            id: e.partner_id, name: e.partner_name
-        }, {
-            id: e.batch_id, batch_number: e.batch_number
-        }));
+        const epcisEvents = events.map(e =>
+            epcisEngine.toEpcisEvent(
+                e,
+                {
+                    id: e.product_id,
+                    name: e.product_name,
+                    sku: e.sku,
+                },
+                {
+                    id: e.partner_id,
+                    name: e.partner_name,
+                },
+                {
+                    id: e.batch_id,
+                    batch_number: e.batch_number,
+                }
+            )
+        );
 
         // Apply EPCIS query filters
         const filtered = epcisEngine.queryEvents(epcisEvents, {
-            eventType, bizStep, EQ_action: action,
+            eventType,
+            bizStep,
+            EQ_action: action,
             EQ_disposition: disposition,
-            GE_eventTime, LT_eventTime, MATCH_epc
+            GE_eventTime,
+            LT_eventTime,
+            MATCH_epc,
         });
 
         res.json({
@@ -62,15 +86,15 @@ router.get('/events', async (req, res) => {
                 queryResults: {
                     queryName: 'SimpleEventQuery',
                     resultsBody: {
-                        eventList: filtered
-                    }
-                }
+                        eventList: filtered,
+                    },
+                },
             },
             'trustchecker:metadata': {
                 total: filtered.length,
                 limit: parseInt(limit),
-                offset: parseInt(offset)
-            }
+                offset: parseInt(offset),
+            },
         });
     } catch (err) {
         console.error('EPCIS query error:', err);
@@ -81,7 +105,8 @@ router.get('/events', async (req, res) => {
 // ─── GET /api/scm/epcis/events/:id — Single EPCIS event ─────────────────────
 router.get('/events/:id', async (req, res) => {
     try {
-        const event = await db.get(`
+        const event = await db.get(
+            `
       SELECT sce.*, p.name as product_name, p.sku, pt.name as partner_name,
              b.batch_number
       FROM supply_chain_events sce
@@ -89,22 +114,33 @@ router.get('/events/:id', async (req, res) => {
       LEFT JOIN partners pt ON sce.partner_id = pt.id
       LEFT JOIN batches b ON sce.batch_id = b.id
       WHERE sce.id = ?
-    `, [req.params.id]);
+    `,
+            [req.params.id]
+        );
 
         if (!event) return res.status(404).json({ error: 'Event not found' });
 
-        const epcisEvent = epcisEngine.toEpcisEvent(event, {
-            id: event.product_id, name: event.product_name, sku: event.sku
-        }, {
-            id: event.partner_id, name: event.partner_name
-        }, {
-            id: event.batch_id, batch_number: event.batch_number
-        });
+        const epcisEvent = epcisEngine.toEpcisEvent(
+            event,
+            {
+                id: event.product_id,
+                name: event.product_name,
+                sku: event.sku,
+            },
+            {
+                id: event.partner_id,
+                name: event.partner_name,
+            },
+            {
+                id: event.batch_id,
+                batch_number: event.batch_number,
+            }
+        );
 
         res.json({
             '@context': 'https://ref.gs1.org/standards/epcis/2.0.0/epcis-context.jsonld',
             type: 'EPCISQueryDocument',
-            epcisBody: { eventList: [epcisEvent] }
+            epcisBody: { eventList: [epcisEvent] },
         });
     } catch (err) {
         console.error('EPCIS event error:', err);
@@ -125,10 +161,13 @@ router.post('/capture', requirePermission('epcis:create'), async (req, res) => {
             const internal = epcisEngine.fromEpcisEvent(epcisEvent);
             const id = uuidv4();
 
-            await db.run(`
+            await db.run(
+                `
         INSERT INTO supply_chain_events (id, event_type, location, actor, details, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
-      `, [id, internal.event_type, internal.location, internal.actor, internal.details, internal.created_at]);
+      `,
+                [id, internal.event_type, internal.location, internal.actor, internal.details, internal.created_at]
+            );
 
             results.push({ id, event_type: internal.event_type, status: 'captured' });
         }
@@ -136,7 +175,7 @@ router.post('/capture', requirePermission('epcis:create'), async (req, res) => {
         res.status(201).json({
             captured: results.length,
             events: results,
-            message: `Successfully captured ${results.length} EPCIS events`
+            message: `Successfully captured ${results.length} EPCIS events`,
         });
     } catch (err) {
         console.error('EPCIS capture error:', err);
@@ -178,16 +217,51 @@ router.get('/stats', cacheMiddleware(60), async (req, res) => {
       SELECT event_type, COUNT(*) as count FROM supply_chain_events GROUP BY event_type ORDER BY count DESC
      LIMIT 1000`);
 
-        const sealed = (await db.prepare("SELECT COUNT(*) as c FROM supply_chain_events WHERE blockchain_seal_id IS NOT NULL AND blockchain_seal_id != ''").get())?.c || 0;
-        const products = (await db.get('SELECT COUNT(DISTINCT product_id) as c FROM supply_chain_events WHERE product_id IS NOT NULL'))?.c || 0;
-        const partners = (await db.get('SELECT COUNT(DISTINCT partner_id) as c FROM supply_chain_events WHERE partner_id IS NOT NULL'))?.c || 0;
+        const sealed =
+            (
+                await db
+                    .prepare(
+                        "SELECT COUNT(*) as c FROM supply_chain_events WHERE blockchain_seal_id IS NOT NULL AND blockchain_seal_id != ''"
+                    )
+                    .get()
+            )?.c || 0;
+        const products =
+            (
+                await db.get(
+                    'SELECT COUNT(DISTINCT product_id) as c FROM supply_chain_events WHERE product_id IS NOT NULL'
+                )
+            )?.c || 0;
+        const partners =
+            (
+                await db.get(
+                    'SELECT COUNT(DISTINCT partner_id) as c FROM supply_chain_events WHERE partner_id IS NOT NULL'
+                )
+            )?.c || 0;
 
         // Map internal types to EPCIS types
         const epcisTypeBreakdown = byType.map(t => ({
             internal_type: t.event_type,
-            epcis_type: ({ 'commission': 'ObjectEvent', 'pack': 'AggregationEvent', 'ship': 'ObjectEvent', 'receive': 'ObjectEvent', 'sell': 'ObjectEvent', 'transform': 'TransformationEvent', 'return': 'ObjectEvent' })[t.event_type] || 'ObjectEvent',
-            cbv_biz_step: ({ 'commission': 'commissioning', 'pack': 'packing', 'ship': 'shipping', 'receive': 'receiving', 'sell': 'retail_selling', 'transform': 'transforming', 'return': 'returning' })[t.event_type] || t.event_type,
-            count: t.count
+            epcis_type:
+                {
+                    commission: 'ObjectEvent',
+                    pack: 'AggregationEvent',
+                    ship: 'ObjectEvent',
+                    receive: 'ObjectEvent',
+                    sell: 'ObjectEvent',
+                    transform: 'TransformationEvent',
+                    return: 'ObjectEvent',
+                }[t.event_type] || 'ObjectEvent',
+            cbv_biz_step:
+                {
+                    commission: 'commissioning',
+                    pack: 'packing',
+                    ship: 'shipping',
+                    receive: 'receiving',
+                    sell: 'retail_selling',
+                    transform: 'transforming',
+                    return: 'returning',
+                }[t.event_type] || t.event_type,
+            count: t.count,
         }));
 
         res.json({
@@ -202,8 +276,8 @@ router.get('/stats', cacheMiddleware(60), async (req, res) => {
                 cbv_2_0: true,
                 gs1_digital_link: true,
                 json_ld: true,
-                sensor_data: true
-            }
+                sensor_data: true,
+            },
         });
     } catch (err) {
         console.error('EPCIS stats error:', err);

@@ -9,38 +9,50 @@ router.get('/stats', async (req, res) => {
     try {
         // NODE-BP-1: Parallelize 11 independent queries
         // Using PostgreSQL syntax (not SQLite)
-        const [products, scans, todayScans, avgTrust, seals, alerts, partners, batches, evidence, certifications, validScans] = await Promise.all([
+        const [
+            products,
+            scans,
+            todayScans,
+            avgTrust,
+            seals,
+            alerts,
+            partners,
+            batches,
+            evidence,
+            certifications,
+            validScans,
+        ] = await Promise.all([
             db.get('SELECT COUNT(*) as count FROM products'),
             db.get('SELECT COUNT(*) as count FROM scan_events'),
-            db.get('SELECT COUNT(*) as count FROM scan_events WHERE scanned_at >= NOW() - INTERVAL \'1 day\''),
+            db.get("SELECT COUNT(*) as count FROM scan_events WHERE scanned_at >= NOW() - INTERVAL '1 day'"),
             db.get('SELECT ROUND(AVG(score)::numeric, 1) as avg FROM trust_scores'),
             db.get('SELECT COUNT(*) as count FROM blockchain_seals'),
-            db.get('SELECT COUNT(*) as count FROM fraud_alerts WHERE status = \'open\''),
+            db.get("SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'"),
             db.get('SELECT COUNT(*) as count FROM partners'),
             db.get('SELECT COUNT(*) as count FROM batches'),
             db.get('SELECT COUNT(*) as count FROM evidence_items'),
-            db.get('SELECT COUNT(*) as count FROM certifications WHERE status = \'active\''),
-            db.get('SELECT COUNT(*) as count FROM scan_events WHERE result = \'valid\''),
+            db.get("SELECT COUNT(*) as count FROM certifications WHERE status = 'active'"),
+            db.get("SELECT COUNT(*) as count FROM scan_events WHERE result = 'valid'"),
         ]);
 
         const verificationRate = scans.count > 0 ? Math.round((validScans.count / scans.count) * 100) : 0;
 
         // S-03 FIX: Anonymize counts to ranges — prevent competitive intelligence
-            const anonymize = (n) => {
-                if (n < 100) return '100+';
-                if (n < 1000) return '1,000+';
-                if (n < 10000) return '10,000+';
-                if (n < 100000) return '100,000+';
-                return '1,000,000+';
-            };
-            res.json({
-                total_products: anonymize(products.count),
-                total_scans: anonymize(scans.count),
-                avg_trust_score: avgTrust.avg ? Math.round(avgTrust.avg) : 0,
-                verification_rate: verificationRate,
-                platform_uptime: '99.97%',
-                last_updated: new Date().toISOString()
-            });
+        const anonymize = n => {
+            if (n < 100) return '100+';
+            if (n < 1000) return '1,000+';
+            if (n < 10000) return '10,000+';
+            if (n < 100000) return '100,000+';
+            return '1,000,000+';
+        };
+        res.json({
+            total_products: anonymize(products.count),
+            total_scans: anonymize(scans.count),
+            avg_trust_score: avgTrust.avg ? Math.round(avgTrust.avg) : 0,
+            verification_rate: verificationRate,
+            platform_uptime: '99.97%',
+            last_updated: new Date().toISOString(),
+        });
     } catch (err) {
         console.error('Public stats error:', err);
         res.status(500).json({ error: 'Failed to fetch statistics' });
@@ -142,17 +154,18 @@ const corsHeaders = async (req, res, next) => {
 router.get('/api/v1/stats', corsHeaders, async (req, res) => {
     try {
         // NODE-BP-1: Parallelize 9 queries
-        const [products, scans, validScans, avgTrust, seals, alerts, criticalAlerts, partners, evidence] = await Promise.all([
-            db.get('SELECT COUNT(*) as count FROM products'),
-            db.get('SELECT COUNT(*) as count FROM scan_events'),
-            db.get(`SELECT COUNT(*) as count FROM scan_events WHERE result = 'valid'`),
-            db.get('SELECT ROUND(AVG(score), 1) as avg FROM trust_scores'),
-            db.get('SELECT COUNT(*) as count FROM blockchain_seals'),
-            db.get(`SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'`),
-            db.get(`SELECT COUNT(*) as count FROM fraud_alerts WHERE severity = 'critical'`),
-            db.get('SELECT COUNT(*) as count FROM partners'),
-            db.get('SELECT COUNT(*) as count FROM evidence_items'),
-        ]);
+        const [products, scans, validScans, avgTrust, seals, alerts, criticalAlerts, partners, evidence] =
+            await Promise.all([
+                db.get('SELECT COUNT(*) as count FROM products'),
+                db.get('SELECT COUNT(*) as count FROM scan_events'),
+                db.get(`SELECT COUNT(*) as count FROM scan_events WHERE result = 'valid'`),
+                db.get('SELECT ROUND(AVG(score), 1) as avg FROM trust_scores'),
+                db.get('SELECT COUNT(*) as count FROM blockchain_seals'),
+                db.get(`SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'`),
+                db.get(`SELECT COUNT(*) as count FROM fraud_alerts WHERE severity = 'critical'`),
+                db.get('SELECT COUNT(*) as count FROM partners'),
+                db.get('SELECT COUNT(*) as count FROM evidence_items'),
+            ]);
 
         const verificationRate = scans.count > 0 ? Math.round((validScans.count / scans.count) * 100) : 0;
 
@@ -163,29 +176,29 @@ router.get('/api/v1/stats', corsHeaders, async (req, res) => {
                 platform: {
                     name: 'TrustChecker',
                     version: '8.8.6',
-                    uptime_percent: 99.97
+                    uptime_percent: 99.97,
                 },
                 products: {
                     total: products.count,
                     avg_trust_score: avgTrust.avg || 0,
-                    blockchain_sealed: seals.count
+                    blockchain_sealed: seals.count,
                 },
                 verification: {
                     total_scans: scans.count,
                     valid_scans: validScans.count,
-                    verification_rate_percent: verificationRate
+                    verification_rate_percent: verificationRate,
                 },
                 security: {
                     open_alerts: alerts.count,
                     critical_alerts: criticalAlerts.count,
-                    evidence_items: evidence.count
+                    evidence_items: evidence.count,
                 },
                 supply_chain: {
-                    total_partners: partners.count
-                }
+                    total_partners: partners.count,
+                },
             },
             timestamp: new Date().toISOString(),
-            documentation: '/api/docs'
+            documentation: '/api/docs',
         });
     } catch (err) {
         console.error('Public API verify error:', err);
@@ -200,8 +213,13 @@ router.get('/api/v1/products/:id/trust', corsHeaders, async (req, res) => {
         if (!product) return res.status(404).json({ api_version: 'v1', status: 'error', error: 'Product not found' });
 
         const trust = await db.get('SELECT * FROM trust_scores WHERE product_id = ?', [req.params.id]);
-        const seal = await db.get('SELECT seal_hash, created_at FROM blockchain_seals WHERE product_id = ? ORDER BY created_at DESC LIMIT 1', [req.params.id]);
-        const scanCount = await db.get('SELECT COUNT(*) as count FROM scan_events WHERE product_id = ?', [req.params.id]);
+        const seal = await db.get(
+            'SELECT seal_hash, created_at FROM blockchain_seals WHERE product_id = ? ORDER BY created_at DESC LIMIT 1',
+            [req.params.id]
+        );
+        const scanCount = await db.get('SELECT COUNT(*) as count FROM scan_events WHERE product_id = ?', [
+            req.params.id,
+        ]);
 
         res.json({
             api_version: 'v1',
@@ -211,22 +229,33 @@ router.get('/api/v1/products/:id/trust', corsHeaders, async (req, res) => {
                     id: product.id,
                     name: product.name,
                     category: product.category,
-                    brand: product.brand
+                    brand: product.brand,
                 },
-                trust_score: trust ? {
-                    overall: trust.score,
-                    grade: trust.score >= 90 ? 'A+' : trust.score >= 80 ? 'A' : trust.score >= 70 ? 'B' : trust.score >= 50 ? 'C' : 'D',
-                    factors: {
-                        supply_chain: trust.factor_supply_chain,
-                        verification: trust.factor_verification,
-                        community: trust.factor_community,
-                        blockchain: trust.factor_blockchain
-                    }
-                } : null,
+                trust_score: trust
+                    ? {
+                          overall: trust.score,
+                          grade:
+                              trust.score >= 90
+                                  ? 'A+'
+                                  : trust.score >= 80
+                                    ? 'A'
+                                    : trust.score >= 70
+                                      ? 'B'
+                                      : trust.score >= 50
+                                        ? 'C'
+                                        : 'D',
+                          factors: {
+                              supply_chain: trust.factor_supply_chain,
+                              verification: trust.factor_verification,
+                              community: trust.factor_community,
+                              blockchain: trust.factor_blockchain,
+                          },
+                      }
+                    : null,
                 blockchain_seal: seal ? { hash: seal.seal_hash, sealed_at: seal.created_at } : null,
-                total_scans: scanCount.count
+                total_scans: scanCount.count,
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     } catch (err) {
         console.error('Public API batch verify error:', err);
@@ -315,7 +344,7 @@ router.get('/embed/snippet', corsHeaders, async (req, res) => {
         res.json({
             embed_code: `<iframe src="${baseUrl}/api/public/embed/widget" width="400" height="360" frameborder="0" style="border-radius:12px;overflow:hidden" title="TrustChecker Widget"></iframe>`,
             script_tag: `<script src="${baseUrl}/api/public/embed/widget"></script>`,
-            documentation: '/api/docs'
+            documentation: '/api/docs',
         });
     } catch (e) {
         console.error(e);
@@ -327,7 +356,8 @@ router.get('/embed/snippet', corsHeaders, async (req, res) => {
 router.get('/recently-verified', corsHeaders, async (req, res) => {
     try {
         const { limit = 10 } = req.query;
-        const products = await db.all(`
+        const products = await db.all(
+            `
       SELECT p.id, p.name, p.category, p.brand, p.trust_score,
         (SELECT COUNT(*) FROM scan_events WHERE product_id = p.id) as scan_count,
         (SELECT MAX(scanned_at) FROM scan_events WHERE product_id = p.id) as last_scanned
@@ -335,12 +365,14 @@ router.get('/recently-verified', corsHeaders, async (req, res) => {
       WHERE p.trust_score IS NOT NULL AND p.status = 'active'
       ORDER BY last_scanned DESC
       LIMIT ?
-    `, [Math.min(Number(limit) || 10, 50)]); // SEC-API: cap limit to 50
+    `,
+            [Math.min(Number(limit) || 10, 50)]
+        ); // SEC-API: cap limit to 50
 
         res.json({
             recently_verified: products,
             total: products.length,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     } catch (err) {
         console.error('Product lookup error:', err);
@@ -352,14 +384,24 @@ router.get('/recently-verified', corsHeaders, async (req, res) => {
 router.get('/search', corsHeaders, async (req, res) => {
     try {
         const { q, category, brand, limit = 20 } = req.query;
-        if (!q && !category && !brand) return res.status(400).json({ error: 'Provide q, category, or brand parameter' });
+        if (!q && !category && !brand)
+            return res.status(400).json({ error: 'Provide q, category, or brand parameter' });
 
         let sql = `SELECT p.id, p.name, p.category, p.brand, p.trust_score, p.origin_country FROM products p WHERE p.status = 'active'`;
         const params = [];
 
-        if (q) { sql += ` AND (p.name LIKE ? OR p.sku LIKE ? OR p.category LIKE ?)`; params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
-        if (category) { sql += ` AND p.category = ?`; params.push(category); }
-        if (brand) { sql += ` AND p.brand = ?`; params.push(brand); }
+        if (q) {
+            sql += ` AND (p.name LIKE ? OR p.sku LIKE ? OR p.category LIKE ?)`;
+            params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+        }
+        if (category) {
+            sql += ` AND p.category = ?`;
+            params.push(category);
+        }
+        if (brand) {
+            sql += ` AND p.brand = ?`;
+            params.push(brand);
+        }
 
         sql += ` ORDER BY p.trust_score DESC LIMIT ?`;
         params.push(Math.min(Number(limit) || 20, 100)); // SEC-API: cap limit to 100
@@ -370,7 +412,7 @@ router.get('/search', corsHeaders, async (req, res) => {
             query: { q, category, brand },
             results,
             total: results.length,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     } catch (err) {
         console.error('Manufacturer products error:', err);
@@ -382,14 +424,16 @@ router.get('/search', corsHeaders, async (req, res) => {
 router.get('/health', corsHeaders, async (req, res) => {
     try {
         // NODE-BP-1: Parallelize 6 queries
-        const [productsRow, scans24hRow, fraudAlertsRow, leakAlertsRow, blockchainRow, avgTrustRow] = await Promise.all([
-            db.get('SELECT COUNT(*) as c FROM products'),
-            db.get("SELECT COUNT(*) as c FROM scan_events WHERE scanned_at > NOW() - INTERVAL '1 day'"),
-            db.get("SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'active'"),
-            db.get("SELECT COUNT(*) as c FROM leak_alerts WHERE status = 'open'"),
-            db.get('SELECT COUNT(*) as c FROM blockchain_seals'),
-            db.get('SELECT COALESCE(AVG(trust_score), 0) as a FROM products'),
-        ]);
+        const [productsRow, scans24hRow, fraudAlertsRow, leakAlertsRow, blockchainRow, avgTrustRow] = await Promise.all(
+            [
+                db.get('SELECT COUNT(*) as c FROM products'),
+                db.get("SELECT COUNT(*) as c FROM scan_events WHERE scanned_at > NOW() - INTERVAL '1 day'"),
+                db.get("SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'active'"),
+                db.get("SELECT COUNT(*) as c FROM leak_alerts WHERE status = 'open'"),
+                db.get('SELECT COUNT(*) as c FROM blockchain_seals'),
+                db.get('SELECT COALESCE(AVG(trust_score), 0) as a FROM products'),
+            ]
+        );
         const products = productsRow?.c || 0;
         const scans24h = scans24hRow?.c || 0;
         const fraudAlerts = fraudAlertsRow?.c || 0;
@@ -407,10 +451,10 @@ router.get('/health', corsHeaders, async (req, res) => {
                 fraud_detection: { status: fraudAlerts > 10 ? 'warning' : 'operational', active_alerts: fraudAlerts },
                 leak_monitoring: { status: leakAlerts > 20 ? 'warning' : 'operational', open_alerts: leakAlerts },
                 blockchain: { status: 'operational', seals: blockchainIntact },
-                trust_scoring: { status: 'operational', avg_score: Math.round(avgTrust) }
+                trust_scoring: { status: 'operational', avg_score: Math.round(avgTrust) },
             },
             uptime: '99.97%',
-            last_check: new Date().toISOString()
+            last_check: new Date().toISOString(),
         });
     } catch (err) {
         console.error('Recent scans error:', err);
@@ -429,7 +473,7 @@ router.post('/check', async (req, res) => {
         if (!code || code.trim().length < 3) {
             return res.status(400).json({
                 valid: false,
-                message: '❌ Vui lòng nhập mã sản phẩm hợp lệ (ít nhất 3 ký tự)'
+                message: '❌ Vui lòng nhập mã sản phẩm hợp lệ (ít nhất 3 ký tự)',
             });
         }
 
@@ -443,9 +487,10 @@ router.post('/check', async (req, res) => {
             return res.json({
                 valid: false,
                 result: 'not_found',
-                message: '❌ MÃ KHÔNG TỒN TẠI TRONG HỆ THỐNG — Sản phẩm này có thể là hàng giả. Vui lòng liên hệ nhà sản xuất để xác minh.',
+                message:
+                    '❌ MÃ KHÔNG TỒN TẠI TRONG HỆ THỐNG — Sản phẩm này có thể là hàng giả. Vui lòng liên hệ nhà sản xuất để xác minh.',
                 code: cleanCode,
-                response_time_ms: Date.now() - startTime
+                response_time_ms: Date.now() - startTime,
             });
         }
 
@@ -465,11 +510,14 @@ router.post('/check', async (req, res) => {
 
         // Create scan event for this check
         const scanId = require('uuid').v4();
-const { withTransaction } = require('../middleware/transaction');
-        await db.run(`
+        const { withTransaction } = require('../middleware/transaction');
+        await db.run(
+            `
             INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, ip_address, user_agent, result, scanned_at)
             VALUES (?, ?, ?, 'code_check', ?, ?, 'pending', NOW())
-        `, [scanId, qrCode.id, qrCode.product_id, req.ip || '', req.get('user-agent') || '']);
+        `,
+            [scanId, qrCode.id, qrCode.product_id, req.ip || '', req.get('user-agent') || '']
+        );
 
         // Determine result
         let result, message, risk_level;
@@ -492,11 +540,17 @@ const { withTransaction } = require('../middleware/transaction');
 
             result = scanCount >= 3 ? 'suspicious' : 'warning';
             message = `⚠️ Mã bạn kiểm tra đã được quét vào lúc ${hours} giờ ${minutes} phút ngày ${day} tháng ${month} năm ${year}. Lưu ý kiểm tra kĩ vì có thể không phải hàng chính hãng.`;
-            risk_level = scanCount >= 5 ? 'Rất cao — có khả năng hàng giả' : scanCount >= 3 ? 'Cao — nghi ngờ hàng giả' : 'Trung bình — cần kiểm tra thêm';
+            risk_level =
+                scanCount >= 5
+                    ? 'Rất cao — có khả năng hàng giả'
+                    : scanCount >= 3
+                      ? 'Cao — nghi ngờ hàng giả'
+                      : 'Trung bình — cần kiểm tra thêm';
         }
 
         // Update scan event result
-        await db.prepare('UPDATE scan_events SET result = ?, response_time_ms = ? WHERE id = ?')
+        await db
+            .prepare('UPDATE scan_events SET result = ?, response_time_ms = ? WHERE id = ?')
             .run(result, Date.now() - startTime, scanId);
 
         res.json({
@@ -507,15 +561,17 @@ const { withTransaction } = require('../middleware/transaction');
             scan_verification: {
                 is_first_scan: isFirstScan,
                 total_scans: scanCount + 1,
-                risk_level
+                risk_level,
             },
-            product: product ? {
-                name: product.name,
-                manufacturer: product.manufacturer,
-                category: product.category,
-                origin_country: product.origin_country
-            } : null,
-            response_time_ms: Date.now() - startTime
+            product: product
+                ? {
+                      name: product.name,
+                      manufacturer: product.manufacturer,
+                      category: product.category,
+                      origin_country: product.origin_country,
+                  }
+                : null,
+            response_time_ms: Date.now() - startTime,
         });
     } catch (err) {
         console.error('Public check error:', err);

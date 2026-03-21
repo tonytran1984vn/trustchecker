@@ -11,7 +11,6 @@ const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();
 
-
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
 
@@ -21,19 +20,24 @@ router.get('/routes', authMiddleware, async (req, res) => {
         const orgId = req.user?.org_id;
         let routes;
         if (orgId) {
-            routes = await db.all(`
+            routes = await db.all(
+                `
                 SELECT * FROM supply_routes WHERE org_id = ? ORDER BY created_at DESC
-             LIMIT 1000`, [orgId]);
+             LIMIT 1000`,
+                [orgId]
+            );
         } else {
             routes = await db.all(`
                 SELECT * FROM supply_routes ORDER BY created_at DESC
              LIMIT 1000`);
         }
-        res.json(routes.map(r => ({
-            ...r,
-            chain: typeof r.chain === 'string' ? JSON.parse(r.chain || '[]') : (r.chain || []),
-            products: typeof r.products === 'string' ? JSON.parse(r.products || '[]') : (r.products || [])
-        })));
+        res.json(
+            routes.map(r => ({
+                ...r,
+                chain: typeof r.chain === 'string' ? JSON.parse(r.chain || '[]') : r.chain || [],
+                products: typeof r.products === 'string' ? JSON.parse(r.products || '[]') : r.products || [],
+            }))
+        );
     } catch (err) {
         console.error('List supply routes error:', err);
         res.status(500).json({ error: 'Failed to fetch supply routes' });
@@ -46,11 +50,22 @@ router.post('/routes', authMiddleware, requireRole('admin', 'company_admin'), as
         const { name, chain, products, geo_fence, status } = req.body;
         const id = uuidv4();
         const orgId = req.user?.org_id || null;
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO supply_routes (id, name, chain, products, geo_fence, status, created_by, org_id, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-        `, [id, name, JSON.stringify(chain || []), JSON.stringify(products || []),
-            geo_fence || '', status || 'active', req.user?.id || null, orgId]);
+        `,
+            [
+                id,
+                name,
+                JSON.stringify(chain || []),
+                JSON.stringify(products || []),
+                geo_fence || '',
+                status || 'active',
+                req.user?.id || null,
+                orgId,
+            ]
+        );
 
         res.status(201).json({ id, name, status: 'created' });
     } catch (err) {
@@ -65,17 +80,20 @@ router.get('/routes/:id', authMiddleware, async (req, res) => {
         const route = await db.get('SELECT * FROM supply_routes WHERE id = ?', [req.params.id]);
         if (!route) return res.status(404).json({ error: 'Route not found' });
 
-        const breaches = await db.all(`
+        const breaches = await db.all(
+            `
             SELECT rb.*, cr.name as rule_name FROM route_breaches rb
             LEFT JOIN channel_rules cr ON rb.rule_id = cr.id
             WHERE rb.route_id = ? ORDER BY rb.created_at DESC LIMIT 50
-        `, [req.params.id]);
+        `,
+            [req.params.id]
+        );
 
         res.json({
             ...route,
             chain: JSON.parse(route.chain || '[]'),
             products: JSON.parse(route.products || '[]'),
-            breaches: breaches.map(b => ({ ...b, details: JSON.parse(b.details || '{}') }))
+            breaches: breaches.map(b => ({ ...b, details: JSON.parse(b.details || '{}') })),
         });
     } catch (err) {
         console.error('Get route error:', err);
@@ -87,11 +105,20 @@ router.get('/routes/:id', authMiddleware, async (req, res) => {
 router.put('/routes/:id', authMiddleware, requirePermission('supply_chain:create'), async (req, res) => {
     try {
         const { name, chain, products, geo_fence, status } = req.body;
-        await db.run(`
+        await db.run(
+            `
             UPDATE supply_routes SET name = ?, chain = ?, products = ?, geo_fence = ?, status = ?, updated_at = NOW()
             WHERE id = ?
-        `, [name, JSON.stringify(chain || []), JSON.stringify(products || []),
-            geo_fence || '', status || 'active', req.params.id]);
+        `,
+            [
+                name,
+                JSON.stringify(chain || []),
+                JSON.stringify(products || []),
+                geo_fence || '',
+                status || 'active',
+                req.params.id,
+            ]
+        );
         res.json({ id: req.params.id, status: 'updated' });
     } catch (err) {
         console.error('Update route error:', err);
@@ -105,7 +132,9 @@ router.get('/channel-rules', authMiddleware, async (req, res) => {
         const orgId = req.user?.org_id;
         let rules;
         if (orgId && req.user?.role !== 'super_admin') {
-            rules = await db.all('SELECT * FROM channel_rules WHERE org_id = ? ORDER BY created_at DESC LIMIT 1000', [orgId]);
+            rules = await db.all('SELECT * FROM channel_rules WHERE org_id = ? ORDER BY created_at DESC LIMIT 1000', [
+                orgId,
+            ]);
         } else {
             rules = await db.all('SELECT * FROM channel_rules ORDER BY created_at DESC LIMIT 1000');
         }
@@ -121,10 +150,13 @@ router.post('/channel-rules', authMiddleware, requirePermission('supply_chain:cr
     try {
         const { name, logic, severity, auto_action } = req.body;
         const id = uuidv4();
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO channel_rules (id, name, logic, severity, auto_action, is_active, triggers_30d, created_at)
             VALUES (?, ?, ?, ?, ?, 1, 0, NOW())
-        `, [id, name, logic || '', severity || 'medium', auto_action || '']);
+        `,
+            [id, name, logic || '', severity || 'medium', auto_action || '']
+        );
         res.status(201).json({ id, name, status: 'created' });
     } catch (err) {
         console.error('Create channel rule error:', err);
@@ -145,9 +177,18 @@ router.get('/route-breaches', authMiddleware, async (req, res) => {
         `;
         const conditions = [];
         const params = [];
-        if (orgId && req.user?.role !== 'super_admin') { conditions.push('sr.org_id = ?'); params.push(orgId); }
-        if (route_id) { conditions.push('rb.route_id = ?'); params.push(route_id); }
-        if (severity) { conditions.push('rb.severity = ?'); params.push(severity); }
+        if (orgId && req.user?.role !== 'super_admin') {
+            conditions.push('sr.org_id = ?');
+            params.push(orgId);
+        }
+        if (route_id) {
+            conditions.push('rb.route_id = ?');
+            params.push(route_id);
+        }
+        if (severity) {
+            conditions.push('rb.severity = ?');
+            params.push(severity);
+        }
         if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
         query += ` ORDER BY rb.created_at DESC LIMIT ?`;
         params.push(Math.min(parseInt(limit) || 50, 200));
@@ -165,11 +206,23 @@ router.post('/route-breaches', authMiddleware, async (req, res) => {
     try {
         const { route_id, rule_id, scan_event_id, code_data, scanned_in, severity, action, details } = req.body;
         const id = uuidv4();
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO route_breaches (id, route_id, rule_id, scan_event_id, code_data, scanned_in, severity, action, details, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-        `, [id, route_id, rule_id || null, scan_event_id || null,
-            code_data || '', scanned_in || '', severity || 'medium', action || '', JSON.stringify(details || {})]);
+        `,
+            [
+                id,
+                route_id,
+                rule_id || null,
+                scan_event_id || null,
+                code_data || '',
+                scanned_in || '',
+                severity || 'medium',
+                action || '',
+                JSON.stringify(details || {}),
+            ]
+        );
 
         // Update route integrity status
         if (severity === 'critical' || severity === 'high') {
@@ -211,25 +264,45 @@ router.post('/routes/:id/simulate', authMiddleware, async (req, res) => {
         for (const rule of rules) {
             const logic = (rule.logic || '').toLowerCase();
             if (logic.includes('geo') && !geoInRoute) {
-                triggeredRules.push({ rule_id: rule.id, rule_name: rule.name, severity: rule.severity, reason: `Scan geo "${test_scan_geo}" outside route chain` });
+                triggeredRules.push({
+                    rule_id: rule.id,
+                    rule_name: rule.name,
+                    severity: rule.severity,
+                    reason: `Scan geo "${test_scan_geo}" outside route chain`,
+                });
             }
             if (logic.includes('reverse') && test_scan_geo) {
                 // Check for reverse flow: scan location matches earlier node than expected
-                const scanIdx = chain.findIndex(n => (n.location || '').toLowerCase().includes((test_scan_geo || '').toLowerCase()));
+                const scanIdx = chain.findIndex(n =>
+                    (n.location || '').toLowerCase().includes((test_scan_geo || '').toLowerCase())
+                );
                 if (scanIdx >= 0 && scanIdx < chain.length - 1) {
-                    triggeredRules.push({ rule_id: rule.id, rule_name: rule.name, severity: 'high', reason: 'Reverse flow detected — scan at upstream node' });
+                    triggeredRules.push({
+                        rule_id: rule.id,
+                        rule_name: rule.name,
+                        severity: 'high',
+                        reason: 'Reverse flow detected — scan at upstream node',
+                    });
                 }
             }
         }
 
         // Save simulation
         const simId = uuidv4();
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO route_simulations (id, route_id, scenario, input_data, results, breaches_predicted, created_by, created_at)
             VALUES (?, ?, 'what_if', ?, ?, ?, ?, NOW())
-        `, [simId, req.params.id, JSON.stringify({ test_scan_geo, test_device, test_code }),
-            JSON.stringify({ geo_in_route: geoInRoute, triggered_rules: triggeredRules }),
-            triggeredRules.length, req.user?.email || '']);
+        `,
+            [
+                simId,
+                req.params.id,
+                JSON.stringify({ test_scan_geo, test_device, test_code }),
+                JSON.stringify({ geo_in_route: geoInRoute, triggered_rules: triggeredRules }),
+                triggeredRules.length,
+                req.user?.email || '',
+            ]
+        );
 
         res.json({
             simulation_id: simId,
@@ -238,8 +311,10 @@ router.post('/routes/:id/simulate', authMiddleware, async (req, res) => {
             geo_in_route: geoInRoute,
             breaches_predicted: triggeredRules.length,
             triggered_rules: triggeredRules,
-            recommendation: triggeredRules.length === 0 ? 'No breaches predicted — scan is within expected route' :
-                `${triggeredRules.length} rule(s) would trigger — review route or update rules`
+            recommendation:
+                triggeredRules.length === 0
+                    ? 'No breaches predicted — scan is within expected route'
+                    : `${triggeredRules.length} rule(s) would trigger — review route or update rules`,
         });
     } catch (err) {
         console.error('Route simulation error:', err);
@@ -261,21 +336,27 @@ router.get('/routes/:id/replay', authMiddleware, async (req, res) => {
         let scanEvents = [];
         if (products.length > 0) {
             const placeholders = products.map(() => '?').join(',');
-            scanEvents = await db.all(`
+            scanEvents = await db.all(
+                `
                 SELECT se.*, p.name as product_name FROM scan_events se
                 LEFT JOIN products p ON se.product_id = p.id
                 WHERE se.product_id IN (${placeholders})
                 AND se.scanned_at > NOW() - CAST('parseInt(days) days' AS INTERVAL)
                 ORDER BY se.scanned_at ASC
-             LIMIT 1000`, [...products]);
+             LIMIT 1000`,
+                [...products]
+            );
         }
 
         // Get breaches in period
-        const breaches = await db.all(`
+        const breaches = await db.all(
+            `
             SELECT * FROM route_breaches WHERE route_id = ?
             AND created_at > NOW() - CAST('parseInt(days) days' AS INTERVAL)
             ORDER BY created_at ASC
-         LIMIT 1000`, [req.params.id]);
+         LIMIT 1000`,
+            [req.params.id]
+        );
 
         // Build timeline
         const timeline = [];
@@ -286,7 +367,7 @@ router.get('/routes/:id/replay', authMiddleware, async (req, res) => {
                 geo: `${se.geo_city || ''}, ${se.geo_country || ''}`,
                 product: se.product_name,
                 ers: se.fraud_score,
-                device: se.device_fingerprint?.substring(0, 8) || 'unknown'
+                device: se.device_fingerprint?.substring(0, 8) || 'unknown',
             });
         }
         for (const b of breaches) {
@@ -295,7 +376,7 @@ router.get('/routes/:id/replay', authMiddleware, async (req, res) => {
                 timestamp: b.created_at,
                 geo: b.scanned_in,
                 severity: b.severity,
-                code: b.code_data
+                code: b.code_data,
             });
         }
         timeline.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -306,7 +387,7 @@ router.get('/routes/:id/replay', authMiddleware, async (req, res) => {
             period_days: parseInt(days),
             total_scans: scanEvents.length,
             total_breaches: breaches.length,
-            timeline
+            timeline,
         });
     } catch (err) {
         console.error('Route replay error:', err);
@@ -321,15 +402,28 @@ router.get('/integrity-index', authMiddleware, async (req, res) => {
 
         const index = [];
         for (const route of routes) {
-            const totalBreaches = (await db.get('SELECT COUNT(*) as c FROM route_breaches WHERE route_id = ?', [route.id]))?.c || 0;
-            const recentBreaches = (await db.get(`SELECT COUNT(*) as c FROM route_breaches WHERE route_id = ? AND created_at > NOW() - INTERVAL '30 days'`, [route.id]))?.c || 0;
-            const criticalBreaches = (await db.get(`SELECT COUNT(*) as c FROM route_breaches WHERE route_id = ? AND severity IN ('critical', 'high')`, [route.id]))?.c || 0;
+            const totalBreaches =
+                (await db.get('SELECT COUNT(*) as c FROM route_breaches WHERE route_id = ?', [route.id]))?.c || 0;
+            const recentBreaches =
+                (
+                    await db.get(
+                        `SELECT COUNT(*) as c FROM route_breaches WHERE route_id = ? AND created_at > NOW() - INTERVAL '30 days'`,
+                        [route.id]
+                    )
+                )?.c || 0;
+            const criticalBreaches =
+                (
+                    await db.get(
+                        `SELECT COUNT(*) as c FROM route_breaches WHERE route_id = ? AND severity IN ('critical', 'high')`,
+                        [route.id]
+                    )
+                )?.c || 0;
             const chain = JSON.parse(route.chain || '[]');
 
             // Composite Integrity Score (0-100, 100 = perfect)
             let score = 100;
-            score -= Math.min(recentBreaches * 5, 30);    // -5 per recent breach, max -30
-            score -= Math.min(criticalBreaches * 10, 40);  // -10 per critical, max -40
+            score -= Math.min(recentBreaches * 5, 30); // -5 per recent breach, max -30
+            score -= Math.min(criticalBreaches * 10, 40); // -10 per critical, max -40
             if (route.integrity === 'breach') score -= 20;
             score = Math.max(0, score);
 
@@ -345,20 +439,24 @@ router.get('/integrity-index', authMiddleware, async (req, res) => {
                 critical_breaches: criticalBreaches,
                 integrity_score: score,
                 grade,
-                recommendation: score >= 90 ? 'Route operating normally' :
-                    score >= 60 ? 'Review channel rules and recent breaches' :
-                        'Route compromised — consider route suspension or rule hardening'
+                recommendation:
+                    score >= 90
+                        ? 'Route operating normally'
+                        : score >= 60
+                          ? 'Review channel rules and recent breaches'
+                          : 'Route compromised — consider route suspension or rule hardening',
             });
         }
 
         // Platform averages
-        const avgScore = index.length > 0 ? (index.reduce((s, r) => s + r.integrity_score, 0) / index.length).toFixed(1) : 0;
+        const avgScore =
+            index.length > 0 ? (index.reduce((s, r) => s + r.integrity_score, 0) / index.length).toFixed(1) : 0;
 
         res.json({
             total_routes: index.length,
             avg_integrity_score: parseFloat(avgScore),
             routes_at_risk: index.filter(r => r.grade === 'D' || r.grade === 'F').length,
-            index
+            index,
         });
     } catch (err) {
         console.error('Integrity index error:', err);
@@ -378,11 +476,14 @@ router.get('/reverse-flow', authMiddleware, async (req, res) => {
             if (chain.length < 2) continue;
 
             // Check for scans that appear at earlier nodes after being at later nodes
-            const breaches = await db.all(`
+            const breaches = await db.all(
+                `
                 SELECT * FROM route_breaches WHERE route_id = ? AND severity IN ('high', 'critical')
                 AND created_at > NOW() - CAST('parseInt(days) days' AS INTERVAL)
                 ORDER BY created_at DESC LIMIT 10
-            `, [route.id]);
+            `,
+                [route.id]
+            );
 
             for (const b of breaches) {
                 const details = safeParse(b.details, {});
@@ -394,7 +495,7 @@ router.get('/reverse-flow', authMiddleware, async (req, res) => {
                         scanned_in: b.scanned_in,
                         severity: b.severity,
                         timestamp: b.created_at,
-                        type: 'reverse_flow'
+                        type: 'reverse_flow',
                     });
                 }
             }
@@ -403,7 +504,7 @@ router.get('/reverse-flow', authMiddleware, async (req, res) => {
         res.json({
             period_days: parseInt(days),
             reverse_flow_anomalies: anomalies.length,
-            anomalies
+            anomalies,
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to detect reverse flow' });
@@ -414,11 +515,13 @@ router.get('/reverse-flow', authMiddleware, async (req, res) => {
 router.get('/simulations', authMiddleware, async (req, res) => {
     try {
         const sims = await db.all('SELECT * FROM route_simulations ORDER BY created_at DESC LIMIT 30');
-        res.json(sims.map(s => ({
-            ...s,
-            input_data: JSON.parse(s.input_data || '{}'),
-            results: JSON.parse(s.results || '{}')
-        })));
+        res.json(
+            sims.map(s => ({
+                ...s,
+                input_data: JSON.parse(s.input_data || '{}'),
+                results: JSON.parse(s.results || '{}'),
+            }))
+        );
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch simulations' });
     }

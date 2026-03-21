@@ -13,7 +13,6 @@ const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();
 
-
 router.use(authMiddleware);
 router.use(orgGuard());
 
@@ -24,18 +23,26 @@ router.get('/cases', authMiddleware, async (req, res) => {
         const { status, limit = 50 } = req.query;
         let query = 'SELECT * FROM forensic_cases WHERE 1=1';
         const params = [];
-        if (orgId) { query += ' AND org_id = ?'; params.push(orgId); }
-        if (status) { query += ' AND status = ?'; params.push(status); }
+        if (orgId) {
+            query += ' AND org_id = ?';
+            params.push(orgId);
+        }
+        if (status) {
+            query += ' AND status = ?';
+            params.push(status);
+        }
         query += ' ORDER BY created_at DESC LIMIT ?';
         params.push(Math.min(parseInt(limit) || 50, 200));
 
         const cases = await db.prepare(query).all(...params);
-        res.json(cases.map(c => ({
-            ...c,
-            scan_chain: JSON.parse(c.scan_chain || '[]'),
-            device_compare: JSON.parse(c.device_compare || '[]'),
-            factor_breakdown: JSON.parse(c.factor_breakdown || '[]')
-        })));
+        res.json(
+            cases.map(c => ({
+                ...c,
+                scan_chain: JSON.parse(c.scan_chain || '[]'),
+                device_compare: JSON.parse(c.device_compare || '[]'),
+                factor_breakdown: JSON.parse(c.factor_breakdown || '[]'),
+            }))
+        );
     } catch (err) {
         console.error('List forensic cases error:', err);
         res.status(500).json({ error: 'Failed to fetch forensic cases' });
@@ -56,9 +63,12 @@ router.post('/cases', authMiddleware, async (req, res) => {
 
         if (scan_event_ids && scan_event_ids.length) {
             const placeholders = scan_event_ids.map(() => '?').join(',');
-            const events = await db.all(`
+            const events = await db.all(
+                `
                 SELECT * FROM scan_events WHERE id IN (${placeholders}) ORDER BY scanned_at ASC
-             LIMIT 1000`, [...scan_event_ids]);
+             LIMIT 1000`,
+                [...scan_event_ids]
+            );
 
             scanChain = events.map((e, i) => ({
                 seq: i + 1,
@@ -69,31 +79,54 @@ router.post('/cases', authMiddleware, async (req, res) => {
                 device: e.device_fingerprint,
                 ip: e.ip_address,
                 ers: e.fraud_score,
-                user_agent: e.user_agent
+                user_agent: e.user_agent,
             }));
 
             // Device comparison
             const uniqueDevices = [...new Set(events.map(e => e.device_fingerprint))];
             deviceCompare = [
                 { field: 'Device Hash', values: uniqueDevices, match: uniqueDevices.length === 1 },
-                { field: 'Country', values: [...new Set(events.map(e => e.geo_country))], match: new Set(events.map(e => e.geo_country)).size === 1 },
-                { field: 'IP Block', values: [...new Set(events.map(e => e.ip_address?.split('.').slice(0, 2).join('.')))], match: false },
+                {
+                    field: 'Country',
+                    values: [...new Set(events.map(e => e.geo_country))],
+                    match: new Set(events.map(e => e.geo_country)).size === 1,
+                },
+                {
+                    field: 'IP Block',
+                    values: [...new Set(events.map(e => e.ip_address?.split('.').slice(0, 2).join('.')))],
+                    match: false,
+                },
             ];
 
             currentErs = Math.max(...events.map(e => e.fraud_score || 0));
         }
 
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO forensic_cases (id, case_number, code_data, product_id, batch_id, scan_chain, device_compare, factor_breakdown, current_ers, status, assigned_to, org_id, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, 'open', ?, ?, NOW(), NOW())
-        `, [id, caseNumber, code_data || '', product_id || null, batch_id || null,
-            JSON.stringify(scanChain), JSON.stringify(deviceCompare), currentErs,
-            req.user?.email || req.user?.username || null, req.user?.org_id || req.user?.orgId || null]);
+        `,
+            [
+                id,
+                caseNumber,
+                code_data || '',
+                product_id || null,
+                batch_id || null,
+                JSON.stringify(scanChain),
+                JSON.stringify(deviceCompare),
+                currentErs,
+                req.user?.email || req.user?.username || null,
+                req.user?.org_id || req.user?.orgId || null,
+            ]
+        );
 
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
             VALUES (?, ?, 'forensic_case_created', 'forensic_case', ?, ?, NOW())
-        `, [uuidv4(), req.user?.id || 'system', id, JSON.stringify({ case_number: caseNumber, code_data })]);
+        `,
+            [uuidv4(), req.user?.id || 'system', id, JSON.stringify({ case_number: caseNumber, code_data })]
+        );
 
         res.status(201).json({ id, case_number: caseNumber, status: 'open', scan_chain_length: scanChain.length });
     } catch (err) {
@@ -108,7 +141,10 @@ router.get('/cases/:id', authMiddleware, async (req, res) => {
         const orgId = req.orgId;
         let q = 'SELECT * FROM forensic_cases WHERE (id = ? OR case_number = ?)';
         const params = [req.params.id, req.params.id];
-        if (orgId) { q += ' AND org_id = ?'; params.push(orgId); }
+        if (orgId) {
+            q += ' AND org_id = ?';
+            params.push(orgId);
+        }
         const fc = await db.prepare(q).get(...params);
         if (!fc) return res.status(404).json({ error: 'Forensic case not found' });
 
@@ -116,7 +152,7 @@ router.get('/cases/:id', authMiddleware, async (req, res) => {
             ...fc,
             scan_chain: JSON.parse(fc.scan_chain || '[]'),
             device_compare: JSON.parse(fc.device_compare || '[]'),
-            factor_breakdown: JSON.parse(fc.factor_breakdown || '[]')
+            factor_breakdown: JSON.parse(fc.factor_breakdown || '[]'),
         });
     } catch (err) {
         console.error('Get forensic case error:', err);
@@ -129,19 +165,28 @@ router.post('/cases/:id/freeze', authMiddleware, requirePermission('fraud_case:a
     try {
         let q = 'SELECT * FROM forensic_cases WHERE id = ?';
         const params = [req.params.id];
-        if (req.orgId) { q += ' AND org_id = ?'; params.push(req.orgId); }
+        if (req.orgId) {
+            q += ' AND org_id = ?';
+            params.push(req.orgId);
+        }
         const fc = await db.prepare(q).get(...params);
         if (!fc) return res.status(404).json({ error: 'Case not found' });
         if (fc.status === 'frozen') return res.status(400).json({ error: 'Case already frozen' });
 
-        await db.run(`
+        await db.run(
+            `
             UPDATE forensic_cases SET status = 'frozen', frozen_at = NOW(), updated_at = NOW() WHERE id = ?
-        `, [req.params.id]);
+        `,
+            [req.params.id]
+        );
 
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
             VALUES (?, ?, 'forensic_case_frozen', 'forensic_case', ?, '{}', NOW())
-        `, [uuidv4(), req.user?.id || 'system', req.params.id]);
+        `,
+            [uuidv4(), req.user?.id || 'system', req.params.id]
+        );
 
         res.json({ id: req.params.id, status: 'frozen', frozen_at: new Date().toISOString() });
     } catch (err) {
@@ -155,7 +200,10 @@ router.get('/cases/:id/evidence', authMiddleware, async (req, res) => {
     try {
         let q = 'SELECT * FROM forensic_cases WHERE id = ?';
         const params = [req.params.id];
-        if (req.orgId) { q += ' AND org_id = ?'; params.push(req.orgId); }
+        if (req.orgId) {
+            q += ' AND org_id = ?';
+            params.push(req.orgId);
+        }
         const fc = await db.prepare(q).get(...params);
         if (!fc) return res.status(404).json({ error: 'Case not found' });
 
@@ -165,10 +213,22 @@ router.get('/cases/:id/evidence', authMiddleware, async (req, res) => {
         // Build hash chain for immutability proof
         let prevHash = '0';
         const hashChain = scanChain.map((event, i) => {
-            const payload = JSON.stringify({ seq: event.seq, timestamp: event.timestamp, geo: event.geo, ers: event.ers });
-            const hash = crypto.createHash('sha256').update(prevHash + payload).digest('hex');
+            const payload = JSON.stringify({
+                seq: event.seq,
+                timestamp: event.timestamp,
+                geo: event.geo,
+                ers: event.ers,
+            });
+            const hash = crypto
+                .createHash('sha256')
+                .update(prevHash + payload)
+                .digest('hex');
             prevHash = hash;
-            return { seq: i + 1, payload_hash: hash.substring(0, 16) + '...', prev_hash: i === 0 ? '0' : hashChain?.[i - 1]?.payload_hash || '0' };
+            return {
+                seq: i + 1,
+                payload_hash: hash.substring(0, 16) + '...',
+                prev_hash: i === 0 ? '0' : hashChain?.[i - 1]?.payload_hash || '0',
+            };
         });
 
         // Evidence package
@@ -178,17 +238,21 @@ router.get('/cases/:id/evidence', authMiddleware, async (req, res) => {
             generated_at: new Date().toISOString(),
             components: {
                 scan_logs: { count: scanChain.length, status: 'complete' },
-                risk_breakdown: { ers: fc.current_ers, factors: factors.length, status: factors.length > 0 ? 'complete' : 'pending' },
+                risk_breakdown: {
+                    ers: fc.current_ers,
+                    factors: factors.length,
+                    status: factors.length > 0 ? 'complete' : 'pending',
+                },
                 device_analysis: { devices_compared: safeParse(fc.device_compare, []).length, status: 'complete' },
                 geo_trace: { coordinates: scanChain.filter(s => s.lat).length, status: 'complete' },
                 hash_proof: { algorithm: 'SHA-256', chain_length: hashChain.length, status: 'verified' },
-                digital_signature: { algorithm: 'RSA-2048', status: 'ready' }
+                digital_signature: { algorithm: 'RSA-2048', status: 'ready' },
             },
             scan_chain: scanChain,
             hash_chain: hashChain,
             case_status: fc.status,
             frozen: fc.status === 'frozen',
-            frozen_at: fc.frozen_at
+            frozen_at: fc.frozen_at,
         };
 
         res.json(evidence);
@@ -204,7 +268,10 @@ router.patch('/cases/:id', authMiddleware, requirePermission('fraud_case:approve
         const { verdict, status } = req.body;
         let q2 = 'SELECT * FROM forensic_cases WHERE id = ?';
         const qParams = [req.params.id];
-        if (req.orgId) { q2 += ' AND org_id = ?'; qParams.push(req.orgId); }
+        if (req.orgId) {
+            q2 += ' AND org_id = ?';
+            qParams.push(req.orgId);
+        }
         const fc = await db.prepare(q2).get(...qParams);
         if (!fc) return res.status(404).json({ error: 'Case not found' });
         if (fc.status === 'frozen' && status !== 'closed') {
@@ -213,20 +280,29 @@ router.patch('/cases/:id', authMiddleware, requirePermission('fraud_case:approve
 
         const updates = [];
         const params = [];
-        if (verdict) { updates.push('verdict = ?'); params.push(verdict); }
-        if (status) {
-            updates.push('status = ?'); params.push(status);
-            if (status === 'closed') { updates.push("closed_at = NOW()"); }
+        if (verdict) {
+            updates.push('verdict = ?');
+            params.push(verdict);
         }
-        updates.push("updated_at = NOW()");
+        if (status) {
+            updates.push('status = ?');
+            params.push(status);
+            if (status === 'closed') {
+                updates.push('closed_at = NOW()');
+            }
+        }
+        updates.push('updated_at = NOW()');
         params.push(req.params.id);
 
         await db.run(`UPDATE forensic_cases SET ${updates.join(', ')} WHERE id = ?`, [...params]);
 
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
             VALUES (?, ?, 'forensic_case_updated', 'forensic_case', ?, ?, NOW())
-        `, [uuidv4(), req.user?.id || 'system', req.params.id, JSON.stringify({ verdict, status })]);
+        `,
+            [uuidv4(), req.user?.id || 'system', req.params.id, JSON.stringify({ verdict, status })]
+        );
 
         res.json({ id: req.params.id, verdict, status });
     } catch (err) {

@@ -11,7 +11,6 @@ const { withTransaction } = require('../middleware/transaction');
 
 const router = express.Router();
 
-
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
 
@@ -24,8 +23,18 @@ router.post('/scan', authMiddleware, requirePermission('leak_monitor:create'), a
         const scanPlatforms = platforms || PLATFORMS;
         const orgId = req.user?.org_id || req.user?.orgId || null;
 
-        const product = product_id ? await db.prepare('SELECT * FROM products WHERE id = ?' + (orgId ? ' AND org_id = ?' : '')).get(...(orgId ? [product_id, orgId] : [product_id])) : null;
-        const products = product ? [product] : await db.prepare('SELECT * FROM products WHERE status = \'active\'' + (orgId ? ' AND org_id = ?' : '') + ' LIMIT 20').all(...(orgId ? [orgId] : []));
+        const product = product_id
+            ? await db
+                  .prepare('SELECT * FROM products WHERE id = ?' + (orgId ? ' AND org_id = ?' : ''))
+                  .get(...(orgId ? [product_id, orgId] : [product_id]))
+            : null;
+        const products = product
+            ? [product]
+            : await db
+                  .prepare(
+                      "SELECT * FROM products WHERE status = 'active'" + (orgId ? ' AND org_id = ?' : '') + ' LIMIT 20'
+                  )
+                  .all(...(orgId ? [orgId] : []));
 
         // Get authorized regions for products
         const authorizedRegions = ['VN', 'SG', 'US', 'JP'];
@@ -37,16 +46,36 @@ router.post('/scan', authMiddleware, requirePermission('leak_monitor:create'), a
                 const detected = _simulateMarketplaceScan(p, platform, authorizedRegions);
                 for (const leak of detected) {
                     const id = uuidv4();
-                    await db.run(`
+                    await db.run(
+                        `
             INSERT INTO leak_alerts (id, product_id, platform, url, listing_title, listing_price, authorized_price, region_detected, authorized_regions, leak_type, risk_score, org_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `, [id, p.id, platform, leak.url, leak.listing_title, leak.listing_price, leak.authorized_price, leak.region, JSON.stringify(authorizedRegions), leak.type, leak.risk_score, orgId]);
+          `,
+                        [
+                            id,
+                            p.id,
+                            platform,
+                            leak.url,
+                            leak.listing_title,
+                            leak.listing_price,
+                            leak.authorized_price,
+                            leak.region,
+                            JSON.stringify(authorizedRegions),
+                            leak.type,
+                            leak.risk_score,
+                            orgId,
+                        ]
+                    );
                     results.push({ id, ...leak, product_name: p.name });
                 }
             }
         }
 
-        eventBus.emitEvent('LeakScan', { products_scanned: products.length, platforms: scanPlatforms, leaks_found: results.length });
+        eventBus.emitEvent('LeakScan', {
+            products_scanned: products.length,
+            platforms: scanPlatforms,
+            leaks_found: results.length,
+        });
 
         res.json({
             scan_id: uuidv4(),
@@ -54,7 +83,7 @@ router.post('/scan', authMiddleware, requirePermission('leak_monitor:create'), a
             platforms_scanned: scanPlatforms,
             leaks_found: results.length,
             results,
-            scanned_at: new Date().toISOString()
+            scanned_at: new Date().toISOString(),
         });
     } catch (err) {
         console.error('Leak scan error:', err);
@@ -74,8 +103,14 @@ router.get('/alerts', async (req, res) => {
       WHERE la.status = ?
     `;
         const params = [status];
-        if (orgId) { query += ' AND p.org_id = ?'; params.push(orgId); }
-        if (platform) { query += ' AND la.platform = ?'; params.push(platform); }
+        if (orgId) {
+            query += ' AND p.org_id = ?';
+            params.push(orgId);
+        }
+        if (platform) {
+            query += ' AND la.platform = ?';
+            params.push(platform);
+        }
         query += ' ORDER BY la.risk_score DESC, la.created_at DESC LIMIT ?';
         params.push(Math.min(Number(limit) || 50, 200));
 
@@ -102,24 +137,65 @@ router.get('/stats', async (req, res) => {
     try {
         const orgId = req.user?.org_id || req.user?.orgId || null;
         const orgJoin = orgId ? ' LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ?' : '';
-        const orgWhere = orgId ? " LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? AND status = 'open'" : " WHERE status = 'open'";
-        const total = (await db.prepare('SELECT COUNT(*) as c FROM leak_alerts la' + (orgId ? ' LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ?' : '')).get(...(orgId ? [orgId] : [])))?.c || 0;
-        const open = (await db.prepare("SELECT COUNT(*) as c FROM leak_alerts la" + (orgId ? " LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? AND la.status = 'open'" : " WHERE la.status = 'open'")).get(...(orgId ? [orgId] : [])))?.c || 0;
-        const resolved = (await db.prepare("SELECT COUNT(*) as c FROM leak_alerts la" + (orgId ? " LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? AND la.status = 'resolved'" : " WHERE la.status = 'resolved'")).get(...(orgId ? [orgId] : [])))?.c || 0;
+        const orgWhere = orgId
+            ? " LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? AND status = 'open'"
+            : " WHERE status = 'open'";
+        const total =
+            (
+                await db
+                    .prepare(
+                        'SELECT COUNT(*) as c FROM leak_alerts la' +
+                            (orgId ? ' LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ?' : '')
+                    )
+                    .get(...(orgId ? [orgId] : []))
+            )?.c || 0;
+        const open =
+            (
+                await db
+                    .prepare(
+                        'SELECT COUNT(*) as c FROM leak_alerts la' +
+                            (orgId
+                                ? " LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? AND la.status = 'open'"
+                                : " WHERE la.status = 'open'")
+                    )
+                    .get(...(orgId ? [orgId] : []))
+            )?.c || 0;
+        const resolved =
+            (
+                await db
+                    .prepare(
+                        'SELECT COUNT(*) as c FROM leak_alerts la' +
+                            (orgId
+                                ? " LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? AND la.status = 'resolved'"
+                                : " WHERE la.status = 'resolved'")
+                    )
+                    .get(...(orgId ? [orgId] : []))
+            )?.c || 0;
 
         const byPlatform = orgId
-          ? await db.all('SELECT la.platform, COUNT(*) as count, AVG(la.risk_score) as avg_risk FROM leak_alerts la LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? GROUP BY la.platform ORDER BY count DESC LIMIT 1000', [orgId])
-          : await db.all('SELECT platform, COUNT(*) as count, AVG(risk_score) as avg_risk FROM leak_alerts GROUP BY platform ORDER BY count DESC LIMIT 1000');
+            ? await db.all(
+                  'SELECT la.platform, COUNT(*) as count, AVG(la.risk_score) as avg_risk FROM leak_alerts la LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? GROUP BY la.platform ORDER BY count DESC LIMIT 1000',
+                  [orgId]
+              )
+            : await db.all(
+                  'SELECT platform, COUNT(*) as count, AVG(risk_score) as avg_risk FROM leak_alerts GROUP BY platform ORDER BY count DESC LIMIT 1000'
+              );
         const byType = orgId
-          ? await db.all('SELECT la.leak_type, COUNT(*) as count FROM leak_alerts la LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? GROUP BY la.leak_type', [orgId])
-          : await db.all('SELECT leak_type, COUNT(*) as count FROM leak_alerts GROUP BY leak_type');
+            ? await db.all(
+                  'SELECT la.leak_type, COUNT(*) as count FROM leak_alerts la LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ? GROUP BY la.leak_type',
+                  [orgId]
+              )
+            : await db.all('SELECT leak_type, COUNT(*) as count FROM leak_alerts GROUP BY leak_type');
         const topProducts = orgId
-          ? await db.all(`
+            ? await db.all(
+                  `
       SELECT la.product_id, p.name as product_name, COUNT(*) as leak_count, AVG(la.risk_score) as avg_risk
       FROM leak_alerts la LEFT JOIN products p ON la.product_id = p.id WHERE p.org_id = ?
       GROUP BY la.product_id, p.name ORDER BY leak_count DESC LIMIT 10
-    `, [orgId])
-          : await db.all(`
+    `,
+                  [orgId]
+              )
+            : await db.all(`
       SELECT la.product_id, p.name as product_name, COUNT(*) as leak_count, AVG(la.risk_score) as avg_risk
       FROM leak_alerts la LEFT JOIN products p ON la.product_id = p.id
       GROUP BY la.product_id, p.name ORDER BY leak_count DESC LIMIT 10
@@ -127,7 +203,8 @@ router.get('/stats', async (req, res) => {
 
         // Distributor risk scoring based on leaks
         const distributorRisk = orgId
-          ? await db.all(`
+            ? await db.all(
+                  `
       SELECT pt.id, pt.name, COUNT(la.id) as leak_count, AVG(la.risk_score) as avg_risk
       FROM partners pt
       LEFT JOIN supply_chain_events sce ON pt.id = sce.partner_id
@@ -135,8 +212,10 @@ router.get('/stats', async (req, res) => {
       WHERE la.id IS NOT NULL AND pt.org_id = ?
       GROUP BY pt.id, pt.name
       ORDER BY leak_count DESC
-     LIMIT 1000`, [orgId])
-          : await db.all(`
+     LIMIT 1000`,
+                  [orgId]
+              )
+            : await db.all(`
       SELECT pt.id, pt.name, COUNT(la.id) as leak_count, AVG(la.risk_score) as avg_risk
       FROM partners pt
       LEFT JOIN supply_chain_events sce ON pt.id = sce.partner_id
@@ -147,11 +226,13 @@ router.get('/stats', async (req, res) => {
      LIMIT 1000`);
 
         res.json({
-            total, open, resolved,
+            total,
+            open,
+            resolved,
             by_platform: byPlatform,
             by_type: byType,
             top_products: topProducts,
-            distributor_risk: distributorRisk
+            distributor_risk: distributorRisk,
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch stats' });
@@ -169,13 +250,14 @@ function _simulateMarketplaceScan(product, platform, authorizedRegions) {
             { type: 'unauthorized_region', regions: ['CN', 'TH', 'KR', 'IN', 'RU'] },
             { type: 'price_dumping', regions: authorizedRegions },
             { type: 'gray_market', regions: ['HK', 'TW', 'MY'] },
-            { type: 'parallel_import', regions: authorizedRegions }
+            { type: 'parallel_import', regions: authorizedRegions },
         ];
 
         const leakType = leakTypes[Math.floor(Math.random() * leakTypes.length)];
         const region = leakType.regions[Math.floor(Math.random() * leakType.regions.length)];
         const basePrice = 50 + Math.random() * 200;
-        const listingPrice = leakType.type === 'price_dumping' ? basePrice * 0.4 : basePrice * (0.7 + Math.random() * 0.5);
+        const listingPrice =
+            leakType.type === 'price_dumping' ? basePrice * 0.4 : basePrice * (0.7 + Math.random() * 0.5);
 
         leaks.push({
             platform,
@@ -185,7 +267,7 @@ function _simulateMarketplaceScan(product, platform, authorizedRegions) {
             authorized_price: Math.round(basePrice * 100) / 100,
             region,
             type: leakType.type,
-            risk_score: leakType.type === 'unauthorized_region' ? 0.85 : leakType.type === 'price_dumping' ? 0.9 : 0.65
+            risk_score: leakType.type === 'unauthorized_region' ? 0.85 : leakType.type === 'price_dumping' ? 0.9 : 0.65,
         });
     }
 
@@ -201,9 +283,23 @@ router.put('/alerts/:id/resolve', authMiddleware, requirePermission('fraud_case:
 
         await db.run(`UPDATE leak_alerts SET status = 'resolved' WHERE id = ?`, [req.params.id]);
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'LEAK_RESOLVED', 'leak_alert', req.params.id,
-                JSON.stringify({ resolution: resolution || 'resolved', action_taken: action_taken || 'none', platform: alert.platform, product_id: alert.product_id }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'LEAK_RESOLVED',
+                'leak_alert',
+                req.params.id,
+                JSON.stringify({
+                    resolution: resolution || 'resolved',
+                    action_taken: action_taken || 'none',
+                    platform: alert.platform,
+                    product_id: alert.product_id,
+                })
+            );
 
         res.json({ alert_id: req.params.id, status: 'resolved', resolution: resolution || 'resolved' });
     } catch (err) {
@@ -215,11 +311,14 @@ router.put('/alerts/:id/resolve', authMiddleware, requirePermission('fraud_case:
 // ─── POST /alerts/:id/takedown — Generate C&D takedown notice ───────────────
 router.post('/alerts/:id/takedown', authMiddleware, requirePermission('fraud_case:approve'), async (req, res) => {
     try {
-        const alert = await db.get(`
+        const alert = await db.get(
+            `
       SELECT la.*, p.name as product_name, p.sku, p.manufacturer
       FROM leak_alerts la LEFT JOIN products p ON la.product_id = p.id
       WHERE la.id = ?
-    `, [req.params.id]);
+    `,
+            [req.params.id]
+        );
         if (!alert) return res.status(404).json({ error: 'Leak alert not found' });
 
         const takedownId = uuidv4();
@@ -233,11 +332,21 @@ router.post('/alerts/:id/takedown', authMiddleware, requirePermission('fraud_cas
             violation: alert.leak_type,
             notice_text: `CEASE AND DESIST NOTICE\n\nTo: ${alert.platform} Trust & Safety Team\nRe: Unauthorized listing of "${alert.product_name}" (SKU: ${alert.sku})\nURL: ${alert.url}\n\nDear Trust & Safety Team,\n\nWe have identified an unauthorized listing of our product on your platform. This listing violates our distribution agreements and intellectual property rights.\n\nViolation Type: ${alert.leak_type.replace(/_/g, ' ').toUpperCase()}\nDetected Region: ${alert.region_detected}\nListing Price: $${alert.listing_price} (Authorized: $${alert.authorized_price})\n\nWe request immediate removal of this listing. Failure to comply may result in further legal action.\n\nGenerated by TrustChecker Anti-Counterfeiting Platform`,
             generated_at: new Date().toISOString(),
-            status: 'sent'
+            status: 'sent',
         };
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'TAKEDOWN_SENT', 'leak_alert', req.params.id, JSON.stringify({ takedown_id: takedownId, platform: alert.platform }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'TAKEDOWN_SENT',
+                'leak_alert',
+                req.params.id,
+                JSON.stringify({ takedown_id: takedownId, platform: alert.platform })
+            );
 
         res.json(notice);
     } catch (err) {
@@ -253,11 +362,14 @@ router.get('/trends', async (req, res) => {
         const safeWeeks = Math.max(1, Math.min(52, Math.floor(Number(weeks)) || 12));
         const cutoff = new Date(Date.now() - safeWeeks * 7 * 86400000).toISOString();
 
-        const weeklyTrend = await db.all(`
+        const weeklyTrend = await db.all(
+            `
             SELECT to_char(created_at, 'IYYY-"W"IW') as week, COUNT(*) as count, AVG(risk_score) as avg_risk
             FROM leak_alerts WHERE created_at > $1
             GROUP BY week ORDER BY week ASC
-         LIMIT 1000`, [cutoff]);
+         LIMIT 1000`,
+            [cutoff]
+        );
 
         const platformTrend = await db.all(`
             SELECT platform, to_char(created_at, 'YYYY-MM') as month, COUNT(*) as count
@@ -282,7 +394,7 @@ router.get('/trends', async (req, res) => {
             platform_trend: platformTrend,
             type_trend: typeTrend,
             resolution_rate: resolutionRate,
-            period_weeks: Number(weeks)
+            period_weeks: Number(weeks),
         });
     } catch (err) {
         console.error('Leak dashboard error:', err);
@@ -291,4 +403,3 @@ router.get('/trends', async (req, res) => {
 });
 
 module.exports = router;
-

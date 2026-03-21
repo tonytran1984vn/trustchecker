@@ -28,14 +28,27 @@ router.post('/ask', async (req, res) => {
         const response = aiAssistant.respond(message, enrichedContext);
 
         // Log conversation
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'AI_CHAT', 'chatbot', 'assistant',
-                JSON.stringify({ question: message.substring(0, 200), category: response.category, confidence: response.confidence }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'AI_CHAT',
+                'chatbot',
+                'assistant',
+                JSON.stringify({
+                    question: message.substring(0, 200),
+                    category: response.category,
+                    confidence: response.confidence,
+                })
+            );
 
         res.json({
             bot: 'TrustBot',
             ...response,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -48,7 +61,7 @@ router.get('/suggestions', async (req, res) => {
         const { page } = req.query;
         const suggestions = aiAssistant.getSuggestions({
             role: req.user.role,
-            current_page: page
+            current_page: page,
         });
         res.json({ suggestions });
     } catch (e) {
@@ -63,9 +76,18 @@ router.post('/chat/start', async (req, res) => {
         const sessionId = uuidv4();
 
         // Store chat session in audit
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'CHAT_STARTED', 'chat', sessionId,
-                JSON.stringify({ topic: topic || 'General Support', started_at: new Date().toISOString() }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'CHAT_STARTED',
+                'chat',
+                sessionId,
+                JSON.stringify({ topic: topic || 'General Support', started_at: new Date().toISOString() })
+            );
 
         res.json({
             session_id: sessionId,
@@ -75,9 +97,9 @@ router.post('/chat/start', async (req, res) => {
             agent: {
                 name: 'TrustBot',
                 type: 'ai',
-                note: 'AI assistant will handle your request. If needed, you will be escalated to a human agent.'
+                note: 'AI assistant will handle your request. If needed, you will be escalated to a human agent.',
             },
-            auto_response: aiAssistant.respond(topic || 'help', { role: req.user.role })
+            auto_response: aiAssistant.respond(topic || 'help', { role: req.user.role }),
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -95,7 +117,7 @@ router.post('/chat/:sessionId/message', async (req, res) => {
         // AI auto-response
         const aiResponse = aiAssistant.respond(message, {
             role: req.user.role,
-            session_id: sessionId
+            session_id: sessionId,
         });
 
         // Determine if escalation is needed
@@ -103,8 +125,19 @@ router.post('/chat/:sessionId/message', async (req, res) => {
 
         const response = {
             session_id: sessionId,
-            user_message: { id: uuidv4(), text: message, sender: req.user.username, timestamp: new Date().toISOString() },
-            bot_response: { id: uuidv4(), text: aiResponse.response, sender: 'TrustBot', timestamp: new Date().toISOString(), ...aiResponse },
+            user_message: {
+                id: uuidv4(),
+                text: message,
+                sender: req.user.username,
+                timestamp: new Date().toISOString(),
+            },
+            bot_response: {
+                id: uuidv4(),
+                text: aiResponse.response,
+                sender: 'TrustBot',
+                timestamp: new Date().toISOString(),
+                ...aiResponse,
+            },
         };
 
         if (needsEscalation) {
@@ -112,7 +145,11 @@ router.post('/chat/:sessionId/message', async (req, res) => {
                 needed: true,
                 reason: 'AI confidence too low for reliable response',
                 action: 'Creating support ticket for human agent review',
-                ticket_suggestion: { subject: `Chat escalation: ${message.substring(0, 80)}`, priority: 'high', category: 'technical' }
+                ticket_suggestion: {
+                    subject: `Chat escalation: ${message.substring(0, 80)}`,
+                    priority: 'high',
+                    category: 'technical',
+                },
             };
         }
 

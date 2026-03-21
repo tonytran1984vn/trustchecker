@@ -24,13 +24,13 @@ router.get('/verify-chain', requireTenantAdmin(), async (req, res) => {
             entity_type: 'system',
             entity_id: 'audit_chain',
             details: { entries_checked: result.entries_checked, valid: result.valid },
-            ip: req.ip || ''
+            ip: req.ip || '',
         });
 
         res.json({
             ...result,
             verified_by: req.user.email,
-            verified_at: new Date().toISOString()
+            verified_at: new Date().toISOString(),
         });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -40,15 +40,27 @@ router.get('/verify-chain', requireTenantAdmin(), async (req, res) => {
 // ─── GET /stats — Audit log statistics ──────────────────────────────────────
 router.get('/stats', requireTenantAdmin(), async (req, res) => {
     try {
-        const total = await db.get('SELECT COUNT(*) as count FROM audit_log' + (req.orgId ? ' WHERE org_id = ?' : ''), req.orgId ? [req.orgId] : []);
-        const hashed = await db.get('SELECT COUNT(*) as count FROM audit_log WHERE entry_hash IS NOT NULL' + (req.orgId ? ' AND org_id = ?' : ''), req.orgId ? [req.orgId] : []);
-        const recent = await db.all('SELECT action, COUNT(*) as count FROM audit_log' + (req.orgId ? ' WHERE org_id = ?' : '') + ' GROUP BY action ORDER BY count DESC LIMIT 20', req.orgId ? [req.orgId] : []);
+        const total = await db.get(
+            'SELECT COUNT(*) as count FROM audit_log' + (req.orgId ? ' WHERE org_id = ?' : ''),
+            req.orgId ? [req.orgId] : []
+        );
+        const hashed = await db.get(
+            'SELECT COUNT(*) as count FROM audit_log WHERE entry_hash IS NOT NULL' +
+                (req.orgId ? ' AND org_id = ?' : ''),
+            req.orgId ? [req.orgId] : []
+        );
+        const recent = await db.all(
+            'SELECT action, COUNT(*) as count FROM audit_log' +
+                (req.orgId ? ' WHERE org_id = ?' : '') +
+                ' GROUP BY action ORDER BY count DESC LIMIT 20',
+            req.orgId ? [req.orgId] : []
+        );
 
         res.json({
             total_entries: total?.count || 0,
             hashed_entries: hashed?.count || 0,
             hash_coverage: total?.count > 0 ? Math.round((hashed?.count / total?.count) * 100) : 0,
-            top_actions: recent
+            top_actions: recent,
         });
     } catch (e) {
         res.status(500).json({ error: e.message });

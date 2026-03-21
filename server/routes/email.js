@@ -49,14 +49,46 @@ router.post('/send', requirePermission('notification:manage'), async (req, res) 
     let html;
     try {
         switch (template) {
-            case 'password_reset': html = emailTemplates.passwordReset(params?.username, params?.token, params?.url); break;
-            case 'welcome': html = emailTemplates.welcome(params?.username, params?.url); break;
-            case 'fraud_alert': html = emailTemplates.fraudAlert(params?.productName, params?.fraudScore, params?.scanId, params?.details); break;
-            case 'scan_receipt': html = emailTemplates.scanReceipt(params?.productName, params?.result, params?.trustScore, params?.fraudScore, params?.sealHash); break;
-            case 'invoice': html = emailTemplates.invoice(params?.planName, params?.amount, params?.currency, params?.invoiceId, params?.period); break;
-            case 'kyc_status': html = emailTemplates.kycStatus(params?.businessName, params?.status, params?.reason); break;
-            case 'weekly_digest': html = emailTemplates.weeklyDigest(params?.stats || {}); break;
-            default: return res.status(400).json({ error: 'Unknown template' });
+            case 'password_reset':
+                html = emailTemplates.passwordReset(params?.username, params?.token, params?.url);
+                break;
+            case 'welcome':
+                html = emailTemplates.welcome(params?.username, params?.url);
+                break;
+            case 'fraud_alert':
+                html = emailTemplates.fraudAlert(
+                    params?.productName,
+                    params?.fraudScore,
+                    params?.scanId,
+                    params?.details
+                );
+                break;
+            case 'scan_receipt':
+                html = emailTemplates.scanReceipt(
+                    params?.productName,
+                    params?.result,
+                    params?.trustScore,
+                    params?.fraudScore,
+                    params?.sealHash
+                );
+                break;
+            case 'invoice':
+                html = emailTemplates.invoice(
+                    params?.planName,
+                    params?.amount,
+                    params?.currency,
+                    params?.invoiceId,
+                    params?.period
+                );
+                break;
+            case 'kyc_status':
+                html = emailTemplates.kycStatus(params?.businessName, params?.status, params?.reason);
+                break;
+            case 'weekly_digest':
+                html = emailTemplates.weeklyDigest(params?.stats || {});
+                break;
+            default:
+                return res.status(400).json({ error: 'Unknown template' });
         }
     } catch (e) {
         console.error('Email template error:', e.message);
@@ -71,7 +103,7 @@ router.post('/send', requirePermission('notification:manage'), async (req, res) 
         subject: getSubject(template),
         html_size: html.length,
         sent_at: new Date().toISOString(),
-        note: 'Configure SMTP in Integrations → Email settings for real delivery'
+        note: 'Configure SMTP in Integrations → Email settings for real delivery',
     });
 });
 
@@ -82,7 +114,7 @@ router.get('/config', requirePermission('notification:manage'), async (req, res)
             provider: 'simulated',
             smtp_configured: false,
             supported_templates: emailTemplates.listTemplates().length,
-            note: 'Set up SMTP credentials in Admin → Integrations → Email/SMTP to enable real email delivery'
+            note: 'Set up SMTP credentials in Admin → Integrations → Email/SMTP to enable real email delivery',
         });
     } catch (e) {
         console.error(e);

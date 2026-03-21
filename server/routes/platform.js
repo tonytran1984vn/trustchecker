@@ -28,16 +28,12 @@ router.get('/orgs/check-availability', async (req, res) => {
         const result = { name_available: true, slug_available: true, suggestions: [] };
 
         if (name) {
-            const existing = await db.get(
-                'SELECT id FROM organizations WHERE LOWER(name) = LOWER(?)', [name]
-            );
+            const existing = await db.get('SELECT id FROM organizations WHERE LOWER(name) = LOWER(?)', [name]);
             result.name_available = !existing;
         }
 
         if (slug) {
-            const existing = await db.get(
-                'SELECT id FROM organizations WHERE slug = ?', [slug]
-            );
+            const existing = await db.get('SELECT id FROM organizations WHERE slug = ?', [slug]);
             result.slug_available = !existing;
 
             if (existing) {
@@ -47,9 +43,7 @@ router.get('/orgs/check-availability', async (req, res) => {
                 const suggestions = [];
                 for (const s of suffixes) {
                     const candidate = `${slug}-${s}`;
-                    const taken = await db.get(
-                        'SELECT id FROM organizations WHERE slug = ?', [candidate]
-                    );
+                    const taken = await db.get('SELECT id FROM organizations WHERE slug = ?', [candidate]);
                     if (!taken) suggestions.push(candidate);
                 }
                 result.suggestions = suggestions;
@@ -72,7 +66,9 @@ router.post('/orgs', async (req, res) => {
             return res.status(400).json({ error: 'name and slug are required' });
         }
         if (!admin_email || !admin_username || !admin_password) {
-            return res.status(400).json({ error: 'admin_email, admin_username, admin_password are required to create Company Admin' });
+            return res
+                .status(400)
+                .json({ error: 'admin_email, admin_username, admin_password are required to create Company Admin' });
         }
 
         // Check name uniqueness
@@ -116,14 +112,18 @@ router.post('/orgs', async (req, res) => {
             `SELECT permission_id FROM rbac_role_permissions WHERE role_id = 'role-company_admin'`
         );
         for (const p of templatePerms) {
-            await db.run('INSERT OR IGNORE INTO rbac_role_permissions (role_id, permission_id) VALUES (?, ?)', [roleId, p.permission_id]);
+            await db.run('INSERT OR IGNORE INTO rbac_role_permissions (role_id, permission_id) VALUES (?, ?)', [
+                roleId,
+                p.permission_id,
+            ]);
         }
 
         // Assign role to admin user
-        await db.run(
-            'INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id, assigned_by) VALUES (?, ?, ?)',
-            [adminId, roleId, req.user.id]
-        );
+        await db.run('INSERT OR IGNORE INTO rbac_user_roles (user_id, role_id, assigned_by) VALUES (?, ?, ?)', [
+            adminId,
+            roleId,
+            req.user.id,
+        ]);
 
         // Audit log
         await db.run(
@@ -137,7 +137,7 @@ router.post('/orgs', async (req, res) => {
         res.status(201).json({
             org: { id: orgId, name, slug, plan, status: 'active' },
             admin: { id: adminId, username: admin_username, email: admin_email, role: 'admin' },
-            message: 'Tenant created with Company Admin'
+            message: 'Tenant created with Company Admin',
         });
     } catch (err) {
         console.error('[Platform] Create org error:', err);
@@ -152,10 +152,14 @@ router.post('/orgs', async (req, res) => {
 // GET /feature-flags — Read platform-wide flags from dedicated table
 router.get('/feature-flags', async (req, res) => {
     try {
-        const rows = await db.all('SELECT key, label, description, icon, color, enabled FROM platform_feature_flags ORDER BY key LIMIT 1000');
+        const rows = await db.all(
+            'SELECT key, label, description, icon, color, enabled FROM platform_feature_flags ORDER BY key LIMIT 1000'
+        );
         // Also return as a simple key→value map for backward compat
         const flags = {};
-        rows.forEach(r => { flags[r.key] = r.enabled; });
+        rows.forEach(r => {
+            flags[r.key] = r.enabled;
+        });
         res.json({ flags, flagList: rows });
     } catch (err) {
         console.error('[Platform] Feature flags read error:', err);
@@ -178,7 +182,7 @@ router.put('/feature-flags', async (req, res) => {
         }
 
         await db.run(
-            "UPDATE platform_feature_flags SET enabled = ?, updated_at = NOW(), updated_by = ? WHERE key = ?",
+            'UPDATE platform_feature_flags SET enabled = ?, updated_at = NOW(), updated_by = ? WHERE key = ?',
             [value, req.user.id, key]
         );
 
@@ -232,10 +236,10 @@ router.put('/notifications/:id', async (req, res) => {
         );
         if (!pref) return res.status(404).json({ error: 'Preference not found' });
 
-        await db.run(
-            "UPDATE notification_preferences SET enabled = ?, updated_at = NOW() WHERE id = ?",
-            [enabled, req.params.id]
-        );
+        await db.run('UPDATE notification_preferences SET enabled = ?, updated_at = NOW() WHERE id = ?', [
+            enabled,
+            req.params.id,
+        ]);
 
         if (typeof db.save === 'function') await db.save();
         res.json({ message: `${pref.key} ${enabled ? 'enabled' : 'disabled'}`, id: req.params.id, enabled });
@@ -267,27 +271,73 @@ router.get('/email-settings', async (req, res) => {
 // PUT /email-settings — Update SMTP config + recipients
 router.put('/email-settings', async (req, res) => {
     try {
-        const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, from_name, from_email, recipients, enabled, smtp_accounts, daily_limit } = req.body;
+        const {
+            smtp_host,
+            smtp_port,
+            smtp_user,
+            smtp_pass,
+            smtp_secure,
+            from_name,
+            from_email,
+            recipients,
+            enabled,
+            smtp_accounts,
+            daily_limit,
+        } = req.body;
 
         // Build SET clause dynamically (only update provided fields)
         const updates = [];
         const params = [];
         let idx = 1;
 
-        if (smtp_host !== undefined) { updates.push(`smtp_host = $${idx++}`); params.push(smtp_host); }
-        if (smtp_port !== undefined) { updates.push(`smtp_port = $${idx++}`); params.push(smtp_port); }
-        if (smtp_user !== undefined) { updates.push(`smtp_user = $${idx++}`); params.push(smtp_user); }
-        if (smtp_pass !== undefined && smtp_pass !== '••••••••') { updates.push(`smtp_pass = $${idx++}`); params.push(smtp_pass); }
-        if (smtp_secure !== undefined) { updates.push(`smtp_secure = $${idx++}`); params.push(smtp_secure); }
-        if (from_name !== undefined) { updates.push(`from_name = $${idx++}`); params.push(from_name); }
-        if (from_email !== undefined) { updates.push(`from_email = $${idx++}`); params.push(from_email); }
-        if (recipients !== undefined) { updates.push(`recipients = $${idx++}::jsonb`); params.push(JSON.stringify(recipients)); }
-        if (enabled !== undefined) { updates.push(`enabled = $${idx++}`); params.push(enabled); }
-        if (smtp_accounts !== undefined) { updates.push(`smtp_accounts = $${idx++}::jsonb`); params.push(JSON.stringify(smtp_accounts)); }
-        if (daily_limit !== undefined) { updates.push(`daily_limit = $${idx++}`); params.push(daily_limit); }
+        if (smtp_host !== undefined) {
+            updates.push(`smtp_host = $${idx++}`);
+            params.push(smtp_host);
+        }
+        if (smtp_port !== undefined) {
+            updates.push(`smtp_port = $${idx++}`);
+            params.push(smtp_port);
+        }
+        if (smtp_user !== undefined) {
+            updates.push(`smtp_user = $${idx++}`);
+            params.push(smtp_user);
+        }
+        if (smtp_pass !== undefined && smtp_pass !== '••••••••') {
+            updates.push(`smtp_pass = $${idx++}`);
+            params.push(smtp_pass);
+        }
+        if (smtp_secure !== undefined) {
+            updates.push(`smtp_secure = $${idx++}`);
+            params.push(smtp_secure);
+        }
+        if (from_name !== undefined) {
+            updates.push(`from_name = $${idx++}`);
+            params.push(from_name);
+        }
+        if (from_email !== undefined) {
+            updates.push(`from_email = $${idx++}`);
+            params.push(from_email);
+        }
+        if (recipients !== undefined) {
+            updates.push(`recipients = $${idx++}::jsonb`);
+            params.push(JSON.stringify(recipients));
+        }
+        if (enabled !== undefined) {
+            updates.push(`enabled = $${idx++}`);
+            params.push(enabled);
+        }
+        if (smtp_accounts !== undefined) {
+            updates.push(`smtp_accounts = $${idx++}::jsonb`);
+            params.push(JSON.stringify(smtp_accounts));
+        }
+        if (daily_limit !== undefined) {
+            updates.push(`daily_limit = $${idx++}`);
+            params.push(daily_limit);
+        }
 
         updates.push(`updated_at = NOW()`);
-        updates.push(`updated_by = $${idx++}`); params.push(req.user.id);
+        updates.push(`updated_by = $${idx++}`);
+        params.push(req.user.id);
 
         if (updates.length > 2) {
             await db.run(`UPDATE email_settings SET ${updates.join(', ')} WHERE id = 'default'`, params);
@@ -326,7 +376,7 @@ const { withTransaction } = require('../middleware/transaction');
 // GET /channel-settings/:channel
 router.get('/channel-settings/:channel', async (req, res) => {
     try {
-        const row = await db.get("SELECT * FROM channel_settings WHERE channel = $1", [req.params.channel]);
+        const row = await db.get('SELECT * FROM channel_settings WHERE channel = $1', [req.params.channel]);
         if (!row) return res.json({ config: { enabled: false, config: {} } });
         res.json({ config: { ...row, config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config } });
     } catch (err) {
@@ -343,10 +393,17 @@ router.put('/channel-settings/:channel', async (req, res) => {
         const params = [];
         let idx = 1;
 
-        if (enabled !== undefined) { updates.push(`enabled = $${idx++}`); params.push(enabled); }
-        if (config !== undefined) { updates.push(`config = $${idx++}::jsonb`); params.push(JSON.stringify(config)); }
+        if (enabled !== undefined) {
+            updates.push(`enabled = $${idx++}`);
+            params.push(enabled);
+        }
+        if (config !== undefined) {
+            updates.push(`config = $${idx++}::jsonb`);
+            params.push(JSON.stringify(config));
+        }
         updates.push(`updated_at = NOW()`);
-        updates.push(`updated_by = $${idx++}`); params.push(req.user.id);
+        updates.push(`updated_by = $${idx++}`);
+        params.push(req.user.id);
         params.push(req.params.channel);
 
         await db.run(`UPDATE channel_settings SET ${updates.join(', ')} WHERE channel = $${idx}`, params);
@@ -385,7 +442,18 @@ router.post('/channel-settings/:channel/test', async (req, res) => {
 // PLATFORM USER MANAGEMENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const PLATFORM_ROLES = ['super_admin', 'platform_security', 'data_gov_officer', 'global_risk_committee', 'emission_engine', 'change_management_officer', 'incident_response_lead', 'auditor', 'developer', 'platform_devops'];
+const PLATFORM_ROLES = [
+    'super_admin',
+    'platform_security',
+    'data_gov_officer',
+    'global_risk_committee',
+    'emission_engine',
+    'change_management_officer',
+    'incident_response_lead',
+    'auditor',
+    'developer',
+    'platform_devops',
+];
 
 // ─── GET /users — List platform users ────────────────────────────────────────
 router.get('/users', async (req, res) => {
@@ -441,7 +509,10 @@ router.post('/users', async (req, res) => {
 // ─── PUT /users/:id — Update platform user (role, password, status) ─────────
 router.put('/users/:id', async (req, res) => {
     try {
-        const user = await db.get('SELECT id, username, role, email FROM users WHERE id = ? AND user_type = ?', [req.params.id, 'platform']);
+        const user = await db.get('SELECT id, username, role, email FROM users WHERE id = ? AND user_type = ?', [
+            req.params.id,
+            'platform',
+        ]);
         if (!user) return res.status(404).json({ error: 'Platform user not found' });
 
         const { role, password, status } = req.body;
@@ -496,7 +567,10 @@ router.delete('/users/:id', async (req, res) => {
         if (req.params.id === req.user.id) {
             return res.status(400).json({ error: 'Cannot delete your own account' });
         }
-        const user = await db.get('SELECT id, username, role FROM users WHERE id = ? AND user_type = ?', [req.params.id, 'platform']);
+        const user = await db.get('SELECT id, username, role FROM users WHERE id = ? AND user_type = ?', [
+            req.params.id,
+            'platform',
+        ]);
         if (!user) return res.status(404).json({ error: 'Platform user not found' });
 
         await db.run('DELETE FROM users WHERE id = ?', [req.params.id]);
@@ -541,10 +615,7 @@ router.get('/orgs/:id', async (req, res) => {
             [req.params.id]
         );
 
-        const roles = await db.all(
-            'SELECT * FROM rbac_roles WHERE org_id = ?',
-            [req.params.id]
-        );
+        const roles = await db.all('SELECT * FROM rbac_roles WHERE org_id = ?', [req.params.id]);
 
         res.json({ org, users, roles });
     } catch (err) {
@@ -577,11 +648,24 @@ router.post('/orgs/:id/users', async (req, res) => {
 
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'TENANT_USER_CREATED', 'user', ?, ?)`,
-            [uuidv4(), req.user.id, id, JSON.stringify({ username, email, role, org_id: req.params.id, org_name: org.name })]
+            [
+                uuidv4(),
+                req.user.id,
+                id,
+                JSON.stringify({ username, email, role, org_id: req.params.id, org_name: org.name }),
+            ]
         );
 
         if (typeof db.save === 'function') await db.save();
-        res.status(201).json({ id, username, email, role, user_type: 'org', org_id: req.params.id, message: 'Company user created' });
+        res.status(201).json({
+            id,
+            username,
+            email,
+            role,
+            user_type: 'org',
+            org_id: req.params.id,
+            message: 'Company user created',
+        });
     } catch (err) {
         console.error('[Platform] Create org user error:', err);
         res.status(500).json({ error: 'Failed to create company user' });
@@ -597,20 +681,28 @@ router.put('/orgs/:id', async (req, res) => {
 
         const updates = [];
         const params = [];
-        if (plan) { updates.push('plan = ?'); params.push(plan); }
+        if (plan) {
+            updates.push('plan = ?');
+            params.push(plan);
+        }
         if (feature_flags) {
             const flags = typeof feature_flags === 'string' ? feature_flags : JSON.stringify(feature_flags);
-            updates.push('feature_flags = ?'); params.push(flags);
+            updates.push('feature_flags = ?');
+            params.push(flags);
         }
         if (name) {
             // Check name uniqueness (exclude self)
-            const existingName = await db.get('SELECT id FROM organizations WHERE name = ? AND id != ?', [name, req.params.id]);
+            const existingName = await db.get('SELECT id FROM organizations WHERE name = ? AND id != ?', [
+                name,
+                req.params.id,
+            ]);
             if (existingName) {
                 return res.status(409).json({ error: `Organization name "${name}" already exists` });
             }
-            updates.push('name = ?'); params.push(name);
+            updates.push('name = ?');
+            params.push(name);
         }
-        updates.push("updated_at = NOW()");
+        updates.push('updated_at = NOW()');
 
         if (updates.length > 1) {
             params.push(req.params.id);
@@ -635,10 +727,7 @@ router.put('/orgs/:id', async (req, res) => {
 router.post('/orgs/:id/suspend', async (req, res) => {
     try {
         const { reason } = req.body;
-        await db.run(
-            "UPDATE organizations SET status = 'suspended', updated_at = NOW() WHERE id = ?",
-            [req.params.id]
-        );
+        await db.run("UPDATE organizations SET status = 'suspended', updated_at = NOW() WHERE id = ?", [req.params.id]);
 
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'TENANT_SUSPENDED', 'organization', ?, ?)`,
@@ -646,7 +735,7 @@ router.post('/orgs/:id/suspend', async (req, res) => {
         );
 
         if (typeof db.save === 'function') await db.save();
-        clearCacheByPrefix('/api/risk-graph').catch(() => { });
+        clearCacheByPrefix('/api/risk-graph').catch(() => {});
         res.json({ message: 'Tenant suspended', id: req.params.id });
     } catch (err) {
         console.error('[Platform] Suspend org error:', err);
@@ -657,10 +746,7 @@ router.post('/orgs/:id/suspend', async (req, res) => {
 // ─── POST /orgs/:id/activate — Reactivate org ─────────────────────────
 router.post('/orgs/:id/activate', async (req, res) => {
     try {
-        await db.run(
-            "UPDATE organizations SET status = 'active', updated_at = NOW() WHERE id = ?",
-            [req.params.id]
-        );
+        await db.run("UPDATE organizations SET status = 'active', updated_at = NOW() WHERE id = ?", [req.params.id]);
 
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'TENANT_ACTIVATED', 'organization', ?, ?)`,
@@ -668,7 +754,7 @@ router.post('/orgs/:id/activate', async (req, res) => {
         );
 
         if (typeof db.save === 'function') await db.save();
-        clearCacheByPrefix('/api/risk-graph').catch(() => { });
+        clearCacheByPrefix('/api/risk-graph').catch(() => {});
         res.json({ message: 'Tenant activated', id: req.params.id });
     } catch (err) {
         console.error('[Platform] Activate org error:', err);
@@ -692,11 +778,19 @@ router.post('/orgs/:id/admin-reset', async (req, res) => {
         if (!admin) return res.status(404).json({ error: 'No Company Admin found for this org' });
 
         const hash = await bcrypt.hash(new_password, 12);
-        await db.run('UPDATE users SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?', [hash, admin.id]);
+        await db.run('UPDATE users SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?', [
+            hash,
+            admin.id,
+        ]);
 
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'ADMIN_PASSWORD_RESET', 'user', ?, ?)`,
-            [uuidv4(), req.user.id, admin.id, JSON.stringify({ org_id: req.params.id, target_username: admin.username })]
+            [
+                uuidv4(),
+                req.user.id,
+                admin.id,
+                JSON.stringify({ org_id: req.params.id, target_username: admin.username }),
+            ]
         );
 
         if (typeof db.save === 'function') await db.save();
@@ -747,7 +841,9 @@ router.get('/sa-config/:key', async (req, res) => {
             try {
                 const data = JSON.parse(row.setting_value);
                 return res.json({ key, data, source: 'database' });
-            } catch { /* invalid JSON, fall through */ }
+            } catch {
+                /* invalid JSON, fall through */
+            }
         }
         res.json({ key, data: null, source: 'none' });
     } catch (err) {

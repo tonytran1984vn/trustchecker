@@ -30,20 +30,33 @@ router.post('/', async (req, res) => {
         if (!event_type || !url) return res.status(400).json({ error: 'event_type and url required' });
 
         const validEvents = [
-            'scan.completed', 'scan.suspicious', 'scan.counterfeit',
-            'fraud.alert', 'fraud.resolved',
-            'product.created', 'product.updated',
-            'evidence.uploaded', 'evidence.verified',
-            'kyc.submitted', 'kyc.approved', 'kyc.rejected',
-            'ticket.created', 'ticket.resolved',
+            'scan.completed',
+            'scan.suspicious',
+            'scan.counterfeit',
+            'fraud.alert',
+            'fraud.resolved',
+            'product.created',
+            'product.updated',
+            'evidence.uploaded',
+            'evidence.verified',
+            'kyc.submitted',
+            'kyc.approved',
+            'kyc.rejected',
+            'ticket.created',
+            'ticket.resolved',
             'anomaly.detected',
-            'cert.expired', 'cert.created',
-            'payment.completed', 'payment.refunded',
-            'user.registered', 'user.login'
+            'cert.expired',
+            'cert.created',
+            'payment.completed',
+            'payment.refunded',
+            'user.registered',
+            'user.login',
         ];
 
         if (!validEvents.includes(event_type) && event_type !== '*') {
-            return res.status(400).json({ error: `Invalid event. Choose from: ${validEvents.join(', ')} or '*' for all` });
+            return res
+                .status(400)
+                .json({ error: `Invalid event. Choose from: ${validEvents.join(', ')} or '*' for all` });
         }
 
         const id = webhookEngine.subscribe(event_type, url, secret);
@@ -73,7 +86,7 @@ router.post('/test', async (req, res) => {
         const testPayload = {
             event: event_type || 'test.ping',
             data: { message: 'This is a test webhook from TrustChecker', timestamp: new Date().toISOString() },
-            test: true
+            test: true,
         };
 
         // Temporarily subscribe, deliver, and unsubscribe

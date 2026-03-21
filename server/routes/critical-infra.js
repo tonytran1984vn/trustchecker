@@ -2,7 +2,7 @@
  * Critical Infrastructure Routes v1.1
  * Revenue Governance + Jurisdictional Risk + Kill-Switch + Super Admin + Model Risk
  * + Integration Locking + Stress Testing + Economic Risk + Contagion
- * 
+ *
  * RBAC v1.1: Role-gated per sensitivity level.
  *   L3 (admin):           Revenue, jurisdiction, econrisk, contagion — operational visibility
  *   L4 (risk_committee):  Kill-switch, model-risk, stress, integration — risk governance
@@ -20,28 +20,51 @@ router.use(authMiddleware);
 const revGov = require('../engines/economics-engine').revenueGovernance;
 const jurisdiction = require('../engines/regulatory-engine').jurisdictionalRisk;
 const killSwitch = require('../engines/infrastructure/kill-switch-engine');
-const superAdmin = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was super-admin-boundaries-engine
+const superAdmin = new Proxy(
+    {},
+    { get: (_, fn) => () => ({ status: 'archived', message: fn + ' has been archived' }) }
+); // ARCHIVED: was super-admin-boundaries-engine
 const modelRisk = require('../engines/risk-model-engine').tiering;
 
 // ═══════════════════════════════════════════════════════════════════
 // REVENUE GOVERNANCE — /revenue-gov [L3+ admin]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/revenue-gov/map', requireTenantAdmin(), (req, res) => { res.json(revGov.getFullMap()); });
-router.get('/revenue-gov/pricing', requireTenantAdmin(), (req, res) => { res.json(revGov.getPricingAuthority()); });
-router.get('/revenue-gov/ai-impact', requireTenantAdmin(), (req, res) => { res.json(revGov.getAIRevenueMap()); });
-router.get('/revenue-gov/settlement', requireTenantAdmin(), (req, res) => { res.json(revGov.getSettlementControl()); });
-router.get('/revenue-gov/fees', requireTenantAdmin(), (req, res) => { res.json(revGov.getFeeGovernance()); });
+router.get('/revenue-gov/map', requireTenantAdmin(), (req, res) => {
+    res.json(revGov.getFullMap());
+});
+router.get('/revenue-gov/pricing', requireTenantAdmin(), (req, res) => {
+    res.json(revGov.getPricingAuthority());
+});
+router.get('/revenue-gov/ai-impact', requireTenantAdmin(), (req, res) => {
+    res.json(revGov.getAIRevenueMap());
+});
+router.get('/revenue-gov/settlement', requireTenantAdmin(), (req, res) => {
+    res.json(revGov.getSettlementControl());
+});
+router.get('/revenue-gov/fees', requireTenantAdmin(), (req, res) => {
+    res.json(revGov.getFeeGovernance());
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // JURISDICTIONAL RISK — /jurisdiction [L3+ admin]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/jurisdiction/map', requireTenantAdmin(), (req, res) => { res.json(jurisdiction.getFullMap()); });
-router.get('/jurisdiction/deployment', requireTenantAdmin(), (req, res) => { res.json(jurisdiction.getDeploymentMap()); });
-router.get('/jurisdiction/data-isolation', requireTenantAdmin(), (req, res) => { res.json(jurisdiction.getDataIsolation()); });
-router.get('/jurisdiction/geo-routing', requireTenantAdmin(), (req, res) => { res.json(jurisdiction.getGeoRouting()); });
-router.get('/jurisdiction/carbon-registries', requireTenantAdmin(), (req, res) => { res.json(jurisdiction.getCarbonRegistryMap()); });
+router.get('/jurisdiction/map', requireTenantAdmin(), (req, res) => {
+    res.json(jurisdiction.getFullMap());
+});
+router.get('/jurisdiction/deployment', requireTenantAdmin(), (req, res) => {
+    res.json(jurisdiction.getDeploymentMap());
+});
+router.get('/jurisdiction/data-isolation', requireTenantAdmin(), (req, res) => {
+    res.json(jurisdiction.getDataIsolation());
+});
+router.get('/jurisdiction/geo-routing', requireTenantAdmin(), (req, res) => {
+    res.json(jurisdiction.getGeoRouting());
+});
+router.get('/jurisdiction/carbon-registries', requireTenantAdmin(), (req, res) => {
+    res.json(jurisdiction.getCarbonRegistryMap());
+});
 
 router.get('/jurisdiction/assess/:region_id', requireTenantAdmin(), (req, res) => {
     res.json(jurisdiction.assessJurisdiction(req.params.region_id));
@@ -51,10 +74,18 @@ router.get('/jurisdiction/assess/:region_id', requireTenantAdmin(), (req, res) =
 // KILL-SWITCH — /killswitch [L4+ risk_committee read, L5 trigger]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/killswitch/architecture', requireRole('risk_committee'), (req, res) => { res.json(killSwitch.getFullArchitecture()); });
-router.get('/killswitch/switches', requireRole('risk_committee'), (req, res) => { res.json(killSwitch.getKillSwitches()); });
-router.get('/killswitch/circuit-breakers', requireRole('risk_committee'), (req, res) => { res.json(killSwitch.getCircuitBreakers()); });
-router.get('/killswitch/escalation', requireRole('risk_committee'), (req, res) => { res.json(killSwitch.getEscalationLadder()); });
+router.get('/killswitch/architecture', requireRole('risk_committee'), (req, res) => {
+    res.json(killSwitch.getFullArchitecture());
+});
+router.get('/killswitch/switches', requireRole('risk_committee'), (req, res) => {
+    res.json(killSwitch.getKillSwitches());
+});
+router.get('/killswitch/circuit-breakers', requireRole('risk_committee'), (req, res) => {
+    res.json(killSwitch.getCircuitBreakers());
+});
+router.get('/killswitch/escalation', requireRole('risk_committee'), (req, res) => {
+    res.json(killSwitch.getEscalationLadder());
+});
 
 router.get('/killswitch/switch/:id', requireRole('risk_committee'), (req, res) => {
     const sw = killSwitch.getSwitch(req.params.id);
@@ -70,21 +101,41 @@ router.post('/killswitch/assess-threat', requireRole('super_admin'), (req, res) 
 // SUPER ADMIN BOUNDARIES — /superadmin [L5 super_admin only]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/superadmin/framework', requireRole('super_admin'), (req, res) => { res.json(superAdmin.getFullFramework()); });
-router.get('/superadmin/summary', requireRole('super_admin'), (req, res) => { res.json(superAdmin.getSummary()); });
-router.get('/superadmin/permitted', requireRole('super_admin'), (req, res) => { res.json(superAdmin.getPermitted()); });
-router.get('/superadmin/prohibited', requireRole('super_admin'), (req, res) => { res.json(superAdmin.getProhibited()); });
-router.get('/superadmin/accountability', requireRole('super_admin'), (req, res) => { res.json(superAdmin.getAccountability()); });
+router.get('/superadmin/framework', requireRole('super_admin'), (req, res) => {
+    res.json(superAdmin.getFullFramework());
+});
+router.get('/superadmin/summary', requireRole('super_admin'), (req, res) => {
+    res.json(superAdmin.getSummary());
+});
+router.get('/superadmin/permitted', requireRole('super_admin'), (req, res) => {
+    res.json(superAdmin.getPermitted());
+});
+router.get('/superadmin/prohibited', requireRole('super_admin'), (req, res) => {
+    res.json(superAdmin.getProhibited());
+});
+router.get('/superadmin/accountability', requireRole('super_admin'), (req, res) => {
+    res.json(superAdmin.getAccountability());
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // MODEL RISK TIERING — /model-risk [L4+ risk_committee]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/model-risk/framework', requireRole('risk_committee'), (req, res) => { res.json(modelRisk.getFullFramework()); });
-router.get('/model-risk/tiers', requireRole('risk_committee'), (req, res) => { res.json(modelRisk.getModelTiers()); });
-router.get('/model-risk/sensitivity', requireRole('risk_committee'), (req, res) => { res.json(modelRisk.getRevenueSensitivity()); });
-router.get('/model-risk/shutdown', requireRole('risk_committee'), (req, res) => { res.json(modelRisk.getShutdownCriteria()); });
-router.get('/model-risk/governance', requireRole('risk_committee'), (req, res) => { res.json(modelRisk.getModelGovernance()); });
+router.get('/model-risk/framework', requireRole('risk_committee'), (req, res) => {
+    res.json(modelRisk.getFullFramework());
+});
+router.get('/model-risk/tiers', requireRole('risk_committee'), (req, res) => {
+    res.json(modelRisk.getModelTiers());
+});
+router.get('/model-risk/sensitivity', requireRole('risk_committee'), (req, res) => {
+    res.json(modelRisk.getRevenueSensitivity());
+});
+router.get('/model-risk/shutdown', requireRole('risk_committee'), (req, res) => {
+    res.json(modelRisk.getShutdownCriteria());
+});
+router.get('/model-risk/governance', requireRole('risk_committee'), (req, res) => {
+    res.json(modelRisk.getModelGovernance());
+});
 
 router.get('/model-risk/model/:name', requireRole('risk_committee'), (req, res) => {
     const model = modelRisk.getModelByName(req.params.name);
@@ -98,12 +149,24 @@ router.get('/model-risk/model/:name', requireRole('risk_committee'), (req, res) 
 
 const integration = require('../engines/infrastructure/integration-locking-engine');
 
-router.get('/integration/architecture', requireRole('risk_committee'), (req, res) => { res.json(integration.getFullArchitecture()); });
-router.get('/integration/capital-triggers', requireRole('risk_committee'), (req, res) => { res.json(integration.getCapitalTriggers()); });
-router.get('/integration/risklab-bindings', requireRole('risk_committee'), (req, res) => { res.json(integration.getRiskLabBindings()); });
-router.get('/integration/revenue-stabilizer', requireRole('risk_committee'), (req, res) => { res.json(integration.getRevenueStabilizer()); });
-router.get('/integration/charter-amendment', requireRole('risk_committee'), (req, res) => { res.json(integration.getCharterAmendment()); });
-router.get('/integration/coherence-map', requireRole('risk_committee'), (req, res) => { res.json(integration.getCoherenceMap()); });
+router.get('/integration/architecture', requireRole('risk_committee'), (req, res) => {
+    res.json(integration.getFullArchitecture());
+});
+router.get('/integration/capital-triggers', requireRole('risk_committee'), (req, res) => {
+    res.json(integration.getCapitalTriggers());
+});
+router.get('/integration/risklab-bindings', requireRole('risk_committee'), (req, res) => {
+    res.json(integration.getRiskLabBindings());
+});
+router.get('/integration/revenue-stabilizer', requireRole('risk_committee'), (req, res) => {
+    res.json(integration.getRevenueStabilizer());
+});
+router.get('/integration/charter-amendment', requireRole('risk_committee'), (req, res) => {
+    res.json(integration.getCharterAmendment());
+});
+router.get('/integration/coherence-map', requireRole('risk_committee'), (req, res) => {
+    res.json(integration.getCoherenceMap());
+});
 
 router.post('/integration/evaluate', requireRole('super_admin'), (req, res) => {
     res.json(integration.evaluateSystemState(req.body));
@@ -115,10 +178,18 @@ router.post('/integration/evaluate', requireRole('super_admin'), (req, res) => {
 
 const stress = require('../engines/crisis-module').systemicStress;
 
-router.get('/stress/framework', requireRole('risk_committee'), (req, res) => { res.json(stress.getFullFramework()); });
-router.get('/stress/scenarios', requireRole('risk_committee'), (req, res) => { res.json(stress.getScenarios()); });
-router.get('/stress/decision-latency', requireRole('risk_committee'), (req, res) => { res.json(stress.getDecisionLatency()); });
-router.get('/stress/network-collapse', requireRole('risk_committee'), (req, res) => { res.json(stress.getNetworkCollapse()); });
+router.get('/stress/framework', requireRole('risk_committee'), (req, res) => {
+    res.json(stress.getFullFramework());
+});
+router.get('/stress/scenarios', requireRole('risk_committee'), (req, res) => {
+    res.json(stress.getScenarios());
+});
+router.get('/stress/decision-latency', requireRole('risk_committee'), (req, res) => {
+    res.json(stress.getDecisionLatency());
+});
+router.get('/stress/network-collapse', requireRole('risk_committee'), (req, res) => {
+    res.json(stress.getNetworkCollapse());
+});
 
 router.post('/stress/run', requireRole('super_admin'), (req, res) => {
     const { scenario_id, car_pct, revenue_usd } = req.body;
@@ -131,12 +202,24 @@ router.post('/stress/run', requireRole('super_admin'), (req, res) => {
 
 const econRisk = require('../engines/economics-engine').economicRisk;
 
-router.get('/econrisk/framework', requireTenantAdmin(), (req, res) => { res.json(econRisk.getFullFramework()); });
-router.get('/econrisk/revenue-risk', requireTenantAdmin(), (req, res) => { res.json(econRisk.getRevenueRisk()); });
-router.get('/econrisk/org-credit', requireTenantAdmin(), (req, res) => { res.json(econRisk.getTenantCredit()); });
-router.get('/econrisk/cost-allocation', requireTenantAdmin(), (req, res) => { res.json(econRisk.getCostAllocation()); });
-router.get('/econrisk/token-economics', requireTenantAdmin(), (req, res) => { res.json(econRisk.getTokenEconomics()); });
-router.get('/econrisk/trust-feedback', requireTenantAdmin(), (req, res) => { res.json(econRisk.getFinancialTrustFeedback()); });
+router.get('/econrisk/framework', requireTenantAdmin(), (req, res) => {
+    res.json(econRisk.getFullFramework());
+});
+router.get('/econrisk/revenue-risk', requireTenantAdmin(), (req, res) => {
+    res.json(econRisk.getRevenueRisk());
+});
+router.get('/econrisk/org-credit', requireTenantAdmin(), (req, res) => {
+    res.json(econRisk.getTenantCredit());
+});
+router.get('/econrisk/cost-allocation', requireTenantAdmin(), (req, res) => {
+    res.json(econRisk.getCostAllocation());
+});
+router.get('/econrisk/token-economics', requireTenantAdmin(), (req, res) => {
+    res.json(econRisk.getTokenEconomics());
+});
+router.get('/econrisk/trust-feedback', requireTenantAdmin(), (req, res) => {
+    res.json(econRisk.getFinancialTrustFeedback());
+});
 
 router.post('/econrisk/score-org', requireRole('risk_committee'), (req, res) => {
     const { trust_score, payment_pct, settlement_pct, years, external_credit, engagement } = req.body;
@@ -150,11 +233,21 @@ router.post('/econrisk/score-org', requireRole('risk_committee'), (req, res) => 
 const contagion = require('../engines/core/cross-tenant-contagion-engine');
 const { withTransaction } = require('../middleware/transaction');
 
-router.get('/contagion/framework', requireRole('risk_committee'), (req, res) => { res.json(contagion.getFullFramework()); });
-router.get('/contagion/trust-model', requireRole('risk_committee'), (req, res) => { res.json(contagion.getTrustContagion()); });
-router.get('/contagion/route-risk', requireRole('risk_committee'), (req, res) => { res.json(contagion.getSharedRouteRisk()); });
-router.get('/contagion/anchoring-impact', requireRole('risk_committee'), (req, res) => { res.json(contagion.getAnchoringCrossImpact()); });
-router.get('/contagion/circuit-breakers', requireRole('risk_committee'), (req, res) => { res.json(contagion.getContagionBreakers()); });
+router.get('/contagion/framework', requireRole('risk_committee'), (req, res) => {
+    res.json(contagion.getFullFramework());
+});
+router.get('/contagion/trust-model', requireRole('risk_committee'), (req, res) => {
+    res.json(contagion.getTrustContagion());
+});
+router.get('/contagion/route-risk', requireRole('risk_committee'), (req, res) => {
+    res.json(contagion.getSharedRouteRisk());
+});
+router.get('/contagion/anchoring-impact', requireRole('risk_committee'), (req, res) => {
+    res.json(contagion.getAnchoringCrossImpact());
+});
+router.get('/contagion/circuit-breakers', requireRole('risk_committee'), (req, res) => {
+    res.json(contagion.getContagionBreakers());
+});
 
 router.post('/contagion/simulate', requireRole('super_admin'), (req, res) => {
     const { source_trust_drop, connections } = req.body;

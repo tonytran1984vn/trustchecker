@@ -2,7 +2,7 @@
  * Legitimacy Layer Routes v1.1
  * Economic Logic + Forensic Logic + Jurisdiction Logic
  * Mount: /api/economic-logic, /api/forensic, /api/jurisdiction-logic
- * 
+ *
  * RBAC:
  *   /economic-logic   → L3+ admin (business/operational insight)
  *   /forensic         → L4+ risk_committee (investigation data, evidence chain)
@@ -25,11 +25,21 @@ const { withTransaction } = require('../middleware/transaction');
 // ECONOMIC LOGIC — /economic-logic [L3+ admin]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/economic-logic/framework', requireTenantAdmin(), (req, res) => { res.json(econ.getFullFramework()); });
-router.get('/economic-logic/mechanism-design', requireTenantAdmin(), (req, res) => { res.json(econ.getMechanismDesign()); });
-router.get('/economic-logic/game-theory', requireTenantAdmin(), (req, res) => { res.json(econ.getGameTheory()); });
-router.get('/economic-logic/sustainability', requireTenantAdmin(), (req, res) => { res.json(econ.getSustainability()); });
-router.get('/economic-logic/value-fairness', requireTenantAdmin(), (req, res) => { res.json(econ.getValueFairness()); });
+router.get('/economic-logic/framework', requireTenantAdmin(), (req, res) => {
+    res.json(econ.getFullFramework());
+});
+router.get('/economic-logic/mechanism-design', requireTenantAdmin(), (req, res) => {
+    res.json(econ.getMechanismDesign());
+});
+router.get('/economic-logic/game-theory', requireTenantAdmin(), (req, res) => {
+    res.json(econ.getGameTheory());
+});
+router.get('/economic-logic/sustainability', requireTenantAdmin(), (req, res) => {
+    res.json(econ.getSustainability());
+});
+router.get('/economic-logic/value-fairness', requireTenantAdmin(), (req, res) => {
+    res.json(econ.getValueFairness());
+});
 
 router.post('/economic-logic/analyze-incentive', requireRole('risk_committee'), (req, res) => {
     const { participant_type, stake_usd, detection_pct, cheat_gain_usd } = req.body;
@@ -40,12 +50,24 @@ router.post('/economic-logic/analyze-incentive', requireRole('risk_committee'), 
 // FORENSIC LOGIC — /forensic [L4+ risk_committee]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/forensic/framework', requireRole('risk_committee'), (req, res) => { res.json(forensic.getFullFramework()); });
-router.get('/forensic/evidence-chain', requireRole('risk_committee'), (req, res) => { res.json(forensic.getEvidenceChain()); });
-router.get('/forensic/investigation', requireRole('risk_committee'), (req, res) => { res.json(forensic.getInvestigationProtocol()); });
-router.get('/forensic/tamper-detection', requireRole('risk_committee'), (req, res) => { res.json(forensic.getTamperDetection()); });
-router.get('/forensic/regulatory-evidence', requireRole('risk_committee'), (req, res) => { res.json(forensic.getRegulatoryEvidence()); });
-router.get('/forensic/dispute', requireRole('risk_committee'), (req, res) => { res.json(forensic.getDisputeForensics()); });
+router.get('/forensic/framework', requireRole('risk_committee'), (req, res) => {
+    res.json(forensic.getFullFramework());
+});
+router.get('/forensic/evidence-chain', requireRole('risk_committee'), (req, res) => {
+    res.json(forensic.getEvidenceChain());
+});
+router.get('/forensic/investigation', requireRole('risk_committee'), (req, res) => {
+    res.json(forensic.getInvestigationProtocol());
+});
+router.get('/forensic/tamper-detection', requireRole('risk_committee'), (req, res) => {
+    res.json(forensic.getTamperDetection());
+});
+router.get('/forensic/regulatory-evidence', requireRole('risk_committee'), (req, res) => {
+    res.json(forensic.getRegulatoryEvidence());
+});
+router.get('/forensic/dispute', requireRole('risk_committee'), (req, res) => {
+    res.json(forensic.getDisputeForensics());
+});
 
 router.post('/forensic/verify-chain', requireRole('super_admin'), (req, res) => {
     res.json(forensic.verifyChainIntegrity(req.body.records));
@@ -55,12 +77,24 @@ router.post('/forensic/verify-chain', requireRole('super_admin'), (req, res) => 
 // JURISDICTION LOGIC — /jurisdiction-logic [L3+ admin]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/jurisdiction-logic/framework', requireTenantAdmin(), (req, res) => { res.json(jurisLogic.getFullFramework()); });
-router.get('/jurisdiction-logic/conflicts', requireTenantAdmin(), (req, res) => { res.json(jurisLogic.getConflictResolution()); });
-router.get('/jurisdiction-logic/arbitrage-prevention', requireTenantAdmin(), (req, res) => { res.json(jurisLogic.getArbitragePrevention()); });
-router.get('/jurisdiction-logic/liability', requireTenantAdmin(), (req, res) => { res.json(jurisLogic.getLiabilityMap()); });
-router.get('/jurisdiction-logic/governing-law', requireTenantAdmin(), (req, res) => { res.json(jurisLogic.getGoverningLaw()); });
-router.get('/jurisdiction-logic/enforcement', requireTenantAdmin(), (req, res) => { res.json(jurisLogic.getCrossBorderEnforcement()); });
+router.get('/jurisdiction-logic/framework', requireTenantAdmin(), (req, res) => {
+    res.json(jurisLogic.getFullFramework());
+});
+router.get('/jurisdiction-logic/conflicts', requireTenantAdmin(), (req, res) => {
+    res.json(jurisLogic.getConflictResolution());
+});
+router.get('/jurisdiction-logic/arbitrage-prevention', requireTenantAdmin(), (req, res) => {
+    res.json(jurisLogic.getArbitragePrevention());
+});
+router.get('/jurisdiction-logic/liability', requireTenantAdmin(), (req, res) => {
+    res.json(jurisLogic.getLiabilityMap());
+});
+router.get('/jurisdiction-logic/governing-law', requireTenantAdmin(), (req, res) => {
+    res.json(jurisLogic.getGoverningLaw());
+});
+router.get('/jurisdiction-logic/enforcement', requireTenantAdmin(), (req, res) => {
+    res.json(jurisLogic.getCrossBorderEnforcement());
+});
 
 router.get('/jurisdiction-logic/conflict/:id', requireTenantAdmin(), (req, res) => {
     const conflict = jurisLogic.resolveConflict(req.params.id);

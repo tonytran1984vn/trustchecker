@@ -28,10 +28,14 @@ router.post('/risk-model/register', requirePermission('admin:manage'), (req, res
 });
 
 // GET /risk-model/versions — Version history
-router.get('/risk-model/versions', (req, res) => { res.json(riskGov.getVersionHistory()); });
+router.get('/risk-model/versions', (req, res) => {
+    res.json(riskGov.getVersionHistory());
+});
 
 // GET /risk-model/drift — Drift detection
-router.get('/risk-model/drift', (req, res) => { res.json(riskGov.detectDrift()); });
+router.get('/risk-model/drift', (req, res) => {
+    res.json(riskGov.detectDrift());
+});
 
 // POST /risk-model/propose-change — Propose weight change
 router.post('/risk-model/propose-change', requirePermission('risk:view'), (req, res) => {
@@ -48,10 +52,14 @@ router.post('/risk-model/review-change', requirePermission('compliance:review'),
 });
 
 // GET /risk-model/pending — Pending weight changes
-router.get('/risk-model/pending', (req, res) => { res.json(riskGov.getPendingChanges()); });
+router.get('/risk-model/pending', (req, res) => {
+    res.json(riskGov.getPendingChanges());
+});
 
 // GET /risk-model/overrides — Override audit trail
-router.get('/risk-model/overrides', (req, res) => { res.json(riskGov.getOverrideLog()); });
+router.get('/risk-model/overrides', (req, res) => {
+    res.json(riskGov.getOverrideLog());
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // SUPER ADMIN CONSTRAINTS (4 endpoints)
@@ -82,7 +90,9 @@ router.get('/sa/dashboard', requirePermission('admin:manage'), (req, res) => {
 });
 
 // GET /sa/audit — SA audit trail
-router.get('/sa/audit', (req, res) => { res.json(saConstraints.getAuditTrail()); });
+router.get('/sa/audit', (req, res) => {
+    res.json(saConstraints.getAuditTrail());
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // OBSERVABILITY (4 endpoints)
@@ -124,11 +134,15 @@ router.post('/risk-intelligence/challenger', requirePermission('risk:view'), asy
     try {
         const db = require('../db');
         const orgId = req.user?.org_id || req.user?.orgId || null;
-        const entities = req.body.entities || (orgId
-            ? await db.all('SELECT * FROM partners WHERE org_id = ? LIMIT 50', [orgId]).catch(() => [])
-            : await db.all('SELECT * FROM partners LIMIT 50').catch(() => []));
+        const entities =
+            req.body.entities ||
+            (orgId
+                ? await db.all('SELECT * FROM partners WHERE org_id = ? LIMIT 50', [orgId]).catch(() => [])
+                : await db.all('SELECT * FROM partners LIMIT 50').catch(() => []));
         res.json(riskInfra.runChallengerModel(entities));
-    } catch (err) { res.status(500).json({ error: 'Challenger model failed' }); }
+    } catch (err) {
+        res.status(500).json({ error: 'Challenger model failed' });
+    }
 });
 
 // POST /risk-intelligence/backtest — Run back-testing
@@ -163,11 +177,15 @@ router.post('/risk-intelligence/bias', requirePermission('risk:view'), async (re
     try {
         const db = require('../db');
         const orgId = req.user?.org_id || req.user?.orgId || null;
-        const entities = req.body.entities || (orgId
-            ? await db.all('SELECT * FROM partners WHERE org_id = ? LIMIT 100', [orgId]).catch(() => [])
-            : await db.all('SELECT * FROM partners LIMIT 100').catch(() => []));
+        const entities =
+            req.body.entities ||
+            (orgId
+                ? await db.all('SELECT * FROM partners WHERE org_id = ? LIMIT 100', [orgId]).catch(() => [])
+                : await db.all('SELECT * FROM partners LIMIT 100').catch(() => []));
         res.json(riskInfra.analyzeBiasFairness(entities));
-    } catch (err) { res.status(500).json({ error: 'Bias analysis failed' }); }
+    } catch (err) {
+        res.status(500).json({ error: 'Bias analysis failed' });
+    }
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -177,7 +195,9 @@ router.post('/risk-intelligence/bias', requirePermission('risk:view'), async (re
 const mrmf = require('../engines/risk-model-engine').mrmf;
 
 // P1: Model Inventory
-router.get('/mrmf/inventory', (req, res) => { res.json(mrmf.getInventory()); });
+router.get('/mrmf/inventory', (req, res) => {
+    res.json(mrmf.getInventory());
+});
 router.post('/mrmf/register', requirePermission('admin:manage'), (req, res) => {
     const result = mrmf.registerModel(req.body);
     if (result.error) return res.status(400).json(result);
@@ -185,7 +205,9 @@ router.post('/mrmf/register', requirePermission('admin:manage'), (req, res) => {
 });
 
 // P2: MDLC 10-step
-router.get('/mrmf/mdlc', (req, res) => { res.json(mrmf.getMDLC()); });
+router.get('/mrmf/mdlc', (req, res) => {
+    res.json(mrmf.getMDLC());
+});
 router.post('/mrmf/mdlc/advance', requirePermission('risk:view'), (req, res) => {
     const result = mrmf.advanceMDLC(req.body.model_id, req.body.step, req.body.evidence);
     if (result.error) return res.status(400).json(result);
@@ -193,30 +215,46 @@ router.post('/mrmf/mdlc/advance', requirePermission('risk:view'), (req, res) => 
 });
 
 // P3: Stress Test Framework
-router.get('/mrmf/stress-library', (req, res) => { res.json(mrmf.getStressLibrary()); });
+router.get('/mrmf/stress-library', (req, res) => {
+    res.json(mrmf.getStressLibrary());
+});
 router.post('/mrmf/stress-test', requirePermission('risk:view'), (req, res) => {
     const result = mrmf.runStressTest(req.body.test_id, req.body);
     if (result.error) return res.status(400).json(result);
     res.status(201).json(result);
 });
-router.get('/mrmf/stress-results', (req, res) => { res.json(mrmf.getStressResults()); });
+router.get('/mrmf/stress-results', (req, res) => {
+    res.json(mrmf.getStressResults());
+});
 
 // P4: IVU + MVR
-router.get('/mrmf/ivu', (req, res) => { res.json(mrmf.getIVUChecklist()); });
+router.get('/mrmf/ivu', (req, res) => {
+    res.json(mrmf.getIVUChecklist());
+});
 router.post('/mrmf/validate', requirePermission('compliance:review'), (req, res) => {
     const result = mrmf.submitValidation({ ...req.body, validator_id: req.user?.id });
     if (result.error) return res.status(400).json(result);
     res.status(201).json(result);
 });
-router.get('/mrmf/mvr', (req, res) => { res.json(mrmf.generateMVR(req.query.model_id)); });
+router.get('/mrmf/mvr', (req, res) => {
+    res.json(mrmf.generateMVR(req.query.model_id));
+});
 
 // P5: MHI + Residual Risk + Health
-router.get('/mrmf/mhi', (req, res) => { res.json(mrmf.calculateMHI(req.query)); });
-router.get('/mrmf/residual-risk', (req, res) => { res.json(mrmf.calculateResidualRisk(req.query)); });
-router.get('/mrmf/health', (req, res) => { res.json(mrmf.generateModelHealth(req.query)); });
+router.get('/mrmf/mhi', (req, res) => {
+    res.json(mrmf.calculateMHI(req.query));
+});
+router.get('/mrmf/residual-risk', (req, res) => {
+    res.json(mrmf.calculateResidualRisk(req.query));
+});
+router.get('/mrmf/health', (req, res) => {
+    res.json(mrmf.generateModelHealth(req.query));
+});
 
 // P6: Material Change + Governance
-router.get('/mrmf/material-change-policy', (req, res) => { res.json(mrmf.getMaterialChangePolicy()); });
+router.get('/mrmf/material-change-policy', (req, res) => {
+    res.json(mrmf.getMaterialChangePolicy());
+});
 router.post('/mrmf/material-change', requirePermission('risk:view'), (req, res) => {
     const result = mrmf.requestMaterialChange({ ...req.body, proposed_by: req.user?.id });
     if (result.error) return res.status(400).json(result);
@@ -227,10 +265,18 @@ router.post('/mrmf/approve-change', requirePermission('compliance:review'), (req
     if (result.error) return res.status(400).json(result);
     res.json(result);
 });
-router.get('/mrmf/mrc', (req, res) => { res.json({ charter: mrmf.getMRCCharter(), agenda: mrmf.generateMRCAgenda() }); });
-router.get('/mrmf/audit-package', (req, res) => { res.json(mrmf.generateAuditPackage(req.query.model_id)); });
-router.get('/mrmf/maturity', (req, res) => { res.json(mrmf.assessMaturity()); });
-router.get('/mrmf/decision-audit', (req, res) => { res.json(mrmf.getDecisionAudit(parseInt(req.query.limit) || 20)); });
+router.get('/mrmf/mrc', (req, res) => {
+    res.json({ charter: mrmf.getMRCCharter(), agenda: mrmf.generateMRCAgenda() });
+});
+router.get('/mrmf/audit-package', (req, res) => {
+    res.json(mrmf.generateAuditPackage(req.query.model_id));
+});
+router.get('/mrmf/maturity', (req, res) => {
+    res.json(mrmf.assessMaturity());
+});
+router.get('/mrmf/decision-audit', (req, res) => {
+    res.json(mrmf.getDecisionAudit(parseInt(req.query.limit) || 20));
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // ERCM v1.0 — Enterprise Risk & Control Map (11 endpoints)
@@ -239,21 +285,41 @@ router.get('/mrmf/decision-audit', (req, res) => { res.json(mrmf.getDecisionAudi
 
 const ercm = require('../engines/regulatory-engine').ercm;
 
-router.get('/ercm/three-lines', (req, res) => { res.json(ercm.getThreeLines()); });
-router.get('/ercm/governance-bodies', (req, res) => { res.json(ercm.getGovernanceBodies()); });
-router.get('/ercm/risk-registry', (req, res) => { res.json(ercm.getRiskRegistry()); });
-router.get('/ercm/heatmap', (req, res) => { res.json(ercm.generateHeatmap()); });
-router.get('/ercm/control-matrix', (req, res) => { res.json(ercm.getControlMatrix()); });
-router.get('/ercm/risk-appetite', (req, res) => { res.json(ercm.getRiskAppetite()); });
-router.get('/ercm/board-dashboard', (req, res) => { res.json(ercm.getBoardDashboard()); });
-router.get('/ercm/control-tests', (req, res) => { res.json(ercm.getControlTests()); });
+router.get('/ercm/three-lines', (req, res) => {
+    res.json(ercm.getThreeLines());
+});
+router.get('/ercm/governance-bodies', (req, res) => {
+    res.json(ercm.getGovernanceBodies());
+});
+router.get('/ercm/risk-registry', (req, res) => {
+    res.json(ercm.getRiskRegistry());
+});
+router.get('/ercm/heatmap', (req, res) => {
+    res.json(ercm.generateHeatmap());
+});
+router.get('/ercm/control-matrix', (req, res) => {
+    res.json(ercm.getControlMatrix());
+});
+router.get('/ercm/risk-appetite', (req, res) => {
+    res.json(ercm.getRiskAppetite());
+});
+router.get('/ercm/board-dashboard', (req, res) => {
+    res.json(ercm.getBoardDashboard());
+});
+router.get('/ercm/control-tests', (req, res) => {
+    res.json(ercm.getControlTests());
+});
 router.post('/ercm/attestation', requirePermission('admin:manage'), (req, res) => {
     const result = ercm.submitAttestation({ ...req.body, attester_id: req.user?.id });
     if (result.error) return res.status(400).json(result);
     res.status(201).json(result);
 });
-router.get('/ercm/ipo-gap', (req, res) => { res.json(ercm.getIPOGapAnalysis()); });
-router.get('/ercm/maturity', (req, res) => { res.json(ercm.assessMaturity()); });
+router.get('/ercm/ipo-gap', (req, res) => {
+    res.json(ercm.getIPOGapAnalysis());
+});
+router.get('/ercm/maturity', (req, res) => {
+    res.json(ercm.assessMaturity());
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // Institutional Engine — 4 Pillars (10 endpoints)
@@ -263,22 +329,36 @@ router.get('/ercm/maturity', (req, res) => { res.json(ercm.assessMaturity()); })
 const inst = require('../engines/intelligence/institutional-engine');
 
 // I. Risk Appetite
-router.get('/institutional/risk-appetite', (req, res) => { res.json(inst.getRiskAppetite()); });
-router.get('/institutional/appetite-breach', (req, res) => { res.json(inst.checkAppetiteBreach(req.query)); });
+router.get('/institutional/risk-appetite', (req, res) => {
+    res.json(inst.getRiskAppetite());
+});
+router.get('/institutional/appetite-breach', (req, res) => {
+    res.json(inst.checkAppetiteBreach(req.query));
+});
 
 // II. Board Dashboard
-router.get('/institutional/board-kpi-spec', (req, res) => { res.json(inst.getBoardKPISpec()); });
-router.get('/institutional/board-dashboard', (req, res) => { res.json(inst.generateBoardDashboard(req.query)); });
+router.get('/institutional/board-kpi-spec', (req, res) => {
+    res.json(inst.getBoardKPISpec());
+});
+router.get('/institutional/board-dashboard', (req, res) => {
+    res.json(inst.generateBoardDashboard(req.query));
+});
 
 // III. Internal Audit
-router.get('/institutional/audit-charter', (req, res) => { res.json(inst.getAuditCharter()); });
-router.get('/institutional/audit-plan', (req, res) => { res.json(inst.getAuditPlan()); });
+router.get('/institutional/audit-charter', (req, res) => {
+    res.json(inst.getAuditCharter());
+});
+router.get('/institutional/audit-plan', (req, res) => {
+    res.json(inst.getAuditPlan());
+});
 router.post('/institutional/audit-finding', requirePermission('compliance:review'), (req, res) => {
     const result = inst.submitAuditFinding({ ...req.body, auditor_id: req.user?.id });
     if (result.error) return res.status(400).json(result);
     res.status(201).json(result);
 });
-router.get('/institutional/audit-findings', requirePermission('compliance:review'), (req, res) => { res.json(inst.getAuditFindings()); });
+router.get('/institutional/audit-findings', requirePermission('compliance:review'), (req, res) => {
+    res.json(inst.getAuditFindings());
+});
 
 // IV. Risk Capital
 // FIX #10: Input validation on financial calculation endpoints
@@ -302,21 +382,35 @@ router.get('/institutional/economic-capital', (req, res) => {
 });
 
 // Maturity
-router.get('/institutional/maturity', (req, res) => { res.json(inst.assessInstitutionalMaturity()); });
+router.get('/institutional/maturity', (req, res) => {
+    res.json(inst.assessInstitutionalMaturity());
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // Platform Architecture — Simplification & Core Isolation (6 endpoints)
 // ═══════════════════════════════════════════════════════════════════
 
-const platArch = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was platform-architecture-engine
+const platArch = new Proxy({}, { get: (_, fn) => () => ({ status: 'archived', message: fn + ' has been archived' }) }); // ARCHIVED: was platform-architecture-engine
 
 // FIX #4: Restrict platform architecture to admin only (prevents internal architecture disclosure)
-router.get('/platform/module-registry', requirePermission('admin:manage'), (req, res) => { res.json(platArch.getModuleRegistry()); });
-router.get('/platform/dependency-graph', requirePermission('admin:manage'), (req, res) => { res.json(platArch.getDependencyGraph()); });
-router.get('/platform/api-surface', requirePermission('admin:manage'), (req, res) => { res.json(platArch.getAPISurface()); });
-router.get('/platform/critical-path', requirePermission('admin:manage'), (req, res) => { res.json(platArch.getCriticalPath()); });
-router.get('/platform/complexity', requirePermission('admin:manage'), (req, res) => { res.json(platArch.getComplexityScorecard()); });
-router.get('/platform/isolation', requirePermission('admin:manage'), (req, res) => { res.json(platArch.getIsolationSpec()); });
+router.get('/platform/module-registry', requirePermission('admin:manage'), (req, res) => {
+    res.json(platArch.getModuleRegistry());
+});
+router.get('/platform/dependency-graph', requirePermission('admin:manage'), (req, res) => {
+    res.json(platArch.getDependencyGraph());
+});
+router.get('/platform/api-surface', requirePermission('admin:manage'), (req, res) => {
+    res.json(platArch.getAPISurface());
+});
+router.get('/platform/critical-path', requirePermission('admin:manage'), (req, res) => {
+    res.json(platArch.getCriticalPath());
+});
+router.get('/platform/complexity', requirePermission('admin:manage'), (req, res) => {
+    res.json(platArch.getComplexityScorecard());
+});
+router.get('/platform/isolation', requirePermission('admin:manage'), (req, res) => {
+    res.json(platArch.getIsolationSpec());
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // Carbon Registry — Cross-Jurisdiction Legitimacy (10 endpoints)
@@ -325,11 +419,21 @@ router.get('/platform/isolation', requirePermission('admin:manage'), (req, res) 
 const carbonReg = require('../engines/carbon-support').registry;
 const { withTransaction } = require('../middleware/transaction');
 
-router.get('/carbon-registry/jurisdictions', (req, res) => { res.json(carbonReg.getJurisdictions()); });
-router.get('/carbon-registry/protocol', (req, res) => { res.json(carbonReg.getProtocol()); });
-router.get('/carbon-registry/compliance-matrix', (req, res) => { res.json(carbonReg.getComplianceMatrix()); });
-router.get('/carbon-registry/fee-model', (req, res) => { res.json(carbonReg.getFeeModel()); });
-router.get('/carbon-registry/revenue-projection', (req, res) => { res.json(carbonReg.projectRevenue(req.query)); });
+router.get('/carbon-registry/jurisdictions', (req, res) => {
+    res.json(carbonReg.getJurisdictions());
+});
+router.get('/carbon-registry/protocol', (req, res) => {
+    res.json(carbonReg.getProtocol());
+});
+router.get('/carbon-registry/compliance-matrix', (req, res) => {
+    res.json(carbonReg.getComplianceMatrix());
+});
+router.get('/carbon-registry/fee-model', (req, res) => {
+    res.json(carbonReg.getFeeModel());
+});
+router.get('/carbon-registry/revenue-projection', (req, res) => {
+    res.json(carbonReg.projectRevenue(req.query));
+});
 router.post('/carbon-registry/mint', requirePermission('admin:manage'), (req, res) => {
     const result = carbonReg.mintCredit(req.body);
     if (result.error) return res.status(400).json(result);
@@ -357,8 +461,11 @@ router.get('/carbon-registry/workspace-init', (req, res) => {
         stats: carbonReg.getRegistryStats(),
     });
 });
-router.get('/carbon-registry/defensibility', (req, res) => { res.json(carbonReg.getDefensibilityMetrics()); });
-router.get('/carbon-registry/stats', (req, res) => { res.json(carbonReg.getRegistryStats()); });
+router.get('/carbon-registry/defensibility', (req, res) => {
+    res.json(carbonReg.getDefensibilityMetrics());
+});
+router.get('/carbon-registry/stats', (req, res) => {
+    res.json(carbonReg.getRegistryStats());
+});
 
 module.exports = router;
-

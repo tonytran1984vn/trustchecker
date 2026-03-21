@@ -30,10 +30,7 @@ async function meterUsage(userId, type, count = 1, wss = null) {
     const period = new Date().toISOString().substring(0, 7); // YYYY-MM
 
     // Get current plan
-    const plan = await db.get(
-        "SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'",
-        [userId]
-    );
+    const plan = await db.get("SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'", [userId]);
     const planName = plan?.plan_name || 'free';
 
     // Get current usage (from cache or DB)
@@ -57,14 +54,17 @@ async function meterUsage(userId, type, count = 1, wss = null) {
         const id = uuidv4();
         const unitCost = _getUnitCost(type, limitCheck.overage || 0);
 
-        await db.prepare(`
+        await db
+            .prepare(
+                `
             INSERT INTO usage_records (id, user_id, type, count, unit_cost, period, billed_amount, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        `).run(id, userId, type, count, unitCost, period, Math.round(count * unitCost * 100) / 100);
+        `
+            )
+            .run(id, userId, type, count, unitCost, period, Math.round(count * unitCost * 100) / 100);
 
         // Invalidate cache
         _invalidateCache(userId);
-
     } catch (e) {
         // If usage_records table doesn't exist yet, fall back silently
         if (!e.message?.includes('no such table')) {
@@ -101,10 +101,7 @@ async function meterUsage(userId, type, count = 1, wss = null) {
  */
 async function getDetailedUsage(userId) {
     const period = new Date().toISOString().substring(0, 7);
-    const plan = await db.get(
-        "SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'",
-        [userId]
-    );
+    const plan = await db.get("SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'", [userId]);
     const planName = plan?.plan_name || 'free';
     const planDef = PLANS[planName] || PLANS.free;
 
@@ -175,16 +172,18 @@ async function getOverageCharges(userId) {
  */
 function apiMeteringMiddleware(req, res, next) {
     // Skip non-authenticated, health, metrics, public, and webhook routes
-    if (!req.user ||
+    if (
+        !req.user ||
         req.path === '/health' ||
         req.path === '/metrics' ||
         req.path.startsWith('/public/') ||
-        req.path.startsWith('/webhook')) {
+        req.path.startsWith('/webhook')
+    ) {
         return next();
     }
 
     // Fire-and-forget metering (don't block the request)
-    meterUsage(req.user.id, 'api_calls', 1).catch(() => { });
+    meterUsage(req.user.id, 'api_calls', 1).catch(() => {});
     next();
 }
 
@@ -237,7 +236,7 @@ async function _getCurrentUsage(userId, type, period) {
     let count = 0;
     try {
         const row = await db.get(
-            "SELECT COALESCE(SUM(count), 0) as total FROM usage_records WHERE user_id = ? AND type = ? AND period = ?",
+            'SELECT COALESCE(SUM(count), 0) as total FROM usage_records WHERE user_id = ? AND type = ? AND period = ?',
             [userId, type, period]
         );
         count = row?.total || 0;
@@ -306,16 +305,18 @@ function _emitThresholdAlert(wss, userId, type, percentUsed, used, limit) {
             if (wss?.clients) {
                 for (const client of wss.clients) {
                     if (client.readyState === 1 && client.userId === userId) {
-                        client.send(JSON.stringify({
-                            type: 'usage_alert',
-                            level,
-                            metric: type,
-                            threshold,
-                            used,
-                            limit,
-                            percent: percentUsed,
-                            message: `${type.replace('_', ' ')} usage at ${percentUsed}% (${used}/${limit})`,
-                        }));
+                        client.send(
+                            JSON.stringify({
+                                type: 'usage_alert',
+                                level,
+                                metric: type,
+                                threshold,
+                                used,
+                                limit,
+                                percent: percentUsed,
+                                message: `${type.replace('_', ' ')} usage at ${percentUsed}% (${used}/${limit})`,
+                            })
+                        );
                     }
                 }
             }

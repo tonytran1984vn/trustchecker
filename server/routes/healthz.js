@@ -17,14 +17,14 @@ router.get('/', (req, res) => {
             rss: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
             heap: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
         },
-        version: '9.5.0'
+        version: '9.5.0',
     });
 });
 
 // Readiness: dependencies are available
 router.get('/ready', async (req, res) => {
     const checks = { db: false, timestamp: new Date().toISOString() };
-    
+
     try {
         const result = await db.get('SELECT 1 as ok');
         checks.db = result?.ok === 1;
@@ -32,11 +32,11 @@ router.get('/ready', async (req, res) => {
         checks.db = false;
         checks.db_error = e.message;
     }
-    
+
     const allOk = checks.db;
     res.status(allOk ? 200 : 503).json({
         status: allOk ? 'ready' : 'not_ready',
-        checks
+        checks,
     });
 });
 

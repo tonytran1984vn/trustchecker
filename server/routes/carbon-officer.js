@@ -18,61 +18,81 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
         const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
 
         // ── Scope breakdown ─────────────────────────────────────────
-        let products = [], shipments = [], events = [];
+        let products = [],
+            shipments = [],
+            events = [];
         try {
             const pq = orgId
                 ? await db.all('SELECT * FROM products WHERE org_id = ? LIMIT 500', [orgId])
                 : await db.all('SELECT * FROM products LIMIT 500');
             products = pq || [];
-        } catch (_) { }
+        } catch (_) {}
 
         try {
             const sq = orgId
-                ? await db.all(`SELECT s.* FROM shipments s
+                ? await db.all(
+                      `SELECT s.* FROM shipments s
                     INNER JOIN batches b ON s.batch_id = b.id
                     INNER JOIN products p ON b.product_id = p.id
-                    WHERE p.org_id = ? LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000`, [orgId])
+                    WHERE p.org_id = ? LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000`,
+                      [orgId]
+                  )
                 : await db.all('SELECT * FROM shipments LIMIT 500');
             shipments = sq || [];
-        } catch (_) { }
+        } catch (_) {}
 
         try {
             const eq = orgId
-                ? await db.all(`SELECT e.* FROM supply_chain_events e
+                ? await db.all(
+                      `SELECT e.* FROM supply_chain_events e
                     INNER JOIN products p ON e.product_id = p.id
-                    WHERE p.org_id = ? ORDER BY e.created_at DESC LIMIT 200`, [orgId])
-                : await db.prepare("SELECT * FROM supply_chain_events ORDER BY created_at DESC LIMIT 200").all();
+                    WHERE p.org_id = ? ORDER BY e.created_at DESC LIMIT 200`,
+                      [orgId]
+                  )
+                : await db.prepare('SELECT * FROM supply_chain_events ORDER BY created_at DESC LIMIT 200').all();
             events = eq || [];
-        } catch (_) { }
+        } catch (_) {}
 
         const scopeData = carbonEngine.aggregateByScope(products, shipments, events);
 
         // ── Credits summary ─────────────────────────────────────────
-        let credits_minted = 0, credits_pending = 0, credits_retired = 0, total_tCO2e = 0;
+        let credits_minted = 0,
+            credits_pending = 0,
+            credits_retired = 0,
+            total_tCO2e = 0;
         try {
             const creditStats = orgId
-                ? await db.all(`SELECT status, COUNT(*) as cnt, COALESCE(SUM(quantity_tCO2e),0) as total
-                    FROM carbon_credits WHERE org_id = ? GROUP BY status`, [orgId])
+                ? await db.all(
+                      `SELECT status, COUNT(*) as cnt, COALESCE(SUM(quantity_tCO2e),0) as total
+                    FROM carbon_credits WHERE org_id = ? GROUP BY status`,
+                      [orgId]
+                  )
                 : await db.all(`SELECT status, COUNT(*) as cnt, COALESCE(SUM(quantity_tCO2e),0) as total
                     FROM carbon_credits GROUP BY status`);
-            for (const row of (creditStats || [])) {
-                if (row.status === 'minted' || row.status === 'active') { credits_minted += row.cnt; total_tCO2e += row.total; }
-                else if (row.status === 'pending') credits_pending += row.cnt;
+            for (const row of creditStats || []) {
+                if (row.status === 'minted' || row.status === 'active') {
+                    credits_minted += row.cnt;
+                    total_tCO2e += row.total;
+                } else if (row.status === 'pending') credits_pending += row.cnt;
                 else if (row.status === 'retired') credits_retired += row.cnt;
             }
-        } catch (_) { }
+        } catch (_) {}
 
         // ── Simulations summary ─────────────────────────────────────
-        let simulations_total = 0, simulations_eligible = 0;
+        let simulations_total = 0,
+            simulations_eligible = 0;
         try {
             const simStats = orgId
-                ? await db.get(`SELECT COUNT(*) as total, SUM(CASE WHEN credit_eligible = 1 THEN 1 ELSE 0 END) as eligible
-                    FROM carbon_simulations WHERE simulated_by IN (SELECT id FROM users WHERE org_id = ?)`, [orgId])
+                ? await db.get(
+                      `SELECT COUNT(*) as total, SUM(CASE WHEN credit_eligible = 1 THEN 1 ELSE 0 END) as eligible
+                    FROM carbon_simulations WHERE simulated_by IN (SELECT id FROM users WHERE org_id = ?)`,
+                      [orgId]
+                  )
                 : await db.get(`SELECT COUNT(*) as total, SUM(CASE WHEN credit_eligible = 1 THEN 1 ELSE 0 END) as eligible
                     FROM carbon_simulations`);
             simulations_total = simStats?.total || 0;
             simulations_eligible = simStats?.eligible || 0;
-        } catch (_) { }
+        } catch (_) {}
 
         // ── Maturity assessment (direct computation) ────────────────
         const features = [];
@@ -85,25 +105,40 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
         try {
             const r = await db.get('SELECT COUNT(*) as c FROM carbon_offsets WHERE org_id = ?', [orgId]);
             offsetCount = r?.c || 0;
-        } catch (_) { }
+        } catch (_) {}
         if (offsetCount > 0) features.push('offset_recording');
         let partnerCount = 0;
         try {
             const r = await db.get('SELECT COUNT(*) as c FROM partners WHERE org_id = ?', [orgId]);
             partnerCount = r?.c || 0;
-        } catch (_) { }
+        } catch (_) {}
         if (partnerCount > 0) features.push('partner_esg_scoring');
         features.push('risk_integration');
         let orgCount = 0;
-        try { const r = await db.get('SELECT COUNT(*) as c FROM organizations'); orgCount = r?.c || 0; } catch (_) { }
+        try {
+            const r = await db.get('SELECT COUNT(*) as c FROM organizations');
+            orgCount = r?.c || 0;
+        } catch (_) {}
         if (orgCount > 1) features.push('cross_tenant_benchmark');
 
-        let mLevel = 0, mLabel = 'Not Assessed';
-        if (features.length >= 7) { mLevel = 5; mLabel = 'Leader — Net Zero Pathway'; }
-        else if (features.length >= 5) { mLevel = 4; mLabel = 'Advanced — Full Scope Coverage'; }
-        else if (features.length >= 4) { mLevel = 3; mLabel = 'Intermediate — Offset & Risk Integration'; }
-        else if (features.length >= 2) { mLevel = 2; mLabel = 'Developing — Data Collection Active'; }
-        else if (features.length >= 1) { mLevel = 1; mLabel = 'Foundation — Basic Awareness'; }
+        let mLevel = 0,
+            mLabel = 'Not Assessed';
+        if (features.length >= 7) {
+            mLevel = 5;
+            mLabel = 'Leader — Net Zero Pathway';
+        } else if (features.length >= 5) {
+            mLevel = 4;
+            mLabel = 'Advanced — Full Scope Coverage';
+        } else if (features.length >= 4) {
+            mLevel = 3;
+            mLabel = 'Intermediate — Offset & Risk Integration';
+        } else if (features.length >= 2) {
+            mLevel = 2;
+            mLabel = 'Developing — Data Collection Active';
+        } else if (features.length >= 1) {
+            mLevel = 1;
+            mLabel = 'Foundation — Basic Awareness';
+        }
 
         // ── Recent carbon activity (audit log) ──────────────────────
         let recent_activity = [];
@@ -118,11 +153,9 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
                    LEFT JOIN users u ON al.actor_id = u.id
                    WHERE al.action LIKE '%carbon%' OR al.action LIKE '%CARBON%' OR al.action LIKE '%emission%' OR al.action LIKE '%CIP%' OR al.entity_type = 'carbon_credit'
                    ORDER BY al.timestamp DESC LIMIT 15`;
-            recent_activity = orgId
-                ? await db.prepare(q).all(orgId)
-                : await db.prepare(q).all();
+            recent_activity = orgId ? await db.prepare(q).all(orgId) : await db.prepare(q).all();
             recent_activity = recent_activity || [];
-        } catch (_) { }
+        } catch (_) {}
 
         // ── Regulatory status (direct computation) ───────────────────
         const hasProducts = products.length > 0;
@@ -140,14 +173,15 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
 
         // ── Carbon intensity (per product average) ──────────────────
         // Use actual product carbon data instead of engine estimates
-        const total_emissions = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0) || (scopeData?.total_emissions_kgCO2e || 0);
-        const carbon_intensity = products.length > 0
-            ? (total_emissions / products.length).toFixed(2)
-            : 0;
+        const total_emissions =
+            products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0) ||
+            scopeData?.total_emissions_kgCO2e ||
+            0;
+        const carbon_intensity = products.length > 0 ? (total_emissions / products.length).toFixed(2) : 0;
 
         // Override scope breakdown based on industry ratios for products
         const s1Total = Math.round(total_emissions * 0.25); // Scope 1: ~25% direct manufacturing
-        const s2Total = Math.round(total_emissions * 0.20); // Scope 2: ~20% energy
+        const s2Total = Math.round(total_emissions * 0.2); // Scope 2: ~20% energy
         const s3Total = Math.round(total_emissions * 0.55); // Scope 3: ~55% supply chain
         const s1 = { total: s1Total, pct: 25, label: 'Direct Manufacturing' };
         const s2 = { total: s2Total, pct: 20, label: 'Energy & Warehousing' };
@@ -159,20 +193,30 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
         // 3. Product coverage (30%): how many products have carbon data
         let offsetCoverage = 0;
         try {
-            const offRes = await db.get(`SELECT COALESCE(SUM(quantity_tco2e),0) as retired FROM carbon_offsets WHERE org_id = ? AND status = 'retired'`, [orgId]);
-            offsetCoverage = Math.min(1, (offRes?.retired || 0) / ((total_emissions / 1000) || 1));
-        } catch (_) { }
+            const offRes = await db.get(
+                `SELECT COALESCE(SUM(quantity_tco2e),0) as retired FROM carbon_offsets WHERE org_id = ? AND status = 'retired'`,
+                [orgId]
+            );
+            offsetCoverage = Math.min(1, (offRes?.retired || 0) / (total_emissions / 1000 || 1));
+        } catch (_) {}
 
         const productsWithCarbon = products.filter(p => p.carbon_footprint_kgco2e > 0).length;
         const dataCoverage = products.length > 0 ? productsWithCarbon / products.length : 0;
         const maturityScore = Math.min(1, features.length / 7);
 
-        const compositeScore = (offsetCoverage * 0.4) + (maturityScore * 0.3) + (dataCoverage * 0.3);
-        const esgGrade = total_emissions === 0 ? 'N/A'
-            : compositeScore >= 0.85 ? 'A'
-                : compositeScore >= 0.65 ? 'B'
-                    : compositeScore >= 0.45 ? 'C'
-                        : compositeScore >= 0.25 ? 'D' : 'F';
+        const compositeScore = offsetCoverage * 0.4 + maturityScore * 0.3 + dataCoverage * 0.3;
+        const esgGrade =
+            total_emissions === 0
+                ? 'N/A'
+                : compositeScore >= 0.85
+                  ? 'A'
+                  : compositeScore >= 0.65
+                    ? 'B'
+                    : compositeScore >= 0.45
+                      ? 'C'
+                      : compositeScore >= 0.25
+                        ? 'D'
+                        : 'F';
 
         res.json({
             // KPIs
@@ -182,7 +226,11 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
             scope_breakdown: {
                 scope1: { kgCO2e: s1.total || 0, percentage: s1.pct || 0, label: s1.label || 'Direct Manufacturing' },
                 scope2: { kgCO2e: s2.total || 0, percentage: s2.pct || 0, label: s2.label || 'Energy & Warehousing' },
-                scope3: { kgCO2e: s3.total || 0, percentage: s3.pct || 0, label: s3.label || 'Transport & Distribution' },
+                scope3: {
+                    kgCO2e: s3.total || 0,
+                    percentage: s3.pct || 0,
+                    label: s3.label || 'Transport & Distribution',
+                },
             },
             esg_grade: esgGrade,
 
@@ -199,7 +247,8 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
             // Maturity
             maturity_level: mLevel,
             maturity_name: mLabel,
-            maturity_next: mLevel < 5 ? ['Foundation', 'Developing', 'Intermediate', 'Advanced', 'Leader'][mLevel] : null,
+            maturity_next:
+                mLevel < 5 ? ['Foundation', 'Developing', 'Intermediate', 'Advanced', 'Leader'][mLevel] : null,
 
             // Regulatory
             regulatory_frameworks: regulatoryFrameworks,
@@ -223,8 +272,10 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
                 if (credits_minted > 0 || credits_retired > 0) conf += 0.5; // credit activity
                 return Math.min(5, Math.round(conf * 10) / 10);
             })(),
-            high_confidence_ratio_pct: products.length > 0
-                ? Math.round(products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length * 100) : 0,
+            high_confidence_ratio_pct:
+                products.length > 0
+                    ? Math.round((products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length) * 100)
+                    : 0,
             avg_intensity_kgCO2e_per_unit: scopeData?.avg_intensity_kgCO2e_per_unit || 0,
         });
     } catch (err) {

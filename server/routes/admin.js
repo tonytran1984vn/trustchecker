@@ -6,8 +6,8 @@ const { safeError } = require('../utils/safe-error');
  */
 
 function _safeId(name) {
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error("Invalid identifier: " + name);
-  return name;
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error('Invalid identifier: ' + name);
+    return name;
 }
 
 const express = require('express');
@@ -26,37 +26,86 @@ router.get('/overview', async (req, res) => {
         // NODE-BP-1: Parallelize independent DB queries with Promise.all
         const isSuper = req.user?.role === 'super_admin' || req.user?.user_type === 'platform';
         const orgId = req.user?.org_id || req.user?.orgId;
-        const orgFilter = (!isSuper && orgId) ? ' WHERE org_id = ?' : '';
-        const orgP = (!isSuper && orgId) ? [orgId] : [];
-        const [users, products, scans, todayScans, openAlerts, seals, evidence, tickets, anomalies, nfts] = await Promise.all([
-            db.get("SELECT COUNT(*) as c FROM users WHERE status != 'deactivated'" + (orgFilter ? ' AND org_id = ?' : ''), orgP),
-            db.get('SELECT COUNT(*) as c FROM products' + orgFilter, orgP),
-            db.get('SELECT COUNT(*) as c FROM scan_events' + orgFilter, orgP),
-            db.get("SELECT COUNT(*) as c FROM scan_events WHERE DATE(scanned_at) = CURRENT_DATE" + (orgFilter ? ' AND org_id = ?' : ''), orgP),
-            db.get("SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'open'" + (orgFilter ? ' AND org_id = ?' : ''), orgP),
-            db.get('SELECT COUNT(*) as c FROM blockchain_seals' + orgFilter, orgP),
-            db.get('SELECT COUNT(*) as c FROM evidence_items' + orgFilter, orgP),
-            db.get("SELECT COUNT(*) as c FROM support_tickets WHERE status = 'open'" + (orgFilter ? ' AND org_id = ?' : ''), orgP),
-            db.get("SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'open'" + (orgFilter ? ' AND org_id = ?' : ''), orgP),
-            db.get('SELECT COUNT(*) as c FROM nft_certificates' + (orgFilter ? ' WHERE org_id = ?' : ''), orgP),
-        ]);
+        const orgFilter = !isSuper && orgId ? ' WHERE org_id = ?' : '';
+        const orgP = !isSuper && orgId ? [orgId] : [];
+        const [users, products, scans, todayScans, openAlerts, seals, evidence, tickets, anomalies, nfts] =
+            await Promise.all([
+                db.get(
+                    "SELECT COUNT(*) as c FROM users WHERE status != 'deactivated'" +
+                        (orgFilter ? ' AND org_id = ?' : ''),
+                    orgP
+                ),
+                db.get('SELECT COUNT(*) as c FROM products' + orgFilter, orgP),
+                db.get('SELECT COUNT(*) as c FROM scan_events' + orgFilter, orgP),
+                db.get(
+                    'SELECT COUNT(*) as c FROM scan_events WHERE DATE(scanned_at) = CURRENT_DATE' +
+                        (orgFilter ? ' AND org_id = ?' : ''),
+                    orgP
+                ),
+                db.get(
+                    "SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'open'" +
+                        (orgFilter ? ' AND org_id = ?' : ''),
+                    orgP
+                ),
+                db.get('SELECT COUNT(*) as c FROM blockchain_seals' + orgFilter, orgP),
+                db.get('SELECT COUNT(*) as c FROM evidence_items' + orgFilter, orgP),
+                db.get(
+                    "SELECT COUNT(*) as c FROM support_tickets WHERE status = 'open'" +
+                        (orgFilter ? ' AND org_id = ?' : ''),
+                    orgP
+                ),
+                db.get(
+                    "SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'open'" +
+                        (orgFilter ? ' AND org_id = ?' : ''),
+                    orgP
+                ),
+                db.get('SELECT COUNT(*) as c FROM nft_certificates' + (orgFilter ? ' WHERE org_id = ?' : ''), orgP),
+            ]);
 
         const [userGrowth, scanTrend, activeUsersRow, paidPlans] = await Promise.all([
-            db.all("SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE created_at > NOW() - INTERVAL '30 days'" + (orgFilter ? " AND org_id = ?" : "") + " GROUP BY date ORDER BY date LIMIT 1000"),
-            db.all("SELECT DATE(scanned_at) as date, COUNT(*) as count FROM scan_events WHERE scanned_at > NOW() - INTERVAL '14 days'" + (orgFilter ? " AND org_id = ?" : "") + " GROUP BY date ORDER BY date LIMIT 1000"),
-            db.get("SELECT COUNT(DISTINCT actor_id) as c FROM audit_log WHERE timestamp > NOW() - INTERVAL '7 days'" + (orgFilter ? " AND org_id = ?" : ""), orgP),
-            db.all("SELECT plan_name, COUNT(*) as count FROM billing_plans WHERE status = 'active' AND plan_name != 'Free'" + (orgFilter ? " AND user_id IN (SELECT id FROM users WHERE org_id = ?)" : "") + " GROUP BY plan_name", orgP),
+            db.all(
+                "SELECT DATE(created_at) as date, COUNT(*) as count FROM users WHERE created_at > NOW() - INTERVAL '30 days'" +
+                    (orgFilter ? ' AND org_id = ?' : '') +
+                    ' GROUP BY date ORDER BY date LIMIT 1000'
+            ),
+            db.all(
+                "SELECT DATE(scanned_at) as date, COUNT(*) as count FROM scan_events WHERE scanned_at > NOW() - INTERVAL '14 days'" +
+                    (orgFilter ? ' AND org_id = ?' : '') +
+                    ' GROUP BY date ORDER BY date LIMIT 1000'
+            ),
+            db.get(
+                "SELECT COUNT(DISTINCT actor_id) as c FROM audit_log WHERE timestamp > NOW() - INTERVAL '7 days'" +
+                    (orgFilter ? ' AND org_id = ?' : ''),
+                orgP
+            ),
+            db.all(
+                "SELECT plan_name, COUNT(*) as count FROM billing_plans WHERE status = 'active' AND plan_name != 'Free'" +
+                    (orgFilter ? ' AND user_id IN (SELECT id FROM users WHERE org_id = ?)' : '') +
+                    ' GROUP BY plan_name',
+                orgP
+            ),
         ]);
 
         const activeUsers = activeUsersRow?.c || 0;
 
         res.json({
-            totals: { users: users?.c || 0, products: products?.c || 0, scans: scans?.c || 0, today_scans: todayScans?.c || 0, open_alerts: openAlerts?.c || 0, blockchain_seals: seals?.c || 0, evidence_items: evidence?.c || 0, open_tickets: tickets?.c || 0, open_anomalies: anomalies?.c || 0, nft_certificates: nfts?.c || 0 },
+            totals: {
+                users: users?.c || 0,
+                products: products?.c || 0,
+                scans: scans?.c || 0,
+                today_scans: todayScans?.c || 0,
+                open_alerts: openAlerts?.c || 0,
+                blockchain_seals: seals?.c || 0,
+                evidence_items: evidence?.c || 0,
+                open_tickets: tickets?.c || 0,
+                open_anomalies: anomalies?.c || 0,
+                nft_certificates: nfts?.c || 0,
+            },
             active_users_7d: activeUsers,
             user_growth_30d: userGrowth,
             scan_trend_14d: scanTrend,
             paid_plans: paidPlans,
-            system_health: { status: 'healthy', uptime: '99.97%', db_size_mb: getDBSize() }
+            system_health: { status: 'healthy', uptime: '99.97%', db_size_mb: getDBSize() },
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -67,7 +116,8 @@ router.get('/overview', async (req, res) => {
 router.get('/users', async (req, res) => {
     try {
         const { role, status, search, limit = 50, offset = 0 } = req.query;
-        let sql = "SELECT id, username, email, role, company, mfa_enabled, created_at, last_login, org_id FROM users WHERE 1=1";
+        let sql =
+            'SELECT id, username, email, role, company, mfa_enabled, created_at, last_login, org_id FROM users WHERE 1=1';
         const params = [];
 
         // Company Admin / Admin → only their org's users
@@ -81,8 +131,14 @@ router.get('/users', async (req, res) => {
             }
         }
 
-        if (role) { sql += ' AND role = ?'; params.push(role); }
-        if (search) { sql += ' AND (username LIKE ? OR email LIKE ? OR company LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+        if (role) {
+            sql += ' AND role = ?';
+            params.push(role);
+        }
+        if (search) {
+            sql += ' AND (username LIKE ? OR email LIKE ? OR company LIKE ?)';
+            params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+        }
 
         sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
         params.push(Math.min(Number(limit) || 50, 200), Math.max(Number(offset) || 0, 0));
@@ -94,7 +150,10 @@ router.get('/users', async (req, res) => {
         const countParams = [];
         if (userRole !== 'super_admin' && userType !== 'platform') {
             const orgId = req.user?.org_id || req.user?.orgId;
-            if (orgId) { countSql += ' AND org_id = ?'; countParams.push(orgId); }
+            if (orgId) {
+                countSql += ' AND org_id = ?';
+                countParams.push(orgId);
+            }
         }
         const total = (await db.get(countSql, countParams))?.c || 0;
 
@@ -107,10 +166,16 @@ router.get('/users', async (req, res) => {
 // ─── PUT /users/:id/role — Update user role ─────────────────
 // ─── Valid roles for the platform ────────────────────────────
 const VALID_ROLES = [
-    'super_admin', 'admin',                                // System roles
-    'executive', 'ops_manager', 'risk_officer',            // Tenant / Business roles
-    'compliance_officer', 'developer',                     // Tenant / Business roles
-    'manager', 'operator', 'viewer',                       // Legacy roles
+    'super_admin',
+    'admin', // System roles
+    'executive',
+    'ops_manager',
+    'risk_officer', // Tenant / Business roles
+    'compliance_officer',
+    'developer', // Tenant / Business roles
+    'manager',
+    'operator',
+    'viewer', // Legacy roles
 ];
 
 // ─── POST /users — Create a new user with role ──────────────
@@ -140,12 +205,24 @@ router.post('/users', async (req, res) => {
         const displayName = username || email.split('@')[0];
         const password_hash = await bcrypt.hash(password, 12);
 
-        await db.prepare(
-            'INSERT INTO users (id, username, email, password_hash, role, company, org_id, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?, 1)'
-        ).run(id, displayName, email, password_hash, role, company, req.user.org_id || null);
+        await db
+            .prepare(
+                'INSERT INTO users (id, username, email, password_hash, role, company, org_id, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?, 1)'
+            )
+            .run(id, displayName, email, password_hash, role, company, req.user.org_id || null);
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'USER_CREATED', 'user', id, JSON.stringify({ email, role, created_by: req.user.email || req.user.username }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'USER_CREATED',
+                'user',
+                id,
+                JSON.stringify({ email, role, created_by: req.user.email || req.user.username })
+            );
 
         res.status(201).json({ id, username: displayName, email, role, company, message: 'User created successfully' });
     } catch (e) {
@@ -157,7 +234,8 @@ router.post('/users', async (req, res) => {
 router.put('/users/:id/role', async (req, res) => {
     try {
         const { role } = req.body;
-        if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: `Invalid role. Choose: ${VALID_ROLES.join(', ')}` });
+        if (!VALID_ROLES.includes(role))
+            return res.status(400).json({ error: `Invalid role. Choose: ${VALID_ROLES.join(', ')}` });
 
         if (role === 'super_admin' && req.user.role !== 'super_admin') {
             return res.status(403).json({ error: 'Only super_admin can assign super_admin role' });
@@ -172,8 +250,18 @@ router.put('/users/:id/role', async (req, res) => {
 
         await db.run('UPDATE users SET role = ? WHERE id = ?', [role, req.params.id]);
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'USER_ROLE_CHANGED', 'user', req.params.id, JSON.stringify({ username: user.username, new_role: role }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'USER_ROLE_CHANGED',
+                'user',
+                req.params.id,
+                JSON.stringify({ username: user.username, new_role: role })
+            );
 
         res.json({ user_id: req.params.id, username: user.username, new_role: role });
     } catch (e) {
@@ -186,15 +274,26 @@ router.put('/users/:id/status', async (req, res) => {
     try {
         const { status } = req.body;
         const validStatuses = ['active', 'suspended', 'banned'];
-        if (!validStatuses.includes(status)) return res.status(400).json({ error: `Invalid status. Choose: ${validStatuses.join(', ')}` });
+        if (!validStatuses.includes(status))
+            return res.status(400).json({ error: `Invalid status. Choose: ${validStatuses.join(', ')}` });
 
         const user = await db.get('SELECT id, username FROM users WHERE id = ?', [req.params.id]);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         await db.run('UPDATE users SET status = ? WHERE id = ?', [status, req.params.id]);
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'USER_STATUS_CHANGED', 'user', req.params.id, JSON.stringify({ username: user.username, new_status: status }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'USER_STATUS_CHANGED',
+                'user',
+                req.params.id,
+                JSON.stringify({ username: user.username, new_status: status })
+            );
 
         res.json({ user_id: req.params.id, username: user.username, new_status: status });
     } catch (e) {
@@ -215,7 +314,10 @@ router.delete('/users/:id', async (req, res) => {
         const userType = req.user?.user_type;
         if (userRole !== 'super_admin' && userType !== 'platform') {
             const orgId = req.user?.org_id || req.user?.orgId;
-            user = await db.get('SELECT id, username, role FROM users WHERE id = ? AND org_id = ?', [req.params.id, orgId]);
+            user = await db.get('SELECT id, username, role FROM users WHERE id = ? AND org_id = ?', [
+                req.params.id,
+                orgId,
+            ]);
         } else {
             user = await db.get('SELECT id, username, role FROM users WHERE id = ?', [req.params.id]);
         }
@@ -233,7 +335,7 @@ router.delete('/users/:id', async (req, res) => {
             [req.user.id, req.params.id]
         );
         // Revoke active sessions but keep RBAC history for audit
-        await db.run("UPDATE sessions SET revoked = true WHERE user_id = $1", [req.params.id]);
+        await db.run('UPDATE sessions SET revoked = true WHERE user_id = $1', [req.params.id]);
 
         await db.run(
             'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
@@ -250,16 +352,30 @@ router.delete('/users/:id', async (req, res) => {
 router.post('/users/:id/reset-password', authMiddleware, requirePermission('org:user_create'), async (req, res) => {
     try {
         const { new_password } = req.body;
-        if (!new_password || new_password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        if (!new_password || new_password.length < 8)
+            return res.status(400).json({ error: 'Password must be at least 8 characters' });
 
         const user = await db.get('SELECT id, username FROM users WHERE id = ?', [req.params.id]);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const hash = await bcrypt.hash(new_password, 12);
-        await db.run('UPDATE users SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?', [hash, req.params.id]);
+        await db.run('UPDATE users SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?', [
+            hash,
+            req.params.id,
+        ]);
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'ADMIN_PASSWORD_RESET', 'user', req.params.id, JSON.stringify({ username: user.username }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'ADMIN_PASSWORD_RESET',
+                'user',
+                req.params.id,
+                JSON.stringify({ username: user.username })
+            );
 
         res.json({ user_id: req.params.id, message: 'Password reset successfully' });
     } catch (e) {
@@ -272,7 +388,8 @@ router.get('/audit', async (req, res) => {
     try {
         const { action, actor_id, entity_type, from_date, to_date, limit = 100, offset = 0 } = req.query;
         const orgId = req.user?.org_id || req.user?.orgId;
-        let sql = 'SELECT a.*, u.username as actor_name FROM audit_log a LEFT JOIN users u ON a.actor_id = u.id WHERE 1=1';
+        let sql =
+            'SELECT a.*, u.username as actor_name FROM audit_log a LEFT JOIN users u ON a.actor_id = u.id WHERE 1=1';
         const params = [];
 
         // Org-scope: non-super_admin only sees audit entries from their org
@@ -281,11 +398,26 @@ router.get('/audit', async (req, res) => {
             params.push(orgId, req.user.id);
         }
 
-        if (action) { sql += ' AND a.action = ?'; params.push(action); }
-        if (actor_id) { sql += ' AND a.actor_id = ?'; params.push(actor_id); }
-        if (entity_type) { sql += ' AND a.entity_type = ?'; params.push(entity_type); }
-        if (from_date) { sql += ' AND a.timestamp >= ?'; params.push(from_date); }
-        if (to_date) { sql += ' AND a.timestamp <= ?'; params.push(to_date); }
+        if (action) {
+            sql += ' AND a.action = ?';
+            params.push(action);
+        }
+        if (actor_id) {
+            sql += ' AND a.actor_id = ?';
+            params.push(actor_id);
+        }
+        if (entity_type) {
+            sql += ' AND a.entity_type = ?';
+            params.push(entity_type);
+        }
+        if (from_date) {
+            sql += ' AND a.timestamp >= ?';
+            params.push(from_date);
+        }
+        if (to_date) {
+            sql += ' AND a.timestamp <= ?';
+            params.push(to_date);
+        }
 
         sql += ' ORDER BY a.timestamp DESC LIMIT ? OFFSET ?';
         params.push(Math.min(Number(limit) || 100, 500), Math.max(Number(offset) || 0, 0)); // NODE-BP-2: cap
@@ -312,7 +444,9 @@ router.get('/audit', async (req, res) => {
 // ─── GET /settings — Get system settings ────────────────────
 router.get('/settings', async (req, res) => {
     try {
-        const settings = await db.get("SELECT details FROM audit_log WHERE action = 'SYSTEM_SETTINGS' ORDER BY timestamp DESC LIMIT 1");
+        const settings = await db.get(
+            "SELECT details FROM audit_log WHERE action = 'SYSTEM_SETTINGS' ORDER BY timestamp DESC LIMIT 1"
+        );
         const defaults = {
             platform_name: 'TrustChecker',
             max_scan_rate_per_minute: 60,
@@ -341,16 +475,33 @@ router.get('/settings', async (req, res) => {
 router.put('/settings', async (req, res) => {
     try {
         // Fix #11: Validate settings against known keys (was raw req.body)
-        const allowedKeys = ['site_name', 'maintenance_mode', 'max_upload_size', 'default_plan',
-            'fraud_threshold', 'auto_block', 'notification_email', 'timezone'];
+        const allowedKeys = [
+            'site_name',
+            'maintenance_mode',
+            'max_upload_size',
+            'default_plan',
+            'fraud_threshold',
+            'auto_block',
+            'notification_email',
+            'timezone',
+        ];
         const sanitized = {};
         for (const key of allowedKeys) {
             if (req.body[key] !== undefined) sanitized[key] = req.body[key];
         }
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'SYSTEM_SETTINGS', 'system', 'settings',
-                JSON.stringify({ ...sanitized, updated_at: new Date().toISOString(), updated_by: req.user.id }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'SYSTEM_SETTINGS',
+                'system',
+                'settings',
+                JSON.stringify({ ...sanitized, updated_at: new Date().toISOString(), updated_by: req.user.id })
+            );
 
         res.json({ message: 'System settings updated', settings: sanitized });
     } catch (e) {
@@ -367,20 +518,38 @@ router.get('/metrics', async (req, res) => {
 
         // DB metrics
         const dbTables = [
-            'users', 'products', 'qr_codes', 'scan_events', 'fraud_alerts',
-            'blockchain_seals', 'evidence_items', 'support_tickets', 'nft_certificates',
-            'sustainability_scores', 'anomaly_detections', 'audit_log'
+            'users',
+            'products',
+            'qr_codes',
+            'scan_events',
+            'fraud_alerts',
+            'blockchain_seals',
+            'evidence_items',
+            'support_tickets',
+            'nft_certificates',
+            'sustainability_scores',
+            'anomaly_detections',
+            'audit_log',
         ];
 
         const tableSizes = {};
         for (const t of dbTables) {
             try {
                 tableSizes[t] = (await db.get(`SELECT COUNT(*) as c FROM " + _safeId(t) + "`))?.c || 0;
-            } catch { tableSizes[t] = 'N/A'; }
+            } catch {
+                tableSizes[t] = 'N/A';
+            }
         }
 
         // Avg response times (from recent scans)
-        const avgResponseTime = (await db.get('SELECT AVG(response_time_ms) as avg FROM scan_events WHERE response_time_ms > 0' + (orgFilter ? ' AND org_id = ?' : ''), orgP))?.avg || 0;
+        const avgResponseTime =
+            (
+                await db.get(
+                    'SELECT AVG(response_time_ms) as avg FROM scan_events WHERE response_time_ms > 0' +
+                        (orgFilter ? ' AND org_id = ?' : ''),
+                    orgP
+                )
+            )?.avg || 0;
 
         res.json({
             uptime_seconds: Math.round(uptime),
@@ -399,7 +568,7 @@ router.get('/metrics', async (req, res) => {
             },
             node_version: process.version,
             platform: process.platform,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -413,9 +582,11 @@ function getDBSize() {
         const { safeParse } = require('../utils/safe-json');
         const dbPath = path.join(__dirname, '..', 'data', 'trustchecker.db');
         if (fs.existsSync(dbPath)) {
-            return Math.round(fs.statSync(dbPath).size / 1024 / 1024 * 100) / 100;
+            return Math.round((fs.statSync(dbPath).size / 1024 / 1024) * 100) / 100;
         }
-    } catch (e) { console.warn('[admin] getDBSize failed:', e.message); }
+    } catch (e) {
+        console.warn('[admin] getDBSize failed:', e.message);
+    }
     return 0;
 }
 

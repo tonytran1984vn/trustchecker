@@ -67,7 +67,7 @@ function orgGuard(options = {}) {
         if (!orgId) {
             return res.status(403).json({
                 error: 'No org context. User is not assigned to any organization.',
-                code: 'NO_ORG'
+                code: 'NO_ORG',
             });
         }
 
@@ -107,10 +107,9 @@ function orgGuard(options = {}) {
             }
         } else {
             // Fallback: no membership exists yet (legacy users)
-            const org = await db.get(
-                'SELECT id, name, plan, status, feature_flags FROM organizations WHERE id = ?',
-                [orgId]
-            );
+            const org = await db.get('SELECT id, name, plan, status, feature_flags FROM organizations WHERE id = ?', [
+                orgId,
+            ]);
             if (!org) {
                 return res.status(403).json({ error: 'Organization not found', code: 'ORG_NOT_FOUND' });
             }
@@ -152,4 +151,3 @@ module.exports = {
     tenantGuard: orgGuard,
     tenantQuery: orgQuery,
 };
-

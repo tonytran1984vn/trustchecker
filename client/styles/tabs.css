@@ -1,0 +1,122 @@
+/* Tabs, Status Dot, Status Icons, Factor Bars */
+/* ─── Tabs ──────────────────────────────────────────────────── */
+.tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+}
+
+.tab {
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+  background: none;
+  border: none;
+  font-family: inherit;
+}
+
+.tab:hover {
+  color: var(--text-primary);
+}
+
+.tab.active {
+  background: var(--cyan-glow);
+  color: var(--cyan);
+}
+
+/* ─── Status dot ────────────────────────────────────────────── */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.status-dot.green {
+  background: var(--emerald);
+  box-shadow: 0 0 6px var(--emerald);
+}
+
+.status-dot.red {
+  background: var(--rose);
+  box-shadow: 0 0 6px var(--rose);
+}
+
+.status-dot.amber {
+  background: var(--amber);
+  box-shadow: 0 0 6px var(--amber);
+}
+
+.status-dot.blue {
+  background: var(--cyan);
+  box-shadow: 0 0 6px var(--cyan);
+}
+
+/* ─── Status Icons (replaces emoji ✅❌⚠ per UX Pro Max) ──── */
+.status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.status-icon.status-pass {
+  background: var(--emerald-glow);
+  color: var(--emerald);
+  border: 1.5px solid var(--emerald);
+}
+
+.status-icon.status-fail {
+  background: var(--rose-glow);
+  color: var(--rose);
+  border: 1.5px solid var(--rose);
+}
+
+.status-icon.status-warn {
+  background: var(--amber-glow);
+  color: var(--amber);
+  border: 1.5px solid var(--amber);
+}
+
+/* ─── Factor bars ───────────────────────────────────────────── */
+.factor-bar-container {
+  margin-bottom: 12px;
+}
+
+.factor-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+}
+
+.factor-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.factor-bar .fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}

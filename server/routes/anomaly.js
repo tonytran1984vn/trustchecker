@@ -31,9 +31,12 @@ router.post('/scan', requirePermission('anomaly:create'), async (req, res) => {
         const fraudParams = [timeModifier];
         const trustParams = [timeModifier];
         if (orgId) {
-            scanSql += ' AND org_id = ?'; scanParams.push(orgId);
-            fraudSql += ' AND org_id = ?'; fraudParams.push(orgId);
-            trustSql += ' AND org_id = ?'; trustParams.push(orgId);
+            scanSql += ' AND org_id = ?';
+            scanParams.push(orgId);
+            fraudSql += ' AND org_id = ?';
+            fraudParams.push(orgId);
+            trustSql += ' AND org_id = ?';
+            trustParams.push(orgId);
         }
         const scans = await db.all(scanSql, scanParams);
         const fraudAlerts = await db.all(fraudSql, fraudParams);
@@ -44,21 +47,41 @@ router.post('/scan', requirePermission('anomaly:create'), async (req, res) => {
         // Persist detected anomalies
         for (const anomaly of result.anomalies) {
             const id = uuidv4();
-            await db.run(`
+            await db.run(
+                `
         INSERT INTO anomaly_detections (id, source_type, source_id, anomaly_type, severity, score, description, details)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, [id, anomaly.source_type, anomaly.source_id, anomaly.type, anomaly.severity,
-                anomaly.score, anomaly.description, JSON.stringify(anomaly.details)]);
+      `,
+                [
+                    id,
+                    anomaly.source_type,
+                    anomaly.source_id,
+                    anomaly.type,
+                    anomaly.severity,
+                    anomaly.score,
+                    anomaly.description,
+                    JSON.stringify(anomaly.details),
+                ]
+            );
         }
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'ANOMALY_SCAN', 'system', 'anomaly',
-                JSON.stringify({ hours, total: result.total, critical: result.critical, warning: result.warning }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'ANOMALY_SCAN',
+                'system',
+                'anomaly',
+                JSON.stringify({ hours, total: result.total, critical: result.critical, warning: result.warning })
+            );
 
         res.json({
             scan_window_hours: Number(hours),
             data_analyzed: { scans: scans.length, fraud_alerts: fraudAlerts.length, trust_scores: trustScores.length },
-            ...result
+            ...result,
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -87,21 +110,42 @@ async function fetchAnomalyList(query, user) {
         params.push(orgId);
     }
 
-    if (status) { conditions.push('ad.status = ?'); params.push(status); }
-    if (severity) { conditions.push('ad.severity = ?'); params.push(severity); }
-    if (type) { conditions.push('ad.anomaly_type = ?'); params.push(type); }
+    if (status) {
+        conditions.push('ad.status = ?');
+        params.push(status);
+    }
+    if (severity) {
+        conditions.push('ad.severity = ?');
+        params.push(severity);
+    }
+    if (type) {
+        conditions.push('ad.anomaly_type = ?');
+        params.push(type);
+    }
 
     if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-    sql += " ORDER BY CASE ad.severity WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END, ad.detected_at DESC LIMIT ?";
+    sql +=
+        " ORDER BY CASE ad.severity WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END, ad.detected_at DESC LIMIT ?";
     params.push(Math.min(Number(limit) || 50, 200));
 
     const anomalies = await db.all(sql, params);
     const orgFilter = user?.orgId ? ' AND org_id = ?' : '';
     const orgP = user?.orgId ? [user.orgId] : [];
     const stats = {
-        open: (await db.get("SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'open'" + orgFilter, orgP))?.c || 0,
-        critical: (await db.get("SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'open' AND severity = 'critical'" + orgFilter, orgP))?.c || 0,
-        resolved: (await db.get("SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'resolved'" + orgFilter, orgP))?.c || 0,
+        open:
+            (await db.get("SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'open'" + orgFilter, orgP))?.c ||
+            0,
+        critical:
+            (
+                await db.get(
+                    "SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'open' AND severity = 'critical'" +
+                        orgFilter,
+                    orgP
+                )
+            )?.c || 0,
+        resolved:
+            (await db.get("SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'resolved'" + orgFilter, orgP))
+                ?.c || 0,
     };
 
     return { anomalies, stats, total: anomalies.length };
@@ -144,14 +188,29 @@ router.put('/:id/resolve', requirePermission('anomaly:resolve'), async (req, res
         const { resolution } = req.body;
         let aq = 'SELECT * FROM anomaly_detections WHERE id = ?';
         const aqParams = [req.params.id];
-        if (req.orgId) { aq += ' AND org_id = ?'; aqParams.push(req.orgId); }
+        if (req.orgId) {
+            aq += ' AND org_id = ?';
+            aqParams.push(req.orgId);
+        }
         const anomaly = await db.get(aq, aqParams);
         if (!anomaly) return res.status(404).json({ error: 'Anomaly not found' });
 
-        await db.prepare("UPDATE anomaly_detections SET status = 'resolved', resolved_at = NOW() WHERE id = ?").run(req.params.id);
+        await db
+            .prepare("UPDATE anomaly_detections SET status = 'resolved', resolved_at = NOW() WHERE id = ?")
+            .run(req.params.id);
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'ANOMALY_RESOLVED', 'anomaly', req.params.id, JSON.stringify({ resolution, type: anomaly.anomaly_type }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'ANOMALY_RESOLVED',
+                'anomaly',
+                req.params.id,
+                JSON.stringify({ resolution, type: anomaly.anomaly_type })
+            );
 
         res.json({ id: req.params.id, status: 'resolved', resolution });
     } catch (e) {
@@ -165,19 +224,33 @@ router.get('/stats', requirePermission('anomaly:view'), async (req, res) => {
         const orgFilter = req.orgId ? ' WHERE org_id = ?' : '';
         const orgP = req.orgId ? [req.orgId] : [];
         const total = (await db.get('SELECT COUNT(*) as c FROM anomaly_detections' + orgFilter, orgP))?.c || 0;
-        const byType = await db.all('SELECT anomaly_type, COUNT(*) as count FROM anomaly_detections' + orgFilter + ' GROUP BY anomaly_type ORDER BY count DESC LIMIT 1000', orgP);
-        const bySeverity = await db.all('SELECT severity, COUNT(*) as count FROM anomaly_detections' + orgFilter + ' GROUP BY severity', orgP);
-        const byStatus = await db.all('SELECT status, COUNT(*) as count FROM anomaly_detections' + orgFilter + ' GROUP BY status', orgP);
+        const byType = await db.all(
+            'SELECT anomaly_type, COUNT(*) as count FROM anomaly_detections' +
+                orgFilter +
+                ' GROUP BY anomaly_type ORDER BY count DESC LIMIT 1000',
+            orgP
+        );
+        const bySeverity = await db.all(
+            'SELECT severity, COUNT(*) as count FROM anomaly_detections' + orgFilter + ' GROUP BY severity',
+            orgP
+        );
+        const byStatus = await db.all(
+            'SELECT status, COUNT(*) as count FROM anomaly_detections' + orgFilter + ' GROUP BY status',
+            orgP
+        );
 
         const trendFilter = req.orgId
             ? "WHERE detected_at > NOW() - INTERVAL '30 days' AND org_id = ?"
             : "WHERE detected_at > NOW() - INTERVAL '30 days'";
         const trendP = req.orgId ? [req.orgId] : [];
-        const trend = await db.all(`
+        const trend = await db.all(
+            `
       SELECT DATE(detected_at) as date, COUNT(*) as count, SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) as critical
       FROM anomaly_detections ${trendFilter}
       GROUP BY date ORDER BY date ASC
-     LIMIT 1000`, trendP);
+     LIMIT 1000`,
+            trendP
+        );
 
         res.json({ total, by_type: byType, by_severity: bySeverity, by_status: byStatus, trend_30d: trend });
     } catch (e) {

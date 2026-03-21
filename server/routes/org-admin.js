@@ -13,7 +13,14 @@ const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { authMiddleware } = require('../auth/core');
-const { requireTenantAdmin, checkPlanGuardrail, checkSoD, getPermissionsForRole, isCAForbidden, isHighRiskRole } = require('../auth/rbac');
+const {
+    requireTenantAdmin,
+    checkPlanGuardrail,
+    checkSoD,
+    getPermissionsForRole,
+    isCAForbidden,
+    isHighRiskRole,
+} = require('../auth/rbac');
 const { orgGuard } = require('../middleware/org-middleware');
 
 // All routes require auth + org context + org admin
@@ -59,10 +66,7 @@ router.post('/roles', async (req, res) => {
         }
 
         // Check name uniqueness within org
-        const existing = await db.get(
-            'SELECT id FROM rbac_roles WHERE org_id = ? AND name = ?',
-            [req.orgId, name]
-        );
+        const existing = await db.get('SELECT id FROM rbac_roles WHERE org_id = ? AND name = ?', [req.orgId, name]);
         if (existing) {
             return res.status(409).json({ error: `Role "${name}" already exists in this org` });
         }
@@ -73,7 +77,7 @@ router.post('/roles', async (req, res) => {
             if (!allowed) {
                 return res.status(403).json({
                     error: `Permission "${perm}" is not available in your plan`,
-                    code: 'PLAN_GUARDRAIL'
+                    code: 'PLAN_GUARDRAIL',
                 });
             }
         }
@@ -84,12 +88,17 @@ router.post('/roles', async (req, res) => {
             if (forbidden.length > 0) {
                 await db.run(
                     `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'PERMISSION_CEILING_BLOCKED', 'rbac_role', ?, ?)`,
-                    [uuidv4(), req.user.id, 'new_role', JSON.stringify({ attempted_permissions: forbidden, role_name: name })]
+                    [
+                        uuidv4(),
+                        req.user.id,
+                        'new_role',
+                        JSON.stringify({ attempted_permissions: forbidden, role_name: name }),
+                    ]
                 );
                 return res.status(403).json({
                     error: 'Permission ceiling: Company Admin cannot grant governance permissions',
                     code: 'PERMISSION_CEILING',
-                    forbidden_permissions: forbidden
+                    forbidden_permissions: forbidden,
                 });
             }
         }
@@ -104,12 +113,15 @@ router.post('/roles', async (req, res) => {
         let mapped = 0;
         for (const permKey of permissions) {
             const [resource, action] = permKey.split(':');
-            const perm = await db.get(
-                'SELECT id FROM rbac_permissions WHERE resource = ? AND action = ?',
-                [resource, action]
-            );
+            const perm = await db.get('SELECT id FROM rbac_permissions WHERE resource = ? AND action = ?', [
+                resource,
+                action,
+            ]);
             if (perm) {
-                await db.run('INSERT INTO rbac_role_permissions (role_id, permission_id) VALUES (?, ?) ON CONFLICT DO NOTHING', [roleId, perm.id]);
+                await db.run(
+                    'INSERT INTO rbac_role_permissions (role_id, permission_id) VALUES (?, ?) ON CONFLICT DO NOTHING',
+                    [roleId, perm.id]
+                );
                 mapped++;
             }
         }
@@ -131,10 +143,7 @@ router.post('/roles', async (req, res) => {
 // ─── PUT /roles/:id — Update role permissions ────────────────────────────────
 router.put('/roles/:id', async (req, res) => {
     try {
-        const role = await db.get(
-            'SELECT * FROM rbac_roles WHERE id = ? AND org_id = ?',
-            [req.params.id, req.orgId]
-        );
+        const role = await db.get('SELECT * FROM rbac_roles WHERE id = ? AND org_id = ?', [req.params.id, req.orgId]);
         if (!role) return res.status(404).json({ error: 'Role not found' });
         if (role.is_system) return res.status(403).json({ error: 'Cannot modify system roles' });
 
@@ -144,8 +153,14 @@ router.put('/roles/:id', async (req, res) => {
         if (display_name || description) {
             const updates = [];
             const params = [];
-            if (display_name) { updates.push('display_name = ?'); params.push(display_name); }
-            if (description !== undefined) { updates.push('description = ?'); params.push(description); }
+            if (display_name) {
+                updates.push('display_name = ?');
+                params.push(display_name);
+            }
+            if (description !== undefined) {
+                updates.push('description = ?');
+                params.push(description);
+            }
             params.push(req.params.id);
             await db.run(`UPDATE rbac_roles SET ${updates.join(', ')} WHERE id = ?`, params);
         }
@@ -156,7 +171,9 @@ router.put('/roles/:id', async (req, res) => {
             for (const perm of permissions) {
                 const allowed = await checkPlanGuardrail(req.orgId, perm);
                 if (!allowed) {
-                    return res.status(403).json({ error: `Permission "${perm}" is not available in your plan`, code: 'PLAN_GUARDRAIL' });
+                    return res
+                        .status(403)
+                        .json({ error: `Permission "${perm}" is not available in your plan`, code: 'PLAN_GUARDRAIL' });
                 }
             }
 
@@ -171,7 +188,7 @@ router.put('/roles/:id', async (req, res) => {
                     return res.status(403).json({
                         error: 'Permission ceiling: Company Admin cannot grant governance permissions',
                         code: 'PERMISSION_CEILING',
-                        forbidden_permissions: forbidden
+                        forbidden_permissions: forbidden,
                     });
                 }
             }
@@ -181,9 +198,15 @@ router.put('/roles/:id', async (req, res) => {
             let mapped = 0;
             for (const permKey of permissions) {
                 const [resource, action] = permKey.split(':');
-                const perm = await db.get('SELECT id FROM rbac_permissions WHERE resource = ? AND action = ?', [resource, action]);
+                const perm = await db.get('SELECT id FROM rbac_permissions WHERE resource = ? AND action = ?', [
+                    resource,
+                    action,
+                ]);
                 if (perm) {
-                    await db.run('INSERT INTO rbac_role_permissions (role_id, permission_id) VALUES (?, ?) ON CONFLICT DO NOTHING', [req.params.id, perm.id]);
+                    await db.run(
+                        'INSERT INTO rbac_role_permissions (role_id, permission_id) VALUES (?, ?) ON CONFLICT DO NOTHING',
+                        [req.params.id, perm.id]
+                    );
                     mapped++;
                 }
             }
@@ -206,17 +229,16 @@ router.put('/roles/:id', async (req, res) => {
 // ─── DELETE /roles/:id — Delete role ─────────────────────────────────────────
 router.delete('/roles/:id', async (req, res) => {
     try {
-        const role = await db.get(
-            'SELECT * FROM rbac_roles WHERE id = ? AND org_id = ?',
-            [req.params.id, req.orgId]
-        );
+        const role = await db.get('SELECT * FROM rbac_roles WHERE id = ? AND org_id = ?', [req.params.id, req.orgId]);
         if (!role) return res.status(404).json({ error: 'Role not found' });
         if (role.is_system) return res.status(403).json({ error: 'Cannot delete system roles' });
 
         // Check if users are assigned
         const count = await db.get('SELECT COUNT(*) as c FROM rbac_user_roles WHERE role_id = ?', [req.params.id]);
         if (count?.c > 0) {
-            return res.status(409).json({ error: `Cannot delete role: ${count.c} user(s) still assigned`, code: 'ROLE_IN_USE' });
+            return res
+                .status(409)
+                .json({ error: `Cannot delete role: ${count.c} user(s) still assigned`, code: 'ROLE_IN_USE' });
         }
 
         await db.run('DELETE FROM rbac_role_permissions WHERE role_id = ?', [req.params.id]);
@@ -317,7 +339,7 @@ router.post('/users', async (req, res) => {
 
         const userId = uuidv4();
         const hash = await bcrypt.hash(password, 12);
-        const companyName = company || (req.org?.name || '');
+        const companyName = company || req.org?.name || '';
 
         await db.run(
             `INSERT INTO users (id, username, email, password_hash, role, user_type, company, org_id) VALUES (?, ?, ?, ?, ?, 'org', ?, ?)`,
@@ -346,25 +368,34 @@ router.put('/users/:id/roles', async (req, res) => {
         if (req.params.id === req.user.id) {
             await db.run(
                 `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'SELF_ELEVATION_BLOCKED', 'user', ?, ?)`,
-                [uuidv4(), req.user.id, req.user.id, JSON.stringify({ attempted_roles: role_ids, reason: 'Self-role elevation is prohibited' })]
+                [
+                    uuidv4(),
+                    req.user.id,
+                    req.user.id,
+                    JSON.stringify({ attempted_roles: role_ids, reason: 'Self-role elevation is prohibited' }),
+                ]
             );
             return res.status(403).json({
                 error: 'Self-role elevation prohibited: You cannot assign roles to yourself',
-                code: 'SELF_ELEVATION_BLOCKED'
+                code: 'SELF_ELEVATION_BLOCKED',
             });
         }
 
         // Verify user belongs to this org
-        const user = await db.get(
-            'SELECT id, username FROM users WHERE id = ? AND org_id = ?',
-            [req.params.id, req.orgId]
-        );
+        const user = await db.get('SELECT id, username FROM users WHERE id = ? AND org_id = ?', [
+            req.params.id,
+            req.orgId,
+        ]);
         if (!user) return res.status(404).json({ error: 'User not found in this org' });
 
         // GOV: Check if CA is trying to assign high-risk roles — require dual-control
         for (const roleId of role_ids) {
             const roleInfo = await db.get('SELECT name, display_name FROM rbac_roles WHERE id = ?', [roleId]);
-            if (roleInfo && isHighRiskRole(roleInfo.name) && (req.user.role === 'company_admin' || req.user.role === 'admin')) {
+            if (
+                roleInfo &&
+                isHighRiskRole(roleInfo.name) &&
+                (req.user.role === 'company_admin' || req.user.role === 'admin')
+            ) {
                 // Ensure pending_role_approvals table exists
                 await db.run(`CREATE TABLE IF NOT EXISTS pending_role_approvals (
                     id TEXT PRIMARY KEY,
@@ -391,11 +422,18 @@ router.put('/users/:id/roles', async (req, res) => {
                 // Audit log
                 await db.run(
                     `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'HIGH_RISK_ROLE_PENDING', 'pending_approval', ?, ?)`,
-                    [uuidv4(), req.user.id, approvalId, JSON.stringify({
-                        role: roleInfo.name, display: roleInfo.display_name,
-                        target_user: user.username, severity: 'high',
-                        requires: 'org_owner or security_officer approval'
-                    })]
+                    [
+                        uuidv4(),
+                        req.user.id,
+                        approvalId,
+                        JSON.stringify({
+                            role: roleInfo.name,
+                            display: roleInfo.display_name,
+                            target_user: user.username,
+                            severity: 'high',
+                            requires: 'org_owner or security_officer approval',
+                        }),
+                    ]
                 );
 
                 // Remove this role from immediate assignment list
@@ -408,7 +446,7 @@ router.put('/users/:id/roles', async (req, res) => {
                         code: 'DUAL_CONTROL_PENDING',
                         approval_id: approvalId,
                         pending_role: roleInfo.display_name,
-                        requires_approval_from: 'org_owner or security_officer'
+                        requires_approval_from: 'org_owner or security_officer',
                     });
                 }
             }
@@ -416,10 +454,10 @@ router.put('/users/:id/roles', async (req, res) => {
 
         // Verify all roles belong to this org
         for (const roleId of role_ids) {
-            const role = await db.get(
-                'SELECT id, name FROM rbac_roles WHERE id = ? AND org_id = ?',
-                [roleId, req.orgId]
-            );
+            const role = await db.get('SELECT id, name FROM rbac_roles WHERE id = ? AND org_id = ?', [
+                roleId,
+                req.orgId,
+            ]);
             if (!role) {
                 return res.status(400).json({ error: `Role ${roleId} not found in this org` });
             }
@@ -433,7 +471,7 @@ router.put('/users/:id/roles', async (req, res) => {
                         error: sod.details,
                         code: 'SOD_CONFLICT',
                         role: role.name,
-                        permission: perm
+                        permission: perm,
                     });
                 }
             }
@@ -478,10 +516,10 @@ router.put('/users/:id/roles', async (req, res) => {
 // ─── DELETE /users/:id — Remove user from org ─────────────────────────────
 router.delete('/users/:id', async (req, res) => {
     try {
-        const user = await db.get(
-            'SELECT id, username FROM users WHERE id = ? AND org_id = ?',
-            [req.params.id, req.orgId]
-        );
+        const user = await db.get('SELECT id, username FROM users WHERE id = ? AND org_id = ?', [
+            req.params.id,
+            req.orgId,
+        ]);
         if (!user) return res.status(404).json({ error: 'User not found in this org' });
 
         // Don't allow deleting self
@@ -564,7 +602,7 @@ router.post('/approvals/:id/approve', async (req, res) => {
         if (!['org_owner', 'security_officer', 'super_admin', 'admin'].includes(approverRole)) {
             return res.status(403).json({
                 error: 'Only org_owner or security_officer can approve high-risk role assignments',
-                code: 'DUAL_CONTROL_DENIED'
+                code: 'DUAL_CONTROL_DENIED',
             });
         }
 
@@ -578,7 +616,7 @@ router.post('/approvals/:id/approve', async (req, res) => {
         if (approval.requested_by === req.user.id) {
             return res.status(403).json({
                 error: 'Cannot approve your own request (dual-control)',
-                code: 'DUAL_CONTROL_SELF_APPROVE'
+                code: 'DUAL_CONTROL_SELF_APPROVE',
             });
         }
 
@@ -600,10 +638,17 @@ router.post('/approvals/:id/approve', async (req, res) => {
         // Audit
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'HIGH_RISK_ROLE_APPROVED', 'pending_approval', ?, ?)`,
-            [uuidv4(), req.user.id, req.params.id, JSON.stringify({
-                role: approval.role_name, target_user_id: approval.user_id,
-                approver: req.user.username, severity: 'high'
-            })]
+            [
+                uuidv4(),
+                req.user.id,
+                req.params.id,
+                JSON.stringify({
+                    role: approval.role_name,
+                    target_user_id: approval.user_id,
+                    approver: req.user.username,
+                    severity: 'high',
+                }),
+            ]
         );
 
         if (typeof db.save === 'function') await db.save();
@@ -619,7 +664,9 @@ router.post('/approvals/:id/reject', async (req, res) => {
     try {
         const approverRole = req.user.role;
         if (!['org_owner', 'security_officer', 'super_admin', 'admin'].includes(approverRole)) {
-            return res.status(403).json({ error: 'Only org_owner or security_officer can reject', code: 'DUAL_CONTROL_DENIED' });
+            return res
+                .status(403)
+                .json({ error: 'Only org_owner or security_officer can reject', code: 'DUAL_CONTROL_DENIED' });
         }
 
         const approval = await db.get(
@@ -637,10 +684,18 @@ router.post('/approvals/:id/reject', async (req, res) => {
 
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'HIGH_RISK_ROLE_REJECTED', 'pending_approval', ?, ?)`,
-            [uuidv4(), req.user.id, req.params.id, JSON.stringify({
-                role: approval.role_name, target_user_id: approval.user_id,
-                rejector: req.user.username, reason, severity: 'high'
-            })]
+            [
+                uuidv4(),
+                req.user.id,
+                req.params.id,
+                JSON.stringify({
+                    role: approval.role_name,
+                    target_user_id: approval.user_id,
+                    rejector: req.user.username,
+                    reason,
+                    severity: 'high',
+                }),
+            ]
         );
 
         if (typeof db.save === 'function') await db.save();
@@ -662,21 +717,29 @@ router.get('/governance/dashboard', async (req, res) => {
         // Pending approvals
         let pendingCount = 0;
         try {
-            const p = await db.get('SELECT COUNT(*) as c FROM pending_role_approvals WHERE org_id = ? AND status = ?', [tid, 'pending']);
+            const p = await db.get('SELECT COUNT(*) as c FROM pending_role_approvals WHERE org_id = ? AND status = ?', [
+                tid,
+                'pending',
+            ]);
             pendingCount = p?.c || 0;
-        } catch (_) { /* table may not exist */ }
+        } catch (_) {
+            /* table may not exist */
+        }
 
         // SoD conflict warnings (users with conflicting roles)
         const sodWarnings = [];
         const users = await db.all('SELECT id, username FROM users WHERE org_id = ?', [tid]);
         const { SOD_CONFLICTS } = require('../auth/rbac');
         for (const u of users.slice(0, 50)) {
-            const perms = await db.all(`
+            const perms = await db.all(
+                `
                 SELECT DISTINCT p.resource || ':' || p.action AS perm
                 FROM rbac_user_roles ur
                 JOIN rbac_role_permissions rp ON rp.role_id = ur.role_id
                 JOIN rbac_permissions p ON p.id = rp.permission_id
-                WHERE ur.user_id = ?`, [u.id]);
+                WHERE ur.user_id = ?`,
+                [u.id]
+            );
             const permSet = new Set(perms.map(r => r.perm));
             for (const [p1, p2] of SOD_CONFLICTS) {
                 if (permSet.has(p1) && permSet.has(p2)) {
@@ -733,28 +796,92 @@ router.get('/governance/kpi-overview', async (req, res) => {
         const UNIT_VALUE = 150;
 
         const [
-            openCritical, riskByRegion, riskByProduct, fraud7d, fraudPrev7d, fraudDensity,
-            slaSummary, slaOverdueValue, slaBreach,
-            created7d, resolved7d, backlog, avgResTime, investigatorLoad,
-            resolvedTotal, weeklyFraud, weeklyAlerts,
+            openCritical,
+            riskByRegion,
+            riskByProduct,
+            fraud7d,
+            fraudPrev7d,
+            fraudDensity,
+            slaSummary,
+            slaOverdueValue,
+            slaBreach,
+            created7d,
+            resolved7d,
+            backlog,
+            avgResTime,
+            investigatorLoad,
+            resolvedTotal,
+            weeklyFraud,
+            weeklyAlerts,
         ] = await Promise.all([
-            db.get(`SELECT SUM(CASE WHEN fa.severity IN ('critical','high') AND fa.status != 'resolved' THEN 1 ELSE 0 END) as open_serious, COUNT(*) as total FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1`, [tid]),
-            db.all(`SELECT se.geo_country as region, SUM(CASE WHEN se.result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged FROM scan_events se WHERE se.org_id = $1 AND se.geo_country IS NOT NULL AND se.scanned_at >= NOW() - INTERVAL '30 days' GROUP BY se.geo_country ORDER BY flagged DESC LIMIT 10`, [tid]),
-            db.all(`SELECT p.name, SUM(CASE WHEN se.result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged FROM products p JOIN scan_events se ON se.product_id = p.id WHERE p.org_id = $1 AND se.scanned_at >= NOW() - INTERVAL '30 days' GROUP BY p.id, p.name ORDER BY flagged DESC LIMIT 10`, [tid]),
-            db.get(`SELECT COUNT(*) as total, SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged, SUM(CASE WHEN result = 'counterfeit' THEN 1 ELSE 0 END) as counterfeit FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '7 days'`, [tid]),
-            db.get(`SELECT COUNT(*) as total, SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '14 days' AND scanned_at < NOW() - INTERVAL '7 days'`, [tid]),
-            db.get(`SELECT COUNT(*) as total, SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '30 days'`, [tid]),
-            db.get(`SELECT SUM(CASE WHEN fa.status != 'resolved' THEN 1 ELSE 0 END) as open, SUM(CASE WHEN fa.status != 'resolved' AND fa.created_at < NOW() - INTERVAL '48 hours' THEN 1 ELSE 0 END) as overdue, SUM(CASE WHEN fa.severity = 'critical' AND fa.status != 'resolved' THEN 1 ELSE 0 END) as critical_open, SUM(CASE WHEN fa.severity = 'high' AND fa.status != 'resolved' THEN 1 ELSE 0 END) as high_open FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1`, [tid]),
-            db.get(`SELECT SUM(CASE WHEN fa.status != 'resolved' AND fa.created_at < NOW() - INTERVAL '48 hours' THEN 1 ELSE 0 END) as overdue_count FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1`, [tid]),
-            db.get(`SELECT ROUND(AVG(EXTRACT(EPOCH FROM NOW() - fa.created_at) / 3600)::numeric, 1) as avg_breach_hours FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.status != 'resolved' AND fa.created_at < NOW() - INTERVAL '48 hours'`, [tid]),
-            db.get(`SELECT COUNT(*) as count FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.created_at >= NOW() - INTERVAL '7 days'`, [tid]),
-            db.get(`SELECT COUNT(*) as count FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.resolved_at >= NOW() - INTERVAL '7 days'`, [tid]),
-            db.get(`SELECT SUM(CASE WHEN fa.status != 'resolved' THEN 1 ELSE 0 END) as backlog FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1`, [tid]),
-            db.get(`SELECT ROUND(AVG(EXTRACT(EPOCH FROM fa.resolved_at - fa.created_at) / 3600)::numeric, 1) as avg_hours FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.status = 'resolved' AND fa.resolved_at IS NOT NULL`, [tid]),
-            db.all(`SELECT fa.resolved_by, COUNT(*) as cases FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.status = 'resolved' AND fa.resolved_by IS NOT NULL AND fa.resolved_at >= NOW() - INTERVAL '30 days' GROUP BY fa.resolved_by ORDER BY cases DESC LIMIT 10`, [tid]),
-            db.get(`SELECT COUNT(*) as total FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.status = 'resolved'`, [tid]),
-            db.all(`SELECT DATE_TRUNC('week', scanned_at)::date as week, COUNT(*) as scans, SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '12 weeks' GROUP BY DATE_TRUNC('week', scanned_at) ORDER BY week ASC LIMIT 1000`, [tid]),
-            db.all(`SELECT DATE_TRUNC('week', fa.created_at)::date as week, COUNT(*) as created, SUM(CASE WHEN fa.status = 'resolved' THEN 1 ELSE 0 END) as resolved FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.created_at >= NOW() - INTERVAL '12 weeks' GROUP BY DATE_TRUNC('week', fa.created_at) ORDER BY week ASC LIMIT 1000`, [tid]),
+            db.get(
+                `SELECT SUM(CASE WHEN fa.severity IN ('critical','high') AND fa.status != 'resolved' THEN 1 ELSE 0 END) as open_serious, COUNT(*) as total FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1`,
+                [tid]
+            ),
+            db.all(
+                `SELECT se.geo_country as region, SUM(CASE WHEN se.result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged FROM scan_events se WHERE se.org_id = $1 AND se.geo_country IS NOT NULL AND se.scanned_at >= NOW() - INTERVAL '30 days' GROUP BY se.geo_country ORDER BY flagged DESC LIMIT 10`,
+                [tid]
+            ),
+            db.all(
+                `SELECT p.name, SUM(CASE WHEN se.result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged FROM products p JOIN scan_events se ON se.product_id = p.id WHERE p.org_id = $1 AND se.scanned_at >= NOW() - INTERVAL '30 days' GROUP BY p.id, p.name ORDER BY flagged DESC LIMIT 10`,
+                [tid]
+            ),
+            db.get(
+                `SELECT COUNT(*) as total, SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged, SUM(CASE WHEN result = 'counterfeit' THEN 1 ELSE 0 END) as counterfeit FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '7 days'`,
+                [tid]
+            ),
+            db.get(
+                `SELECT COUNT(*) as total, SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '14 days' AND scanned_at < NOW() - INTERVAL '7 days'`,
+                [tid]
+            ),
+            db.get(
+                `SELECT COUNT(*) as total, SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '30 days'`,
+                [tid]
+            ),
+            db.get(
+                `SELECT SUM(CASE WHEN fa.status != 'resolved' THEN 1 ELSE 0 END) as open, SUM(CASE WHEN fa.status != 'resolved' AND fa.created_at < NOW() - INTERVAL '48 hours' THEN 1 ELSE 0 END) as overdue, SUM(CASE WHEN fa.severity = 'critical' AND fa.status != 'resolved' THEN 1 ELSE 0 END) as critical_open, SUM(CASE WHEN fa.severity = 'high' AND fa.status != 'resolved' THEN 1 ELSE 0 END) as high_open FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1`,
+                [tid]
+            ),
+            db.get(
+                `SELECT SUM(CASE WHEN fa.status != 'resolved' AND fa.created_at < NOW() - INTERVAL '48 hours' THEN 1 ELSE 0 END) as overdue_count FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1`,
+                [tid]
+            ),
+            db.get(
+                `SELECT ROUND(AVG(EXTRACT(EPOCH FROM NOW() - fa.created_at) / 3600)::numeric, 1) as avg_breach_hours FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.status != 'resolved' AND fa.created_at < NOW() - INTERVAL '48 hours'`,
+                [tid]
+            ),
+            db.get(
+                `SELECT COUNT(*) as count FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.created_at >= NOW() - INTERVAL '7 days'`,
+                [tid]
+            ),
+            db.get(
+                `SELECT COUNT(*) as count FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.resolved_at >= NOW() - INTERVAL '7 days'`,
+                [tid]
+            ),
+            db.get(
+                `SELECT SUM(CASE WHEN fa.status != 'resolved' THEN 1 ELSE 0 END) as backlog FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1`,
+                [tid]
+            ),
+            db.get(
+                `SELECT ROUND(AVG(EXTRACT(EPOCH FROM fa.resolved_at - fa.created_at) / 3600)::numeric, 1) as avg_hours FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.status = 'resolved' AND fa.resolved_at IS NOT NULL`,
+                [tid]
+            ),
+            db.all(
+                `SELECT fa.resolved_by, COUNT(*) as cases FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.status = 'resolved' AND fa.resolved_by IS NOT NULL AND fa.resolved_at >= NOW() - INTERVAL '30 days' GROUP BY fa.resolved_by ORDER BY cases DESC LIMIT 10`,
+                [tid]
+            ),
+            db.get(
+                `SELECT COUNT(*) as total FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.status = 'resolved'`,
+                [tid]
+            ),
+            db.all(
+                `SELECT DATE_TRUNC('week', scanned_at)::date as week, COUNT(*) as scans, SUM(CASE WHEN result IN ('suspicious','counterfeit') THEN 1 ELSE 0 END) as flagged FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '12 weeks' GROUP BY DATE_TRUNC('week', scanned_at) ORDER BY week ASC LIMIT 1000`,
+                [tid]
+            ),
+            db.all(
+                `SELECT DATE_TRUNC('week', fa.created_at)::date as week, COUNT(*) as created, SUM(CASE WHEN fa.status = 'resolved' THEN 1 ELSE 0 END) as resolved FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id WHERE p.org_id = $1 AND fa.created_at >= NOW() - INTERVAL '12 weeks' GROUP BY DATE_TRUNC('week', fa.created_at) ORDER BY week ASC LIMIT 1000`,
+                [tid]
+            ),
         ]);
 
         // ═══ TIER 1: RISK EXPOSURE HEALTH ═══
@@ -762,13 +889,13 @@ router.get('/governance/kpi-overview', async (req, res) => {
         const openExposure = openSerious * UNIT_VALUE;
         const regionFlagged = (riskByRegion || []).map(r => parseInt(r.flagged) || 0);
         const totalRegionFlagged = regionFlagged.reduce((s, v) => s + v, 0);
-        const topRegionPct = totalRegionFlagged > 0 ? Math.round(regionFlagged[0] / totalRegionFlagged * 100) : 0;
+        const topRegionPct = totalRegionFlagged > 0 ? Math.round((regionFlagged[0] / totalRegionFlagged) * 100) : 0;
         const flagged7d = parseInt(fraud7d?.flagged) || 0;
         const flaggedPrev7d = parseInt(fraudPrev7d?.flagged) || 0;
-        const trendDelta = flaggedPrev7d > 0 ? Math.round((flagged7d - flaggedPrev7d) / flaggedPrev7d * 100) : 0;
+        const trendDelta = flaggedPrev7d > 0 ? Math.round(((flagged7d - flaggedPrev7d) / flaggedPrev7d) * 100) : 0;
         const density30d = parseInt(fraudDensity?.total) || 0;
         const flg30d = parseInt(fraudDensity?.flagged) || 0;
-        const fraudPer1k = density30d > 0 ? Math.round(flg30d / density30d * 1000 * 10) / 10 : 0;
+        const fraudPer1k = density30d > 0 ? Math.round((flg30d / density30d) * 1000 * 10) / 10 : 0;
         const t1_exp = Math.max(0, 100 - openSerious * 2);
         const t1_con = topRegionPct > 50 ? Math.max(0, 100 - (topRegionPct - 50) * 3) : 100;
         const t1_trd = trendDelta > 0 ? Math.max(0, 100 - trendDelta * 2) : Math.min(100, 100 + Math.abs(trendDelta));
@@ -780,10 +907,11 @@ router.get('/governance/kpi-overview', async (req, res) => {
         const overdueCount = parseInt(slaSummary?.overdue) || 0;
         const critOpen = parseInt(slaSummary?.critical_open) || 0;
         const highOpen = parseInt(slaSummary?.high_open) || 0;
-        const overdueRate = openCount > 0 ? Math.round(overdueCount / openCount * 100) : 0;
+        const overdueRate = openCount > 0 ? Math.round((overdueCount / openCount) * 100) : 0;
         const overdueExp = (parseInt(slaOverdueValue?.overdue_count) || 0) * UNIT_VALUE;
         const avgBreachH = parseFloat(slaBreach?.avg_breach_hours) || 0;
-        const t2_ovd = overdueRate > 15 ? Math.max(0, 100 - (overdueRate - 15) * 4) : Math.max(0, 100 - overdueRate * 2);
+        const t2_ovd =
+            overdueRate > 15 ? Math.max(0, 100 - (overdueRate - 15) * 4) : Math.max(0, 100 - overdueRate * 2);
         const t2_brch = avgBreachH > 0 ? Math.max(0, 100 - (avgBreachH - 48) / 2) : 100;
         const t2_esc = Math.max(0, 100 - (critOpen + highOpen) * 1.5);
         const tier2 = Math.round(t2_ovd * 0.4 + t2_brch * 0.3 + t2_esc * 0.3);
@@ -791,12 +919,15 @@ router.get('/governance/kpi-overview', async (req, res) => {
         // ═══ TIER 3: OPERATIONAL THROUGHPUT ═══
         const cr7 = parseInt(created7d?.count) || 0;
         const rs7 = parseInt(resolved7d?.count) || 0;
-        const resRate = cr7 > 0 ? Math.round(rs7 / cr7 * 100) : 100;
+        const resRate = cr7 > 0 ? Math.round((rs7 / cr7) * 100) : 100;
         const netBk = parseInt(backlog?.backlog) || 0;
         const avgResH = parseFloat(avgResTime?.avg_hours) || 0;
         const loads = (investigatorLoad || []).map(i => parseInt(i.cases) || 0);
         const avgLd = loads.length > 0 ? loads.reduce((s, v) => s + v, 0) / loads.length : 0;
-        const loadVar = loads.length > 1 ? Math.round(Math.sqrt(loads.reduce((s, v) => s + (v - avgLd) ** 2, 0) / loads.length)) : 0;
+        const loadVar =
+            loads.length > 1
+                ? Math.round(Math.sqrt(loads.reduce((s, v) => s + (v - avgLd) ** 2, 0) / loads.length))
+                : 0;
         const t3_res = Math.min(100, resRate);
         const t3_bk = Math.max(0, 100 - netBk * 0.5);
         const t3_spd = avgResH > 0 ? Math.max(0, 100 - (avgResH - 24) * 1.5) : 100;
@@ -810,11 +941,12 @@ router.get('/governance/kpi-overview', async (req, res) => {
         const tier4 = Math.round(t4_spd * 0.5 + t4_con * 0.5);
 
         // ═══ CRCE COMPOSITE ═══
-        const crce = Math.round(0.30 * tier1 + 0.30 * tier2 + 0.25 * tier3 + 0.15 * tier4);
+        const crce = Math.round(0.3 * tier1 + 0.3 * tier2 + 0.25 * tier3 + 0.15 * tier4);
 
         // CRCE history from weekly data
         const crceHistory = (weeklyFraud || []).map(w => {
-            const sc = parseInt(w.scans) || 0; const fl = parseInt(w.flagged) || 0;
+            const sc = parseInt(w.scans) || 0;
+            const fl = parseInt(w.flagged) || 0;
             const rate = sc > 0 ? fl / sc : 0;
             return { week: w.week, crce: Math.max(0, Math.min(100, Math.round(100 - rate * 200 - overdueRate * 0.5))) };
         });
@@ -825,60 +957,89 @@ router.get('/governance/kpi-overview', async (req, res) => {
         });
 
         res.json({
-            crce, crce_history: crceHistory,
+            crce,
+            crce_history: crceHistory,
             tiers: {
                 risk_exposure: {
-                    score: tier1, weight: 0.30, metrics: {
+                    score: tier1,
+                    weight: 0.3,
+                    metrics: {
                         open_critical_exposure: { value: openExposure, cases: openSerious },
                         concentration_ratio: { value: topRegionPct, threshold: 50 },
                         trend_delta_7d: { value: trendDelta },
                         fraud_density: { value: fraudPer1k },
-                    }
+                    },
                 },
                 sla_control: {
-                    score: tier2, weight: 0.30, metrics: {
+                    score: tier2,
+                    weight: 0.3,
+                    metrics: {
                         overdue_rate: { value: overdueRate, open: openCount, overdue: overdueCount, threshold: 15 },
                         overdue_exposure: { value: overdueExp },
                         avg_breach_time: { value: avgBreachH },
                         critical_open: { value: critOpen, high_open: highOpen },
-                    }
+                    },
                 },
                 throughput: {
-                    score: tier3, weight: 0.25, metrics: {
+                    score: tier3,
+                    weight: 0.25,
+                    metrics: {
                         resolution_rate: { value: resRate, created: cr7, resolved: rs7 },
                         net_backlog: { value: netBk },
                         avg_resolution_time: { value: avgResH },
                         investigator_variance: { value: loadVar, count: loads.length },
-                    }
+                    },
                 },
                 quality: {
-                    score: tier4, weight: 0.15, partial: true, metrics: {
+                    score: tier4,
+                    weight: 0.15,
+                    partial: true,
+                    metrics: {
                         speed_quality: { value: t4_spd },
                         consistency: { value: t4_con },
                         total_resolved: { value: resolvedCnt },
-                    }
+                    },
                 },
             },
             briefing: {
-                critical_alerts: critOpen, high_alerts: highOpen, sla_overdue: overdueCount,
+                critical_alerts: critOpen,
+                high_alerts: highOpen,
+                sla_overdue: overdueCount,
                 flagged_products: productList.filter(p => p.flagged > 3).length,
                 region_spikes: regionFlagged.filter(f => f > 3).length,
-                exposure: openExposure, trend_delta: trendDelta,
-                top_regions: (riskByRegion || []).slice(0, 5).map(r => ({ region: r.region, flagged: parseInt(r.flagged) || 0 })),
+                exposure: openExposure,
+                trend_delta: trendDelta,
+                top_regions: (riskByRegion || [])
+                    .slice(0, 5)
+                    .map(r => ({ region: r.region, flagged: parseInt(r.flagged) || 0 })),
                 top_products: productList.slice(0, 5),
             },
             trends: {
-                fraud_weekly: (weeklyFraud || []).map(w => ({ week: w.week, scans: parseInt(w.scans) || 0, flagged: parseInt(w.flagged) || 0, rate: parseInt(w.scans) > 0 ? Math.round(parseInt(w.flagged) / parseInt(w.scans) * 10000) / 100 : 0 })),
-                alert_weekly: (weeklyAlerts || []).map(w => ({ week: w.week, created: parseInt(w.created) || 0, resolved: parseInt(w.resolved) || 0 })),
+                fraud_weekly: (weeklyFraud || []).map(w => ({
+                    week: w.week,
+                    scans: parseInt(w.scans) || 0,
+                    flagged: parseInt(w.flagged) || 0,
+                    rate:
+                        parseInt(w.scans) > 0 ? Math.round((parseInt(w.flagged) / parseInt(w.scans)) * 10000) / 100 : 0,
+                })),
+                alert_weekly: (weeklyAlerts || []).map(w => ({
+                    week: w.week,
+                    created: parseInt(w.created) || 0,
+                    resolved: parseInt(w.resolved) || 0,
+                })),
             },
-            investigation: productList.map((p, i) => ({ ...p, rank: i + 1, risk_score: Math.round(p.flagged * 3 + p.exposure / 100), severity: p.flagged > 10 ? 'critical' : p.flagged > 5 ? 'high' : p.flagged > 2 ? 'medium' : 'low' })),
+            investigation: productList.map((p, i) => ({
+                ...p,
+                rank: i + 1,
+                risk_score: Math.round(p.flagged * 3 + p.exposure / 100),
+                severity: p.flagged > 10 ? 'critical' : p.flagged > 5 ? 'high' : p.flagged > 2 ? 'medium' : 'low',
+            })),
         });
     } catch (err) {
         console.error('[Governance] CRCE error:', err);
         res.status(500).json({ error: 'Failed to compute CRCE' });
     }
 });
-
 
 // ─── Governance: Reports Data (Company Admin Export) ─────────────────────────
 router.get('/governance/reports-data', async (req, res) => {
@@ -888,29 +1049,41 @@ router.get('/governance/reports-data', async (req, res) => {
         const interval = range === '7d' ? '7 days' : range === '90d' ? '90 days' : '30 days';
 
         const [scanSummary, alertSummary, productSummary, dailySeries] = await Promise.all([
-            db.get(`SELECT COUNT(*) as total,
+            db.get(
+                `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
                     COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
                     COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
                     ROUND(AVG(trust_score)::numeric, 1) as avg_trust
-                    FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '${interval}'`, [tid]),
-            db.all(`SELECT fa.severity, fa.status, COUNT(*) as count
+                    FROM scan_events WHERE org_id = $1 AND scanned_at >= NOW() - INTERVAL '${interval}'`,
+                [tid]
+            ),
+            db.all(
+                `SELECT fa.severity, fa.status, COUNT(*) as count
                     FROM fraud_alerts fa JOIN products p ON p.id = fa.product_id
                     WHERE p.org_id = $1 AND fa.created_at >= NOW() - INTERVAL '${interval}'
-                    GROUP BY fa.severity, fa.status`, [tid]),
-            db.all(`SELECT p.name, p.category, p.status,
+                    GROUP BY fa.severity, fa.status`,
+                [tid]
+            ),
+            db.all(
+                `SELECT p.name, p.category, p.status,
                     COUNT(se.id) as scans,
                     COUNT(se.id) FILTER (WHERE se.result IN ('suspicious','counterfeit')) as flagged
                     FROM products p
                     LEFT JOIN scan_events se ON se.product_id = p.id AND se.scanned_at >= NOW() - INTERVAL '${interval}'
                     WHERE p.org_id = $1
                     GROUP BY p.id, p.name, p.category, p.status
-                    ORDER BY scans DESC LIMIT 1000`, [tid]),
-            db.all(`SELECT scanned_at::date as day, COUNT(*) as scans,
+                    ORDER BY scans DESC LIMIT 1000`,
+                [tid]
+            ),
+            db.all(
+                `SELECT scanned_at::date as day, COUNT(*) as scans,
                     COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged
                     FROM scan_events WHERE org_id = $1
                     AND scanned_at >= NOW() - INTERVAL '${interval}'
-                    GROUP BY scanned_at::date ORDER BY day ASC LIMIT 1000`, [tid]),
+                    GROUP BY scanned_at::date ORDER BY day ASC LIMIT 1000`,
+                [tid]
+            ),
         ]);
 
         res.json({
@@ -922,12 +1095,23 @@ router.get('/governance/reports-data', async (req, res) => {
                 suspicious: parseInt(scanSummary?.suspicious) || 0,
                 avg_trust: parseFloat(scanSummary?.avg_trust) || 0,
             },
-            alert_summary: alertSummary.map(a => ({ severity: a.severity, status: a.status, count: parseInt(a.count) || 0 })),
-            product_summary: productSummary.map(p => ({
-                name: p.name, category: p.category || '—', status: p.status,
-                scans: parseInt(p.scans) || 0, flagged: parseInt(p.flagged) || 0,
+            alert_summary: alertSummary.map(a => ({
+                severity: a.severity,
+                status: a.status,
+                count: parseInt(a.count) || 0,
             })),
-            daily_series: dailySeries.map(d => ({ day: d.day, scans: parseInt(d.scans) || 0, flagged: parseInt(d.flagged) || 0 })),
+            product_summary: productSummary.map(p => ({
+                name: p.name,
+                category: p.category || '—',
+                status: p.status,
+                scans: parseInt(p.scans) || 0,
+                flagged: parseInt(p.flagged) || 0,
+            })),
+            daily_series: dailySeries.map(d => ({
+                day: d.day,
+                scans: parseInt(d.scans) || 0,
+                flagged: parseInt(d.flagged) || 0,
+            })),
         });
     } catch (err) {
         console.error('[Governance] Reports data error:', err);
@@ -983,35 +1167,56 @@ router.get('/governance/audit-summary', async (req, res) => {
         const tid = req.orgId;
 
         const [totalEvents, actionDist, topUsers, dailySeries, recentCritical, loginFails] = await Promise.all([
-            db.get(`SELECT COUNT(*) as total FROM audit_log
-                    WHERE actor_id IN (SELECT id FROM users WHERE org_id = $1)`, [tid]),
-            db.all(`SELECT action, COUNT(*) as count FROM audit_log
+            db.get(
+                `SELECT COUNT(*) as total FROM audit_log
+                    WHERE actor_id IN (SELECT id FROM users WHERE org_id = $1)`,
+                [tid]
+            ),
+            db.all(
+                `SELECT action, COUNT(*) as count FROM audit_log
                     WHERE actor_id IN (SELECT id FROM users WHERE org_id = $1)
-                    GROUP BY action ORDER BY count DESC LIMIT 15`, [tid]),
-            db.all(`SELECT u.username, u.email, COUNT(al.id) as events
+                    GROUP BY action ORDER BY count DESC LIMIT 15`,
+                [tid]
+            ),
+            db.all(
+                `SELECT u.username, u.email, COUNT(al.id) as events
                     FROM audit_log al JOIN users u ON u.id = al.actor_id
                     WHERE u.org_id = $1
                     GROUP BY u.id, u.username, u.email
-                    ORDER BY events DESC LIMIT 10`, [tid]),
-            db.all(`SELECT al.timestamp::date as day, COUNT(*) as events
+                    ORDER BY events DESC LIMIT 10`,
+                [tid]
+            ),
+            db.all(
+                `SELECT al.timestamp::date as day, COUNT(*) as events
                     FROM audit_log al
                     WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
                     AND al.timestamp >= NOW() - INTERVAL '30 days'
-                    GROUP BY al.timestamp::date ORDER BY day ASC LIMIT 1000`, [tid]),
-            db.all(`SELECT al.*, u.username as actor_name FROM audit_log al
+                    GROUP BY al.timestamp::date ORDER BY day ASC LIMIT 1000`,
+                [tid]
+            ),
+            db.all(
+                `SELECT al.*, u.username as actor_name FROM audit_log al
                     LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
                     AND al.action IN ('SELF_ELEVATION_BLOCKED','PERMISSION_CEILING_BLOCKED','HIGH_RISK_ROLE_PENDING','ROLE_ASSIGNED','ROLE_REMOVED')
-                    ORDER BY al.timestamp DESC LIMIT 15`, [tid]),
-            db.get(`SELECT COUNT(*) as total FROM audit_log
+                    ORDER BY al.timestamp DESC LIMIT 15`,
+                [tid]
+            ),
+            db.get(
+                `SELECT COUNT(*) as total FROM audit_log
                     WHERE actor_id IN (SELECT id FROM users WHERE org_id = $1)
                     AND action = 'LOGIN_FAILED'
-                    AND timestamp >= NOW() - INTERVAL '30 days'`, [tid]),
+                    AND timestamp >= NOW() - INTERVAL '30 days'`,
+                [tid]
+            ),
         ]);
 
-        const activeUsers = await db.get(`SELECT COUNT(DISTINCT actor_id) as count FROM audit_log
+        const activeUsers = await db.get(
+            `SELECT COUNT(DISTINCT actor_id) as count FROM audit_log
             WHERE actor_id IN (SELECT id FROM users WHERE org_id = $1)
-            AND timestamp >= NOW() - INTERVAL '7 days'`, [tid]);
+            AND timestamp >= NOW() - INTERVAL '7 days'`,
+            [tid]
+        );
 
         res.json({
             total_events: parseInt(totalEvents?.total) || 0,
@@ -1021,7 +1226,8 @@ router.get('/governance/audit-summary', async (req, res) => {
             top_users: topUsers.map(u => ({ username: u.username, email: u.email, events: parseInt(u.events) || 0 })),
             daily_activity: dailySeries.map(d => ({ day: d.day, events: parseInt(d.events) || 0 })),
             recent_critical: recentCritical.map(e => ({
-                action: e.action, actor: e.actor_name || '—',
+                action: e.action,
+                actor: e.actor_name || '—',
                 details: typeof e.details === 'string' ? e.details : JSON.stringify(e.details || {}),
                 timestamp: e.timestamp,
             })),
@@ -1090,9 +1296,7 @@ router.post('/appoint-admin', async (req, res) => {
         }
 
         // Assign company_admin RBAC role
-        const caRole = await db.get(
-            `SELECT id FROM rbac_roles WHERE org_id = ? AND name = 'company_admin'`, [orgId]
-        );
+        const caRole = await db.get(`SELECT id FROM rbac_roles WHERE org_id = ? AND name = 'company_admin'`, [orgId]);
         if (caRole) {
             await db.run(
                 `INSERT INTO rbac_user_roles (user_id, role_id, assigned_by) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,
@@ -1103,10 +1307,17 @@ router.post('/appoint-admin', async (req, res) => {
         // Audit
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'CA_APPOINTED', 'user', ?, ?)`,
-            [uuidv4(), req.user.id, user.id, JSON.stringify({
-                email, appointed_by: req.user.email, created,
-                severity: 'high',
-            })]
+            [
+                uuidv4(),
+                req.user.id,
+                user.id,
+                JSON.stringify({
+                    email,
+                    appointed_by: req.user.email,
+                    created,
+                    severity: 'high',
+                }),
+            ]
         );
 
         if (typeof db.save === 'function') await db.save();
@@ -1147,24 +1358,77 @@ router.get('/owner/dashboard', requireOrgOwner(), async (req, res) => {
     try {
         const tid = req.orgId;
 
-        const [userCount, roleDistribution, highRiskCount, pendingApprovals,
-            sodWarnings, suspiciousAlerts, carbonMints, riskModelVersion,
-            selfElevationCount, inactivePrivCount, recentCritical] = await Promise.all([
-                db.get(`SELECT COUNT(*) as c FROM users WHERE org_id = $1`, [tid]),
-                db.all(`SELECT role, COUNT(*) as count FROM users WHERE org_id = $1 GROUP BY role ORDER BY count DESC LIMIT 1000`, [tid]),
-                db.get(`SELECT COUNT(*) as c FROM users WHERE org_id = $1 AND role IN ('compliance_officer','risk_officer','risk_committee','security_officer','org_owner')`, [tid]),
-                db.get(`SELECT COUNT(*) as c FROM pending_role_approvals WHERE org_id = $1 AND status = 'pending'`, [tid]).catch(() => ({ c: 0 })),
-                db.all(`SELECT u.email, array_agg(ur.role_id) as roles FROM rbac_user_roles ur JOIN users u ON u.id = ur.user_id WHERE u.org_id = $1 GROUP BY u.email HAVING COUNT(*) > 3 LIMIT 10`, [tid]).catch(() => []),
-                db.all(`SELECT action, details, timestamp FROM audit_log WHERE entity_type IN ('session','security') AND actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY timestamp DESC LIMIT 10`, [tid]).catch(() => []),
-                db.get(`SELECT COUNT(*) as c FROM audit_log WHERE action = 'CARBON_MINT' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) AND timestamp > NOW() - INTERVAL '30 days'`, [tid]).catch(() => ({ c: 0 })),
-                db.get(`SELECT details FROM audit_log WHERE action = 'RISK_MODEL_DEPLOY' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY timestamp DESC LIMIT 1`, [tid]).catch(() => null),
-                // NEW: Self-elevation attempt count (30d)
-                db.get(`SELECT COUNT(*) as c FROM audit_log WHERE action = 'SELF_ELEVATION_BLOCKED' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) AND timestamp > NOW() - INTERVAL '30 days'`, [tid]).catch(() => ({ c: 0 })),
-                // NEW: Inactive privileged accounts count
-                db.get(`SELECT COUNT(*) as c FROM users WHERE org_id = $1 AND role IN ('company_admin','admin','org_owner','security_officer','compliance_officer','risk_officer') AND (last_login IS NULL OR last_login < NOW() - INTERVAL '30 days')`, [tid]).catch(() => ({ c: 0 })),
-                // NEW: Last 5 critical actions for quick view
-                db.all(`SELECT al.action, al.timestamp, u.email as actor_email FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id WHERE al.action IN ('TENANT_FREEZE','FORCE_REAUTH','REVOKE_ALL_SESSIONS','ROLE_SUSPENDED','CA_APPOINTED','ROLE_APPOINTED','HIGH_RISK_ROLE_APPROVED','SELF_ELEVATION_BLOCKED') AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1)) ORDER BY al.timestamp DESC LIMIT 5`, [tid]).catch(() => []),
-            ]);
+        const [
+            userCount,
+            roleDistribution,
+            highRiskCount,
+            pendingApprovals,
+            sodWarnings,
+            suspiciousAlerts,
+            carbonMints,
+            riskModelVersion,
+            selfElevationCount,
+            inactivePrivCount,
+            recentCritical,
+        ] = await Promise.all([
+            db.get(`SELECT COUNT(*) as c FROM users WHERE org_id = $1`, [tid]),
+            db.all(
+                `SELECT role, COUNT(*) as count FROM users WHERE org_id = $1 GROUP BY role ORDER BY count DESC LIMIT 1000`,
+                [tid]
+            ),
+            db.get(
+                `SELECT COUNT(*) as c FROM users WHERE org_id = $1 AND role IN ('compliance_officer','risk_officer','risk_committee','security_officer','org_owner')`,
+                [tid]
+            ),
+            db
+                .get(`SELECT COUNT(*) as c FROM pending_role_approvals WHERE org_id = $1 AND status = 'pending'`, [tid])
+                .catch(() => ({ c: 0 })),
+            db
+                .all(
+                    `SELECT u.email, array_agg(ur.role_id) as roles FROM rbac_user_roles ur JOIN users u ON u.id = ur.user_id WHERE u.org_id = $1 GROUP BY u.email HAVING COUNT(*) > 3 LIMIT 10`,
+                    [tid]
+                )
+                .catch(() => []),
+            db
+                .all(
+                    `SELECT action, details, timestamp FROM audit_log WHERE entity_type IN ('session','security') AND actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY timestamp DESC LIMIT 10`,
+                    [tid]
+                )
+                .catch(() => []),
+            db
+                .get(
+                    `SELECT COUNT(*) as c FROM audit_log WHERE action = 'CARBON_MINT' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) AND timestamp > NOW() - INTERVAL '30 days'`,
+                    [tid]
+                )
+                .catch(() => ({ c: 0 })),
+            db
+                .get(
+                    `SELECT details FROM audit_log WHERE action = 'RISK_MODEL_DEPLOY' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY timestamp DESC LIMIT 1`,
+                    [tid]
+                )
+                .catch(() => null),
+            // NEW: Self-elevation attempt count (30d)
+            db
+                .get(
+                    `SELECT COUNT(*) as c FROM audit_log WHERE action = 'SELF_ELEVATION_BLOCKED' AND actor_id IN (SELECT id FROM users WHERE org_id = $1) AND timestamp > NOW() - INTERVAL '30 days'`,
+                    [tid]
+                )
+                .catch(() => ({ c: 0 })),
+            // NEW: Inactive privileged accounts count
+            db
+                .get(
+                    `SELECT COUNT(*) as c FROM users WHERE org_id = $1 AND role IN ('company_admin','admin','org_owner','security_officer','compliance_officer','risk_officer') AND (last_login IS NULL OR last_login < NOW() - INTERVAL '30 days')`,
+                    [tid]
+                )
+                .catch(() => ({ c: 0 })),
+            // NEW: Last 5 critical actions for quick view
+            db
+                .all(
+                    `SELECT al.action, al.timestamp, u.email as actor_email FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id WHERE al.action IN ('TENANT_FREEZE','FORCE_REAUTH','REVOKE_ALL_SESSIONS','ROLE_SUSPENDED','CA_APPOINTED','ROLE_APPOINTED','HIGH_RISK_ROLE_APPROVED','SELF_ELEVATION_BLOCKED') AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1)) ORDER BY al.timestamp DESC LIMIT 5`,
+                    [tid]
+                )
+                .catch(() => []),
+        ]);
 
         // Compute Privilege Risk Score (0-100)
         const hrCount = highRiskCount?.c || 0;
@@ -1172,13 +1436,16 @@ router.get('/owner/dashboard', requireOrgOwner(), async (req, res) => {
         const sodCount = (sodWarnings || []).length;
         const inactiveCount = inactivePrivCount?.c || 0;
         const selfElevations = selfElevationCount?.c || 0;
-        const privilege_risk_score = Math.min(100, Math.round(
-            (hrCount / total) * 30 +           // High-risk role density
-            sodCount * 15 +                     // Each SoD violation
-            inactiveCount * 10 +                // Inactive privileged accounts
-            selfElevations * 5 +                // Self-elevation attempts
-            (pendingApprovals?.c || 0) * 3      // Unresolved approvals
-        ));
+        const privilege_risk_score = Math.min(
+            100,
+            Math.round(
+                (hrCount / total) * 30 + // High-risk role density
+                    sodCount * 15 + // Each SoD violation
+                    inactiveCount * 10 + // Inactive privileged accounts
+                    selfElevations * 5 + // Self-elevation attempts
+                    (pendingApprovals?.c || 0) * 3 // Unresolved approvals
+            )
+        );
 
         res.json({
             total_users: userCount?.c || 0,
@@ -1189,7 +1456,16 @@ router.get('/owner/dashboard', requireOrgOwner(), async (req, res) => {
             sod_violation_count: sodCount,
             suspicious_alerts: suspiciousAlerts,
             carbon_mints_30d: carbonMints?.c || 0,
-            risk_model_version: (() => { try { const d = riskModelVersion?.details; if (!d) return 'N/A'; const obj = typeof d === 'string' ? JSON.parse(d) : d; return obj.version || 'N/A'; } catch { return 'N/A'; } })(),
+            risk_model_version: (() => {
+                try {
+                    const d = riskModelVersion?.details;
+                    if (!d) return 'N/A';
+                    const obj = typeof d === 'string' ? JSON.parse(d) : d;
+                    return obj.version || 'N/A';
+                } catch {
+                    return 'N/A';
+                }
+            })(),
             // Enhanced fields
             privilege_risk_score,
             inactive_privileged_count: inactiveCount,
@@ -1209,28 +1485,45 @@ router.get('/owner/access-oversight', requireOrgOwner(), async (req, res) => {
 
         const [roleMatrix, escalationHistory, riskAccounts, inactivePrivileged] = await Promise.all([
             // Role matrix (read-only)
-            db.all(`SELECT u.id, u.email, u.username, u.role, u.last_login, u.created_at
-                    FROM users u WHERE u.org_id = $1 ORDER BY u.role, u.email LIMIT 1000`, [tid]),
+            db.all(
+                `SELECT u.id, u.email, u.username, u.role, u.last_login, u.created_at
+                    FROM users u WHERE u.org_id = $1 ORDER BY u.role, u.email LIMIT 1000`,
+                [tid]
+            ),
             // Privilege escalation history (role changes)
-            db.all(`SELECT al.actor_id, al.action, al.entity_id, al.details, al.timestamp,
+            db.all(
+                `SELECT al.actor_id, al.action, al.entity_id, al.details, al.timestamp,
                            u.email as actor_email
                     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action IN ('ROLE_CHANGED','CA_APPOINTED','ROLE_ASSIGNED','SELF_ELEVATION_BLOCKED','PERMISSION_CEILING_BLOCKED')
                     AND al.entity_id IN (SELECT id FROM users WHERE org_id = $1)
-                    ORDER BY al.timestamp DESC LIMIT 50`, [tid]),
+                    ORDER BY al.timestamp DESC LIMIT 50`,
+                [tid]
+            ),
             // Highest-risk accounts (most permissions + roles)
-            db.all(`SELECT u.email, u.role, u.last_login,
+            db.all(
+                `SELECT u.email, u.role, u.last_login,
                            COUNT(DISTINCT ur.role_id) as role_count
                     FROM users u LEFT JOIN rbac_user_roles ur ON ur.user_id = u.id
                     WHERE u.org_id = $1 GROUP BY u.id, u.email, u.role, u.last_login
-                    ORDER BY role_count DESC LIMIT 10`, [tid]),
+                    ORDER BY role_count DESC LIMIT 10`,
+                [tid]
+            ),
             // Inactive privileged accounts (no login in 30+ days with admin-level roles)
-            db.all(`SELECT email, role, last_login FROM users
+            db.all(
+                `SELECT email, role, last_login FROM users
                     WHERE org_id = $1 AND role IN ('company_admin','admin','org_owner','security_officer','compliance_officer','risk_officer')
-                    AND (last_login IS NULL OR last_login < NOW() - INTERVAL '30 days')`, [tid]),
+                    AND (last_login IS NULL OR last_login < NOW() - INTERVAL '30 days')`,
+                [tid]
+            ),
         ]);
 
-        res.json({ role_matrix: roleMatrix, escalation_history: escalationHistory, risk_accounts: riskAccounts, inactive_privileged: inactivePrivileged });
+        res.json({
+            role_matrix: roleMatrix,
+            escalation_history: escalationHistory,
+            risk_accounts: riskAccounts,
+            inactive_privileged: inactivePrivileged,
+        });
     } catch (err) {
         console.error('[OwnerAPI] Access oversight error:', err);
         res.status(500).json({ error: 'Failed to load access oversight' });
@@ -1270,10 +1563,18 @@ router.post('/owner/emergency', requireOrgOwner(), async (req, res) => {
         const tid = req.orgId;
 
         if (!justification || justification.length < 10) {
-            return res.status(400).json({ error: 'Justification is required (min 10 chars)', code: 'JUSTIFICATION_REQUIRED' });
+            return res
+                .status(400)
+                .json({ error: 'Justification is required (min 10 chars)', code: 'JUSTIFICATION_REQUIRED' });
         }
 
-        const VALID_ACTIONS = ['TENANT_FREEZE', 'FORCE_REAUTH', 'REVOKE_ALL_SESSIONS', 'SUSPEND_ROLE', 'EMERGENCY_AUDIT_EXPORT'];
+        const VALID_ACTIONS = [
+            'TENANT_FREEZE',
+            'FORCE_REAUTH',
+            'REVOKE_ALL_SESSIONS',
+            'SUSPEND_ROLE',
+            'EMERGENCY_AUDIT_EXPORT',
+        ];
         if (!VALID_ACTIONS.includes(action)) {
             return res.status(400).json({ error: 'Invalid emergency action', valid_actions: VALID_ACTIONS });
         }
@@ -1281,13 +1582,22 @@ router.post('/owner/emergency', requireOrgOwner(), async (req, res) => {
         let result = {};
 
         if (action === 'TENANT_FREEZE') {
-            await db.run(`UPDATE organizations SET settings = jsonb_set(COALESCE(settings::jsonb, '{}'::jsonb), '{frozen}', 'true') WHERE id = $1`, [tid]);
+            await db.run(
+                `UPDATE organizations SET settings = jsonb_set(COALESCE(settings::jsonb, '{}'::jsonb), '{frozen}', 'true') WHERE id = $1`,
+                [tid]
+            );
             result = { message: 'Org frozen — all write operations blocked', frozen: true };
         } else if (action === 'FORCE_REAUTH') {
-            const revoked = await db.run(`UPDATE sessions SET revoked = true WHERE user_id IN (SELECT id FROM users WHERE org_id = $1) AND revoked = false`, [tid]);
+            const revoked = await db.run(
+                `UPDATE sessions SET revoked = true WHERE user_id IN (SELECT id FROM users WHERE org_id = $1) AND revoked = false`,
+                [tid]
+            );
             result = { message: 'All user sessions invalidated — re-authentication required', sessions_revoked: true };
         } else if (action === 'REVOKE_ALL_SESSIONS') {
-            await db.run(`UPDATE sessions SET revoked = true WHERE user_id IN (SELECT id FROM users WHERE org_id = $1) AND revoked = false`, [tid]);
+            await db.run(
+                `UPDATE sessions SET revoked = true WHERE user_id IN (SELECT id FROM users WHERE org_id = $1) AND revoked = false`,
+                [tid]
+            );
             result = { message: 'All active sessions revoked', sessions_revoked: true };
         } else if (action === 'SUSPEND_ROLE') {
             if (!target_role) return res.status(400).json({ error: 'target_role is required for SUSPEND_ROLE' });
@@ -1295,7 +1605,8 @@ router.post('/owner/emergency', requireOrgOwner(), async (req, res) => {
             result = { message: `All ${target_role} users demoted to viewer`, suspended_role: target_role };
         } else if (action === 'EMERGENCY_AUDIT_EXPORT') {
             const logs = await db.all(
-                `SELECT al.* FROM audit_log al WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY al.timestamp DESC LIMIT 1000`, [tid]
+                `SELECT al.* FROM audit_log al WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1) ORDER BY al.timestamp DESC LIMIT 1000`,
+                [tid]
             );
             result = { message: 'Emergency audit export ready', log_count: logs.length, logs };
         }
@@ -1303,11 +1614,19 @@ router.post('/owner/emergency', requireOrgOwner(), async (req, res) => {
         // Immutable audit log
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES ($1, $2, $3, 'emergency', $4, $5)`,
-            [uuidv4(), req.user.id, action, tid, JSON.stringify({
-                justification, target_role, target_user_id,
-                severity: 'critical',
-                triggered_by: req.user.email,
-            })]
+            [
+                uuidv4(),
+                req.user.id,
+                action,
+                tid,
+                JSON.stringify({
+                    justification,
+                    target_role,
+                    target_user_id,
+                    severity: 'critical',
+                    triggered_by: req.user.email,
+                }),
+            ]
         );
 
         if (typeof db.save === 'function') await db.save();
@@ -1354,15 +1673,27 @@ router.post('/owner/appoint', requireOrgOwner(), async (req, res) => {
 
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES ($1, $2, 'ROLE_APPOINTED', 'user', $3, $4)`,
-            [uuidv4(), req.user.id, user.id, JSON.stringify({
-                email, role: targetRole, appointed_by: req.user.email, created, severity: 'high',
-            })]
+            [
+                uuidv4(),
+                req.user.id,
+                user.id,
+                JSON.stringify({
+                    email,
+                    role: targetRole,
+                    appointed_by: req.user.email,
+                    created,
+                    severity: 'high',
+                }),
+            ]
         );
 
         if (typeof db.save === 'function') await db.save();
 
         res.status(201).json({
-            user_id: user.id, email, role: targetRole, created,
+            user_id: user.id,
+            email,
+            role: targetRole,
+            created,
             temp_password: created ? tempPassword : undefined,
             message: created ? `${targetRole} account created for ${email}` : `${email} promoted to ${targetRole}`,
         });
@@ -1377,47 +1708,72 @@ router.get('/owner/privilege-governance', requireOrgOwner(), async (req, res) =>
     try {
         const tid = req.orgId;
 
-        const [recentRoleAssignments, roleExpirations, selfElevationLog,
-            highRiskUsers, sodConflicts] = await Promise.all([
+        const [recentRoleAssignments, roleExpirations, selfElevationLog, highRiskUsers, sodConflicts] =
+            await Promise.all([
                 // Recent role assignments (who got what, when, by whom)
-                db.all(`SELECT al.action, al.details, al.timestamp,
+                db
+                    .all(
+                        `SELECT al.action, al.details, al.timestamp,
                                u.email as actor_email, target.email as target_email
                         FROM audit_log al
                         LEFT JOIN users u ON u.id = al.actor_id
                         LEFT JOIN users target ON target.id = al.entity_id
                         WHERE al.action IN ('ROLES_ASSIGNED','HIGH_RISK_ROLE_APPROVED','HIGH_RISK_ROLE_REJECTED','HIGH_RISK_ROLE_PENDING','ROLE_APPOINTED','CA_APPOINTED')
                         AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
-                        ORDER BY al.timestamp DESC LIMIT 30`, [tid]).catch(() => []),
+                        ORDER BY al.timestamp DESC LIMIT 30`,
+                        [tid]
+                    )
+                    .catch(() => []),
                 // Role expiration tracking
-                db.all(`SELECT ur.expires_at, r.name as role_name, r.display_name, u.email
+                db
+                    .all(
+                        `SELECT ur.expires_at, r.name as role_name, r.display_name, u.email
                         FROM rbac_user_roles ur
                         JOIN rbac_roles r ON r.id = ur.role_id
                         JOIN users u ON u.id = ur.user_id
                         WHERE r.org_id = $1 AND ur.expires_at IS NOT NULL
-                        ORDER BY ur.expires_at ASC LIMIT 20`, [tid]).catch(() => []),
+                        ORDER BY ur.expires_at ASC LIMIT 20`,
+                        [tid]
+                    )
+                    .catch(() => []),
                 // Self-assignment attempt log
-                db.all(`SELECT al.timestamp, al.details, u.email as actor_email
+                db
+                    .all(
+                        `SELECT al.timestamp, al.details, u.email as actor_email
                         FROM audit_log al
                         LEFT JOIN users u ON u.id = al.actor_id
                         WHERE al.action IN ('SELF_ELEVATION_BLOCKED','PERMISSION_CEILING_BLOCKED')
                         AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
-                        ORDER BY al.timestamp DESC LIMIT 20`, [tid]).catch(() => []),
+                        ORDER BY al.timestamp DESC LIMIT 20`,
+                        [tid]
+                    )
+                    .catch(() => []),
                 // High-risk role mapping
-                db.all(`SELECT u.email, u.username, u.role, u.last_login, u.created_at,
+                db
+                    .all(
+                        `SELECT u.email, u.username, u.role, u.last_login, u.created_at,
                                COUNT(DISTINCT ur.role_id) as role_count
                         FROM users u
                         LEFT JOIN rbac_user_roles ur ON ur.user_id = u.id
                         WHERE u.org_id = $1 AND u.role IN ('compliance_officer','risk_officer','risk_committee','security_officer','org_owner','carbon_officer','company_admin')
                         GROUP BY u.id, u.email, u.username, u.role, u.last_login, u.created_at
-                        ORDER BY role_count DESC LIMIT 1000`, [tid]).catch(() => []),
+                        ORDER BY role_count DESC LIMIT 1000`,
+                        [tid]
+                    )
+                    .catch(() => []),
                 // SoD conflict report
-                db.all(`SELECT u.email, array_agg(ur.role_id) as roles, COUNT(DISTINCT ur.role_id) as role_count
+                db
+                    .all(
+                        `SELECT u.email, array_agg(ur.role_id) as roles, COUNT(DISTINCT ur.role_id) as role_count
                         FROM rbac_user_roles ur
                         JOIN users u ON u.id = ur.user_id
                         WHERE u.org_id = $1
                         GROUP BY u.id, u.email
                         HAVING COUNT(DISTINCT ur.role_id) > 2
-                        ORDER BY role_count DESC LIMIT 15`, [tid]).catch(() => []),
+                        ORDER BY role_count DESC LIMIT 15`,
+                        [tid]
+                    )
+                    .catch(() => []),
             ]);
 
         res.json({
@@ -1440,7 +1796,9 @@ router.get('/owner/risk-monitoring', requireOrgOwner(), async (req, res) => {
 
         const [riskSignals, anomalies, newIpLogins] = await Promise.all([
             // Risk signals: suspicious and security-related events
-            db.all(`SELECT al.id, al.actor_id, al.action, al.entity_type, al.details, al.timestamp,
+            db
+                .all(
+                    `SELECT al.id, al.actor_id, al.action, al.entity_type, al.details, al.timestamp,
                            u.email as actor_email
                     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action IN (
@@ -1448,19 +1806,32 @@ router.get('/owner/risk-monitoring', requireOrgOwner(), async (req, res) => {
                         'NEW_IP_LOGIN','ROLE_EXPIRED','SOD_CONFLICT_DETECTED'
                     )
                     AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
-                    ORDER BY al.timestamp DESC LIMIT 50`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 50`,
+                    [tid]
+                )
+                .catch(() => []),
             // Anomalous patterns: failed logins, unusual hours
-            db.all(`SELECT al.action, al.details, al.timestamp, u.email as actor_email
+            db
+                .all(
+                    `SELECT al.action, al.details, al.timestamp, u.email as actor_email
                     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action IN ('LOGIN_FAILED','SUSPICIOUS_ACCESS','RATE_LIMIT_HIT','SESSION_HIJACK_DETECTED')
                     AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
-                    ORDER BY al.timestamp DESC LIMIT 30`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 30`,
+                    [tid]
+                )
+                .catch(() => []),
             // New IP logins
-            db.all(`SELECT al.details, al.timestamp, u.email as actor_email
+            db
+                .all(
+                    `SELECT al.details, al.timestamp, u.email as actor_email
                     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action = 'NEW_IP_LOGIN'
                     AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
-                    ORDER BY al.timestamp DESC LIMIT 20`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 20`,
+                    [tid]
+                )
+                .catch(() => []),
         ]);
 
         res.json({
@@ -1482,7 +1853,9 @@ router.get('/owner/governance-log', requireOrgOwner(), async (req, res) => {
 
         const [governanceActions, emergencyLog, appointmentHistory] = await Promise.all([
             // All governance-level actions (immutable trail)
-            db.all(`SELECT al.id, al.actor_id, al.action, al.entity_type, al.entity_id, al.details, al.timestamp,
+            db
+                .all(
+                    `SELECT al.id, al.actor_id, al.action, al.entity_type, al.entity_id, al.details, al.timestamp,
                            u.email as actor_email
                     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action IN (
@@ -1493,21 +1866,34 @@ router.get('/owner/governance-log', requireOrgOwner(), async (req, res) => {
                         'CARBON_MINT','ORG_CREATED'
                     )
                     AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
-                    ORDER BY al.timestamp DESC LIMIT 100`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 100`,
+                    [tid]
+                )
+                .catch(() => []),
             // Emergency / break-glass events
-            db.all(`SELECT al.id, al.action, al.details, al.timestamp, u.email as actor_email
+            db
+                .all(
+                    `SELECT al.id, al.action, al.details, al.timestamp, u.email as actor_email
                     FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.entity_type = 'emergency'
                     AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id = $1)
-                    ORDER BY al.timestamp DESC LIMIT 50`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 50`,
+                    [tid]
+                )
+                .catch(() => []),
             // CA/SO appointment history
-            db.all(`SELECT al.action, al.details, al.timestamp, u.email as actor_email, target.email as target_email
+            db
+                .all(
+                    `SELECT al.action, al.details, al.timestamp, u.email as actor_email, target.email as target_email
                     FROM audit_log al
                     LEFT JOIN users u ON u.id = al.actor_id
                     LEFT JOIN users target ON target.id = al.entity_id
                     WHERE al.action IN ('CA_APPOINTED','ROLE_APPOINTED')
                     AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1))
-                    ORDER BY al.timestamp DESC LIMIT 30`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 30`,
+                    [tid]
+                )
+                .catch(() => []),
         ]);
 
         res.json({
@@ -1529,36 +1915,58 @@ router.get('/owner/financial', requireOrgOwner(), async (req, res) => {
 
         const [orgPlan, orgInvoices, orgUsage, orgInfo] = await Promise.all([
             // Active billing plan for any user in this org
-            db.get(`SELECT bp.* FROM billing_plans bp
+            db
+                .get(
+                    `SELECT bp.* FROM billing_plans bp
                     JOIN users u ON u.id = bp.user_id
                     WHERE u.org_id = $1 AND bp.status = 'active'
-                    ORDER BY bp.started_at DESC LIMIT 1`, [tid]).catch(() => null),
+                    ORDER BY bp.started_at DESC LIMIT 1`,
+                    [tid]
+                )
+                .catch(() => null),
             // All invoices for users in this org
-            db.all(`SELECT i.* FROM invoices i
+            db
+                .all(
+                    `SELECT i.* FROM invoices i
                     JOIN users u ON u.id = i.user_id
                     WHERE u.org_id = $1
-                    ORDER BY i.created_at DESC LIMIT 1000`, [tid]).catch(() => []),
+                    ORDER BY i.created_at DESC LIMIT 1000`,
+                    [tid]
+                )
+                .catch(() => []),
             // Usage stats (org-wide)
             Promise.all([
-                db.get(`SELECT COUNT(*) as c FROM scan_events WHERE org_id = $1 AND scanned_at >= date_trunc('month', NOW())`, [tid]).catch(() => ({ c: 0 })),
-                db.get(`SELECT COALESCE(SUM(file_size), 0) as s FROM evidence_items WHERE org_id = $1`, [tid]).catch(() => ({ s: 0 })),
-                db.get(`SELECT COUNT(*) as c FROM audit_log WHERE timestamp >= date_trunc('month', NOW()) AND actor_id IN (SELECT id FROM users WHERE org_id = $1)`, [tid]).catch(() => ({ c: 0 })),
+                db
+                    .get(
+                        `SELECT COUNT(*) as c FROM scan_events WHERE org_id = $1 AND scanned_at >= date_trunc('month', NOW())`,
+                        [tid]
+                    )
+                    .catch(() => ({ c: 0 })),
+                db
+                    .get(`SELECT COALESCE(SUM(file_size), 0) as s FROM evidence_items WHERE org_id = $1`, [tid])
+                    .catch(() => ({ s: 0 })),
+                db
+                    .get(
+                        `SELECT COUNT(*) as c FROM audit_log WHERE timestamp >= date_trunc('month', NOW()) AND actor_id IN (SELECT id FROM users WHERE org_id = $1)`,
+                        [tid]
+                    )
+                    .catch(() => ({ c: 0 })),
             ]),
             // Org info
             db.get(`SELECT name, plan, settings FROM organizations WHERE id = $1`, [tid]).catch(() => null),
         ]);
 
         const plan = orgPlan || {};
-        const isEnterprise = (plan.plan_name === 'enterprise') || (orgInfo?.plan === 'enterprise');
+        const isEnterprise = plan.plan_name === 'enterprise' || orgInfo?.plan === 'enterprise';
 
         // Build usage object
         const [scans, evidence, apiCalls] = orgUsage;
         const usage = {
-            scans: { used: scans?.c || 0, limit: isEnterprise ? '∞' : (plan.scan_limit || 100) },
-            api_calls: { used: apiCalls?.c || 0, limit: isEnterprise ? '∞' : (plan.api_limit || 500) },
+            scans: { used: scans?.c || 0, limit: isEnterprise ? '∞' : plan.scan_limit || 100 },
+            api_calls: { used: apiCalls?.c || 0, limit: isEnterprise ? '∞' : plan.api_limit || 500 },
             storage_mb: {
-                used: Math.round((evidence?.s || 0) / (1024 * 1024) * 100) / 100,
-                limit: isEnterprise ? '∞' : (plan.storage_mb || 50),
+                used: Math.round(((evidence?.s || 0) / (1024 * 1024)) * 100) / 100,
+                limit: isEnterprise ? '∞' : plan.storage_mb || 50,
             },
         };
 
@@ -1595,29 +2003,51 @@ router.get('/owner/compliance', requireOrgOwner(), async (req, res) => {
 
         const [retentionPolicies, complianceRecords, gdprActivity, consentStats, orgSettings] = await Promise.all([
             // Retention policies created by org users (or all if table has no org scope)
-            db.all(`SELECT drp.* FROM data_retention_policies drp
+            db
+                .all(
+                    `SELECT drp.* FROM data_retention_policies drp
                     WHERE drp.created_by IN (SELECT id FROM users WHERE org_id = $1)
-                    ORDER BY drp.created_at DESC LIMIT 1000`, [tid]).catch(() => []),
+                    ORDER BY drp.created_at DESC LIMIT 1000`,
+                    [tid]
+                )
+                .catch(() => []),
             // Compliance records linked to org's products
-            db.all(`SELECT cr.* FROM compliance_records cr
+            db
+                .all(
+                    `SELECT cr.* FROM compliance_records cr
                     WHERE cr.entity_id IN (SELECT id FROM products WHERE org_id = $1)
-                    ORDER BY cr.created_at DESC LIMIT 50`, [tid]).catch(() => []),
+                    ORDER BY cr.created_at DESC LIMIT 50`,
+                    [tid]
+                )
+                .catch(() => []),
             // GDPR activity for org users
-            db.all(`SELECT al.action, al.timestamp, al.details, u.email as actor_email
+            db
+                .all(
+                    `SELECT al.action, al.timestamp, al.details, u.email as actor_email
                     FROM audit_log al
                     LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action IN ('GDPR_EXPORT','GDPR_DATA_EXPORT','GDPR_DELETION','CONSENT_GIVEN','RETENTION_EXECUTED')
                     AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
-                    ORDER BY al.timestamp DESC LIMIT 30`, [tid]).catch(() => []),
+                    ORDER BY al.timestamp DESC LIMIT 30`,
+                    [tid]
+                )
+                .catch(() => []),
             // Consent stats for this org
             Promise.all([
                 db.get(`SELECT COUNT(*) as c FROM users WHERE org_id = $1`, [tid]).catch(() => ({ c: 0 })),
-                db.get(`SELECT COUNT(DISTINCT al.actor_id) as c FROM audit_log al
+                db
+                    .get(
+                        `SELECT COUNT(DISTINCT al.actor_id) as c FROM audit_log al
                         WHERE al.action = 'CONSENT_GIVEN'
-                        AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)`, [tid]).catch(() => ({ c: 0 })),
+                        AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)`,
+                        [tid]
+                    )
+                    .catch(() => ({ c: 0 })),
             ]),
             // Org settings for compliance context
-            db.get(`SELECT name, plan, settings, feature_flags FROM organizations WHERE id = $1`, [tid]).catch(() => null),
+            db
+                .get(`SELECT name, plan, settings, feature_flags FROM organizations WHERE id = $1`, [tid])
+                .catch(() => null),
         ]);
 
         const [totalUsers, consentedUsers] = consentStats;
@@ -1626,13 +2056,56 @@ router.get('/owner/compliance', requireOrgOwner(), async (req, res) => {
         const consentRate = totalU > 0 ? Math.round((consentedU / totalU) * 100) : 0;
 
         // Default retention policies if none exist for this org
-        const retention = retentionPolicies.length > 0 ? retentionPolicies : [
-            { id: 'default-1', table_name: 'audit_log', name: 'Audit Log', retention_days: 730, action: 'archive', is_active: true, is_default: true },
-            { id: 'default-2', table_name: 'scan_events', name: 'Scan Events', retention_days: 365, action: 'archive', is_active: true, is_default: true },
-            { id: 'default-3', table_name: 'fraud_alerts', name: 'Fraud Alerts', retention_days: 365, action: 'archive', is_active: true, is_default: true },
-            { id: 'default-4', table_name: 'usage_metrics', name: 'Usage Metrics', retention_days: 180, action: 'delete', is_active: true, is_default: true },
-            { id: 'default-5', table_name: 'webhook_events', name: 'Webhook Events', retention_days: 90, action: 'delete', is_active: true, is_default: true },
-        ];
+        const retention =
+            retentionPolicies.length > 0
+                ? retentionPolicies
+                : [
+                      {
+                          id: 'default-1',
+                          table_name: 'audit_log',
+                          name: 'Audit Log',
+                          retention_days: 730,
+                          action: 'archive',
+                          is_active: true,
+                          is_default: true,
+                      },
+                      {
+                          id: 'default-2',
+                          table_name: 'scan_events',
+                          name: 'Scan Events',
+                          retention_days: 365,
+                          action: 'archive',
+                          is_active: true,
+                          is_default: true,
+                      },
+                      {
+                          id: 'default-3',
+                          table_name: 'fraud_alerts',
+                          name: 'Fraud Alerts',
+                          retention_days: 365,
+                          action: 'archive',
+                          is_active: true,
+                          is_default: true,
+                      },
+                      {
+                          id: 'default-4',
+                          table_name: 'usage_metrics',
+                          name: 'Usage Metrics',
+                          retention_days: 180,
+                          action: 'delete',
+                          is_active: true,
+                          is_default: true,
+                      },
+                      {
+                          id: 'default-5',
+                          table_name: 'webhook_events',
+                          name: 'Webhook Events',
+                          retention_days: 90,
+                          action: 'delete',
+                          is_active: true,
+                          is_default: true,
+                      },
+                  ];
 
         // Compliance score computation
         const hasRetention = retention.length > 0;
@@ -1641,15 +2114,14 @@ router.get('/owner/compliance', requireOrgOwner(), async (req, res) => {
         const totalRecords = complianceRecords.length;
         const recordScore = totalRecords > 0 ? Math.round((compliantRecords / totalRecords) * 100) : 0;
         const complianceScore = Math.round(
-            (hasRetention ? 30 : 0) +
-            (consentRate > 50 ? 20 : consentRate > 0 ? 10 : 0) +
-            (recordScore * 0.5)
+            (hasRetention ? 30 : 0) + (consentRate > 50 ? 20 : consentRate > 0 ? 10 : 0) + recordScore * 0.5
         );
 
         // Framework breakdown
         const frameworks = {};
         complianceRecords.forEach(r => {
-            if (!frameworks[r.framework]) frameworks[r.framework] = { total: 0, compliant: 0, partial: 0, non_compliant: 0 };
+            if (!frameworks[r.framework])
+                frameworks[r.framework] = { total: 0, compliant: 0, partial: 0, non_compliant: 0 };
             frameworks[r.framework].total++;
             if (r.status === 'compliant') frameworks[r.framework].compliant++;
             else if (r.status === 'partial') frameworks[r.framework].partial++;
@@ -1697,55 +2169,84 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         const tid = req.orgId;
 
         const [
-            productStats, scanStats30d, scanStatsPrev, fraudAlerts,
-            compRecords, supplyEvents, geoBreakdown, categoryBreakdown,
-            orgInfo, dailyScanBreakdown
+            productStats,
+            scanStats30d,
+            scanStatsPrev,
+            fraudAlerts,
+            compRecords,
+            supplyEvents,
+            geoBreakdown,
+            categoryBreakdown,
+            orgInfo,
+            dailyScanBreakdown,
         ] = await Promise.all([
             // Products overview
-            db.get(`SELECT COUNT(*) as total,
+            db.get(
+                `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE status = 'active') as active,
                     ROUND(AVG(trust_score)::numeric, 2) as avg_trust
-                    FROM products WHERE org_id = $1`, [tid]),
+                    FROM products WHERE org_id = $1`,
+                [tid]
+            ),
             // Scan stats (30d)
-            db.get(`SELECT COUNT(*) as total,
+            db.get(
+                `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
                     COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
                     COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
                     ROUND(AVG(trust_score)::numeric, 3) as avg_trust,
                     ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud
                     FROM scan_events WHERE org_id = $1
-                    AND scanned_at >= NOW() - INTERVAL '30 days'`, [tid]),
+                    AND scanned_at >= NOW() - INTERVAL '30 days'`,
+                [tid]
+            ),
             // Scan stats (prev 30d for trend)
-            db.get(`SELECT COUNT(*) as total,
+            db.get(
+                `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE result = 'suspicious' OR result = 'counterfeit') as flagged
                     FROM scan_events WHERE org_id = $1
                     AND scanned_at >= NOW() - INTERVAL '60 days'
-                    AND scanned_at < NOW() - INTERVAL '30 days'`, [tid]),
+                    AND scanned_at < NOW() - INTERVAL '30 days'`,
+                [tid]
+            ),
             // Fraud alerts
-            db.get(`SELECT COUNT(*) as total,
+            db.get(
+                `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE status != 'resolved') as open,
                     COUNT(*) FILTER (WHERE severity = 'critical') as critical,
                     COUNT(*) FILTER (WHERE severity = 'high') as high
-                    FROM fraud_alerts WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                    FROM fraud_alerts WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                [tid]
+            ),
             // Compliance records
-            db.get(`SELECT COUNT(*) as total,
+            db.get(
+                `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE status = 'compliant') as compliant,
                     COUNT(*) FILTER (WHERE status = 'partial') as partial,
                     COUNT(*) FILTER (WHERE status != 'compliant' AND status != 'partial') as non_compliant
-                    FROM compliance_records WHERE entity_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                    FROM compliance_records WHERE entity_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                [tid]
+            ),
             // Supply chain events
-            db.get(`SELECT COUNT(*) as total FROM supply_chain_events
-                    WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+            db.get(
+                `SELECT COUNT(*) as total FROM supply_chain_events
+                    WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                [tid]
+            ),
             // Geographic exposure
-            db.all(`SELECT geo_country, COUNT(*) as scans,
+            db.all(
+                `SELECT geo_country, COUNT(*) as scans,
                     COUNT(*) FILTER (WHERE result = 'suspicious' OR result = 'counterfeit') as flagged,
                     ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud
                     FROM scan_events WHERE org_id = $1
                     AND scanned_at >= NOW() - INTERVAL '30 days'
                     AND geo_country IS NOT NULL
-                    GROUP BY geo_country ORDER BY scans DESC LIMIT 15`, [tid]),
+                    GROUP BY geo_country ORDER BY scans DESC LIMIT 15`,
+                [tid]
+            ),
             // Category exposure
-            db.all(`SELECT p.category, COUNT(DISTINCT p.id) as products,
+            db.all(
+                `SELECT p.category, COUNT(DISTINCT p.id) as products,
                     COUNT(se.id) as scans,
                     COUNT(se.id) FILTER (WHERE se.result = 'suspicious') as suspicious,
                     COUNT(se.id) FILTER (WHERE se.result = 'counterfeit') as counterfeit,
@@ -1754,11 +2255,14 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
                     FROM products p
                     LEFT JOIN scan_events se ON se.product_id = p.id
                         AND se.scanned_at >= NOW() - INTERVAL '30 days'
-                    WHERE p.org_id = $1 GROUP BY p.category ORDER BY scans DESC LIMIT 1000`, [tid]),
+                    WHERE p.org_id = $1 GROUP BY p.category ORDER BY scans DESC LIMIT 1000`,
+                [tid]
+            ),
             // Org info + financial config
             db.get(`SELECT name, plan, settings FROM organizations WHERE id = $1`, [tid]),
             // Daily scan breakdown (for time-decay weighting)
-            db.all(`SELECT DATE(scanned_at) as scan_date,
+            db.all(
+                `SELECT DATE(scanned_at) as scan_date,
                     EXTRACT(DAY FROM NOW() - DATE(scanned_at))::int as days_ago,
                     COUNT(*) as total,
                     COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
@@ -1767,7 +2271,9 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
                     FROM scan_events WHERE org_id = $1
                     AND scanned_at >= NOW() - INTERVAL '30 days'
                     GROUP BY DATE(scanned_at)
-                    ORDER BY scan_date DESC LIMIT 1000`, [tid]),
+                    ORDER BY scan_date DESC LIMIT 1000`,
+                [tid]
+            ),
         ]);
 
         const s30 = scanStats30d || {};
@@ -1785,22 +2291,56 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             ? require('../engines/regulatory-engine/erqf.jsc')
             : require('../engines/regulatory-engine/erqf');
         const erqf = computeRisk({
-            scanStats30d, scanStatsPrev, fraudAlerts, compRecords,
-            geoBreakdown, categoryBreakdown, dailyScanBreakdown,
+            scanStats30d,
+            scanStatsPrev,
+            fraudAlerts,
+            compRecords,
+            geoBreakdown,
+            categoryBreakdown,
+            dailyScanBreakdown,
             financials: orgInfo?.settings?.financials || {},
             buConfig: orgInfo?.settings?.bu_config || null,
         });
 
         // Destructure results for response
-        const { exposure, scenarios, geo_risk: geoRisk, per_bu: perBU, group_aggregated: groupAggregated, _internal } = erqf;
+        const {
+            exposure,
+            scenarios,
+            geo_risk: geoRisk,
+            per_bu: perBU,
+            group_aggregated: groupAggregated,
+            _internal,
+        } = erqf;
         const { tcar_ci_low, tcar_ci_high } = exposure;
-        const { pFraud, confirmationRate, severity, coverageRatio, trustScore, WCRS,
-            enforcementProbability, currentFraudRate, prevFraudRate, volatility,
-            preset, clusterId, crNonCompliant, crPartial, crTotal } = _internal;
-        const { total_capital_at_risk: TCAR, expected_revenue_loss: ERL, expected_brand_impact: EBI,
-            regulatory_exposure: RFE, diversification_adj: diversification,
-            brand_risk_factor: brandRiskFactor, incident_escalation: incidentEscalation,
-            supply_chain_scri: SCRI, scri_cluster_weights: sw, trend_direction: trendDirection } = exposure;
+        const {
+            pFraud,
+            confirmationRate,
+            severity,
+            coverageRatio,
+            trustScore,
+            WCRS,
+            enforcementProbability,
+            currentFraudRate,
+            prevFraudRate,
+            volatility,
+            preset,
+            clusterId,
+            crNonCompliant,
+            crPartial,
+            crTotal,
+        } = _internal;
+        const {
+            total_capital_at_risk: TCAR,
+            expected_revenue_loss: ERL,
+            expected_brand_impact: EBI,
+            regulatory_exposure: RFE,
+            diversification_adj: diversification,
+            brand_risk_factor: brandRiskFactor,
+            incident_escalation: incidentEscalation,
+            supply_chain_scri: SCRI,
+            scri_cluster_weights: sw,
+            trend_direction: trendDirection,
+        } = exposure;
         const cluster = { label: exposure.risk_cluster.label };
 
         const totalScans = parseInt(s30.total) || 0;
@@ -1881,7 +2421,8 @@ router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
         const isFullRange = req.query.range === 'full';
         const weekInterval = isFullRange ? '52 weeks' : '12 weeks';
 
-        const weeks = await db.all(`
+        const weeks = await db.all(
+            `
             SELECT DATE_TRUNC('week', scanned_at)::date as week_start,
                    COUNT(*) as total,
                    COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
@@ -1892,14 +2433,16 @@ router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
             FROM scan_events WHERE org_id = $1
             AND scanned_at >= NOW() - INTERVAL '${weekInterval}'
             GROUP BY DATE_TRUNC('week', scanned_at)
-            ORDER BY week_start ASC LIMIT 1000`, [tid]);
+            ORDER BY week_start ASC LIMIT 1000`,
+            [tid]
+        );
 
         const org = await db.get(`SELECT settings FROM organizations WHERE id = $1`, [tid]);
         const fin = org?.settings?.financials || {};
         const annualRevenue = Number(fin.annual_revenue) || 0;
         const brandValue = Number(fin.brand_value_estimate) || 0;
 
-        const mapRow = (w) => {
+        const mapRow = w => {
             const total = parseInt(w.total) || 1;
             const flagged = (parseInt(w.suspicious) || 0) + (parseInt(w.counterfeit) || 0);
             const pFraud = Math.round((flagged / total) * 10000) / 100;
@@ -1915,7 +2458,10 @@ router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
                 scans: parseInt(w.total),
                 suspicious: parseInt(w.suspicious) || 0,
                 counterfeit: parseInt(w.counterfeit) || 0,
-                pFraud, erl, ebi, tcar,
+                pFraud,
+                erl,
+                ebi,
+                tcar,
                 avg_trust: parseFloat(w.avg_trust) || 0,
             };
         };
@@ -1925,7 +2471,8 @@ router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
 
         // Full range: add daily data + statistical summary
         if (isFullRange) {
-            const daily = await db.all(`
+            const daily = await db.all(
+                `
                 SELECT scanned_at::date as day,
                        COUNT(*) as total,
                        COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
@@ -1935,10 +2482,13 @@ router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
                 FROM scan_events WHERE org_id = $1
                 AND scanned_at >= NOW() - INTERVAL '30 days'
                 GROUP BY scanned_at::date
-                ORDER BY day ASC LIMIT 1000`, [tid]);
+                ORDER BY day ASC LIMIT 1000`,
+                [tid]
+            );
 
             result.daily = daily.map(d => ({
-                day: d.day, scans: parseInt(d.total),
+                day: d.day,
+                scans: parseInt(d.total),
                 suspicious: parseInt(d.suspicious) || 0,
                 counterfeit: parseInt(d.counterfeit) || 0,
                 authentic: parseInt(d.authentic) || 0,
@@ -1947,20 +2497,41 @@ router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
 
             // Statistical summary
             if (trend.length > 0) {
-                const avg = (arr) => arr.reduce((s, v) => s + v, 0) / arr.length;
-                const std = (arr) => { const m = avg(arr); return Math.sqrt(arr.reduce((s, v) => s + (v - m) ** 2, 0) / arr.length); };
+                const avg = arr => arr.reduce((s, v) => s + v, 0) / arr.length;
+                const std = arr => {
+                    const m = avg(arr);
+                    return Math.sqrt(arr.reduce((s, v) => s + (v - m) ** 2, 0) / arr.length);
+                };
                 const tcars = trend.map(t => t.tcar);
                 const pFrauds = trend.map(t => t.pFraud);
                 const scansArr = trend.map(t => t.scans);
                 const trusts = trend.map(t => t.avg_trust);
 
                 result.stats = {
-                    tcar: { avg: Math.round(avg(tcars)), min: Math.min(...tcars), max: Math.max(...tcars), std: Math.round(std(tcars)) },
-                    pFraud: { avg: Math.round(avg(pFrauds) * 100) / 100, min: Math.min(...pFrauds), max: Math.max(...pFrauds) },
-                    scans: { avg: Math.round(avg(scansArr)), min: Math.min(...scansArr), max: Math.max(...scansArr), total: scansArr.reduce((s, v) => s + v, 0) },
-                    trust: { avg: Math.round(avg(trusts) * 10) / 10, min: Math.min(...trusts), max: Math.max(...trusts) },
-                    peak_risk_week: trend.reduce((mx, t) => t.tcar > mx.tcar ? t : mx, trend[0]).week,
-                    lowest_risk_week: trend.reduce((mn, t) => t.tcar < mn.tcar ? t : mn, trend[0]).week,
+                    tcar: {
+                        avg: Math.round(avg(tcars)),
+                        min: Math.min(...tcars),
+                        max: Math.max(...tcars),
+                        std: Math.round(std(tcars)),
+                    },
+                    pFraud: {
+                        avg: Math.round(avg(pFrauds) * 100) / 100,
+                        min: Math.min(...pFrauds),
+                        max: Math.max(...pFrauds),
+                    },
+                    scans: {
+                        avg: Math.round(avg(scansArr)),
+                        min: Math.min(...scansArr),
+                        max: Math.max(...scansArr),
+                        total: scansArr.reduce((s, v) => s + v, 0),
+                    },
+                    trust: {
+                        avg: Math.round(avg(trusts) * 10) / 10,
+                        min: Math.min(...trusts),
+                        max: Math.max(...trusts),
+                    },
+                    peak_risk_week: trend.reduce((mx, t) => (t.tcar > mx.tcar ? t : mx), trend[0]).week,
+                    lowest_risk_week: trend.reduce((mn, t) => (t.tcar < mn.tcar ? t : mn), trend[0]).week,
                 };
             }
         }
@@ -1978,7 +2549,8 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
         const tid = req.orgId;
 
         // Per-country summary (30 days)
-        const countries = await db.all(`
+        const countries = await db.all(
+            `
             SELECT geo_country as country, COUNT(*) as scans,
                    COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged,
                    COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
@@ -1989,15 +2561,19 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
             AND scanned_at >= NOW() - INTERVAL '30 days'
             AND geo_country IS NOT NULL AND geo_country != ''
             GROUP BY geo_country
-            ORDER BY flagged DESC LIMIT 1000`, [tid]);
+            ORDER BY flagged DESC LIMIT 1000`,
+            [tid]
+        );
 
         const result = {
             countries: countries.map(c => {
                 const scans = parseInt(c.scans) || 0;
                 const flagged = parseInt(c.flagged) || 0;
-                const fraudRate = scans > 0 ? Math.round(flagged / scans * 10000) / 100 : 0;
+                const fraudRate = scans > 0 ? Math.round((flagged / scans) * 10000) / 100 : 0;
                 return {
-                    country: c.country, scans, flagged,
+                    country: c.country,
+                    scans,
+                    flagged,
                     counterfeit: parseInt(c.counterfeit) || 0,
                     suspicious: parseInt(c.suspicious) || 0,
                     fraud_rate: fraudRate,
@@ -2010,7 +2586,8 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
         // Per-country weekly trend (12 weeks, top 5 countries)
         const topCountries = result.countries.slice(0, 5).map(c => c.country);
         if (topCountries.length > 0) {
-            const weeklyGeo = await db.all(`
+            const weeklyGeo = await db.all(
+                `
                 SELECT geo_country as country, DATE_TRUNC('week', scanned_at)::date as week,
                        COUNT(*) as scans,
                        COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged
@@ -2018,7 +2595,9 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
                 AND scanned_at >= NOW() - INTERVAL '12 weeks'
                 AND geo_country = ANY($2)
                 GROUP BY geo_country, DATE_TRUNC('week', scanned_at)
-                ORDER BY week ASC LIMIT 1000`, [tid, topCountries]);
+                ORDER BY week ASC LIMIT 1000`,
+                [tid, topCountries]
+            );
 
             const countryTrends = {};
             weeklyGeo.forEach(r => {
@@ -2026,15 +2605,18 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
                 const scans = parseInt(r.scans) || 0;
                 const flagged = parseInt(r.flagged) || 0;
                 countryTrends[r.country].push({
-                    week: r.week, scans, flagged,
-                    fraud_rate: scans > 0 ? Math.round(flagged / scans * 10000) / 100 : 0,
+                    week: r.week,
+                    scans,
+                    flagged,
+                    fraud_rate: scans > 0 ? Math.round((flagged / scans) * 10000) / 100 : 0,
                 });
             });
             result.country_trends = countryTrends;
         }
 
         // Top flagged products by country
-        const topProductsByCountry = await db.all(`
+        const topProductsByCountry = await db.all(
+            `
             SELECT se.geo_country as country, p.name as product, COUNT(*) as flags,
                    COUNT(*) FILTER (WHERE se.result = 'counterfeit') as counterfeit
             FROM scan_events se
@@ -2044,16 +2626,20 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
             AND se.geo_country IS NOT NULL AND se.geo_country != ''
             GROUP BY se.geo_country, p.name
             ORDER BY flags DESC
-            LIMIT 20`, [tid]);
+            LIMIT 20`,
+            [tid]
+        );
 
         result.top_products_by_country = topProductsByCountry.map(r => ({
-            country: r.country, product: r.product,
+            country: r.country,
+            product: r.product,
             flags: parseInt(r.flags) || 0,
             counterfeit: parseInt(r.counterfeit) || 0,
         }));
 
         // Monthly geo progression
-        const monthlyGeo = await db.all(`
+        const monthlyGeo = await db.all(
+            `
             SELECT DATE_TRUNC('month', scanned_at)::date as month,
                    COUNT(DISTINCT geo_country) as countries,
                    COUNT(*) as scans,
@@ -2061,7 +2647,9 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
             FROM scan_events WHERE org_id = $1
             AND geo_country IS NOT NULL AND geo_country != ''
             GROUP BY DATE_TRUNC('month', scanned_at)
-            ORDER BY month ASC LIMIT 1000`, [tid]);
+            ORDER BY month ASC LIMIT 1000`,
+            [tid]
+        );
 
         result.monthly_geo = monthlyGeo.map(m => ({
             month: m.month,
@@ -2084,7 +2672,8 @@ router.get('/owner/ccs/alerts', requireExecutiveAccess(), async (req, res) => {
         const alerts = [];
 
         // 1. Critical fraud alerts (unresolved)
-        const fraudAlerts = await db.all(`
+        const fraudAlerts = await db.all(
+            `
             SELECT fa.id, fa.severity, fa.status, fa.description, fa.created_at,
                    p.name as product_name
             FROM fraud_alerts fa
@@ -2092,7 +2681,9 @@ router.get('/owner/ccs/alerts', requireExecutiveAccess(), async (req, res) => {
             WHERE p.org_id = $1 AND fa.status != 'resolved'
             ORDER BY CASE fa.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 ELSE 3 END,
                      fa.created_at DESC
-            LIMIT 10`, [tid]);
+            LIMIT 10`,
+            [tid]
+        );
 
         for (const fa of fraudAlerts) {
             alerts.push({
@@ -2106,7 +2697,8 @@ router.get('/owner/ccs/alerts', requireExecutiveAccess(), async (req, res) => {
         }
 
         // 2. Fraud spike detection (current week vs avg)
-        const spikeCheck = await db.get(`
+        const spikeCheck = await db.get(
+            `
             SELECT
               (SELECT COUNT(*) FROM scan_events WHERE org_id = $1
                AND result IN ('suspicious','counterfeit')
@@ -2117,7 +2709,9 @@ router.get('/owner/ccs/alerts', requireExecutiveAccess(), async (req, res) => {
                 AND scanned_at >= NOW() - INTERVAL '56 days'
                 AND scanned_at < NOW() - INTERVAL '7 days'
                 GROUP BY DATE_TRUNC('week', scanned_at)
-              ) sub) as weekly_avg`, [tid]);
+              ) sub) as weekly_avg`,
+            [tid]
+        );
 
         const currentWeekFlagged = parseInt(spikeCheck?.current_week) || 0;
         const weeklyAvg = parseFloat(spikeCheck?.weekly_avg) || 0;
@@ -2133,7 +2727,8 @@ router.get('/owner/ccs/alerts', requireExecutiveAccess(), async (req, res) => {
         }
 
         // 3. Trust score drops (products with significant trust decline)
-        const trustDrops = await db.all(`
+        const trustDrops = await db.all(
+            `
             SELECT sub.name, sub.trust_score, sub.recent_trust, sub.prev_trust
             FROM (
                 SELECT p.name, p.trust_score,
@@ -2148,7 +2743,9 @@ router.get('/owner/ccs/alerts', requireExecutiveAccess(), async (req, res) => {
             ) sub
             WHERE sub.prev_trust IS NOT NULL AND sub.recent_trust IS NOT NULL
               AND (sub.prev_trust - sub.recent_trust) > 10
-            LIMIT 5`, [tid]);
+            LIMIT 5`,
+            [tid]
+        );
 
         for (const td of trustDrops) {
             const drop = Math.round((parseFloat(td.prev_trust) || 0) - (parseFloat(td.recent_trust) || 0));
@@ -2181,16 +2778,23 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
         const tid = req.orgId;
 
         const [scanTotals, counterfeitsAll, firstDetection, productCount] = await Promise.all([
-            db.get(`SELECT COUNT(*) as total,
+            db.get(
+                `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
                     COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
                     COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious
-                    FROM scan_events WHERE org_id = $1`, [tid]),
-            db.get(`SELECT COUNT(*) as total,
+                    FROM scan_events WHERE org_id = $1`,
+                [tid]
+            ),
+            db.get(
+                `SELECT COUNT(*) as total,
                     MIN(scanned_at) as first_at, MAX(scanned_at) as last_at
                     FROM scan_events WHERE org_id = $1
-                    AND result = 'counterfeit'`, [tid]),
-            db.get(`SELECT ROUND(AVG(EXTRACT(EPOCH FROM (
+                    AND result = 'counterfeit'`,
+                [tid]
+            ),
+            db.get(
+                `SELECT ROUND(AVG(EXTRACT(EPOCH FROM (
                         (SELECT MIN(se.scanned_at) FROM scan_events se
                          WHERE se.product_id = p.id AND se.result IN ('suspicious','counterfeit'))
                         - p.created_at
@@ -2198,7 +2802,9 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
                     FROM products p WHERE p.org_id = $1
                     AND EXISTS (SELECT 1 FROM scan_events se
                                 WHERE se.product_id = p.id
-                                AND se.result IN ('suspicious','counterfeit'))`, [tid]),
+                                AND se.result IN ('suspicious','counterfeit'))`,
+                [tid]
+            ),
             db.get(`SELECT COUNT(*) as total FROM products WHERE org_id = $1`, [tid]),
         ]);
 
@@ -2267,7 +2873,8 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
         // Full detail: monthly progression + category breakdown
         if (req.query.detail === 'full') {
             // Monthly ROI progression
-            const monthly = await db.all(`
+            const monthly = await db.all(
+                `
                 SELECT DATE_TRUNC('month', scanned_at)::date as month,
                        COUNT(*) as total,
                        COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
@@ -2275,7 +2882,9 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
                        COUNT(*) FILTER (WHERE result = 'authentic') as authentic
                 FROM scan_events WHERE org_id = $1
                 GROUP BY DATE_TRUNC('month', scanned_at)
-                ORDER BY month ASC LIMIT 1000`, [tid]);
+                ORDER BY month ASC LIMIT 1000`,
+                [tid]
+            );
 
             result.monthly = monthly.map(m => {
                 const mScans = parseInt(m.total) || 0;
@@ -2294,17 +2903,21 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
                     detection_value: mDetectionVal,
                     cost_savings: mCostSave,
                     total_value: mTotal,
-                    roi: platformCost > 0 ? Math.round(mTotal / platformCost * 120 * 10) / 10 : 0,
+                    roi: platformCost > 0 ? Math.round((mTotal / platformCost) * 120 * 10) / 10 : 0,
                     cumulative_value: 0, // filled below
                 };
             });
 
             // Cumulative value
             let cum = 0;
-            result.monthly.forEach(m => { cum += m.total_value; m.cumulative_value = cum; });
+            result.monthly.forEach(m => {
+                cum += m.total_value;
+                m.cumulative_value = cum;
+            });
 
             // Per-category detection breakdown
-            const catBreakdown = await db.all(`
+            const catBreakdown = await db.all(
+                `
                 SELECT p.category, COUNT(*) as total,
                        COUNT(*) FILTER (WHERE se.result = 'counterfeit') as counterfeit,
                        COUNT(*) FILTER (WHERE se.result = 'suspicious') as suspicious
@@ -2312,7 +2925,9 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
                 JOIN products p ON p.id = se.product_id
                 WHERE p.org_id = $1 AND se.result IN ('counterfeit','suspicious')
                 GROUP BY p.category
-                ORDER BY counterfeit DESC LIMIT 1000`, [tid]);
+                ORDER BY counterfeit DESC LIMIT 1000`,
+                [tid]
+            );
 
             result.categories = catBreakdown.map(c => ({
                 category: c.category || 'Uncategorized',
@@ -2323,7 +2938,8 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
             }));
 
             // Top products by detection value
-            const topProducts = await db.all(`
+            const topProducts = await db.all(
+                `
                 SELECT p.name, p.category, COUNT(*) as detections,
                        COUNT(*) FILTER (WHERE se.result = 'counterfeit') as counterfeit
                 FROM scan_events se
@@ -2331,7 +2947,9 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
                 WHERE p.org_id = $1 AND se.result IN ('counterfeit','suspicious')
                 GROUP BY p.id, p.name, p.category
                 ORDER BY counterfeit DESC
-                LIMIT 10`, [tid]);
+                LIMIT 10`,
+                [tid]
+            );
 
             result.top_products = topProducts.map(p => ({
                 name: p.name,
@@ -2356,7 +2974,10 @@ router.get('/owner/ccs/bu-config', requireExecutiveAccess(), async (req, res) =>
         const org = await db.get(`SELECT settings FROM organizations WHERE id = $1`, [tid]);
         const buConfig = org?.settings?.bu_config || null;
         // Also return available categories for mapping
-        const categories = await db.all(`SELECT DISTINCT category FROM products WHERE org_id = $1 AND category IS NOT NULL ORDER BY category LIMIT 1000`, [tid]);
+        const categories = await db.all(
+            `SELECT DISTINCT category FROM products WHERE org_id = $1 AND category IS NOT NULL ORDER BY category LIMIT 1000`,
+            [tid]
+        );
         res.json({
             bu_config: buConfig,
             available_categories: categories.map(c => c.category),
@@ -2392,12 +3013,16 @@ router.patch('/owner/ccs/bu-config', requireExecutiveAccess(), async (req, res) 
             updated_by: req.user.id,
         };
 
-        await db.run(`UPDATE organizations SET settings = $1, updated_at = NOW() WHERE id = $2`,
-            [JSON.stringify(settings), tid]);
+        await db.run(`UPDATE organizations SET settings = $1, updated_at = NOW() WHERE id = $2`, [
+            JSON.stringify(settings),
+            tid,
+        ]);
 
-        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
+        await db.run(
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
                       VALUES ($1, $2, 'BU_CONFIG_UPDATED', 'organization', $3, $4, NOW())`,
-            [require('uuid').v4(), req.user.id, tid, JSON.stringify(settings.bu_config)]);
+            [require('uuid').v4(), req.user.id, tid, JSON.stringify(settings.bu_config)]
+        );
 
         res.json({ success: true, bu_config: settings.bu_config });
     } catch (err) {
@@ -2411,43 +3036,61 @@ router.get('/owner/ccs/decisions', requireExecutiveAccess(), async (req, res) =>
     try {
         const tid = req.orgId;
 
-        const [criticalAlerts, complianceDeadlines, pendingApprovals, recentAnomalies, recentAudit] = await Promise.all([
-            // Critical/high fraud alerts (unresolved)
-            db.all(`SELECT fa.id, fa.alert_type, fa.severity, fa.description, fa.status, fa.created_at,
+        const [criticalAlerts, complianceDeadlines, pendingApprovals, recentAnomalies, recentAudit] = await Promise.all(
+            [
+                // Critical/high fraud alerts (unresolved)
+                db.all(
+                    `SELECT fa.id, fa.alert_type, fa.severity, fa.description, fa.status, fa.created_at,
                            p.name as product_name, p.category
                     FROM fraud_alerts fa
                     JOIN products p ON p.id = fa.product_id
                     WHERE p.org_id = $1 AND fa.status != 'resolved'
                     ORDER BY CASE fa.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
-                             fa.created_at DESC LIMIT 10`, [tid]),
-            // Compliance records expiring within 60 days
-            db.all(`SELECT cr.framework, cr.requirement, cr.status, cr.next_review, cr.checked_by,
+                             fa.created_at DESC LIMIT 10`,
+                    [tid]
+                ),
+                // Compliance records expiring within 60 days
+                db.all(
+                    `SELECT cr.framework, cr.requirement, cr.status, cr.next_review, cr.checked_by,
                            p.name as product_name
                     FROM compliance_records cr
                     JOIN products p ON p.id = cr.entity_id
                     WHERE p.org_id = $1 AND cr.next_review IS NOT NULL
                     AND cr.next_review <= NOW() + INTERVAL '60 days'
-                    ORDER BY cr.next_review ASC LIMIT 10`, [tid]),
-            // Pending role/governance approvals
-            db.all(`SELECT al.action, al.details, al.timestamp, u.email as actor_email
+                    ORDER BY cr.next_review ASC LIMIT 10`,
+                    [tid]
+                ),
+                // Pending role/governance approvals
+                db.all(
+                    `SELECT al.action, al.details, al.timestamp, u.email as actor_email
                     FROM audit_log al
                     LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.action IN ('ROLE_CHANGE_REQUESTED','APPROVAL_PENDING','CA_APPOINTMENT_REQUESTED')
                     AND al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
-                    ORDER BY al.timestamp DESC LIMIT 5`, [tid]),
-            // Recent anomalies
-            db.all(`SELECT ad.anomaly_type, ad.severity, ad.score, ad.description, ad.detected_at, ad.status
+                    ORDER BY al.timestamp DESC LIMIT 5`,
+                    [tid]
+                ),
+                // Recent anomalies
+                db
+                    .all(
+                        `SELECT ad.anomaly_type, ad.severity, ad.score, ad.description, ad.detected_at, ad.status
                     FROM anomaly_detections ad
                     WHERE ad.status != 'resolved'
-                    ORDER BY ad.detected_at DESC LIMIT 5`).catch(() => []),
-            // Recent critical audit actions
-            db.all(`SELECT al.action, al.entity_type, al.details, al.timestamp, u.email
+                    ORDER BY ad.detected_at DESC LIMIT 5`
+                    )
+                    .catch(() => []),
+                // Recent critical audit actions
+                db.all(
+                    `SELECT al.action, al.entity_type, al.details, al.timestamp, u.email
                     FROM audit_log al
                     LEFT JOIN users u ON u.id = al.actor_id
                     WHERE al.actor_id IN (SELECT id FROM users WHERE org_id = $1)
                     AND al.action IN ('EMERGENCY_ACTION','LOCKOUT','ROLE_CHANGED','SELF_ELEVATION_BLOCKED','MFA_DISABLED')
-                    ORDER BY al.timestamp DESC LIMIT 5`, [tid]),
-        ]);
+                    ORDER BY al.timestamp DESC LIMIT 5`,
+                    [tid]
+                ),
+            ]
+        );
 
         // Classify decisions
         const strategic_alerts = (criticalAlerts || []).map(a => ({
@@ -2470,13 +3113,18 @@ router.get('/owner/ccs/decisions', requireExecutiveAccess(), async (req, res) =>
                 status: c.status,
                 days_until_review: daysUntil,
                 urgency: daysUntil <= 14 ? 'critical' : daysUntil <= 30 ? 'high' : 'medium',
-                action: daysUntil <= 14 ? `URGENT: ${c.framework} review due in ${daysUntil} days` : `Schedule ${c.framework} review (${daysUntil} days)`,
+                action:
+                    daysUntil <= 14
+                        ? `URGENT: ${c.framework} review due in ${daysUntil} days`
+                        : `Schedule ${c.framework} review (${daysUntil} days)`,
             };
         });
 
         const governance_actions = (pendingApprovals || []).map(a => {
             let details = {};
-            try { details = typeof a.details === 'string' ? JSON.parse(a.details) : (a.details || {}); } catch (_) { }
+            try {
+                details = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {};
+            } catch (_) {}
             return { action: a.action, actor: a.actor_email, time: a.created_at, details };
         });
 
@@ -2487,7 +3135,9 @@ router.get('/owner/ccs/decisions', requireExecutiveAccess(), async (req, res) =>
             anomalies: recentAnomalies || [],
             security_events: (recentAudit || []).map(a => {
                 let details = {};
-                try { details = typeof a.details === 'string' ? JSON.parse(a.details) : (a.details || {}); } catch (_) { }
+                try {
+                    details = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {};
+                } catch (_) {}
                 return { action: a.action, actor: a.email, time: a.created_at, details };
             }),
             summary: {
@@ -2508,39 +3158,61 @@ router.get('/owner/ccs/valuation', requireExecutiveAccess(), async (req, res) =>
     try {
         const tid = req.orgId;
 
-        const [orgInfo, compStats, scanStats, fraudStats, userStats, retentionStats, consentStats, invoiceStats] = await Promise.all([
-            db.get(`SELECT name, plan, settings FROM organizations WHERE id = $1`, [tid]),
-            // Compliance maturity
-            db.get(`SELECT COUNT(*) as total,
+        const [orgInfo, compStats, scanStats, fraudStats, userStats, retentionStats, consentStats, invoiceStats] =
+            await Promise.all([
+                db.get(`SELECT name, plan, settings FROM organizations WHERE id = $1`, [tid]),
+                // Compliance maturity
+                db.get(
+                    `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE status = 'compliant') as compliant
-                    FROM compliance_records WHERE entity_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
-            // Scan integrity
-            db.get(`SELECT COUNT(*) as total,
+                    FROM compliance_records WHERE entity_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                    [tid]
+                ),
+                // Scan integrity
+                db.get(
+                    `SELECT COUNT(*) as total,
                     ROUND(AVG(trust_score)::numeric, 3) as avg_trust,
                     COUNT(*) FILTER (WHERE result = 'authentic') as authentic
                     FROM scan_events WHERE org_id = $1
-                    AND scanned_at >= NOW() - INTERVAL '90 days'`, [tid]),
-            // Fraud control
-            db.get(`SELECT COUNT(*) as total,
+                    AND scanned_at >= NOW() - INTERVAL '90 days'`,
+                    [tid]
+                ),
+                // Fraud control
+                db.get(
+                    `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE status = 'resolved') as resolved
-                    FROM fraud_alerts WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
-            // User governance
-            db.get(`SELECT COUNT(*) as total,
+                    FROM fraud_alerts WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                    [tid]
+                ),
+                // User governance
+                db.get(
+                    `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE mfa_enabled = true) as mfa_enabled
-                    FROM users WHERE org_id = $1`, [tid]),
-            // Retention policies
-            db.get(`SELECT COUNT(*) as c FROM data_retention_policies
-                    WHERE created_by IN (SELECT id FROM users WHERE org_id = $1)`, [tid]),
-            // Consent
-            db.get(`SELECT COUNT(DISTINCT actor_id) as c FROM audit_log
+                    FROM users WHERE org_id = $1`,
+                    [tid]
+                ),
+                // Retention policies
+                db.get(
+                    `SELECT COUNT(*) as c FROM data_retention_policies
+                    WHERE created_by IN (SELECT id FROM users WHERE org_id = $1)`,
+                    [tid]
+                ),
+                // Consent
+                db.get(
+                    `SELECT COUNT(DISTINCT actor_id) as c FROM audit_log
                     WHERE action = 'CONSENT_GIVEN'
-                    AND actor_id IN (SELECT id FROM users WHERE org_id = $1)`, [tid]),
-            // Revenue (actual from invoices)
-            db.get(`SELECT COALESCE(SUM(amount), 0) as total_paid,
+                    AND actor_id IN (SELECT id FROM users WHERE org_id = $1)`,
+                    [tid]
+                ),
+                // Revenue (actual from invoices)
+                db.get(
+                    `SELECT COALESCE(SUM(amount), 0) as total_paid,
                     COUNT(*) as invoice_count
                     FROM invoices WHERE user_id IN (SELECT id FROM users WHERE org_id = $1)
-                    AND status = 'paid'`, [tid]),
-        ]);
+                    AND status = 'paid'`,
+                    [tid]
+                ),
+            ]);
 
         const fin = orgInfo?.settings?.financials || {};
         const annualRevenue = fin.annual_revenue || 0;
@@ -2549,20 +3221,20 @@ router.get('/owner/ccs/valuation', requireExecutiveAccess(), async (req, res) =>
         const brandValue = fin.brand_value_estimate || 0;
 
         // Governance Maturity Score (0-100)
-        const compScore = compStats?.total > 0 ? (parseInt(compStats.compliant) / parseInt(compStats.total)) : 0;
-        const scanIntegrity = scanStats?.total > 0 ? (parseInt(scanStats.authentic) / parseInt(scanStats.total)) : 0;
-        const fraudResRate = fraudStats?.total > 0 ? (parseInt(fraudStats.resolved) / parseInt(fraudStats.total)) : 0;
-        const mfaRate = userStats?.total > 0 ? (parseInt(userStats.mfa_enabled) / parseInt(userStats.total)) : 0;
+        const compScore = compStats?.total > 0 ? parseInt(compStats.compliant) / parseInt(compStats.total) : 0;
+        const scanIntegrity = scanStats?.total > 0 ? parseInt(scanStats.authentic) / parseInt(scanStats.total) : 0;
+        const fraudResRate = fraudStats?.total > 0 ? parseInt(fraudStats.resolved) / parseInt(fraudStats.total) : 0;
+        const mfaRate = userStats?.total > 0 ? parseInt(userStats.mfa_enabled) / parseInt(userStats.total) : 0;
         const hasRetention = (parseInt(retentionStats?.c) || 0) > 0 ? 1 : 0;
-        const consentRate = userStats?.total > 0 ? (parseInt(consentStats?.c || 0) / parseInt(userStats.total)) : 0;
+        const consentRate = userStats?.total > 0 ? parseInt(consentStats?.c || 0) / parseInt(userStats.total) : 0;
 
         const governanceScore = Math.round(
-            compScore * 25 +        // Compliance (25%)
-            scanIntegrity * 20 +     // Scan integrity (20%)
-            fraudResRate * 15 +      // Fraud resolution (15%)
-            mfaRate * 15 +           // MFA adoption (15%)
-            hasRetention * 10 +      // Data governance (10%)
-            consentRate * 15          // GDPR consent (15%)
+            compScore * 25 + // Compliance (25%)
+                scanIntegrity * 20 + // Scan integrity (20%)
+                fraudResRate * 15 + // Fraud resolution (15%)
+                mfaRate * 15 + // MFA adoption (15%)
+                hasRetention * 10 + // Data governance (10%)
+                consentRate * 15 // GDPR consent (15%)
         );
 
         // Governance Premium Multiplier (0.8x to 1.2x based on governance score)
@@ -2575,12 +3247,16 @@ router.get('/owner/ccs/valuation', requireExecutiveAccess(), async (req, res) =>
         const evUplift = evWithGovernance - evBaseline;
 
         // Risk-Adjusted Revenue
-        const fraudRate = scanStats?.total > 0 ? (parseInt(scanStats.total) - parseInt(scanStats.authentic)) / parseInt(scanStats.total) : 0;
+        const fraudRate =
+            scanStats?.total > 0
+                ? (parseInt(scanStats.total) - parseInt(scanStats.authentic)) / parseInt(scanStats.total)
+                : 0;
         const rar = Math.round(annualRevenue * (1 - fraudRate * 0.3)); // 30% impact severity
 
         // Capital Efficiency (if they invest in TrustChecker platform)
         const platformCost = parseFloat(invoiceStats?.total_paid || 0);
-        const capitalEfficiency = platformCost > 0 && evUplift > 0 ? Math.round((evUplift / platformCost) * 100) / 100 : 0;
+        const capitalEfficiency =
+            platformCost > 0 && evUplift > 0 ? Math.round((evUplift / platformCost) * 100) / 100 : 0;
 
         res.json({
             financial_inputs: {
@@ -2614,7 +3290,8 @@ router.get('/owner/ccs/valuation', requireExecutiveAccess(), async (req, res) =>
                 platform_cost: platformCost,
                 ev_uplift: evUplift,
                 roi: capitalEfficiency,
-                payback_months: platformCost > 0 && evUplift > 0 ? Math.round((platformCost / (evUplift / 12)) * 10) / 10 : 0,
+                payback_months:
+                    platformCost > 0 && evUplift > 0 ? Math.round((platformCost / (evUplift / 12)) * 10) / 10 : 0,
             },
             org_plan: orgInfo?.plan || 'free',
         });
@@ -2629,9 +3306,18 @@ router.patch('/owner/org-financials', requireExecutiveAccess(), async (req, res)
     try {
         const tid = req.orgId;
         const {
-            annual_revenue, ebitda, ev_multiple, brand_value_estimate, risk_tolerance,
-            industry_type, estimated_units_ytd, manual_cost_per_check, recovery_rate,
-            custom_beta, custom_k, custom_avg_fine
+            annual_revenue,
+            ebitda,
+            ev_multiple,
+            brand_value_estimate,
+            risk_tolerance,
+            industry_type,
+            estimated_units_ytd,
+            manual_cost_per_check,
+            recovery_rate,
+            custom_beta,
+            custom_k,
+            custom_avg_fine,
         } = req.body;
 
         // Get current settings
@@ -2642,31 +3328,38 @@ router.patch('/owner/org-financials', requireExecutiveAccess(), async (req, res)
         // Merge financials (including ERQF fields)
         settings.financials = {
             ...prev,
-            annual_revenue: annual_revenue !== undefined ? Number(annual_revenue) : (prev.annual_revenue || 0),
-            ebitda: ebitda !== undefined ? Number(ebitda) : (prev.ebitda || 0),
-            ev_multiple: ev_multiple !== undefined ? Number(ev_multiple) : (prev.ev_multiple || 8),
-            brand_value_estimate: brand_value_estimate !== undefined ? Number(brand_value_estimate) : (prev.brand_value_estimate || 0),
+            annual_revenue: annual_revenue !== undefined ? Number(annual_revenue) : prev.annual_revenue || 0,
+            ebitda: ebitda !== undefined ? Number(ebitda) : prev.ebitda || 0,
+            ev_multiple: ev_multiple !== undefined ? Number(ev_multiple) : prev.ev_multiple || 8,
+            brand_value_estimate:
+                brand_value_estimate !== undefined ? Number(brand_value_estimate) : prev.brand_value_estimate || 0,
             risk_tolerance: risk_tolerance || prev.risk_tolerance || 'moderate',
             // ERQF fields
             industry_type: industry_type || prev.industry_type || 'pharmaceutical',
-            estimated_units_ytd: estimated_units_ytd !== undefined ? Number(estimated_units_ytd) : (prev.estimated_units_ytd || 0),
-            manual_cost_per_check: manual_cost_per_check !== undefined ? Number(manual_cost_per_check) : (prev.manual_cost_per_check || 5),
-            recovery_rate: recovery_rate !== undefined ? Number(recovery_rate) : (prev.recovery_rate || 0.2),
+            estimated_units_ytd:
+                estimated_units_ytd !== undefined ? Number(estimated_units_ytd) : prev.estimated_units_ytd || 0,
+            manual_cost_per_check:
+                manual_cost_per_check !== undefined ? Number(manual_cost_per_check) : prev.manual_cost_per_check || 5,
+            recovery_rate: recovery_rate !== undefined ? Number(recovery_rate) : prev.recovery_rate || 0.2,
             // Custom ERQF overrides (0 = use industry default)
-            custom_beta: custom_beta !== undefined ? Number(custom_beta) : (prev.custom_beta || 0),
-            custom_k: custom_k !== undefined ? Number(custom_k) : (prev.custom_k || 0),
-            custom_avg_fine: custom_avg_fine !== undefined ? Number(custom_avg_fine) : (prev.custom_avg_fine || 0),
+            custom_beta: custom_beta !== undefined ? Number(custom_beta) : prev.custom_beta || 0,
+            custom_k: custom_k !== undefined ? Number(custom_k) : prev.custom_k || 0,
+            custom_avg_fine: custom_avg_fine !== undefined ? Number(custom_avg_fine) : prev.custom_avg_fine || 0,
             updated_at: new Date().toISOString(),
             updated_by: req.user.id,
         };
 
-        await db.run(`UPDATE organizations SET settings = $1, updated_at = NOW() WHERE id = $2`,
-            [JSON.stringify(settings), tid]);
+        await db.run(`UPDATE organizations SET settings = $1, updated_at = NOW() WHERE id = $2`, [
+            JSON.stringify(settings),
+            tid,
+        ]);
 
         // Audit log
-        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
+        await db.run(
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
                       VALUES ($1, $2, 'FINANCIAL_CONFIG_UPDATED', 'organization', $3, $4, NOW())`,
-            [require('uuid').v4(), req.user.id, tid, JSON.stringify(settings.financials)]);
+            [require('uuid').v4(), req.user.id, tid, JSON.stringify(settings.financials)]
+        );
 
         res.json({ success: true, financials: settings.financials });
     } catch (err) {
@@ -2684,61 +3377,93 @@ router.get('/owner/ccs/market', requireExecutiveAccess(), async (req, res) => {
 
         const [scanTotals, repeatScans, channelData, geoData, leakAlerts, partnerStats] = await Promise.all([
             // First-scan vs total
-            db.get(`SELECT COUNT(*) as total,
+            db
+                .get(
+                    `SELECT COUNT(*) as total,
                     COUNT(DISTINCT device_fingerprint) as unique_devices
                     FROM scan_events WHERE org_id = $1
-                    AND scanned_at >= NOW() - INTERVAL '30 days'`, [tid])
+                    AND scanned_at >= NOW() - INTERVAL '30 days'`,
+                    [tid]
+                )
                 .catch(() => ({ total: 0, unique_devices: 0 })),
             // Repeat scans (same device)
-            db.get(`SELECT COUNT(*) as repeat_count FROM (
+            db
+                .get(
+                    `SELECT COUNT(*) as repeat_count FROM (
                     SELECT device_fingerprint, COUNT(*) as cnt
                     FROM scan_events WHERE org_id = $1
                     AND scanned_at >= NOW() - INTERVAL '30 days'
                     AND device_fingerprint IS NOT NULL AND device_fingerprint != ''
                     GROUP BY device_fingerprint HAVING COUNT(*) > 1
-                    ) sub`, [tid])
+                    ) sub`,
+                    [tid]
+                )
                 .catch(() => ({ repeat_count: 0 })),
             // Channel compliance by partner type
-            db.all(`SELECT p.type as channel, COUNT(p.id) as partners,
+            db
+                .all(
+                    `SELECT p.type as channel, COUNT(p.id) as partners,
                     ROUND(AVG(p.trust_score)::numeric, 1) as avg_trust,
                     COUNT(p.id) FILTER (WHERE p.kyc_status = 'verified') as verified,
                     ROUND(100.0 * COUNT(p.id) FILTER (WHERE p.kyc_status = 'verified') / NULLIF(COUNT(p.id), 0), 1) as compliance_pct
                     FROM partners p WHERE p.org_id = $1 AND p.status = 'active'
-                    GROUP BY p.type ORDER BY partners DESC LIMIT 1000`, [tid])
+                    GROUP BY p.type ORDER BY partners DESC LIMIT 1000`,
+                    [tid]
+                )
                 .catch(() => []),
             // Regional penetration
-            db.all(`SELECT geo_country as country, COUNT(*) as scans,
+            db
+                .all(
+                    `SELECT geo_country as country, COUNT(*) as scans,
                     COUNT(DISTINCT device_fingerprint) as unique_users,
                     ROUND(100.0 * COUNT(*) FILTER (WHERE result = 'authentic') / NULLIF(COUNT(*), 0), 1) as auth_rate
                     FROM scan_events WHERE org_id = $1
                     AND scanned_at >= NOW() - INTERVAL '30 days'
                     AND geo_country IS NOT NULL AND geo_country != ''
-                    GROUP BY geo_country ORDER BY scans DESC LIMIT 10`, [tid])
+                    GROUP BY geo_country ORDER BY scans DESC LIMIT 10`,
+                    [tid]
+                )
                 .catch(() => []),
             // Gray market / leak detection
-            db.all(`SELECT la.platform, la.listing_title, la.leak_type, la.risk_score,
+            db
+                .all(
+                    `SELECT la.platform, la.listing_title, la.leak_type, la.risk_score,
                     la.region_detected, la.status, la.created_at
                     FROM leak_alerts la
                     WHERE la.product_id IN (SELECT id FROM products WHERE org_id = $1)
                     AND la.status != 'resolved'
-                    ORDER BY la.created_at DESC LIMIT 10`, [tid])
+                    ORDER BY la.created_at DESC LIMIT 10`,
+                    [tid]
+                )
                 .catch(() => []),
             // Partner overview
-            db.get(`SELECT COUNT(*) as total,
+            db
+                .get(
+                    `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE kyc_status = 'verified') as verified,
                     COUNT(*) FILTER (WHERE risk_level = 'high') as high_risk
-                    FROM partners WHERE org_id = $1 AND status = 'active'`, [tid])
+                    FROM partners WHERE org_id = $1 AND status = 'active'`,
+                    [tid]
+                )
                 .catch(() => ({ total: 0, verified: 0, high_risk: 0 })),
         ]);
 
         const total = Number(scanTotals?.total || 0);
         const unique = Number(scanTotals?.unique_devices || 0);
-        const firstScanRatio = total > 0 ? Math.round(1000 * unique / total) / 10 : 0;
-        const repeatRate = total > 0 ? Math.round(1000 * Number(repeatScans?.repeat_count || 0) / total) / 10 : 0;
-        const channelCompliance = channelData.length > 0
-            ? Math.round(10 * channelData.reduce((s, c) => s + Number(c.compliance_pct || 0), 0) / channelData.length) / 10 : 0;
-        const grayMarketIndex = leakAlerts.length > 0
-            ? Math.round(100 * leakAlerts.reduce((s, l) => s + Number(l.risk_score || 0), 0) / leakAlerts.length) / 100 : 0;
+        const firstScanRatio = total > 0 ? Math.round((1000 * unique) / total) / 10 : 0;
+        const repeatRate = total > 0 ? Math.round((1000 * Number(repeatScans?.repeat_count || 0)) / total) / 10 : 0;
+        const channelCompliance =
+            channelData.length > 0
+                ? Math.round(
+                      (10 * channelData.reduce((s, c) => s + Number(c.compliance_pct || 0), 0)) / channelData.length
+                  ) / 10
+                : 0;
+        const grayMarketIndex =
+            leakAlerts.length > 0
+                ? Math.round(
+                      (100 * leakAlerts.reduce((s, l) => s + Number(l.risk_score || 0), 0)) / leakAlerts.length
+                  ) / 100
+                : 0;
 
         res.json({
             kpis: {
@@ -2784,35 +3509,52 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
 
         const [scanStats, fraudStats, productStats, scanSpeed, orgInfo, billingPlan] = await Promise.all([
             // Scan volume
-            db.get(`SELECT COUNT(*) as total_scans,
+            db.get(
+                `SELECT COUNT(*) as total_scans,
                     COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
                     COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
                     COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious
                     FROM scan_events WHERE org_id = $1
-                    AND scanned_at >= NOW() - INTERVAL '1 year'`, [tid]),
+                    AND scanned_at >= NOW() - INTERVAL '1 year'`,
+                [tid]
+            ),
             // Fraud financial impact
-            db.get(`SELECT COUNT(*) as total_alerts,
+            db.get(
+                `SELECT COUNT(*) as total_alerts,
                     COUNT(*) FILTER (WHERE severity = 'critical') as critical,
                     COUNT(*) FILTER (WHERE status = 'resolved') as resolved
-                    FROM fraud_alerts WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                    FROM fraud_alerts WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                [tid]
+            ),
             // Product values
-            db.get(`SELECT COUNT(*) as total_products,
+            db.get(
+                `SELECT COUNT(*) as total_products,
                     ROUND(AVG(trust_score)::numeric, 2) as avg_trust
-                    FROM products WHERE org_id = $1 AND status = 'active'`, [tid]),
+                    FROM products WHERE org_id = $1 AND status = 'active'`,
+                [tid]
+            ),
             // Scan performance
-            db.get(`SELECT ROUND(AVG(response_time_ms)::numeric, 0) as avg_ms,
+            db.get(
+                `SELECT ROUND(AVG(response_time_ms)::numeric, 0) as avg_ms,
                     ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY response_time_ms)::numeric, 0) as p95_ms
                     FROM scan_events WHERE org_id = $1
                     AND scanned_at >= NOW() - INTERVAL '30 days'
-                    AND response_time_ms > 0`, [tid]),
+                    AND response_time_ms > 0`,
+                [tid]
+            ),
             // Org settings for financials
             db.get(`SELECT settings, plan FROM organizations WHERE id = $1`, [tid]),
             // Actual billing plan cost
-            db.get(`SELECT bp.price_monthly, bp.billing_cycle, bp.plan_name
+            db
+                .get(
+                    `SELECT bp.price_monthly, bp.billing_cycle, bp.plan_name
                     FROM billing_plans bp
                     JOIN users u ON u.id = bp.user_id
                     WHERE u.org_id = $1 AND bp.status = 'active'
-                    ORDER BY bp.price_monthly DESC LIMIT 1`, [tid]).catch(() => null),
+                    ORDER BY bp.price_monthly DESC LIMIT 1`,
+                    [tid]
+                )
+                .catch(() => null),
         ]);
 
         const totalProducts = Number(productStats?.total_products || 0);
@@ -2826,9 +3568,7 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
 
         // valuePerUnit: revenue per verification (each scan checks one unit)
         const annualRevenue = Number(fin.annual_revenue || 0);
-        const valuePerUnit = (annualRevenue > 0 && totalScans > 0)
-            ? Math.round(annualRevenue / totalScans)
-            : 50;
+        const valuePerUnit = annualRevenue > 0 && totalScans > 0 ? Math.round(annualRevenue / totalScans) : 50;
 
         // platformCost: from actual billing plan, fallback to plan tier estimate
         const planTierCosts = { free: 0, starter: 588, pro: 2388, business: 5988, enterprise: 12000 };
@@ -2851,24 +3591,31 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
         const faTotal = Number(fraudStats?.total_alerts) || 0;
         const faCritHigh = (Number(fraudStats?.critical) || 0) + (Number(fraudStats?.resolved) || 0);
         const confirmRate = faTotal > 0 ? Math.min(faCritHigh / faTotal, 1) : 0.3;
-        const estimatedFraudLoss = Math.round((counterfeit + suspicious * confirmRate) * valuePerUnit * (1 - recoveryRate));
+        const estimatedFraudLoss = Math.round(
+            (counterfeit + suspicious * confirmRate) * valuePerUnit * (1 - recoveryRate)
+        );
 
         // Revenue protected
-        const revenueProtected = Math.min(Math.round(authentic * valuePerUnit), annualRevenue || authentic * valuePerUnit);
+        const revenueProtected = Math.min(
+            Math.round(authentic * valuePerUnit),
+            annualRevenue || authentic * valuePerUnit
+        );
 
         // Incremental Detection Value (IDV)
         // Baseline manual detection rate ~60%, AI improves to ~85% → 25% improvement
-        const baselineDetectionRate = 0.60;
+        const baselineDetectionRate = 0.6;
         const aiDetectionRate = 0.85;
         const IDV = Math.round(TFL * (aiDetectionRate - baselineDetectionRate));
 
         // Audit Cost Savings (ACS)
-        const automationRate = 0.80; // 80% of checks automated
+        const automationRate = 0.8; // 80% of checks automated
         const ACS = Math.round(manualCostPerCheck * automationRate * totalScans);
 
         // Reduced Penalty Risk
         const industry = fin.industry_type || 'pharmaceutical';
-        const avgFine = { pharmaceutical: 50000, luxury: 30000, fmcg: 15000, electronics: 25000, automotive: 40000 }[industry] || 25000;
+        const avgFine =
+            { pharmaceutical: 50000, luxury: 30000, fmcg: 15000, electronics: 25000, automotive: 40000 }[industry] ||
+            25000;
         const reducedPenalty = Math.round(avgFine * 0.15); // Platform reduces penalty risk by ~15%
 
         // Total Economic Benefit (TEB)
@@ -2878,15 +3625,20 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
         const falsePositiveCost = Math.round(suspicious * 5); // $5/investigation
         const investigationCost = Math.round(Number(fraudStats?.total_alerts || 0) * 50); // $50/case
         const totalCost = platformCost + falsePositiveCost + investigationCost;
-        const RAROI = totalCost > 0 ? Math.round(TEB / totalCost * 100) / 100 : 0;
-        const costPerVerification = totalScans > 0 ? Math.round(platformCost / totalScans * 1000) / 1000 : 0;
+        const RAROI = totalCost > 0 ? Math.round((TEB / totalCost) * 100) / 100 : 0;
+        const costPerVerification = totalScans > 0 ? Math.round((platformCost / totalScans) * 1000) / 1000 : 0;
 
         // Scenario modeling
         function perfScenario(fraudMult) {
             const sTFL = Math.round(counterfeit * fraudMult * valuePerUnit * (1 - recoveryRate));
             const sIDV = Math.round(sTFL * (aiDetectionRate - baselineDetectionRate));
             const sTEB = sIDV + ACS + reducedPenalty;
-            return { tfl: sTFL, idv: sIDV, teb: sTEB, raroi: totalCost > 0 ? Math.round(sTEB / totalCost * 100) / 100 : 0 };
+            return {
+                tfl: sTFL,
+                idv: sIDV,
+                teb: sTEB,
+                raroi: totalCost > 0 ? Math.round((sTEB / totalCost) * 100) / 100 : 0,
+            };
         }
 
         res.json({
@@ -2914,11 +3666,11 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
                 total_scans_ytd: totalScans,
             },
             scenarios: {
-                best: perfScenario(0.6),      // Optimistic: -40% fraud
-                moderate: perfScenario(0.8),   // Moderate: -20% fraud
+                best: perfScenario(0.6), // Optimistic: -40% fraud
+                moderate: perfScenario(0.8), // Moderate: -20% fraud
                 base: { tfl: TFL, idv: IDV, teb: TEB, raroi: RAROI },
-                stress: perfScenario(1.5),    // Stress: +50% fraud
-                extreme: perfScenario(2.5),   // Extreme Tail: +150% fraud
+                stress: perfScenario(1.5), // Stress: +50% fraud
+                extreme: perfScenario(2.5), // Extreme Tail: +150% fraud
             },
             performance: {
                 avg_speed_ms: Number(scanSpeed?.avg_ms || 0),
@@ -2931,8 +3683,8 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
                 total_alerts: fraudCount,
                 critical: Number(fraudStats?.critical || 0),
                 resolved: Number(fraudStats?.resolved || 0),
-                resolution_rate: fraudCount > 0
-                    ? Math.round(100 * Number(fraudStats?.resolved || 0) / fraudCount) : 0,
+                resolution_rate:
+                    fraudCount > 0 ? Math.round((100 * Number(fraudStats?.resolved || 0)) / fraudCount) : 0,
             },
         });
     } catch (err) {
@@ -2948,28 +3700,38 @@ router.get('/owner/ccs/risk-intel', requireExecutiveAccess(), async (req, res) =
     try {
         const tid = req.orgId;
 
-        const [scanIntegrity, duplicateRate, complianceRate,
-            geoRisk, productRisk, anomalies, recentAnomalies] = await Promise.all([
+        const [scanIntegrity, duplicateRate, complianceRate, geoRisk, productRisk, anomalies, recentAnomalies] =
+            await Promise.all([
                 // Scan authenticity score
-                db.get(`SELECT COUNT(*) as total,
+                db.get(
+                    `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
                     ROUND(100.0 * COUNT(*) FILTER (WHERE result = 'authentic') / NULLIF(COUNT(*), 0), 1) as auth_pct
                     FROM scan_events WHERE org_id = $1
-                    AND scanned_at >= NOW() - INTERVAL '30 days'`, [tid]),
+                    AND scanned_at >= NOW() - INTERVAL '30 days'`,
+                    [tid]
+                ),
                 // Duplicate detection
-                db.get(`SELECT COUNT(*) as total_dupes FROM (
+                db.get(
+                    `SELECT COUNT(*) as total_dupes FROM (
                     SELECT qr_code_id, COUNT(*) as cnt
                     FROM scan_events WHERE org_id = $1
                     AND scanned_at >= NOW() - INTERVAL '30 days'
                     AND qr_code_id IS NOT NULL
                     GROUP BY qr_code_id HAVING COUNT(*) > 3
-                    ) sub`, [tid]),
+                    ) sub`,
+                    [tid]
+                ),
                 // Distribution compliance
-                db.get(`SELECT COUNT(*) as total,
+                db.get(
+                    `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE status = 'compliant') as compliant
-                    FROM compliance_records WHERE entity_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                    FROM compliance_records WHERE entity_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                    [tid]
+                ),
                 // Geographic risk heatmap
-                db.all(`SELECT geo_country as name,
+                db.all(
+                    `SELECT geo_country as name,
                     COUNT(*) as scans,
                     COUNT(*) FILTER (WHERE result = 'suspicious' OR result = 'counterfeit') as flagged,
                     ROUND(AVG(fraud_score)::numeric * 100, 0) as risk_score
@@ -2977,9 +3739,12 @@ router.get('/owner/ccs/risk-intel', requireExecutiveAccess(), async (req, res) =
                     AND scanned_at >= NOW() - INTERVAL '30 days'
                     AND geo_country IS NOT NULL AND geo_country != ''
                     GROUP BY geo_country
-                    ORDER BY risk_score DESC LIMIT 10`, [tid]),
+                    ORDER BY risk_score DESC LIMIT 10`,
+                    [tid]
+                ),
                 // Product line risk
-                db.all(`SELECT p.name, p.category,
+                db.all(
+                    `SELECT p.name, p.category,
                     ROUND(AVG(se.fraud_score)::numeric * 100, 0) as risk_score,
                     COUNT(se.id) as scan_count
                     FROM products p
@@ -2988,17 +3753,25 @@ router.get('/owner/ccs/risk-intel', requireExecutiveAccess(), async (req, res) =
                     WHERE p.org_id = $1 AND p.status = 'active'
                     GROUP BY p.id, p.name, p.category
                     HAVING COUNT(se.id) > 0
-                    ORDER BY risk_score DESC LIMIT 10`, [tid]),
+                    ORDER BY risk_score DESC LIMIT 10`,
+                    [tid]
+                ),
                 // Anomaly stats
-                db.get(`SELECT COUNT(*) as total,
+                db.get(
+                    `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE severity = 'critical' OR severity = 'high') as high_sev,
                     COUNT(*) FILTER (WHERE status = 'open') as open_count
-                    FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                    FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                    [tid]
+                ),
                 // Recent anomalies for forecast
-                db.all(`SELECT anomaly_type, severity, description, detected_at
+                db.all(
+                    `SELECT anomaly_type, severity, description, detected_at
                     FROM anomaly_detections
                     WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)
-                    ORDER BY detected_at DESC LIMIT 5`, [tid]),
+                    ORDER BY detected_at DESC LIMIT 5`,
+                    [tid]
+                ),
             ]);
 
         const totalScans = Number(scanIntegrity?.total || 0);
@@ -3007,13 +3780,20 @@ router.get('/owner/ccs/risk-intel', requireExecutiveAccess(), async (req, res) =
         const dupePct = totalScans > 0 ? Math.round(100 * (1 - dupeCount / totalScans)) : 100;
         const compTotal = Number(complianceRate?.total || 0);
         const compCompliant = Number(complianceRate?.compliant || 0);
-        const compPct = compTotal > 0 ? Math.round(100 * compCompliant / compTotal) : 0;
+        const compPct = compTotal > 0 ? Math.round((100 * compCompliant) / compTotal) : 0;
         const integrityScore = Math.round((authPct + dupePct + compPct) / 3);
 
         const forecast = {
-            fraud_probability: Number(anomalies?.high_sev || 0) > 3 ? 'High'
-                : Number(anomalies?.high_sev || 0) > 0 ? 'Moderate' : 'Low',
-            fraud_pct: totalScans > 0 ? Math.round(100 * (totalScans - Number(scanIntegrity?.authentic || 0)) / totalScans) : 0,
+            fraud_probability:
+                Number(anomalies?.high_sev || 0) > 3
+                    ? 'High'
+                    : Number(anomalies?.high_sev || 0) > 0
+                      ? 'Moderate'
+                      : 'Low',
+            fraud_pct:
+                totalScans > 0
+                    ? Math.round((100 * (totalScans - Number(scanIntegrity?.authentic || 0))) / totalScans)
+                    : 0,
             counterfeit_risk: dupeCount > 5 ? 'High' : dupeCount > 0 ? 'Moderate' : 'Low',
             open_anomalies: Number(anomalies?.open_count || 0),
         };
@@ -3073,7 +3853,9 @@ router.get('/owner/ccs/reports', requireExecutiveAccess(), async (req, res) => {
 
         const [monthlySummaries, scansByPeriod, alertsByPeriod, recentAudit] = await Promise.all([
             // Monthly snapshots (last 6 months)
-            db.all(`SELECT TO_CHAR(scanned_at, 'YYYY-MM') as month,
+            db
+                .all(
+                    `SELECT TO_CHAR(scanned_at, 'YYYY-MM') as month,
                     COUNT(*) as total_scans,
                     COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
                     COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
@@ -3082,29 +3864,43 @@ router.get('/owner/ccs/reports', requireExecutiveAccess(), async (req, res) => {
                     FROM scan_events WHERE org_id = $1
                     AND scanned_at >= NOW() - INTERVAL '6 months'
                     GROUP BY TO_CHAR(scanned_at, 'YYYY-MM')
-                    ORDER BY month DESC LIMIT 1000`, [tid])
+                    ORDER BY month DESC LIMIT 1000`,
+                    [tid]
+                )
                 .catch(() => []),
             // Scan trend — uses date range
-            db.get(`SELECT COUNT(*) as total,
+            db
+                .get(
+                    `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
                     COUNT(*) FILTER (WHERE result = 'suspicious') as suspicious,
                     COUNT(*) FILTER (WHERE result = 'counterfeit') as counterfeit,
                     ROUND(AVG(trust_score)::numeric, 2) as avg_trust
                     FROM scan_events WHERE org_id = $1
-                    ${periodFilter}`, periodParams)
+                    ${periodFilter}`,
+                    periodParams
+                )
                 .catch(() => ({ total: 0, authentic: 0, suspicious: 0, counterfeit: 0, avg_trust: 0 })),
             // Alert trend — uses date range
-            db.get(`SELECT COUNT(*) as total_alerts,
+            db
+                .get(
+                    `SELECT COUNT(*) as total_alerts,
                     COUNT(*) FILTER (WHERE severity = 'critical') as critical,
                     COUNT(*) FILTER (WHERE status = 'resolved') as resolved
                     FROM fraud_alerts WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)
-                    ${periodFilter.replace(/scanned_at/g, 'created_at')}`, periodParams)
+                    ${periodFilter.replace(/scanned_at/g, 'created_at')}`,
+                    periodParams
+                )
                 .catch(() => ({ total_alerts: 0, critical: 0, resolved: 0 })),
             // Recent audit events (report-related)
-            db.all(`SELECT action, details, created_at, actor_id
+            db
+                .all(
+                    `SELECT action, details, created_at, actor_id
                     FROM audit_log WHERE org_id = $1
                     AND (action LIKE '%REPORT%' OR action LIKE '%EXPORT%' OR action LIKE '%FINANCIAL%')
-                    ORDER BY created_at DESC LIMIT 10`, [tid])
+                    ORDER BY created_at DESC LIMIT 10`,
+                    [tid]
+                )
                 .catch(() => []),
         ]);
 
@@ -3126,9 +3922,7 @@ router.get('/owner/ccs/reports', requireExecutiveAccess(), async (req, res) => {
 
         res.json({
             reports,
-            period_label: fromDate && toDate
-                ? `${fromDate} → ${toDate}`
-                : `Last ${days} days`,
+            period_label: fromDate && toDate ? `${fromDate} → ${toDate}` : `Last ${days} days`,
             current_month: {
                 scans: Number(scansByPeriod?.total || 0),
                 authentic: Number(scansByPeriod?.authentic || 0),
@@ -3140,9 +3934,27 @@ router.get('/owner/ccs/reports', requireExecutiveAccess(), async (req, res) => {
                 resolved: Number(alertsByPeriod?.resolved || 0),
             },
             scheduled: [
-                { name: 'Executive Summary', frequency: 'Monthly', recipients: 'CEO, CFO, COO', next_run: null, active: true },
-                { name: 'Risk Alert Digest', frequency: 'Weekly', recipients: 'CEO, CRO', next_run: null, active: true },
-                { name: 'Board Deck', frequency: 'Quarterly', recipients: 'Board members', next_run: null, active: true },
+                {
+                    name: 'Executive Summary',
+                    frequency: 'Monthly',
+                    recipients: 'CEO, CFO, COO',
+                    next_run: null,
+                    active: true,
+                },
+                {
+                    name: 'Risk Alert Digest',
+                    frequency: 'Weekly',
+                    recipients: 'CEO, CRO',
+                    next_run: null,
+                    active: true,
+                },
+                {
+                    name: 'Board Deck',
+                    frequency: 'Quarterly',
+                    recipients: 'Board members',
+                    next_run: null,
+                    active: true,
+                },
             ],
             recent_activity: recentAudit || [],
         });
@@ -3159,10 +3971,11 @@ router.get('/owner/ccs/trust-report', requireExecutiveAccess(), async (req, res)
     try {
         const tid = req.orgId;
 
-        const [sealStats, chainIntegrity, tamperDetection, scanIntegrity,
-            evidenceStats, productCount] = await Promise.all([
+        const [sealStats, chainIntegrity, tamperDetection, scanIntegrity, evidenceStats, productCount] =
+            await Promise.all([
                 // Blockchain seal coverage
-                db.get(`SELECT COUNT(*) as total_seals,
+                db.get(
+                    `SELECT COUNT(*) as total_seals,
                     COUNT(DISTINCT event_type) as seal_types,
                     COUNT(*) FILTER (WHERE event_type = 'scan_event') as scan_seals,
                     COUNT(*) FILTER (WHERE event_type = 'supply_chain') as chain_seals,
@@ -3170,28 +3983,42 @@ router.get('/owner/ccs/trust-report', requireExecutiveAccess(), async (req, res)
                     FROM blockchain_seals WHERE event_id IN (
                         SELECT id FROM scan_events WHERE org_id = $1
                         UNION SELECT id FROM supply_chain_events WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)
-                    )`, [tid]),
+                    )`,
+                    [tid]
+                ),
                 // Supply chain integrity
-                db.get(`SELECT COUNT(*) as total_events,
+                db.get(
+                    `SELECT COUNT(*) as total_events,
                     COUNT(*) FILTER (WHERE blockchain_seal_id IS NOT NULL) as sealed_events
                     FROM supply_chain_events
-                    WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                    WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                    [tid]
+                ),
                 // Tamper/anomaly detection
-                db.get(`SELECT COUNT(*) as total,
+                db.get(
+                    `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE severity = 'critical') as critical,
                     COUNT(*) FILTER (WHERE status = 'resolved') as resolved
                     FROM anomaly_detections
-                    WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                    WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                    [tid]
+                ),
                 // Scan verification integrity
-                db.get(`SELECT COUNT(*) as total,
+                db.get(
+                    `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE result = 'authentic') as authentic,
                     ROUND(AVG(trust_score)::numeric, 2) as avg_trust
-                    FROM scan_events WHERE org_id = $1`, [tid]),
+                    FROM scan_events WHERE org_id = $1`,
+                    [tid]
+                ),
                 // Evidence packages
-                db.get(`SELECT COUNT(*) as total,
+                db.get(
+                    `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE blockchain_seal_id IS NOT NULL) as sealed
                     FROM evidence_items
-                    WHERE entity_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]),
+                    WHERE entity_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                    [tid]
+                ),
                 // Product count
                 db.get(`SELECT COUNT(*) as total FROM products WHERE org_id = $1 AND status = 'active'`, [tid]),
             ]);
@@ -3210,7 +4037,9 @@ router.get('/owner/ccs/trust-report', requireExecutiveAccess(), async (req, res)
         const chainScore = chainTotal > 0 ? (chainSealed / chainTotal) * 100 : 50;
         const tamperScore = tamperTotal > 0 ? (tamperResolved / tamperTotal) * 100 : 100;
         const evidenceScore = evidenceTotal > 0 ? (evidenceSealed / evidenceTotal) * 100 : 50;
-        const brandProtectionScore = Math.round((scanScore * 0.35 + chainScore * 0.25 + tamperScore * 0.25 + evidenceScore * 0.15));
+        const brandProtectionScore = Math.round(
+            scanScore * 0.35 + chainScore * 0.25 + tamperScore * 0.25 + evidenceScore * 0.15
+        );
 
         res.json({
             seal_coverage: {
@@ -3222,18 +4051,18 @@ router.get('/owner/ccs/trust-report', requireExecutiveAccess(), async (req, res)
             chain_integrity: {
                 total_events: chainTotal,
                 sealed: chainSealed,
-                coverage_pct: chainTotal > 0 ? Math.round(100 * chainSealed / chainTotal) : 0,
+                coverage_pct: chainTotal > 0 ? Math.round((100 * chainSealed) / chainTotal) : 0,
             },
             tamper_detection: {
                 total: tamperTotal,
                 critical: Number(tamperDetection?.critical || 0),
                 resolved: tamperResolved,
-                resolution_rate: tamperTotal > 0 ? Math.round(100 * tamperResolved / tamperTotal) : 100,
+                resolution_rate: tamperTotal > 0 ? Math.round((100 * tamperResolved) / tamperTotal) : 100,
             },
             scan_verification: {
                 total: totalScans,
                 authentic,
-                integrity_pct: totalScans > 0 ? Math.round(100 * authentic / totalScans) : 0,
+                integrity_pct: totalScans > 0 ? Math.round((100 * authentic) / totalScans) : 0,
                 avg_trust: Number(scanIntegrity?.avg_trust || 0),
             },
             evidence_packages: {
@@ -3242,11 +4071,12 @@ router.get('/owner/ccs/trust-report', requireExecutiveAccess(), async (req, res)
             },
             brand_protection_score: brandProtectionScore,
             product_count: Number(productCount?.total || 0),
-            recommendation: brandProtectionScore >= 80
-                ? 'Data integrity posture is strong. All material risk events are sealed.'
-                : brandProtectionScore >= 60
-                    ? 'Moderate integrity. Consider sealing more supply chain events and resolving open anomalies.'
-                    : 'Action required: significant gaps in seal coverage and unresolved tamper alerts.',
+            recommendation:
+                brandProtectionScore >= 80
+                    ? 'Data integrity posture is strong. All material risk events are sealed.'
+                    : brandProtectionScore >= 60
+                      ? 'Moderate integrity. Consider sealing more supply chain events and resolving open anomalies.'
+                      : 'Action required: significant gaps in seal coverage and unresolved tamper alerts.',
         });
     } catch (err) {
         console.error('[CCS] Trust-report error:', err);
@@ -3262,82 +4092,114 @@ router.get('/owner/ccs/scm-summary', requireExecutiveAccess(), async (req, res) 
 
         const [chainStats, partnerRisk, geoExposure, breaches, inventoryStats, recentEvents] = await Promise.all([
             // Supply chain event integrity
-            db.get(`SELECT COUNT(*) as total_events,
+            db
+                .get(
+                    `SELECT COUNT(*) as total_events,
                     COUNT(*) FILTER (WHERE blockchain_seal_id IS NOT NULL) as sealed_events,
                     COUNT(DISTINCT product_id) as products_tracked,
                     COUNT(DISTINCT partner_id) as partners_involved,
                     COUNT(DISTINCT batch_id) as batches_tracked
                     FROM supply_chain_events
-                    WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
-                .catch(() => ({ total_events: 0, sealed_events: 0, products_tracked: 0, partners_involved: 0, batches_tracked: 0 })),
+                    WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                    [tid]
+                )
+                .catch(() => ({
+                    total_events: 0,
+                    sealed_events: 0,
+                    products_tracked: 0,
+                    partners_involved: 0,
+                    batches_tracked: 0,
+                })),
             // Partner trust composition
-            db.all(`SELECT p.type as channel,
+            db
+                .all(
+                    `SELECT p.type as channel,
                     COUNT(*) as total,
                     COUNT(*) FILTER (WHERE p.kyc_status = 'verified') as verified,
                     COUNT(*) FILTER (WHERE p.risk_level = 'high') as high_risk,
                     ROUND(AVG(p.trust_score)::numeric, 1) as avg_trust
                     FROM partners p WHERE p.org_id = $1 AND p.status = 'active'
-                    GROUP BY p.type ORDER BY total DESC LIMIT 1000`, [tid])
+                    GROUP BY p.type ORDER BY total DESC LIMIT 1000`,
+                    [tid]
+                )
                 .catch(() => []),
             // Geographic exposure (supply chain events by location)
-            db.all(`SELECT sce.location as region,
+            db
+                .all(
+                    `SELECT sce.location as region,
                     COUNT(*) as events,
                     COUNT(*) FILTER (WHERE sce.blockchain_seal_id IS NOT NULL) as sealed,
                     COUNT(DISTINCT sce.product_id) as products
                     FROM supply_chain_events sce
                     WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)
                     AND sce.location IS NOT NULL AND sce.location != ''
-                    GROUP BY sce.location ORDER BY events DESC LIMIT 10`, [tid])
+                    GROUP BY sce.location ORDER BY events DESC LIMIT 10`,
+                    [tid]
+                )
                 .catch(() => []),
             // Integrity breaches (anomalies tied to supply chain)
-            db.get(`SELECT COUNT(*) as total,
+            db
+                .get(
+                    `SELECT COUNT(*) as total,
                     COUNT(*) FILTER (WHERE severity = 'critical') as critical,
                     COUNT(*) FILTER (WHERE severity = 'high') as high,
                     COUNT(*) FILTER (WHERE status = 'resolved') as resolved
                     FROM anomaly_detections
-                    WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                    WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                    [tid]
+                )
                 .catch(() => ({ total: 0, critical: 0, high: 0, resolved: 0 })),
             // Inventory traceability
-            db.get(`SELECT COUNT(*) as total_products,
+            db
+                .get(
+                    `SELECT COUNT(*) as total_products,
                     COUNT(*) FILTER (WHERE id IN (
                         SELECT DISTINCT product_id FROM supply_chain_events
                         WHERE product_id IS NOT NULL AND blockchain_seal_id IS NOT NULL
                     )) as traceable_products
-                    FROM products WHERE org_id = $1 AND status = 'active'`, [tid])
+                    FROM products WHERE org_id = $1 AND status = 'active'`,
+                    [tid]
+                )
                 .catch(() => ({ total_products: 0, traceable_products: 0 })),
             // Recent supply chain events (last 5)
-            db.all(`SELECT sce.event_type, sce.location, sce.created_at,
+            db
+                .all(
+                    `SELECT sce.event_type, sce.location, sce.created_at,
                     p.name as product_name,
                     CASE WHEN sce.blockchain_seal_id IS NOT NULL THEN true ELSE false END as is_sealed
                     FROM supply_chain_events sce
                     LEFT JOIN products p ON sce.product_id = p.id
                     WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)
-                    ORDER BY sce.created_at DESC LIMIT 5`, [tid])
+                    ORDER BY sce.created_at DESC LIMIT 5`,
+                    [tid]
+                )
                 .catch(() => []),
         ]);
 
         const totalEvents = Number(chainStats?.total_events || 0);
         const sealedEvents = Number(chainStats?.sealed_events || 0);
-        const integrityIndex = totalEvents > 0 ? Math.round(100 * sealedEvents / totalEvents) : 0;
+        const integrityIndex = totalEvents > 0 ? Math.round((100 * sealedEvents) / totalEvents) : 0;
         const totalProducts = Number(inventoryStats?.total_products || 0);
         const traceableProducts = Number(inventoryStats?.traceable_products || 0);
-        const traceabilityPct = totalProducts > 0 ? Math.round(100 * traceableProducts / totalProducts) : 0;
+        const traceabilityPct = totalProducts > 0 ? Math.round((100 * traceableProducts) / totalProducts) : 0;
         const totalBreaches = Number(breaches?.total || 0);
         const criticalBreaches = Number(breaches?.critical || 0);
         const resolvedBreaches = Number(breaches?.resolved || 0);
 
         // Loss estimate: critical breach × $50k avg, high × $15k, unresolved × $25k penalty
         const unresolvedBreaches = totalBreaches - resolvedBreaches;
-        const estimatedLoss = (criticalBreaches * 50000) + (Number(breaches?.high || 0) * 15000) + (unresolvedBreaches * 25000);
+        const estimatedLoss =
+            criticalBreaches * 50000 + Number(breaches?.high || 0) * 15000 + unresolvedBreaches * 25000;
 
         // Supply Chain Risk Score (0-100, higher = safer)
         const sealScore = integrityIndex; // 0-100
         const traceScore = traceabilityPct; // 0-100
         // Breach resilience = resolution rate (higher = more breaches resolved)
-        const breachScore = totalBreaches > 0 ? Math.round(100 * resolvedBreaches / totalBreaches) : 100;
-        const partnerScore = partnerRisk.length > 0
-            ? Math.round(partnerRisk.reduce((s, p) => s + Number(p.avg_trust || 0), 0) / partnerRisk.length)
-            : 50;
+        const breachScore = totalBreaches > 0 ? Math.round((100 * resolvedBreaches) / totalBreaches) : 100;
+        const partnerScore =
+            partnerRisk.length > 0
+                ? Math.round(partnerRisk.reduce((s, p) => s + Number(p.avg_trust || 0), 0) / partnerRisk.length)
+                : 50;
         const scRiskScore = Math.round(sealScore * 0.3 + traceScore * 0.25 + breachScore * 0.25 + partnerScore * 0.2);
 
         res.json({
@@ -3371,7 +4233,7 @@ router.get('/owner/ccs/scm-summary', requireExecutiveAccess(), async (req, res) 
                 events: Number(g.events),
                 sealed: Number(g.sealed),
                 products: Number(g.products),
-                integrity_pct: Number(g.events) > 0 ? Math.round(100 * Number(g.sealed) / Number(g.events)) : 0,
+                integrity_pct: Number(g.events) > 0 ? Math.round((100 * Number(g.sealed)) / Number(g.events)) : 0,
             })),
             recent_events: recentEvents.map(e => ({
                 type: e.event_type,
@@ -3397,20 +4259,33 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
 
         // Fetch org data
         const [products, shipments, events, partners, violations, offsets, finConfig] = await Promise.all([
-            db.all(`SELECT * FROM products WHERE org_id = $1 AND status = 'active'`, [tid])
+            db.all(`SELECT * FROM products WHERE org_id = $1 AND status = 'active'`, [tid]).catch(() => []),
+            db
+                .all(
+                    `SELECT s.* FROM shipments s JOIN batches b ON s.batch_id = b.id JOIN products p ON b.product_id = p.id WHERE p.org_id = $1 LIMIT 1000`,
+                    [tid]
+                )
                 .catch(() => []),
-            db.all(`SELECT s.* FROM shipments s JOIN batches b ON s.batch_id = b.id JOIN products p ON b.product_id = p.id WHERE p.org_id = $1 LIMIT 1000`, [tid])
+            db
+                .all(
+                    `SELECT sce.* FROM supply_chain_events sce WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                    [tid]
+                )
                 .catch(() => []),
-            db.all(`SELECT sce.* FROM supply_chain_events sce WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+            db.all(`SELECT * FROM partners WHERE org_id = $1 AND status = 'active' LIMIT 1000`, [tid]).catch(() => []),
+            db
+                .all(
+                    `SELECT * FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                    [tid]
+                )
                 .catch(() => []),
-            db.all(`SELECT * FROM partners WHERE org_id = $1 AND status = 'active' LIMIT 1000`, [tid])
-                .catch(() => []),
-            db.all(`SELECT * FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
-                .catch(() => []),
-            db.get(`SELECT COUNT(*) as c FROM evidence_items WHERE entity_type = 'carbon_offset' AND entity_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+            db
+                .get(
+                    `SELECT COUNT(*) as c FROM evidence_items WHERE entity_type = 'carbon_offset' AND entity_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                    [tid]
+                )
                 .catch(() => ({ c: 0 })),
-            db.get(`SELECT * FROM financial_configs WHERE org_id = $1`, [tid])
-                .catch(() => null),
+            db.get(`SELECT * FROM financial_configs WHERE org_id = $1`, [tid]).catch(() => null),
         ]);
 
         // Use carbon engine for calculations
@@ -3436,32 +4311,36 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
         // Derive risk percentages from actual engine data
         const riskImpact = Math.min(100, riskFactors?.total_risk_score_impact || 0);
         const emissionsPerProduct = products.length > 0 ? totalEmissions / products.length : 0;
-        const avgPartnerESG = Array.isArray(leaderboard) && leaderboard.length > 0
-            ? leaderboard.reduce((s, p) => s + (p.esg_score || 50), 0) / leaderboard.length : 50;
+        const avgPartnerESG =
+            Array.isArray(leaderboard) && leaderboard.length > 0
+                ? leaderboard.reduce((s, p) => s + (p.esg_score || 50), 0) / leaderboard.length
+                : 50;
         const regulatoryReadiness = Array.isArray(regulatory)
-            ? regulatory.reduce((s, f) => s + (f.readiness_pct || 0), 0) / Math.max(1, regulatory.length) : 0;
-        const offsetRatio = totalEmissions > 0 ? Math.min(1, Number(offsets?.c || 0) * 500 / totalEmissions) : 0;
+            ? regulatory.reduce((s, f) => s + (f.readiness_pct || 0), 0) / Math.max(1, regulatory.length)
+            : 0;
+        const offsetRatio = totalEmissions > 0 ? Math.min(1, (Number(offsets?.c || 0) * 500) / totalEmissions) : 0;
 
         // Compliance score: weighted combination of factors (higher = better)
         const complianceScore = Math.round(
-            Math.max(0, 100 - riskImpact) * 0.3 +           // Risk impact (30%)
-            regulatoryReadiness * 0.25 +                      // Regulatory readiness (25%)
-            avgPartnerESG * 0.2 +                             // Partner ESG health (20%)
-            Math.min(100, offsetRatio * 100) * 0.15 +        // Offset coverage (15%)
-            Math.min(100, maturity.current_level * 20) * 0.1  // Maturity level (10%)
+            Math.max(0, 100 - riskImpact) * 0.3 + // Risk impact (30%)
+                regulatoryReadiness * 0.25 + // Regulatory readiness (25%)
+                avgPartnerESG * 0.2 + // Partner ESG health (20%)
+                Math.min(100, offsetRatio * 100) * 0.15 + // Offset coverage (15%)
+                Math.min(100, maturity.current_level * 20) * 0.1 // Maturity level (10%)
         );
         const complianceStatus = complianceScore >= 80 ? 'Pass' : complianceScore >= 50 ? 'At Risk' : 'Fail';
 
         // Risk factor percentages (lower = better, shown as exposure %)
         const regulatoryRisk = Math.round(100 - regulatoryReadiness);
-        const transitionRisk = Math.round(Math.min(100, emissionsPerProduct / 50 * 100)); // >50kg/product = 100%
-        const reputationRisk = Math.round(Math.min(100, (100 - avgPartnerESG)));
-        const physicalRisk = Math.round(Math.min(100, (riskImpact * 0.6)));
+        const transitionRisk = Math.round(Math.min(100, (emissionsPerProduct / 50) * 100)); // >50kg/product = 100%
+        const reputationRisk = Math.round(Math.min(100, 100 - avgPartnerESG));
+        const physicalRisk = Math.round(Math.min(100, riskImpact * 0.6));
 
-        const carbonLiability = Math.round(totalEmissions / 1000 * carbonPrice);
-        const regulatoryFineRisk = Math.round(carbonLiability * (regulatoryRisk / 100 * 0.3));
-        const carbonTaxImpact = ebitda > 0 ? Math.round(10000 * carbonLiability / ebitda) / 100 : 0;
-        const esgMultiplier = complianceScore >= 80 ? 0.15 : complianceScore >= 60 ? 0.08 : complianceScore >= 40 ? 0.03 : 0;
+        const carbonLiability = Math.round((totalEmissions / 1000) * carbonPrice);
+        const regulatoryFineRisk = Math.round(carbonLiability * ((regulatoryRisk / 100) * 0.3));
+        const carbonTaxImpact = ebitda > 0 ? Math.round((10000 * carbonLiability) / ebitda) / 100 : 0;
+        const esgMultiplier =
+            complianceScore >= 80 ? 0.15 : complianceScore >= 60 ? 0.08 : complianceScore >= 40 ? 0.03 : 0;
 
         // Scope breakdown — engine returns scope_1.total, scope_2.total, scope_3.total
         const scope1 = Number(scopeData?.scope_1?.total || scopeData?.scope1_kgCO2e || 0);
@@ -3474,12 +4353,14 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
             maturity,
             emissions: {
                 total_kgCO2e: totalEmissions,
-                total_tCO2e: Math.round(totalEmissions / 1000 * 10) / 10,
+                total_tCO2e: Math.round((totalEmissions / 1000) * 10) / 10,
                 scope1: Math.round(scope1),
                 scope2: Math.round(scope2),
                 scope3: Math.round(scope3),
-                grade: scopeData?.grade || (scopeData?.product_rankings?.[0]?.grade) || 'N/A',
-                grade_label: scopeData?.grade_label || (totalEmissions > 0 ? `${Math.round(totalEmissions / 100) / 10} tCO₂e total` : 'No data'),
+                grade: scopeData?.grade || scopeData?.product_rankings?.[0]?.grade || 'N/A',
+                grade_label:
+                    scopeData?.grade_label ||
+                    (totalEmissions > 0 ? `${Math.round(totalEmissions / 100) / 10} tCO₂e total` : 'No data'),
             },
             financial_exposure: {
                 carbon_liability: carbonLiability,
@@ -3497,20 +4378,26 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
             },
             regulatory: {
                 frameworks: Array.isArray(regulatory) ? regulatory : [],
-                aligned_count: Array.isArray(regulatory) ? regulatory.filter(f => f.status === 'aligned' || f.status === 'compliant').length : 0,
+                aligned_count: Array.isArray(regulatory)
+                    ? regulatory.filter(f => f.status === 'aligned' || f.status === 'compliant').length
+                    : 0,
                 total_frameworks: Array.isArray(regulatory) ? regulatory.length : 0,
             },
             partner_esg: {
                 total_partners: partners.length,
-                avg_esg_score: Array.isArray(leaderboard) && leaderboard.length > 0
-                    ? Math.round(leaderboard.reduce((s, p) => s + (p.esg_score || 0), 0) / leaderboard.length * 10) / 10
-                    : 0,
+                avg_esg_score:
+                    Array.isArray(leaderboard) && leaderboard.length > 0
+                        ? Math.round(
+                              (leaderboard.reduce((s, p) => s + (p.esg_score || 0), 0) / leaderboard.length) * 10
+                          ) / 10
+                        : 0,
                 top_performers: (Array.isArray(leaderboard) ? leaderboard : []).slice(0, 3).map(p => ({
                     name: p.name,
                     score: p.esg_score,
                     grade: p.grade,
                 })),
-                risk_partners: (Array.isArray(leaderboard) ? leaderboard : []).filter(p => (p.esg_score || 0) < 40).length,
+                risk_partners: (Array.isArray(leaderboard) ? leaderboard : []).filter(p => (p.esg_score || 0) < 40)
+                    .length,
             },
             products_assessed: products.length,
             offsets_recorded: Number(offsets?.c || 0),
@@ -3529,24 +4416,56 @@ router.get('/owner/ccs/allocation-baseline', requireExecutiveAccess(), async (re
         const carbonEngine = require('../engines/intelligence/carbon-engine');
         const engineClient = require('../engines/infrastructure/engine-client');
 
-        const [finConfig, products, shipments, events, partners, violations, offsets,
-            scmStats, breaches, scanStats] = await Promise.all([
+        const [finConfig, products, shipments, events, partners, violations, offsets, scmStats, breaches, scanStats] =
+            await Promise.all([
                 db.get(`SELECT * FROM financial_configs WHERE org_id = $1`, [tid]).catch(() => null),
-                db.all(`SELECT * FROM products WHERE org_id = $1 AND status = 'active' LIMIT 1000`, [tid])
+                db
+                    .all(`SELECT * FROM products WHERE org_id = $1 AND status = 'active' LIMIT 1000`, [tid])
                     .catch(() => []),
-                db.all(`SELECT s.* FROM shipments s JOIN batches b ON s.batch_id = b.id JOIN products p ON b.product_id = p.id WHERE p.org_id = $1`, [tid]).catch(() => []),
-                db.all(`SELECT sce.* FROM supply_chain_events sce WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                db
+                    .all(
+                        `SELECT s.* FROM shipments s JOIN batches b ON s.batch_id = b.id JOIN products p ON b.product_id = p.id WHERE p.org_id = $1`,
+                        [tid]
+                    )
                     .catch(() => []),
-                db.all(`SELECT * FROM partners WHERE org_id = $1 AND status = 'active' LIMIT 1000`, [tid])
+                db
+                    .all(
+                        `SELECT sce.* FROM supply_chain_events sce WHERE sce.product_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                        [tid]
+                    )
                     .catch(() => []),
-                db.all(`SELECT * FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                db
+                    .all(`SELECT * FROM partners WHERE org_id = $1 AND status = 'active' LIMIT 1000`, [tid])
                     .catch(() => []),
-                db.get(`SELECT COUNT(*) as c FROM evidence_items WHERE entity_type = 'carbon_offset' AND entity_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid]).catch(() => ({ c: 0 })),
-                db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE blockchain_seal_id IS NOT NULL) as sealed FROM supply_chain_events WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                db
+                    .all(
+                        `SELECT * FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                        [tid]
+                    )
+                    .catch(() => []),
+                db
+                    .get(
+                        `SELECT COUNT(*) as c FROM evidence_items WHERE entity_type = 'carbon_offset' AND entity_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                        [tid]
+                    )
+                    .catch(() => ({ c: 0 })),
+                db
+                    .get(
+                        `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE blockchain_seal_id IS NOT NULL) as sealed FROM supply_chain_events WHERE product_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                        [tid]
+                    )
                     .catch(() => ({ total: 0, sealed: 0 })),
-                db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE severity = 'critical') as critical FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`, [tid])
+                db
+                    .get(
+                        `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE severity = 'critical') as critical FROM anomaly_detections WHERE source_id IN (SELECT id FROM products WHERE org_id = $1)`,
+                        [tid]
+                    )
                     .catch(() => ({ total: 0, critical: 0 })),
-                db.get(`SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE result = 'authentic') as authentic FROM scan_events WHERE org_id = $1`, [tid])
+                db
+                    .get(
+                        `SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE result = 'authentic') as authentic FROM scan_events WHERE org_id = $1`,
+                        [tid]
+                    )
                     .catch(() => ({ total: 0, authentic: 0 })),
             ]);
 
@@ -3560,7 +4479,7 @@ router.get('/owner/ccs/allocation-baseline', requireExecutiveAccess(), async (re
         const brandValue = Number(finConfig?.brand_value || revenue * 1.5);
         const totalEmissions = Number(scopeData?.total_kgCO2e || 0);
         const carbonPrice = 90;
-        const carbonLiability = Math.round(totalEmissions / 1000 * carbonPrice);
+        const carbonLiability = Math.round((totalEmissions / 1000) * carbonPrice);
         const totalScans = Number(scanStats?.total || 0);
         const authenticScans = Number(scanStats?.authentic || 0);
         const totalSCEvents = Number(scmStats?.total || 0);
@@ -3574,14 +4493,17 @@ router.get('/owner/ccs/allocation-baseline', requireExecutiveAccess(), async (re
 
         res.json({
             baseline: {
-                revenue, ebitda, ev_multiple: evMultiple, current_ev: currentEV,
+                revenue,
+                ebitda,
+                ev_multiple: evMultiple,
+                current_ev: currentEV,
                 brand_value: brandValue,
                 carbon_liability: carbonLiability,
-                total_emissions_tCO2e: Math.round(totalEmissions / 1000 * 10) / 10,
+                total_emissions_tCO2e: Math.round((totalEmissions / 1000) * 10) / 10,
                 esg_premium: esgPremium,
                 overall_risk: overallRisk,
-                scan_integrity: totalScans > 0 ? Math.round(100 * authenticScans / totalScans) : 0,
-                sc_integrity: totalSCEvents > 0 ? Math.round(100 * sealedSCEvents / totalSCEvents) : 0,
+                scan_integrity: totalScans > 0 ? Math.round((100 * authenticScans) / totalScans) : 0,
+                sc_integrity: totalSCEvents > 0 ? Math.round((100 * sealedSCEvents) / totalSCEvents) : 0,
                 breach_count: totalBreaches,
                 critical_breaches: criticalBreaches,
                 partner_count: partners.length,
@@ -3590,12 +4512,54 @@ router.get('/owner/ccs/allocation-baseline', requireExecutiveAccess(), async (re
             },
             // Investment categories with default ranges
             investment_options: [
-                { id: 'emission_reduction', label: 'Emission Reduction', icon: '🏭', max: 5000000, step: 100000, description: 'Upgrade equipment, process optimization' },
-                { id: 'carbon_offsets', label: 'Carbon Offsets', icon: '🌱', max: 2000000, step: 50000, description: 'Purchase verified carbon credits' },
-                { id: 'renewable_shift', label: 'Renewable Energy', icon: '⚡', max: 3000000, step: 100000, description: 'Solar, wind, green energy transition' },
-                { id: 'verification_expansion', label: 'Verification System', icon: '🔍', max: 1000000, step: 50000, description: 'Expand scan coverage, blockchain sealing' },
-                { id: 'partner_compliance', label: 'Partner Compliance', icon: '🤝', max: 1000000, step: 50000, description: 'KYC programs, audit, supply chain trust' },
-                { id: 'brand_protection', label: 'Brand Protection', icon: '🛡️', max: 2000000, step: 100000, description: 'Anti-counterfeit, market surveillance' },
+                {
+                    id: 'emission_reduction',
+                    label: 'Emission Reduction',
+                    icon: '🏭',
+                    max: 5000000,
+                    step: 100000,
+                    description: 'Upgrade equipment, process optimization',
+                },
+                {
+                    id: 'carbon_offsets',
+                    label: 'Carbon Offsets',
+                    icon: '🌱',
+                    max: 2000000,
+                    step: 50000,
+                    description: 'Purchase verified carbon credits',
+                },
+                {
+                    id: 'renewable_shift',
+                    label: 'Renewable Energy',
+                    icon: '⚡',
+                    max: 3000000,
+                    step: 100000,
+                    description: 'Solar, wind, green energy transition',
+                },
+                {
+                    id: 'verification_expansion',
+                    label: 'Verification System',
+                    icon: '🔍',
+                    max: 1000000,
+                    step: 50000,
+                    description: 'Expand scan coverage, blockchain sealing',
+                },
+                {
+                    id: 'partner_compliance',
+                    label: 'Partner Compliance',
+                    icon: '🤝',
+                    max: 1000000,
+                    step: 50000,
+                    description: 'KYC programs, audit, supply chain trust',
+                },
+                {
+                    id: 'brand_protection',
+                    label: 'Brand Protection',
+                    icon: '🛡️',
+                    max: 2000000,
+                    step: 100000,
+                    description: 'Anti-counterfeit, market surveillance',
+                },
             ],
         });
     } catch (err) {
@@ -3618,63 +4582,99 @@ router.post('/owner/ccs/allocation-simulate', requireExecutiveAccess(), async (r
         const totalInvestment = emRed + offsets + renewable + verif + partnerComp + brandProt;
 
         // Impact calculations (simplified models)
-        const emissionReductionPct = Math.min(0.80, (emRed / 1000000) * 0.20 + (renewable / 1000000) * 0.15);
-        const offsetReductionPct = Math.min(0.50, (offsets / 100000) * 0.05);
+        const emissionReductionPct = Math.min(0.8, (emRed / 1000000) * 0.2 + (renewable / 1000000) * 0.15);
+        const offsetReductionPct = Math.min(0.5, (offsets / 100000) * 0.05);
         const currentEmissions = baseline.total_emissions_tCO2e || 0;
-        const newEmissions = Math.max(0, currentEmissions * (1 - emissionReductionPct) - (offsets / 90));
+        const newEmissions = Math.max(0, currentEmissions * (1 - emissionReductionPct) - offsets / 90);
         const newCarbonLiability = Math.round(newEmissions * 90);
         const liabilityReduction = baseline.carbon_liability - newCarbonLiability;
 
         // Risk reduction
-        const riskReduction = Math.min(0.60,
+        const riskReduction = Math.min(
+            0.6,
             (emRed / 5000000) * 0.15 +
-            (offsets / 2000000) * 0.08 +
-            (renewable / 3000000) * 0.12 +
-            (verif / 1000000) * 0.10 +
-            (partnerComp / 1000000) * 0.10 +
-            (brandProt / 2000000) * 0.05
+                (offsets / 2000000) * 0.08 +
+                (renewable / 3000000) * 0.12 +
+                (verif / 1000000) * 0.1 +
+                (partnerComp / 1000000) * 0.1 +
+                (brandProt / 2000000) * 0.05
         );
         const newRisk = Math.max(0.02, baseline.overall_risk * (1 - riskReduction));
 
         // ESG score improvement
-        const esgImprovement = Math.min(0.35,
-            (emRed / 5000000) * 0.10 +
-            (offsets / 2000000) * 0.05 +
-            (renewable / 3000000) * 0.08 +
-            (verif / 1000000) * 0.04 +
-            (partnerComp / 1000000) * 0.05 +
-            (brandProt / 2000000) * 0.03
+        const esgImprovement = Math.min(
+            0.35,
+            (emRed / 5000000) * 0.1 +
+                (offsets / 2000000) * 0.05 +
+                (renewable / 3000000) * 0.08 +
+                (verif / 1000000) * 0.04 +
+                (partnerComp / 1000000) * 0.05 +
+                (brandProt / 2000000) * 0.03
         );
         const newEsgPremium = baseline.esg_premium + esgImprovement;
 
         // Valuation impact
-        const newEVMultiple = baseline.ev_multiple * (1 + esgImprovement * 0.5) * (1 - (newRisk - baseline.overall_risk) * 0.3);
+        const newEVMultiple =
+            baseline.ev_multiple * (1 + esgImprovement * 0.5) * (1 - (newRisk - baseline.overall_risk) * 0.3);
         const newEV = baseline.ebitda * newEVMultiple;
         const evChange = newEV - baseline.current_ev;
 
         // Brand value impact
-        const brandImprovement = (brandProt / 2000000) * 0.15 + (verif / 1000000) * 0.08 + esgImprovement * 0.10;
+        const brandImprovement = (brandProt / 2000000) * 0.15 + (verif / 1000000) * 0.08 + esgImprovement * 0.1;
         const newBrandValue = Math.round(baseline.brand_value * (1 + brandImprovement));
 
         // Integrity improvements
         const newScanIntegrity = Math.min(100, baseline.scan_integrity + (verif / 1000000) * 15);
-        const newSCIntegrity = Math.min(100, baseline.sc_integrity + (verif / 1000000) * 20 + (partnerComp / 1000000) * 10);
+        const newSCIntegrity = Math.min(
+            100,
+            baseline.sc_integrity + (verif / 1000000) * 20 + (partnerComp / 1000000) * 10
+        );
 
         // ROI calculation
         const totalBenefits = liabilityReduction + Math.max(0, evChange) + (newBrandValue - baseline.brand_value);
-        const roi = totalInvestment > 0 ? Math.round(100 * totalBenefits / totalInvestment) : 0;
-        const paybackMonths = totalInvestment > 0 && totalBenefits > 0 ? Math.round(12 * totalInvestment / totalBenefits) : 0;
+        const roi = totalInvestment > 0 ? Math.round((100 * totalBenefits) / totalInvestment) : 0;
+        const paybackMonths =
+            totalInvestment > 0 && totalBenefits > 0 ? Math.round((12 * totalInvestment) / totalBenefits) : 0;
 
         res.json({
             total_investment: totalInvestment,
             projections: {
-                emissions: { current: currentEmissions, projected: Math.round(newEmissions * 10) / 10, reduction_pct: Math.round(100 * (currentEmissions - newEmissions) / Math.max(1, currentEmissions)) },
-                carbon_liability: { current: baseline.carbon_liability, projected: newCarbonLiability, saved: liabilityReduction },
-                risk: { current: Math.round(baseline.overall_risk * 100), projected: Math.round(newRisk * 100), reduction: Math.round((baseline.overall_risk - newRisk) * 100) },
-                esg_premium: { current: Math.round(baseline.esg_premium * 100) / 100, projected: Math.round(newEsgPremium * 100) / 100, improvement: Math.round(esgImprovement * 100) / 100 },
-                ev_multiple: { current: Math.round(baseline.ev_multiple * 10) / 10, projected: Math.round(newEVMultiple * 10) / 10 },
-                enterprise_value: { current: baseline.current_ev, projected: Math.round(newEV), change: Math.round(evChange) },
-                brand_value: { current: baseline.brand_value, projected: newBrandValue, change: newBrandValue - baseline.brand_value },
+                emissions: {
+                    current: currentEmissions,
+                    projected: Math.round(newEmissions * 10) / 10,
+                    reduction_pct: Math.round(
+                        (100 * (currentEmissions - newEmissions)) / Math.max(1, currentEmissions)
+                    ),
+                },
+                carbon_liability: {
+                    current: baseline.carbon_liability,
+                    projected: newCarbonLiability,
+                    saved: liabilityReduction,
+                },
+                risk: {
+                    current: Math.round(baseline.overall_risk * 100),
+                    projected: Math.round(newRisk * 100),
+                    reduction: Math.round((baseline.overall_risk - newRisk) * 100),
+                },
+                esg_premium: {
+                    current: Math.round(baseline.esg_premium * 100) / 100,
+                    projected: Math.round(newEsgPremium * 100) / 100,
+                    improvement: Math.round(esgImprovement * 100) / 100,
+                },
+                ev_multiple: {
+                    current: Math.round(baseline.ev_multiple * 10) / 10,
+                    projected: Math.round(newEVMultiple * 10) / 10,
+                },
+                enterprise_value: {
+                    current: baseline.current_ev,
+                    projected: Math.round(newEV),
+                    change: Math.round(evChange),
+                },
+                brand_value: {
+                    current: baseline.brand_value,
+                    projected: newBrandValue,
+                    change: newBrandValue - baseline.brand_value,
+                },
                 scan_integrity: { current: baseline.scan_integrity, projected: Math.round(newScanIntegrity) },
                 sc_integrity: { current: baseline.sc_integrity, projected: Math.round(newSCIntegrity) },
             },
@@ -3687,4 +4687,3 @@ router.post('/owner/ccs/allocation-simulate', requireExecutiveAccess(), async (r
 });
 
 module.exports = router;
-

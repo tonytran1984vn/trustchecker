@@ -5,43 +5,72 @@
  */
 
 let riskEngine;
-try { riskEngine = require('../services/risk-scoring-engine'); } catch(_) { riskEngine = null; }
+try {
+    riskEngine = require('../services/risk-scoring-engine');
+} catch (_) {
+    riskEngine = null;
+}
 const express = require('express');
-const { bulkScanDetector, replayDetector } = require("../middleware/blind-spot-defense");
+const { bulkScanDetector, replayDetector } = require('../middleware/blind-spot-defense');
 
 // TC-21-REUSE-CHECK: Detect QR code reuse pattern
 async function checkQrReuse(qrCodeId, qrData, ipAddr, deviceFp, db) {
     const crypto = require('crypto');
-    const ipHash = crypto.createHash('sha256').update(ipAddr || '').digest('hex').substring(0, 16);
-    const devHash = crypto.createHash('sha256').update(deviceFp || '').digest('hex').substring(0, 16);
-    
+    const ipHash = crypto
+        .createHash('sha256')
+        .update(ipAddr || '')
+        .digest('hex')
+        .substring(0, 16);
+    const devHash = crypto
+        .createHash('sha256')
+        .update(deviceFp || '')
+        .digest('hex')
+        .substring(0, 16);
+
     try {
         // Upsert fingerprint
-        await db.run(`INSERT INTO qr_scan_fingerprints (id, qr_code_id, qr_data, ip_hash, device_hash, ip_address, scan_count)
+        await db.run(
+            `INSERT INTO qr_scan_fingerprints (id, qr_code_id, qr_data, ip_hash, device_hash, ip_address, scan_count)
             VALUES ($1, $2, $3, $4, $5, $6, 1)
             ON CONFLICT (qr_code_id, device_hash) DO UPDATE SET scan_count = qr_scan_fingerprints.scan_count + 1, last_seen = NOW()`,
-            [require('uuid').v4(), qrCodeId, qrData, ipHash, devHash, ipAddr || '']);
-        
+            [require('uuid').v4(), qrCodeId, qrData, ipHash, devHash, ipAddr || '']
+        );
+
         // Check if reuse threshold breached
-        const stats = await db.get(`SELECT COUNT(DISTINCT ip_hash) as unique_ips, SUM(scan_count) as total_scans
-            FROM qr_scan_fingerprints WHERE qr_code_id = $1 OR qr_data = $2`, [qrCodeId, qrData]);
-        
+        const stats = await db.get(
+            `SELECT COUNT(DISTINCT ip_hash) as unique_ips, SUM(scan_count) as total_scans
+            FROM qr_scan_fingerprints WHERE qr_code_id = $1 OR qr_data = $2`,
+            [qrCodeId, qrData]
+        );
+
         if (stats && stats.unique_ips >= 4 && stats.total_scans >= 5) {
             // Auto-block QR code
             await db.run("UPDATE qr_codes SET status = 'blocked' WHERE id = $1 AND status != 'blocked'", [qrCodeId]);
-            
+
             // Audit log
             try {
-                await db.run(`INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, details, ip_address, created_at)
+                await db.run(
+                    `INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, details, ip_address, created_at)
                     VALUES ($1, 'system', 'qr_reuse_auto_block', 'qr_code', $2, $3, $4, NOW())`,
-                    [require('uuid').v4(), qrCodeId || qrData, JSON.stringify({ unique_ips: stats.unique_ips, total_scans: stats.total_scans }), ipAddr || '']);
-            } catch(_) {}
-            
-            return { reuse_detected: true, blocked: true, unique_ips: stats.unique_ips, total_scans: stats.total_scans };
+                    [
+                        require('uuid').v4(),
+                        qrCodeId || qrData,
+                        JSON.stringify({ unique_ips: stats.unique_ips, total_scans: stats.total_scans }),
+                        ipAddr || '',
+                    ]
+                );
+            } catch (_) {}
+
+            return {
+                reuse_detected: true,
+                blocked: true,
+                unique_ips: stats.unique_ips,
+                total_scans: stats.total_scans,
+            };
         }
-        
+
         return { reuse_detected: false, unique_ips: stats?.unique_ips || 0, total_scans: stats?.total_scans || 0 };
-    } catch(e) {
+    } catch (e) {
         return { reuse_detected: false, error: e.message };
     }
 }
@@ -62,7 +91,6 @@ router.use((req, res, next) => {
     next();
 });
 
-
 // All routes require authentication
 router.use(authMiddleware);
 router.use(orgGuard());
@@ -78,7 +106,13 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
         // ATK-22: Server-side fingerprint (don't trust client-supplied alone)
         const serverFingerprint = require('crypto')
             .createHash('sha256')
-            .update([req.ip || ip_address || '', req.headers['user-agent'] || '', req.headers['accept-language'] || ''].join('|'))
+            .update(
+                [
+                    req.ip || ip_address || '',
+                    req.headers['user-agent'] || '',
+                    req.headers['accept-language'] || '',
+                ].join('|')
+            )
             .digest('hex')
             .slice(0, 16);
         // ATK-27: Reject future/stale timestamps
@@ -101,17 +135,28 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
         if (!qrCode) {
             // Unknown QR — potential counterfeit
             const scanId = uuidv4();
-            await db.run(`
+            await db.run(
+                `
         INSERT INTO scan_events (id, scan_type, device_fingerprint, ip_address, latitude, longitude, user_agent, result, fraud_score, scanned_at, org_id)
         VALUES ($1, 'validation', $2, $3, $4, $5, $6, 'counterfeit', 1.0, NOW(), $7)
-      `, [scanId, effectiveFingerprint || '', req.ip || ip_address || '', latitude || null, longitude || null, req.headers['user-agent'] || user_agent || '', req.orgId || req.user?.orgId || req.user?.org_id || '']);
+      `,
+                [
+                    scanId,
+                    effectiveFingerprint || '',
+                    req.ip || ip_address || '',
+                    latitude || null,
+                    longitude || null,
+                    req.headers['user-agent'] || user_agent || '',
+                    req.orgId || req.user?.orgId || req.user?.org_id || '',
+                ]
+            );
 
             await blockchainEngine.seal('QRInvalid', scanId, { qr_data, result: 'counterfeit' });
 
             eventBus.emitEvent(EVENT_TYPES.QR_INVALID, {
                 scan_id: scanId,
                 qr_data: qr_data.substring(0, 20) + '...',
-                result: 'counterfeit'
+                result: 'counterfeit',
             });
 
             // TC-21: Track fingerprint for counterfeit scan
@@ -121,11 +166,13 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
                 const devFp2 = effectiveFingerprint || '';
                 const ipH = crypto.createHash('sha256').update(ipAddr2).digest('hex').substring(0, 16);
                 const devH = crypto.createHash('sha256').update(devFp2).digest('hex').substring(0, 16);
-                await db.run(`INSERT INTO qr_scan_fingerprints (id, qr_data, ip_hash, device_hash, ip_address, scan_count)
+                await db.run(
+                    `INSERT INTO qr_scan_fingerprints (id, qr_data, ip_hash, device_hash, ip_address, scan_count)
                     VALUES ($1, $2, $3, $4, $5, 1)
                     ON CONFLICT (qr_data, device_hash) DO UPDATE SET scan_count = qr_scan_fingerprints.scan_count + 1, last_seen = NOW()`,
-                    [require('uuid').v4(), qr_data, ipH, devH, ipAddr2]);
-            } catch(_fp) {}
+                    [require('uuid').v4(), qr_data, ipH, devH, ipAddr2]
+                );
+            } catch (_fp) {}
 
             return res.json({
                 valid: false,
@@ -133,46 +180,69 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
                 message: '❌ QR CODE NOT RECOGNIZED — Potential counterfeit detected',
                 fraud_score: 1.0,
                 trust_score: 0,
-                response_time_ms: Date.now() - startTime
+                response_time_ms: Date.now() - startTime,
             });
         }
 
-        
         // TC21-HMAC-VERIFY: Validate QR signature integrity
         try {
             const parts = qr_data.split('-');
             if (parts.length >= 4) {
                 const sigPart = parts[parts.length - 1]; // Last segment is signature
                 const dataPart = parts.slice(0, -1).join('-');
-                const expectedSig = require('crypto').createHmac('sha256', process.env.QR_SECRET || process.env.JWT_SECRET || 'tc-default-key')
-                    .update(qrCode.product_id + parts[2] + '0').digest('hex').slice(0, 8);
+                const expectedSig = require('crypto')
+                    .createHmac('sha256', process.env.QR_SECRET || process.env.JWT_SECRET || 'tc-default-key')
+                    .update(qrCode.product_id + parts[2] + '0')
+                    .digest('hex')
+                    .slice(0, 8);
                 if (sigPart !== expectedSig && sigPart.length === 8) {
                     req._hmacMismatch = true; // Flag for response enrichment
                 }
             }
-        } catch(_hmac) {}
+        } catch (_hmac) {}
 
         // TC21-REUSE: Check for QR code reuse pattern
-        const reuseResult = await checkQrReuse(qrCode.id, qr_data, req.ip || ip_address, effectiveFingerprint || device_fingerprint, db);
+        const reuseResult = await checkQrReuse(
+            qrCode.id,
+            qr_data,
+            req.ip || ip_address,
+            effectiveFingerprint || device_fingerprint,
+            db
+        );
         if (reuseResult.blocked) {
             return res.json({
                 valid: false,
                 result: 'blocked',
-                message: '🚫 QR CODE BLOCKED — Reuse detected (' + reuseResult.unique_ips + ' IPs, ' + reuseResult.total_scans + ' scans)',
+                message:
+                    '🚫 QR CODE BLOCKED — Reuse detected (' +
+                    reuseResult.unique_ips +
+                    ' IPs, ' +
+                    reuseResult.total_scans +
+                    ' scans)',
                 reuse_detected: true,
                 unique_ips: reuseResult.unique_ips,
                 total_scans: reuseResult.total_scans,
-                response_time_ms: Date.now() - startTime
+                response_time_ms: Date.now() - startTime,
             });
         }
 
         // ── RED-TEAM P1-1: Check QR expiry ──────────────────────────────────
         if (qrCode.expires_at && new Date(qrCode.expires_at) < new Date()) {
             const scanId = uuidv4();
-            await db.run(`
+            await db.run(
+                `
               INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, device_fingerprint, ip_address, result, scanned_at, org_id)
               VALUES (?, ?, ?, 'validation', ?, ?, 'expired', NOW(), ?)
-            `, [scanId, qrCode.id, qrCode.product_id, device_fingerprint || '', req.ip || ip_address || '', qrCode.org_id || '']);
+            `,
+                [
+                    scanId,
+                    qrCode.id,
+                    qrCode.product_id,
+                    device_fingerprint || '',
+                    req.ip || ip_address || '',
+                    qrCode.org_id || '',
+                ]
+            );
             await blockchainEngine.seal('QRExpired', scanId, { qr_data, result: 'expired' });
             return res.json({
                 valid: false,
@@ -181,7 +251,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
                 fraud_score: 0.3,
                 trust_score: 0,
                 expired_at: qrCode.expires_at,
-                response_time_ms: Date.now() - startTime
+                response_time_ms: Date.now() - startTime,
             });
         }
 
@@ -191,10 +261,12 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
         const prodParams = [qrCode.product_id];
         // RED-TEAM P1-2: Default org_id from QR code for public (unauthenticated) scans
         const effectiveOrgId = req.orgId || req.user?.orgId || req.user?.org_id || qrCode.org_id;
-        if (effectiveOrgId) { prodSql += ' AND org_id = ?'; prodParams.push(effectiveOrgId); }
+        if (effectiveOrgId) {
+            prodSql += ' AND org_id = ?';
+            prodParams.push(effectiveOrgId);
+        }
         const product = await db.prepare(prodSql).get(...prodParams);
 
-        
         // ── RED-TEAM P1-4: Anti-bot scan deduplication (5s window) ────────
         if (device_fingerprint || (req.ip && req.ip !== '::1')) {
             const recentScan = await db.get(
@@ -209,7 +281,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
                     valid: true,
                     result: 'duplicate',
                     message: 'Bạn vừa quét mã này. Vui lòng đợi vài giây rồi thử lại.',
-                    response_time_ms: Date.now() - startTime
+                    response_time_ms: Date.now() - startTime,
                 });
             }
         }
@@ -217,7 +289,11 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
         // Step 2.5: Check previous scans — CORE ANTI-COUNTERFEIT LOGIC
         // RED-TEAM P3-1: Use QR code ID hash as advisory lock to prevent concurrent first-scan race
         // Note: pg_advisory_xact_lock is released at end of transaction automatically
-        try { await db.run('SELECT pg_advisory_xact_lock(hashtext($1))', [qrCode.id]); } catch(e) { /* non-critical */ }
+        try {
+            await db.run('SELECT pg_advisory_xact_lock(hashtext($1))', [qrCode.id]);
+        } catch (e) {
+            /* non-critical */
+        }
         const previousScans = await db.all(
             `SELECT id, scanned_at, ip_address, device_fingerprint, geo_city, geo_country 
              FROM scan_events 
@@ -232,27 +308,47 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             const uniqueIPs = new Set(previousScans.map(s => s.ip_address)).size;
             if (uniqueIPs >= 4) {
                 // Flag this QR code as under_review
-                try { await db.run("UPDATE qr_codes SET status = 'under_review' WHERE id = $1 AND status = 'active'", [qrCode.id]); } catch(e) {}
-                
+                try {
+                    await db.run("UPDATE qr_codes SET status = 'under_review' WHERE id = $1 AND status = 'active'", [
+                        qrCode.id,
+                    ]);
+                } catch (e) {}
+
                 const scanId = uuidv4();
-                await db.run(`
+                await db.run(
+                    `
                     INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, device_fingerprint, ip_address, result, scanned_at, org_id)
                     VALUES (?, ?, ?, 'validation', ?, ?, 'blocked', NOW(), ?)`,
-                    [scanId, qrCode.id, qrCode.product_id, device_fingerprint || '', req.ip || ip_address || '', effectiveOrgId || qrCode.org_id || '']);
-                
+                    [
+                        scanId,
+                        qrCode.id,
+                        qrCode.product_id,
+                        device_fingerprint || '',
+                        req.ip || ip_address || '',
+                        effectiveOrgId || qrCode.org_id || '',
+                    ]
+                );
+
                 eventBus.emitEvent('QRBlocked', {
-                    qr_code_id: qrCode.id, product_id: qrCode.product_id,
-                    scan_count: scanCount, unique_ips: uniqueIPs,
-                    message: 'QR code blocked: ' + scanCount + ' scans from ' + uniqueIPs + ' different IPs'
+                    qr_code_id: qrCode.id,
+                    product_id: qrCode.product_id,
+                    scan_count: scanCount,
+                    unique_ips: uniqueIPs,
+                    message: 'QR code blocked: ' + scanCount + ' scans from ' + uniqueIPs + ' different IPs',
                 });
-                
+
                 return res.json({
                     valid: false,
                     result: 'blocked',
-                    message: 'QR code has been flagged for review due to unusual scan activity (' + scanCount + ' scans from ' + uniqueIPs + ' locations).',
+                    message:
+                        'QR code has been flagged for review due to unusual scan activity (' +
+                        scanCount +
+                        ' scans from ' +
+                        uniqueIPs +
+                        ' locations).',
                     fraud_score: 0.9,
                     trust_score: 5,
-                    response_time_ms: Date.now() - startTime
+                    response_time_ms: Date.now() - startTime,
                 });
             }
         }
@@ -261,20 +357,43 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
 
         // Step 3: Create scan event
         const scanId = uuidv4();
-        await db.run(`
+        await db.run(
+            `
       /* ATK-06-MAIN */ INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, device_fingerprint, ip_address, latitude, longitude, user_agent, result, scanned_at, org_id)
       VALUES (?, ?, ?, 'validation', ?, ?, ?, ?, ?, 'pending', NOW(), ?)
-    `, [scanId, qrCode.id, qrCode.product_id, device_fingerprint || '', ip_address || '', latitude || null, longitude || null, user_agent || '', effectiveOrgId || qrCode.org_id || '']);
+    `,
+            [
+                scanId,
+                qrCode.id,
+                qrCode.product_id,
+                device_fingerprint || '',
+                ip_address || '',
+                latitude || null,
+                longitude || null,
+                user_agent || '',
+                effectiveOrgId || qrCode.org_id || '',
+            ]
+        );
 
         // FIX-9-AUDIT-SCAN: Log scan to audit trail
         try {
-            await db.run('INSERT INTO audit_log (action, entity_type, entity_id, org_id, new_value, ip_address, user_agent) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-                ['QR_SCANNED', 'scan_event', scanId, effectiveOrgId || qrCode.org_id, JSON.stringify({ qr_code_id: qrCode.id, product_id: qrCode.product_id }), req.ip || ip_address, req.headers['user-agent'] || user_agent]);
-        } catch(auditErr) {}
+            await db.run(
+                'INSERT INTO audit_log (action, entity_type, entity_id, org_id, new_value, ip_address, user_agent) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+                [
+                    'QR_SCANNED',
+                    'scan_event',
+                    scanId,
+                    effectiveOrgId || qrCode.org_id,
+                    JSON.stringify({ qr_code_id: qrCode.id, product_id: qrCode.product_id }),
+                    req.ip || ip_address,
+                    req.headers['user-agent'] || user_agent,
+                ]
+            );
+        } catch (auditErr) {}
         eventBus.emitEvent(EVENT_TYPES.QR_SCANNED, {
             scan_id: scanId,
             product_id: qrCode.product_id,
-            product_name: product ? product.name : 'Unknown'
+            product_name: product ? product.name : 'Unknown',
         });
 
         // INV-3-SHIP-CHECK: Verify product has been shipped/distributed before allowing valid scan
@@ -291,7 +410,9 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             } else if (lastSCEvent.event_type === 'return') {
                 supplyChainWarning = 'Product has been returned — may not be authorized for resale';
             }
-        } catch(scErr) { /* non-blocking */ }
+        } catch (scErr) {
+            /* non-blocking */
+        }
 
         // Step 4: Run Fraud Engine
         const fraudResult = await engineClient.fraudAnalyze({
@@ -301,7 +422,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             device_fingerprint: device_fingerprint || '',
             ip_address: ip_address || '',
             latitude,
-            longitude
+            longitude,
         });
 
         // Step 5: Calculate Trust Score
@@ -333,13 +454,20 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             // FIX-5-VELOCITY-LOG: Log velocity anomaly to event bus for monitoring
             if (firstScanRecord.ip_address && firstScanRecord.ip_address !== (req.ip || ip_address || '')) {
                 eventBus.emitEvent('VelocityAnomaly', {
-                    qr_code_id: qrCode.id, product_id: qrCode.product_id,
-                    first_ip: firstScanRecord.ip_address, current_ip: req.ip || ip_address,
-                    first_scan: firstScanRecord.scanned_at, time_diff_ms: Date.now() - new Date(firstScanRecord.scanned_at + 'Z').getTime()
+                    qr_code_id: qrCode.id,
+                    product_id: qrCode.product_id,
+                    first_ip: firstScanRecord.ip_address,
+                    current_ip: req.ip || ip_address,
+                    first_scan: firstScanRecord.scanned_at,
+                    time_diff_ms: Date.now() - new Date(firstScanRecord.scanned_at + 'Z').getTime(),
                 });
             }
             // ATK-04 FIX: Geo-velocity — different IP within 1 hour = suspicious clone
-            if (firstScanRecord.ip_address && firstScanRecord.ip_address !== (req.ip || ip_address || '') && (Date.now() - new Date(firstScanRecord.scanned_at + 'Z').getTime()) < 3600000) {
+            if (
+                firstScanRecord.ip_address &&
+                firstScanRecord.ip_address !== (req.ip || ip_address || '') &&
+                Date.now() - new Date(firstScanRecord.scanned_at + 'Z').getTime() < 3600000
+            ) {
                 result = 'suspicious';
             } else {
                 result = scanCount >= 3 ? 'suspicious' : 'warning';
@@ -351,9 +479,16 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
                 total_previous_scans: scanCount,
                 first_scanned_at: firstScanRecord.scanned_at,
                 first_scanned_from_ip: firstScanRecord.ip_address || 'N/A',
-                first_scanned_location: firstScanRecord.geo_city ? `${firstScanRecord.geo_city}, ${firstScanRecord.geo_country}` : 'N/A',
-                risk_level: scanCount >= 5 ? 'Rất cao — có khả năng hàng giả' : scanCount >= 3 ? 'Cao — nghi ngờ hàng giả' : 'Trung bình — cần kiểm tra thêm',
-                all_scan_times: previousScans.map(s => s.scanned_at)
+                first_scanned_location: firstScanRecord.geo_city
+                    ? `${firstScanRecord.geo_city}, ${firstScanRecord.geo_country}`
+                    : 'N/A',
+                risk_level:
+                    scanCount >= 5
+                        ? 'Rất cao — có khả năng hàng giả'
+                        : scanCount >= 3
+                          ? 'Cao — nghi ngờ hàng giả'
+                          : 'Trung bình — cần kiểm tra thêm',
+                all_scan_times: previousScans.map(s => s.scanned_at),
             };
         }
 
@@ -373,18 +508,21 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
 
         // Step 7: Update scan event
         const responseTime = Date.now() - startTime;
-        await db.run(`
+        await db.run(
+            `
       UPDATE scan_events SET result = $1, fraud_score = $2, trust_score = $3, response_time_ms = $4 WHERE id = $5
-    `, [result, fraudResult.fraudScore, trustResult.score, responseTime, scanId]);
+    `,
+            [result, fraudResult.fraudScore, trustResult.score, responseTime, scanId]
+        );
 
         // Step 8: Blockchain seal
         const seal = await blockchainEngine.seal('QRValidated', scanId, {
             product_id: qrCode.product_id,
             result,
             fraud_score: fraudResult.fraudScore,
-                bulk_scan_detected: req.bulkScanDetected || false,
-                is_replay: req.isReplay || false,
-            trust_score: trustResult.score
+            bulk_scan_detected: req.bulkScanDetected || false,
+            is_replay: req.isReplay || false,
+            trust_score: trustResult.score,
         });
 
         eventBus.emitEvent(EVENT_TYPES.QR_VALIDATED, {
@@ -393,7 +531,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             result,
             fraud_score: fraudResult.fraudScore,
             trust_score: trustResult.score,
-            response_time_ms: responseTime
+            response_time_ms: responseTime,
         });
 
         res.json({
@@ -405,37 +543,46 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
                 is_first_scan: isFirstScan,
                 total_scans: scanCount + 1,
                 // TC21-OWNERSHIP-SCAN: Add ownership status
-                ownership_claimed: await (async () => { try { const c = await db.get('SELECT id FROM ownership_claims WHERE qr_code_id = $1', [qrCode.id]); return !!c; } catch(_) { return false; } })(),
-                ...(scan_warning || {})
+                ownership_claimed: await (async () => {
+                    try {
+                        const c = await db.get('SELECT id FROM ownership_claims WHERE qr_code_id = $1', [qrCode.id]);
+                        return !!c;
+                    } catch (_) {
+                        return false;
+                    }
+                })(),
+                ...(scan_warning || {}),
             },
-            product: product ? {
-                id: product.id,
-                name: product.name,
-                sku: product.sku,
-                manufacturer: product.manufacturer,
-                category: product.category,
-                origin_country: product.origin_country
-            } : null,
+            product: product
+                ? {
+                      id: product.id,
+                      name: product.name,
+                      sku: product.sku,
+                      manufacturer: product.manufacturer,
+                      category: product.category,
+                      origin_country: product.origin_country,
+                  }
+                : null,
             fraud: {
                 score: fraudResult.fraudScore,
                 alerts: fraudResult.alerts.length,
                 details: fraudResult.alerts.map(a => ({
                     type: a.type,
                     severity: a.severity,
-                    description: a.description
+                    description: a.description,
                 })),
-                explainability: fraudResult.explainability
+                explainability: fraudResult.explainability,
             },
             trust: {
                 score: trustResult.score,
                 grade: trustResult.grade,
-                factors: trustResult.explanation
+                factors: trustResult.explanation,
             },
             blockchain: {
                 sealed: true,
                 block_index: seal.block_index,
                 data_hash: seal.data_hash,
-                merkle_root: seal.merkle_root
+                merkle_root: seal.merkle_root,
             },
             // TC21-ENRICHED: Reuse analytics + ownership
             previously_verified: !isFirstScan,
@@ -445,9 +592,11 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
                 unique_devices: 'see scan_verification',
                 reuse_risk: scanCount >= 10 ? 'CRITICAL' : scanCount >= 5 ? 'HIGH' : scanCount >= 3 ? 'MEDIUM' : 'LOW',
             },
-            risk_assessment: riskResult ? { score: riskResult.risk_score, level: riskResult.decision, action: riskResult.auto_action } : null,
+            risk_assessment: riskResult
+                ? { score: riskResult.risk_score, level: riskResult.decision, action: riskResult.auto_action }
+                : null,
             hmac_valid: !req._hmacMismatch,
-            response_time_ms: responseTime
+            response_time_ms: responseTime,
         });
     } catch (err) {
         console.error('QR Validation error:', err);
@@ -471,7 +620,10 @@ router.post('/generate', async (req, res) => {
         let prodSql = 'SELECT id, name, sku FROM products WHERE id = ?';
         const prodParams = [product_id];
         const effectiveOrgId2 = req.orgId || req.user?.orgId || req.user?.org_id;
-        if (effectiveOrgId2) { prodSql += ' AND org_id = ?'; prodParams.push(effectiveOrgId2); }
+        if (effectiveOrgId2) {
+            prodSql += ' AND org_id = ?';
+            prodParams.push(effectiveOrgId2);
+        }
         const product = await db.prepare(prodSql).get(...prodParams);
         if (!product) {
             return res.status(404).json({ error: 'Product not found' });
@@ -488,16 +640,22 @@ router.post('/generate', async (req, res) => {
         for (let i = 0; i < qty; i++) {
             // ATK-01 FIX: Crypto-random sequence
             const seq = crypto.randomBytes(8).toString('hex');
-            const hmac = crypto.createHmac('sha256', process.env.QR_SECRET || process.env.JWT_SECRET || 'tc-default-key')
-              .update(product_id + seq + i).digest('hex').slice(0, 8);
+            const hmac = crypto
+                .createHmac('sha256', process.env.QR_SECRET || process.env.JWT_SECRET || 'tc-default-key')
+                .update(product_id + seq + i)
+                .digest('hex')
+                .slice(0, 8);
             const qrData = `${codePrefix}-${year}-${seq}-${hmac}`;
 
             const id = uuidv4();
             try {
-                await db.run(`
+                await db.run(
+                    `
                     INSERT INTO qr_codes (id, product_id, qr_data, org_id, status, generated_by, generated_at)
                     VALUES (?, ?, ?, ?, 'active', ?, NOW())
-                `, [id, product_id, qrData, orgId, req.user?.id || 'system']);
+                `,
+                    [id, product_id, qrData, orgId, req.user?.id || 'system']
+                );
 
                 generated.push({
                     id,
@@ -505,7 +663,7 @@ router.post('/generate', async (req, res) => {
                     product_id,
                     product_name: product.name,
                     status: 'active',
-                    created_at: new Date().toISOString()
+                    created_at: new Date().toISOString(),
                 });
             } catch (dupErr) {
                 // Skip duplicates and continue
@@ -517,7 +675,7 @@ router.post('/generate', async (req, res) => {
             count: generated.length,
             product_id,
             product_name: product.name,
-            generated_by: req.user?.email || 'system'
+            generated_by: req.user?.email || 'system',
         });
 
         res.json({
@@ -525,7 +683,7 @@ router.post('/generate', async (req, res) => {
             message: `Generated ${generated.length} QR codes for ${product.name}`,
             count: generated.length,
             codes: generated.slice(0, 100), // Return max 100 in response
-            product: { id: product.id, name: product.name, sku: product.sku }
+            product: { id: product.id, name: product.name, sku: product.sku },
         });
     } catch (err) {
         console.error('QR Generate error:', err);
@@ -544,14 +702,18 @@ router.post('/claim', async (req, res) => {
         if (!qrCode) return res.status(404).json({ error: 'QR code not found' });
 
         // Check if already claimed
-        const existing = await db.get('SELECT id, claimer_name, claimed_at FROM ownership_claims WHERE qr_code_id = $1', [qrCode.id]);
+        const existing = await db.get(
+            'SELECT id, claimer_name, claimed_at FROM ownership_claims WHERE qr_code_id = $1',
+            [qrCode.id]
+        );
         if (existing) {
             return res.json({
                 claimed: true,
                 already_claimed: true,
                 claimed_by: existing.claimer_name || 'Anonymous',
                 claimed_at: existing.claimed_at,
-                message: '⚠️ Sản phẩm này đã được đăng ký sở hữu bởi người khác. Nếu bạn mua hàng chính hãng, hãy liên hệ nhà sản xuất.',
+                message:
+                    '⚠️ Sản phẩm này đã được đăng ký sở hữu bởi người khác. Nếu bạn mua hàng chính hãng, hãy liên hệ nhà sản xuất.',
             });
         }
 
@@ -559,17 +721,36 @@ router.post('/claim', async (req, res) => {
         const claimId = require('uuid').v4();
         const deviceFp = req.body.device_fingerprint || req.headers['user-agent'] || '';
         const ipAddr = req.ip || req.body.ip_address || '';
-        
-        await db.run(`INSERT INTO ownership_claims (id, qr_code_id, product_id, claimer_device, claimer_ip, claimer_name, claimer_email, claimer_phone, org_id)
+
+        await db.run(
+            `INSERT INTO ownership_claims (id, qr_code_id, product_id, claimer_device, claimer_ip, claimer_name, claimer_email, claimer_phone, org_id)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-            [claimId, qrCode.id, qrCode.product_id, deviceFp, ipAddr, claimer_name || null, claimer_email || null, claimer_phone || null, qrCode.org_id]);
+            [
+                claimId,
+                qrCode.id,
+                qrCode.product_id,
+                deviceFp,
+                ipAddr,
+                claimer_name || null,
+                claimer_email || null,
+                claimer_phone || null,
+                qrCode.org_id,
+            ]
+        );
 
         // Audit
         try {
-            await db.run(`INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, details, ip_address)
+            await db.run(
+                `INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, details, ip_address)
                 VALUES ($1, 'customer', 'ownership_claimed', 'product', $2, $3, $4)`,
-                [require('uuid').v4(), qrCode.product_id, JSON.stringify({ qr_code_id: qrCode.id, claimer: claimer_name || 'Anonymous' }), ipAddr]);
-        } catch(_) {}
+                [
+                    require('uuid').v4(),
+                    qrCode.product_id,
+                    JSON.stringify({ qr_code_id: qrCode.id, claimer: claimer_name || 'Anonymous' }),
+                    ipAddr,
+                ]
+            );
+        } catch (_) {}
 
         res.json({
             claimed: true,
@@ -578,7 +759,7 @@ router.post('/claim', async (req, res) => {
             product_id: qrCode.product_id,
             message: '✅ Đăng ký sở hữu thành công! Bạn là chủ sở hữu hợp pháp của sản phẩm này.',
         });
-    } catch(err) {
+    } catch (err) {
         console.error('Ownership claim error:', err);
         res.status(500).json({ error: 'Claim failed' });
     }
@@ -590,28 +771,39 @@ router.get('/ownership/:qr_data', async (req, res) => {
         const qrCode = await db.get('SELECT id, product_id FROM qr_codes WHERE qr_data = $1', [req.params.qr_data]);
         if (!qrCode) return res.status(404).json({ error: 'QR code not found' });
 
-        const claim = await db.get('SELECT id, claimer_name, claimed_at, status FROM ownership_claims WHERE qr_code_id = $1', [qrCode.id]);
-        
+        const claim = await db.get(
+            'SELECT id, claimer_name, claimed_at, status FROM ownership_claims WHERE qr_code_id = $1',
+            [qrCode.id]
+        );
+
         const totalScans = await db.get('SELECT COUNT(*) as c FROM scan_events WHERE qr_code_id = $1', [qrCode.id]);
-        const uniqueDevices = await db.get('SELECT COUNT(DISTINCT device_fingerprint) as c FROM scan_events WHERE qr_code_id = $1', [qrCode.id]);
-        const fingerprints = await db.get('SELECT COUNT(DISTINCT ip_hash) as unique_ips, SUM(scan_count) as total FROM qr_scan_fingerprints WHERE qr_code_id = $1', [qrCode.id]);
+        const uniqueDevices = await db.get(
+            'SELECT COUNT(DISTINCT device_fingerprint) as c FROM scan_events WHERE qr_code_id = $1',
+            [qrCode.id]
+        );
+        const fingerprints = await db.get(
+            'SELECT COUNT(DISTINCT ip_hash) as unique_ips, SUM(scan_count) as total FROM qr_scan_fingerprints WHERE qr_code_id = $1',
+            [qrCode.id]
+        );
 
         res.json({
             product_id: qrCode.product_id,
-            ownership: claim ? {
-                claimed: true,
-                owner: claim.claimer_name || 'Anonymous',
-                claimed_at: claim.claimed_at,
-                status: claim.status,
-            } : { claimed: false },
+            ownership: claim
+                ? {
+                      claimed: true,
+                      owner: claim.claimer_name || 'Anonymous',
+                      claimed_at: claim.claimed_at,
+                      status: claim.status,
+                  }
+                : { claimed: false },
             scan_analytics: {
                 total_scans: parseInt(totalScans?.c || 0),
                 unique_devices: parseInt(uniqueDevices?.c || 0),
                 unique_ips: parseInt(fingerprints?.unique_ips || 0),
                 reuse_risk: (fingerprints?.unique_ips || 0) >= 4 ? 'HIGH' : 'LOW',
-            }
+            },
         });
-    } catch(err) {
+    } catch (err) {
         res.status(500).json({ error: 'Lookup failed' });
     }
 });
@@ -654,13 +846,16 @@ router.get('/scan-history', async (req, res) => {
 router.get('/fraud-alerts', async (req, res) => {
     try {
         const { status = 'open', limit = 50 } = req.query;
-        const alerts = await db.all(`
+        const alerts = await db.all(
+            `
       SELECT fa.*, p.name as product_name, p.sku as product_sku
       FROM fraud_alerts fa
       LEFT JOIN products p ON fa.product_id = p.id
       WHERE fa.status = ?
       ORDER BY fa.created_at DESC LIMIT ?
-    `, [status, Math.min(Number(limit) || 50, 200)]);
+    `,
+            [status, Math.min(Number(limit) || 50, 200)]
+        );
 
         res.json({ alerts });
     } catch (err) {
@@ -702,41 +897,86 @@ router.get('/dashboard-stats', async (req, res) => {
         const [totalProducts, totalScans, todayScans, openAlerts, avgTrustScore, totalSeals] = await Promise.all([
             db.prepare('SELECT COUNT(*) as count FROM products' + orgF).get(...orgP),
             db.prepare('SELECT COUNT(*) as count FROM scan_events' + orgF).get(...orgP),
-            db.prepare(`SELECT COUNT(*) as count FROM scan_events WHERE DATE(scanned_at) = DATE('now')` + (oid ? ' AND org_id = ?' : '')).get(...orgP),
-            db.prepare(`SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'` + (oid ? ' AND org_id = ?' : '')).get(...orgP),
-            db.prepare('SELECT AVG(trust_score) as avg FROM products WHERE trust_score > 0' + (oid ? ' AND org_id = ?' : '')).get(...orgP),
+            db
+                .prepare(
+                    `SELECT COUNT(*) as count FROM scan_events WHERE DATE(scanned_at) = DATE('now')` +
+                        (oid ? ' AND org_id = ?' : '')
+                )
+                .get(...orgP),
+            db
+                .prepare(
+                    `SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'` + (oid ? ' AND org_id = ?' : '')
+                )
+                .get(...orgP),
+            db
+                .prepare(
+                    'SELECT AVG(trust_score) as avg FROM products WHERE trust_score > 0' +
+                        (oid ? ' AND org_id = ?' : '')
+                )
+                .get(...orgP),
             db.prepare('SELECT COUNT(*) as count FROM blockchain_seals' + orgF).get(...orgP),
         ]);
 
         const [scansByResult, alertsBySeverity, recentActivity, scanTrend] = await Promise.all([
-            db.prepare('SELECT result, COUNT(*) as count FROM scan_events' + (oid ? ' WHERE org_id = ?' : '') + ' GROUP BY result').all(...orgP),
-            db.prepare(`SELECT severity, COUNT(*) as count FROM fraud_alerts WHERE status = 'open'` + (oid ? ' AND org_id = ?' : '') + ' GROUP BY severity').all(...orgP),
-            db.prepare(`SELECT se.id, se.result, se.fraud_score, se.trust_score, se.scanned_at, p.name as product_name
-              FROM scan_events se LEFT JOIN products p ON se.product_id = p.id` + (oid ? ' WHERE se.org_id = ?' : '') + `
-              ORDER BY se.scanned_at DESC LIMIT 10`).all(...orgP),
-            db.prepare(`SELECT DATE(scanned_at) as day, COUNT(*) as count FROM scan_events
-              WHERE scanned_at > (NOW() - interval '7 days')` + (oid ? ' AND org_id = ?' : '') + ` GROUP BY DATE(scanned_at) ORDER BY day ASC LIMIT 1000`).all(...orgP),
+            db
+                .prepare(
+                    'SELECT result, COUNT(*) as count FROM scan_events' +
+                        (oid ? ' WHERE org_id = ?' : '') +
+                        ' GROUP BY result'
+                )
+                .all(...orgP),
+            db
+                .prepare(
+                    `SELECT severity, COUNT(*) as count FROM fraud_alerts WHERE status = 'open'` +
+                        (oid ? ' AND org_id = ?' : '') +
+                        ' GROUP BY severity'
+                )
+                .all(...orgP),
+            db
+                .prepare(
+                    `SELECT se.id, se.result, se.fraud_score, se.trust_score, se.scanned_at, p.name as product_name
+              FROM scan_events se LEFT JOIN products p ON se.product_id = p.id` +
+                        (oid ? ' WHERE se.org_id = ?' : '') +
+                        `
+              ORDER BY se.scanned_at DESC LIMIT 10`
+                )
+                .all(...orgP),
+            db
+                .prepare(
+                    `SELECT DATE(scanned_at) as day, COUNT(*) as count FROM scan_events
+              WHERE scanned_at > (NOW() - interval '7 days')` +
+                        (oid ? ' AND org_id = ?' : '') +
+                        ` GROUP BY DATE(scanned_at) ORDER BY day ASC LIMIT 1000`
+                )
+                .all(...orgP),
         ]);
 
         // ── CIE (Carbon Integrity Engine) metrics ──
         const orgId = req.orgId || req.user?.org_id || req.user?.orgId || null;
-        let cieAnomalies = 0, cieSealedCIPs = 0, cieAnchoredProofs = 0, cieIntegrity = 87;
+        let cieAnomalies = 0,
+            cieSealedCIPs = 0,
+            cieAnchoredProofs = 0,
+            cieIntegrity = 87;
         try {
             // Anomalies = open fraud alerts
             cieAnomalies = openAlerts.count;
             // Sealed CIPs = distinct carbon passport entries (products with carbon data)
             const sealedRes = orgId
-                ? await db.get('SELECT COUNT(*) as c FROM products WHERE org_id = ? AND carbon_footprint_kgco2e > 0', [orgId])
+                ? await db.get('SELECT COUNT(*) as c FROM products WHERE org_id = ? AND carbon_footprint_kgco2e > 0', [
+                      orgId,
+                  ])
                 : await db.get('SELECT COUNT(*) as c FROM products WHERE carbon_footprint_kgco2e > 0');
             cieSealedCIPs = sealedRes?.c || 0;
             // Anchored proofs = blockchain seals
             cieAnchoredProofs = totalSeals.count;
             // Integrity score = weighted composite (trust + coverage + blockchain)
-            const trustPart = Math.min(30, Math.round((avgTrustScore.avg || 0) / 100 * 30));
-            const coveragePart = totalProducts.count > 0 ? Math.min(40, Math.round((cieSealedCIPs / totalProducts.count) * 40)) : 0;
-            const blockchainPart = cieAnchoredProofs > 0 ? Math.min(30, Math.round(Math.min(cieAnchoredProofs / 10, 1) * 30)) : 0;
+            const trustPart = Math.min(30, Math.round(((avgTrustScore.avg || 0) / 100) * 30));
+            const coveragePart =
+                totalProducts.count > 0 ? Math.min(40, Math.round((cieSealedCIPs / totalProducts.count) * 40)) : 0;
+            const blockchainPart =
+                cieAnchoredProofs > 0 ? Math.min(30, Math.round(Math.min(cieAnchoredProofs / 10, 1) * 30)) : 0;
             cieIntegrity = trustPart + coveragePart + blockchainPart;
-        } catch (_) { }
+        } catch (_) {}
 
         res.json({
             total_products: totalProducts.count,
@@ -782,14 +1022,14 @@ router.get('/camera-config', async (req, res) => {
                     video: {
                         facingMode: 'environment',
                         width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
+                        height: { ideal: 720 },
+                    },
                 },
                 decoder: {
                     library: 'jsQR',
                     cdn: 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
-                    interval_ms: 100
-                }
+                    interval_ms: 100,
+                },
             },
             supported_formats: ['QR_CODE', 'DATA_MATRIX', 'CODE_128', 'EAN_13'],
             offline_capable: true,
@@ -797,14 +1037,14 @@ router.get('/camera-config', async (req, res) => {
                 step1: 'Grant camera permission when prompted',
                 step2: 'Point camera at the QR code',
                 step3: 'Hold steady for 1-2 seconds',
-                step4: 'Result appears automatically'
+                step4: 'Result appears automatically',
             },
             tips: [
                 'Ensure adequate lighting',
                 'Hold device 10-20cm from QR code',
                 'Keep QR code flat and visible',
-                'Works offline — scans are queued for sync'
-            ]
+                'Works offline — scans are queued for sync',
+            ],
         });
     } catch (e) {
         console.error(e);
@@ -829,77 +1069,130 @@ router.post('/mobile-scan', bulkScanDetector, replayDetector, validate(schemas.q
             const devFp = req.body.device_fingerprint || req.body.device_info?.model || '';
             const ipHash = crypto.createHash('sha256').update(ipAddr).digest('hex').substring(0, 16);
             const devHash = crypto.createHash('sha256').update(devFp).digest('hex').substring(0, 16);
-            
+
             try {
                 // Log scan event for counterfeit
-                await db.run(`INSERT INTO scan_events (id, scan_type, device_fingerprint, ip_address, result, fraud_score, scanned_at, org_id)
+                await db.run(
+                    `INSERT INTO scan_events (id, scan_type, device_fingerprint, ip_address, result, fraud_score, scanned_at, org_id)
                     VALUES ($1, 'mobile_camera', $2, $3, 'counterfeit', 1.0, NOW(), $4)`,
-                    [scanId, devFp, ipAddr, req.orgId || '']);
-                
+                    [scanId, devFp, ipAddr, req.orgId || '']
+                );
+
                 // Track fingerprint (upsert)
-                await db.run(`INSERT INTO qr_scan_fingerprints (id, qr_data, ip_hash, device_hash, ip_address, scan_count)
+                await db.run(
+                    `INSERT INTO qr_scan_fingerprints (id, qr_data, ip_hash, device_hash, ip_address, scan_count)
                     VALUES ($1, $2, $3, $4, $5, 1)
                     ON CONFLICT (qr_data, device_hash) DO UPDATE SET scan_count = qr_scan_fingerprints.scan_count + 1, last_seen = NOW()`,
-                    [require('uuid').v4(), qr_data, ipHash, devHash, ipAddr]);
-                
+                    [require('uuid').v4(), qr_data, ipHash, devHash, ipAddr]
+                );
+
                 // TC-21 FIX: Check reuse pattern
-                const uniqueIPs = await db.get(`SELECT COUNT(DISTINCT ip_hash) as c FROM qr_scan_fingerprints WHERE qr_data = $1`, [qr_data]);
-                const totalScans = await db.get(`SELECT SUM(scan_count) as c FROM qr_scan_fingerprints WHERE qr_data = $1`, [qr_data]);
-                
+                const uniqueIPs = await db.get(
+                    `SELECT COUNT(DISTINCT ip_hash) as c FROM qr_scan_fingerprints WHERE qr_data = $1`,
+                    [qr_data]
+                );
+                const totalScans = await db.get(
+                    `SELECT SUM(scan_count) as c FROM qr_scan_fingerprints WHERE qr_data = $1`,
+                    [qr_data]
+                );
+
                 if (uniqueIPs?.c >= 4 && totalScans?.c >= 5) {
                     // Auto-flag as reuse attack
                     try {
-                        await db.run(`INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, details, ip_address, created_at)
+                        await db.run(
+                            `INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, details, ip_address, created_at)
                             VALUES ($1, 'system', 'qr_reuse_detected', 'qr_code', $2, $3, $4, NOW())`,
-                            [require('uuid').v4(), qr_data, JSON.stringify({ unique_ips: uniqueIPs.c, total_scans: totalScans.c, threshold: '4 IPs / 5 scans' }), ipAddr]);
-                    } catch(_) {}
+                            [
+                                require('uuid').v4(),
+                                qr_data,
+                                JSON.stringify({
+                                    unique_ips: uniqueIPs.c,
+                                    total_scans: totalScans.c,
+                                    threshold: '4 IPs / 5 scans',
+                                }),
+                                ipAddr,
+                            ]
+                        );
+                    } catch (_) {}
                 }
-            } catch(logErr) { console.error('TC21-LOG:', logErr.message); }
-            
+            } catch (logErr) {
+                console.error('TC21-LOG:', logErr.message);
+            }
+
             return res.json({
-                valid: false, result: 'counterfeit',
+                valid: false,
+                result: 'counterfeit',
                 message: '❌ QR CODE NOT RECOGNIZED',
                 response_time_ms: Date.now() - startTime,
-                scan_type: 'mobile_camera'
+                scan_type: 'mobile_camera',
             });
         }
 
         // TC21-MOBILE-REUSE: Check reuse pattern
-        const mobileReuseResult = await checkQrReuse(qrCode.id, qr_data, req.ip || req.body.ip_address, req.body.device_fingerprint || req.body.device_info?.model, db);
+        const mobileReuseResult = await checkQrReuse(
+            qrCode.id,
+            qr_data,
+            req.ip || req.body.ip_address,
+            req.body.device_fingerprint || req.body.device_info?.model,
+            db
+        );
         if (mobileReuseResult.blocked) {
             return res.json({
-                valid: false, result: 'blocked',
+                valid: false,
+                result: 'blocked',
                 message: '🚫 QR CODE BLOCKED — Reuse detected',
-                reuse_detected: true, unique_ips: mobileReuseResult.unique_ips, total_scans: mobileReuseResult.total_scans,
-                response_time_ms: Date.now() - startTime, scan_type: 'mobile_camera'
+                reuse_detected: true,
+                unique_ips: mobileReuseResult.unique_ips,
+                total_scans: mobileReuseResult.total_scans,
+                response_time_ms: Date.now() - startTime,
+                scan_type: 'mobile_camera',
             });
         }
 
         let mpSql = 'SELECT * FROM products WHERE id = ?';
         const mpParams = [qrCode.product_id];
-        if (req.orgId) { mpSql += ' AND org_id = ?'; mpParams.push(req.orgId); }
+        if (req.orgId) {
+            mpSql += ' AND org_id = ?';
+            mpParams.push(req.orgId);
+        }
         const product = await db.prepare(mpSql).get(...mpParams);
         const scanId = uuidv4();
 
-        await db.run(`
+        await db.run(
+            `
       INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, device_fingerprint, user_agent, result, scanned_at)
       VALUES (?, ?, ?, 'mobile_camera', ?, ?, 'valid', NOW())
-    `, [scanId, qrCode.id, qrCode.product_id,
-            device_info?.model || 'mobile', device_info?.userAgent || 'Mobile Camera']);
+    `,
+            [
+                scanId,
+                qrCode.id,
+                qrCode.product_id,
+                device_info?.model || 'mobile',
+                device_info?.userAgent || 'Mobile Camera',
+            ]
+        );
 
         // INV-3-MOBILE: Check supply chain status for mobile scans
         let mobileScWarning = null;
         try {
-            const lastEvt = await db.get('SELECT event_type FROM supply_chain_events WHERE product_id = $1 ORDER BY created_at DESC LIMIT 1', [qrCode.product_id]);
+            const lastEvt = await db.get(
+                'SELECT event_type FROM supply_chain_events WHERE product_id = $1 ORDER BY created_at DESC LIMIT 1',
+                [qrCode.product_id]
+            );
             if (!lastEvt || ['commission', 'pack'].includes(lastEvt.event_type)) {
                 mobileScWarning = 'Product not yet in distribution';
             }
-        } catch(_) {}
+        } catch (_) {}
 
-        const fraudResult = await engineClient.fraudAnalyze({ id: scanId, qr_code_id: qrCode.id, product_id: qrCode.product_id });
+        const fraudResult = await engineClient.fraudAnalyze({
+            id: scanId,
+            qr_code_id: qrCode.id,
+            product_id: qrCode.product_id,
+        });
         const trustResult = trustEngine.calculate(qrCode.product_id, fraudResult.fraudScore);
 
-        await db.prepare('UPDATE scan_events SET fraud_score = ?, trust_score = ?, response_time_ms = ? WHERE id = ?')
+        await db
+            .prepare('UPDATE scan_events SET fraud_score = ?, trust_score = ?, response_time_ms = ? WHERE id = ?')
             .run(fraudResult.fraudScore, trustResult.score, Date.now() - startTime, scanId);
 
         res.json({
@@ -908,13 +1201,15 @@ router.post('/mobile-scan', bulkScanDetector, replayDetector, validate(schemas.q
             message: fraudResult.fraudScore > 0.7 ? '⚠️ SUSPICIOUS' : '✅ PRODUCT VERIFIED',
             scan_id: scanId,
             scan_type: 'mobile_camera',
-            product: product ? { id: product.id, name: product.name, sku: product.sku, manufacturer: product.manufacturer } : null,
+            product: product
+                ? { id: product.id, name: product.name, sku: product.sku, manufacturer: product.manufacturer }
+                : null,
             fraud_score: fraudResult.fraudScore,
             trust_score: trustResult.score,
             trust_grade: trustResult.grade,
-                supply_chain_status: supplyChainWarning ? 'warning' : 'verified',
-                supply_chain_warning: supplyChainWarning || null, // INV-3-RESP
-            response_time_ms: Date.now() - startTime
+            supply_chain_status: supplyChainWarning ? 'warning' : 'verified',
+            supply_chain_warning: supplyChainWarning || null, // INV-3-RESP
+            response_time_ms: Date.now() - startTime,
         });
     } catch (err) {
         res.status(500).json({ error: 'Mobile scan failed', response_time_ms: Date.now() - startTime });
@@ -936,9 +1231,9 @@ const publicCheckLimiter = rateLimit({
 
 router.get('/public/check/:productId', publicCheckLimiter, async (req, res) => {
     try {
-        const product = await db.prepare(
-            'SELECT id, name, manufacturer, sku, trust_score FROM products WHERE id = ?'
-        ).get(req.params.productId);
+        const product = await db
+            .prepare('SELECT id, name, manufacturer, sku, trust_score FROM products WHERE id = ?')
+            .get(req.params.productId);
 
         if (!product) {
             return res.status(404).json({
@@ -948,13 +1243,15 @@ router.get('/public/check/:productId', publicCheckLimiter, async (req, res) => {
             });
         }
 
-        const scanCount = await db.prepare(
-            'SELECT COUNT(*) as c FROM scan_events WHERE product_id = ?'
-        ).get(product.id);
+        const scanCount = await db
+            .prepare('SELECT COUNT(*) as c FROM scan_events WHERE product_id = ?')
+            .get(product.id);
 
-        const recentScans = await db.prepare(
-            "SELECT COUNT(*) as c FROM scan_events WHERE product_id = ? AND scanned_at >= NOW() - INTERVAL '30 days'"
-        ).get(product.id);
+        const recentScans = await db
+            .prepare(
+                "SELECT COUNT(*) as c FROM scan_events WHERE product_id = ? AND scanned_at >= NOW() - INTERVAL '30 days'"
+            )
+            .get(product.id);
 
         res.json({
             found: true,

@@ -43,9 +43,11 @@ router.use(authMiddleware);
         // Try db.run first; if Prisma mode skips DDL, use Prisma directly
         const result = await db.run(sql).catch(() => null);
         if (!result && db.prisma) {
-            await db.prisma.$executeRawUnsafe(sql).catch(() => { });
+            await db.prisma.$executeRawUnsafe(sql).catch(() => {});
         }
-    } catch (e) { console.error('[carbon-actions] Table init:', e.message); }
+    } catch (e) {
+        console.error('[carbon-actions] Table init:', e.message);
+    }
 })();
 
 // ─── GET / — List all actions for this org ─────────────────────────────────────
@@ -61,18 +63,32 @@ router.get('/', cacheMiddleware(10), async (req, res) => {
                     WHERE ca.org_id = ?`;
         const params = [orgId];
 
-        if (status && status !== 'all') { sql += ` AND ca.status = ?`; params.push(status); }
-        if (priority) { sql += ` AND ca.priority = ?`; params.push(priority); }
-        if (assigned_to) { sql += ` AND ca.assigned_to = ?`; params.push(assigned_to); }
+        if (status && status !== 'all') {
+            sql += ` AND ca.status = ?`;
+            params.push(status);
+        }
+        if (priority) {
+            sql += ` AND ca.priority = ?`;
+            params.push(priority);
+        }
+        if (assigned_to) {
+            sql += ` AND ca.assigned_to = ?`;
+            params.push(assigned_to);
+        }
 
         sql += ` ORDER BY CASE ca.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END, ca.created_at DESC`;
 
         const actions = await db.all(sql, params).catch(() => []);
 
         // Stats
-        const allActions = await db.all(`SELECT status, COUNT(*) as cnt FROM carbon_actions WHERE org_id = ? GROUP BY status`, [orgId]).catch(() => []);
+        const allActions = await db
+            .all(`SELECT status, COUNT(*) as cnt FROM carbon_actions WHERE org_id = ? GROUP BY status`, [orgId])
+            .catch(() => []);
         const stats = { open: 0, in_progress: 0, done: 0, dismissed: 0, total: 0 };
-        allActions.forEach(r => { stats[r.status] = r.cnt; stats.total += r.cnt; });
+        allActions.forEach(r => {
+            stats[r.status] = r.cnt;
+            stats.total += r.cnt;
+        });
 
         res.json({ actions, stats });
     } catch (err) {
@@ -85,13 +101,15 @@ router.get('/', cacheMiddleware(10), async (req, res) => {
 router.get('/my', async (req, res) => {
     try {
         const userId = req.user?.id || req.user?.userId;
-        const actions = await db.all(
-            `SELECT ca.*, u.email as creator_email FROM carbon_actions ca
+        const actions = await db
+            .all(
+                `SELECT ca.*, u.email as creator_email FROM carbon_actions ca
              LEFT JOIN users u ON ca.created_by = u.id
              WHERE ca.assigned_to = ? AND ca.status IN ('open','in_progress')
              ORDER BY CASE ca.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END`,
-            [userId]
-        ).catch(() => []);
+                [userId]
+            )
+            .catch(() => []);
         res.json({ actions, total: actions.length });
     } catch (err) {
         console.error('[carbon-actions] My actions error:', err);
@@ -106,9 +124,9 @@ router.get('/suggestions', cacheMiddleware(120), async (req, res) => {
         const suggestions = [];
 
         // Check for low-grade partners
-        const lowPartners = await db.all(
-            `SELECT id, name, trust_score FROM partners WHERE org_id = ? AND trust_score < 50 LIMIT 1000`, [orgId]
-        ).catch(() => []);
+        const lowPartners = await db
+            .all(`SELECT id, name, trust_score FROM partners WHERE org_id = ? AND trust_score < 50 LIMIT 1000`, [orgId])
+            .catch(() => []);
         lowPartners.forEach(p => {
             suggestions.push({
                 title: `Review partner: ${p.name}`,
@@ -117,15 +135,19 @@ router.get('/suggestions', cacheMiddleware(120), async (req, res) => {
                 priority: p.trust_score < 30 ? 'critical' : 'high',
                 assigned_role: 'procurement',
                 source_type: 'auto_risk',
-                source_ref: `partner:${p.id}`
+                source_ref: `partner:${p.id}`,
             });
         });
 
         // Check for high Scope 3 concentration
-        const products = await db.all(
-            orgId ? `SELECT * FROM products WHERE org_id = ? OR registered_by IN (SELECT id FROM users WHERE org_id = ?)` : `SELECT * FROM products LIMIT 200`,
-            orgId ? [orgId, orgId] : []
-        ).catch(() => []);
+        const products = await db
+            .all(
+                orgId
+                    ? `SELECT * FROM products WHERE org_id = ? OR registered_by IN (SELECT id FROM users WHERE org_id = ?)`
+                    : `SELECT * FROM products LIMIT 200`,
+                orgId ? [orgId, orgId] : []
+            )
+            .catch(() => []);
 
         const totalKg = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
         if (totalKg > 0) {
@@ -133,12 +155,12 @@ router.get('/suggestions', cacheMiddleware(120), async (req, res) => {
             if (s3Est / totalKg > 0.6) {
                 suggestions.push({
                     title: 'Optimize transport emissions (Scope 3)',
-                    description: `Scope 3 estimated at ${Math.round(s3Est / totalKg * 100)}% of total emissions. Consider shifting air freight to sea/rail, consolidating shipments, or selecting lower-emission carriers.`,
+                    description: `Scope 3 estimated at ${Math.round((s3Est / totalKg) * 100)}% of total emissions. Consider shifting air freight to sea/rail, consolidating shipments, or selecting lower-emission carriers.`,
                     category: 'scope_reduction',
                     priority: 'high',
                     assigned_role: 'coo',
                     source_type: 'auto_threshold',
-                    source_ref: 'scope:3'
+                    source_ref: 'scope:3',
                 });
             }
         }
@@ -153,30 +175,36 @@ router.get('/suggestions', cacheMiddleware(120), async (req, res) => {
                 priority: 'medium',
                 assigned_role: 'carbon_officer',
                 source_type: 'auto_threshold',
-                source_ref: 'confidence:low'
+                source_ref: 'confidence:low',
             });
         }
 
         // Check offset coverage
-        let offsetTotal = 0, emissionT = totalKg / 1000;
+        let offsetTotal = 0,
+            emissionT = totalKg / 1000;
         try {
-            const off = await db.get(`SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE org_id = ? AND status = 'retired'`, [orgId]);
+            const off = await db.get(
+                `SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE org_id = ? AND status = 'retired'`,
+                [orgId]
+            );
             offsetTotal = off?.r || 0;
-        } catch (_) { }
+        } catch (_) {}
         if (emissionT > 0 && offsetTotal / emissionT < 0.3) {
             suggestions.push({
                 title: 'Increase carbon offset coverage',
-                description: `Current offset coverage: ${Math.round(offsetTotal / emissionT * 100)}%. Consider purchasing additional carbon credits to improve ESG grade and regulatory readiness.`,
+                description: `Current offset coverage: ${Math.round((offsetTotal / emissionT) * 100)}%. Consider purchasing additional carbon credits to improve ESG grade and regulatory readiness.`,
                 category: 'offset',
                 priority: 'medium',
                 assigned_role: 'cfo',
                 source_type: 'auto_threshold',
-                source_ref: 'offset:low'
+                source_ref: 'offset:low',
             });
         }
 
         // Filter out suggestions that already exist as actions
-        const existing = await db.all(`SELECT source_ref FROM carbon_actions WHERE org_id = ? AND status != 'done'`, [orgId]).catch(() => []);
+        const existing = await db
+            .all(`SELECT source_ref FROM carbon_actions WHERE org_id = ? AND status != 'done'`, [orgId])
+            .catch(() => []);
         const existingRefs = new Set(existing.map(e => e.source_ref));
         const filtered = suggestions.filter(s => !existingRefs.has(s.source_ref));
 
@@ -192,7 +220,17 @@ router.post('/', async (req, res) => {
     try {
         const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const userId = req.user?.id || req.user?.userId;
-        const { title, description, category, priority, assigned_to, assigned_role, due_date, source_type, source_ref } = req.body;
+        const {
+            title,
+            description,
+            category,
+            priority,
+            assigned_to,
+            assigned_role,
+            due_date,
+            source_type,
+            source_ref,
+        } = req.body;
 
         if (!title || !title.trim()) return res.status(400).json({ error: 'Title is required' });
 
@@ -200,13 +238,28 @@ router.post('/', async (req, res) => {
         await db.run(
             `INSERT INTO carbon_actions (id, org_id, title, description, category, priority, assigned_to, assigned_role, created_by, source_type, source_ref, due_date)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [id, orgId, title.trim(), description || '', category || 'other', priority || 'medium',
-                assigned_to || null, assigned_role || '', userId, source_type || 'manual', source_ref || '', due_date || null]
+            [
+                id,
+                orgId,
+                title.trim(),
+                description || '',
+                category || 'other',
+                priority || 'medium',
+                assigned_to || null,
+                assigned_role || '',
+                userId,
+                source_type || 'manual',
+                source_ref || '',
+                due_date || null,
+            ]
         );
 
-        const action = await db.get(`SELECT ca.*, u1.email as creator_email, u2.email as assignee_email
+        const action = await db.get(
+            `SELECT ca.*, u1.email as creator_email, u2.email as assignee_email
             FROM carbon_actions ca LEFT JOIN users u1 ON ca.created_by = u1.id LEFT JOIN users u2 ON ca.assigned_to = u2.id
-            WHERE ca.id = ?`, [id]);
+            WHERE ca.id = ?`,
+            [id]
+        );
 
         res.status(201).json({ action, message: 'Action created' });
     } catch (err) {
@@ -226,20 +279,40 @@ router.patch('/:id', async (req, res) => {
 
         const updates = [];
         const params = [];
-        if (status) { updates.push('status = ?'); params.push(status); }
-        if (notes !== undefined) { updates.push('notes = ?'); params.push(notes); }
-        if (priority) { updates.push('priority = ?'); params.push(priority); }
-        if (assigned_to !== undefined) { updates.push('assigned_to = ?'); params.push(assigned_to || null); }
-        if (due_date !== undefined) { updates.push('due_date = ?'); params.push(due_date || null); }
-        if (status === 'done') { updates.push("completed_at = NOW()"); }
-        updates.push("updated_at = NOW()");
+        if (status) {
+            updates.push('status = ?');
+            params.push(status);
+        }
+        if (notes !== undefined) {
+            updates.push('notes = ?');
+            params.push(notes);
+        }
+        if (priority) {
+            updates.push('priority = ?');
+            params.push(priority);
+        }
+        if (assigned_to !== undefined) {
+            updates.push('assigned_to = ?');
+            params.push(assigned_to || null);
+        }
+        if (due_date !== undefined) {
+            updates.push('due_date = ?');
+            params.push(due_date || null);
+        }
+        if (status === 'done') {
+            updates.push('completed_at = NOW()');
+        }
+        updates.push('updated_at = NOW()');
 
         params.push(id);
         await db.run(`UPDATE carbon_actions SET ${updates.join(', ')} WHERE id = ?`, params);
 
-        const action = await db.get(`SELECT ca.*, u1.email as creator_email, u2.email as assignee_email
+        const action = await db.get(
+            `SELECT ca.*, u1.email as creator_email, u2.email as assignee_email
             FROM carbon_actions ca LEFT JOIN users u1 ON ca.created_by = u1.id LEFT JOIN users u2 ON ca.assigned_to = u2.id
-            WHERE ca.id = ?`, [id]);
+            WHERE ca.id = ?`,
+            [id]
+        );
 
         res.json({ action, message: 'Action updated' });
     } catch (err) {
@@ -256,7 +329,8 @@ router.delete('/:id', async (req, res) => {
 
         const existing = await db.get(`SELECT * FROM carbon_actions WHERE id = ?`, [id]);
         if (!existing) return res.status(404).json({ error: 'Action not found' });
-        if (existing.created_by !== userId) return res.status(403).json({ error: 'Only the creator can delete this action' });
+        if (existing.created_by !== userId)
+            return res.status(403).json({ error: 'Only the creator can delete this action' });
 
         await db.run(`DELETE FROM carbon_actions WHERE id = ?`, [id]);
         res.json({ message: 'Action deleted' });
@@ -284,12 +358,14 @@ router.get('/users', cacheMiddleware(60), async (req, res) => {
     try {
         const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const placeholders = ACTIONABLE_ROLE_LIST.map(() => '?').join(',');
-        const users = await db.all(
-            `SELECT u.id, u.email, u.username, u.role FROM users u
+        const users = await db
+            .all(
+                `SELECT u.id, u.email, u.username, u.role FROM users u
              WHERE u.org_id = ? AND u.role IN (${placeholders})
              ORDER BY u.role, u.email LIMIT 1000`,
-            [orgId, ...ACTIONABLE_ROLE_LIST]
-        ).catch(() => []);
+                [orgId, ...ACTIONABLE_ROLE_LIST]
+            )
+            .catch(() => []);
         // Enrich with role labels
         const enriched = users.map(u => ({ ...u, role_label: ACTIONABLE_ROLES[u.role] || u.role }));
         res.json({ users: enriched, role_map: ACTIONABLE_ROLES });

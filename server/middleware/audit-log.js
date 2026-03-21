@@ -12,10 +12,20 @@
  * Usage: app.use('/api', auditLog);
  */
 let db;
-try { db = require('../db'); } catch(e) {}
+try {
+    db = require('../db');
+} catch (e) {}
 
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-const SENSITIVE_FIELDS = new Set(['password', 'password_hash', 'secret', 'token', 'refreshToken', 'credit_card', 'ssn']);
+const SENSITIVE_FIELDS = new Set([
+    'password',
+    'password_hash',
+    'secret',
+    'token',
+    'refreshToken',
+    'credit_card',
+    'ssn',
+]);
 const SKIP_PATHS = ['/api/auth/login', '/api/auth/refresh', '/healthz'];
 
 /**
@@ -41,7 +51,7 @@ function sanitize(obj) {
  */
 function getIP(req) {
     const forwarded = req.headers['x-forwarded-for'];
-    return forwarded ? forwarded.split(',')[0].trim() : (req.ip || 'unknown');
+    return forwarded ? forwarded.split(',')[0].trim() : req.ip || 'unknown';
 }
 
 function auditLog(req, res, next) {
@@ -55,7 +65,7 @@ function auditLog(req, res, next) {
     const originalJson = res.json.bind(res);
     const startTime = Date.now();
 
-    res.json = function(body) {
+    res.json = function (body) {
         // Log asynchronously (don't block response)
         if (db && req.user) {
             const entry = {

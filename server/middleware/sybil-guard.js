@@ -22,7 +22,7 @@ async function refreshOrgQuality() {
         orgQualityCache = new Map();
         for (const org of orgs) {
             const agedays = (Date.now() - new Date(org.created_at)) / 86400000;
-            const ageFactor = Math.min(agedays / 90, 1.0);    // Max after 90 days
+            const ageFactor = Math.min(agedays / 90, 1.0); // Max after 90 days
             const activityFactor = Math.min((org.product_count + org.scan_count) / 100, 1.0);
             const planFactor = org.plan === 'enterprise' ? 1.0 : org.plan === 'pro' ? 0.8 : 0.3;
             orgQualityCache.set(org.id, {
@@ -33,7 +33,9 @@ async function refreshOrgQuality() {
             });
         }
         lastCacheRefresh = Date.now();
-    } catch(e) { /* non-critical */ }
+    } catch (e) {
+        /* non-critical */
+    }
 }
 
 // Get weighted rating for use in network intelligence

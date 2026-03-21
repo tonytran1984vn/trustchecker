@@ -14,9 +14,9 @@ const EventEmitter = require('events');
 
 // ─── Circuit States ──────────────────────────────────────────
 const STATE = {
-    CLOSED: 'CLOSED',     // Normal operation, requests flow through
-    OPEN: 'OPEN',       // Service down, block requests, use fallback
-    HALF_OPEN: 'HALF_OPEN',  // Probing — allow 1 request to test recovery
+    CLOSED: 'CLOSED', // Normal operation, requests flow through
+    OPEN: 'OPEN', // Service down, block requests, use fallback
+    HALF_OPEN: 'HALF_OPEN', // Probing — allow 1 request to test recovery
 };
 
 /**
@@ -48,8 +48,8 @@ class CircuitBreaker extends EventEmitter {
         this.timeoutMs = opts.timeoutMs ?? 30_000;
 
         // ─── Internal counters ───────────────────────────
-        this._failures = [];  // timestamps of failures within window
-        this._halfOpenOk = 0;   // consecutive successes in HALF_OPEN
+        this._failures = []; // timestamps of failures within window
+        this._halfOpenOk = 0; // consecutive successes in HALF_OPEN
         this._halfOpenActive = 0; // in-flight probes in HALF_OPEN
         this._openSince = null;
         this._stats = { total: 0, success: 0, failure: 0, fallback: 0, rejected: 0 };
@@ -155,8 +155,7 @@ class CircuitBreaker extends EventEmitter {
     }
 
     _shouldProbe() {
-        return this.state === STATE.OPEN &&
-            (Date.now() - this._openSince) >= this.openDurationMs;
+        return this.state === STATE.OPEN && Date.now() - this._openSince >= this.openDurationMs;
     }
 
     async _probe(fn, fallbackFn) {
@@ -186,8 +185,14 @@ class CircuitBreaker extends EventEmitter {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => reject(new Error('Circuit breaker timeout')), this.timeoutMs);
             promise.then(
-                val => { clearTimeout(timer); resolve(val); },
-                err => { clearTimeout(timer); reject(err); }
+                val => {
+                    clearTimeout(timer);
+                    resolve(val);
+                },
+                err => {
+                    clearTimeout(timer);
+                    reject(err);
+                }
             );
         });
     }
@@ -204,7 +209,7 @@ class CircuitBreaker extends EventEmitter {
                 successThreshold: this.successThreshold,
                 openDurationMs: this.openDurationMs,
                 monitorWindowMs: this.monitorWindowMs,
-            }
+            },
         };
     }
 }

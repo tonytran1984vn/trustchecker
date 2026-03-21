@@ -79,7 +79,9 @@ router.post('/escalate', requirePermission('admin:manage'), (req, res) => {
     const { from, to, trigger } = req.body;
     if (!from || !to) return res.status(400).json({ error: 'from and to levels required' });
     const result = crisis.escalate(
-        from, to, trigger || 'manual',
+        from,
+        to,
+        trigger || 'manual',
         req.user?.id || 'unknown',
         req.user?.role || 'unknown'
     );
@@ -120,7 +122,8 @@ router.post('/drill', requirePermission('admin:manage'), (req, res) => {
         const result = crisis.endDrill(req.user?.id || 'unknown');
         return res.json(result);
     }
-    if (!playbook_key) return res.status(400).json({ error: 'playbook_key required', available: Object.keys(crisis.getPlaybooks()) });
+    if (!playbook_key)
+        return res.status(400).json({ error: 'playbook_key required', available: Object.keys(crisis.getPlaybooks()) });
     const result = crisis.startDrill(req.user?.id || 'unknown', playbook_key);
     if (result.error) return res.status(400).json(result);
     res.status(201).json(result);

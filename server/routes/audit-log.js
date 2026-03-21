@@ -1,14 +1,15 @@
 const { streamCSV } = require('../middleware/stream-export');
 /**
  * Audit Log API — Read-only audit trail for auditor + compliance roles
- * 
+ *
  * GET /api/audit-log         — Paginated audit log entries
  * GET /api/audit-log/stats   — Summary stats
  * GET /api/audit-log/export  — CSV export (compliance_officer only)
  */
 
-
-function _safeWhere(clause) { return clause; /* Safe: all user inputs are parameterized via ? */ }
+function _safeWhere(clause) {
+    return clause; /* Safe: all user inputs are parameterized via ? */
+}
 
 const express = require('express');
 const router = express.Router();
@@ -60,7 +61,8 @@ router.get('/', async (req, res) => {
 
         // Count total
         const countRow = await db.get(
-            `SELECT COUNT(*) as total FROM audit_log WHERE ${_safeWhere(whereClause)}`, params
+            `SELECT COUNT(*) as total FROM audit_log WHERE ${_safeWhere(whereClause)}`,
+            params
         );
         const total = countRow?.total || 0;
 
@@ -94,7 +96,10 @@ router.get('/', async (req, res) => {
 router.get('/stats', async (req, res) => {
     try {
         const [total, today, byAction] = await Promise.all([
-            db.get(`SELECT COUNT(*) as count FROM audit_log` + (req.orgId ? ` WHERE org_id = ?` : ''), req.orgId ? [req.orgId] : []),
+            db.get(
+                `SELECT COUNT(*) as count FROM audit_log` + (req.orgId ? ` WHERE org_id = ?` : ''),
+                req.orgId ? [req.orgId] : []
+            ),
             db.get(`SELECT COUNT(*) as count FROM audit_log WHERE timestamp >= CURRENT_DATE`),
             db.all(`SELECT action, COUNT(*) as count FROM audit_log GROUP BY action ORDER BY count DESC LIMIT 10`),
         ]);
@@ -117,13 +122,22 @@ router.get('/export', requirePermission('compliance:manage'), async (req, res) =
     try {
         const params = [];
         let dateFilter = '';
-        if (req.query.from) { dateFilter += ' AND timestamp >= ?'; params.push(req.query.from); }
-        if (req.query.to) { dateFilter += ' AND timestamp <= ?'; params.push(req.query.to); }
+        if (req.query.from) {
+            dateFilter += ' AND timestamp >= ?';
+            params.push(req.query.from);
+        }
+        if (req.query.to) {
+            dateFilter += ' AND timestamp <= ?';
+            params.push(req.query.to);
+        }
 
         // v9.4.2: Scope by org_id for tenant isolation
         const orgId = req.orgId;
         let orgFilter = '';
-        if (orgId) { orgFilter = ' AND al.org_id = ?'; params.push(orgId); }
+        if (orgId) {
+            orgFilter = ' AND al.org_id = ?';
+            params.push(orgId);
+        }
 
         const entries = await db.all(
             `SELECT al.*, u.email as actor_email, u.role as actor_role
@@ -136,12 +150,18 @@ router.get('/export', requirePermission('compliance:manage'), async (req, res) =
 
         // CSV header
         const header = 'timestamp,actor_email,actor_role,action,entity_type,entity_id,ip_address\n';
-        const csv = entries.map(e =>
-            `${e.timestamp},${e.actor_email || ''},${e.actor_role || ''},${e.action},${e.entity_type || ''},${e.entity_id || ''},${e.ip_address || ''}`
-        ).join('\n');
+        const csv = entries
+            .map(
+                e =>
+                    `${e.timestamp},${e.actor_email || ''},${e.actor_role || ''},${e.action},${e.entity_type || ''},${e.entity_id || ''},${e.ip_address || ''}`
+            )
+            .join('\n');
 
         res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename=audit-log-${new Date().toISOString().slice(0, 10)}.csv`);
+        res.setHeader(
+            'Content-Disposition',
+            `attachment; filename=audit-log-${new Date().toISOString().slice(0, 10)}.csv`
+        );
         res.send(header + csv);
     } catch (err) {
         console.error('[audit-log] Export error:', err);

@@ -14,13 +14,7 @@
  */
 
 // Paths that should NOT be wrapped (health checks, public, static)
-const SKIP_PATHS = [
-    '/healthz',
-    '/api/public',
-    '/api/docs',
-    '/socket.io',
-    '/favicon',
-];
+const SKIP_PATHS = ['/healthz', '/api/public', '/api/docs', '/socket.io', '/favicon'];
 
 function responseWrapper() {
     return (req, res, next) => {
@@ -31,7 +25,7 @@ function responseWrapper() {
         // Save original res.json
         const originalJson = res.json.bind(res);
 
-        res.json = function(body) {
+        res.json = function (body) {
             // Skip if body is null/undefined or not an object
             if (!body || typeof body !== 'object') {
                 return originalJson(body);
@@ -46,11 +40,13 @@ function responseWrapper() {
             if (body.error) {
                 return originalJson({
                     data: null,
-                    errors: [{
-                        code: body.code || 'ERROR',
-                        message: body.error,
-                        ...(body.details ? { details: body.details } : {}),
-                    }],
+                    errors: [
+                        {
+                            code: body.code || 'ERROR',
+                            message: body.error,
+                            ...(body.details ? { details: body.details } : {}),
+                        },
+                    ],
                     meta: {
                         timestamp: new Date().toISOString(),
                         path: req.path,

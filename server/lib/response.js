@@ -29,11 +29,13 @@ function paginated(res, result) {
 function error(res, message, code = 'ERROR', status = 400, details = null) {
     return res.status(status).json({
         data: null,
-        errors: [{
-            code,
-            message,
-            ...(details ? { details } : {}),
-        }],
+        errors: [
+            {
+                code,
+                message,
+                ...(details ? { details } : {}),
+            },
+        ],
         meta: { timestamp: new Date().toISOString(), api_version: 1 },
     });
 }

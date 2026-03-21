@@ -2,7 +2,7 @@
  * Carbon & ESG Routes v3.0 — Cross-Cutting ESG Governance Intelligence
  * Product carbon passports, partner ESG leaderboard, GRI reporting,
  * Risk factor mapping, regulatory alignment, maturity assessment
- * 
+ *
  * ★ Multi-org: all data queries scoped by req.orgId (org_id)
  * Endpoints: 11 (5 original + 6 new v3.0)
  */
@@ -21,23 +21,36 @@ router.use(authMiddleware);
 // Data cache (60s TTL) — prevents duplicate DB calls when 9 endpoints fire simultaneously
 const _dataCache = new Map();
 function cached(key, ttlSec, fn, orgId) {
-    key = (orgId || "global") + ":" + key;
+    key = (orgId || 'global') + ':' + key;
     const entry = _dataCache.get(key);
     if (entry && Date.now() - entry.ts < ttlSec * 1000) return Promise.resolve(entry.data);
-    return fn().then(data => { _dataCache.set(key, { data, ts: Date.now() }); return data; });
+    return fn().then(data => {
+        _dataCache.set(key, { data, ts: Date.now() });
+        return data;
+    });
 }
 
 function dateClause(col, from, to, params) {
     let clause = '';
-    if (from) { clause += ` AND ${col} >= ?`; params.push(from); }
-    if (to) { clause += ` AND ${col} <= ?`; params.push(to + 'T23:59:59.999Z'); }
+    if (from) {
+        clause += ` AND ${col} >= ?`;
+        params.push(from);
+    }
+    if (to) {
+        clause += ` AND ${col} <= ?`;
+        params.push(to + 'T23:59:59.999Z');
+    }
     return clause;
 }
 
 async function _getOrgProducts(orgId, from, to) {
     const params = [];
-    let q = 'SELECT id, name, category, carbon_footprint_kgco2e, created_at, updated_at, org_id FROM products WHERE 1=1';
-    if (orgId) { q += ' AND org_id = ?'; params.push(orgId); }
+    let q =
+        'SELECT id, name, category, carbon_footprint_kgco2e, created_at, updated_at, org_id FROM products WHERE 1=1';
+    if (orgId) {
+        q += ' AND org_id = ?';
+        params.push(orgId);
+    }
     q += dateClause('created_at', from, to, params);
     q += ' LIMIT 200';
     return db.prepare(q).all(...params);
@@ -47,10 +60,14 @@ function getOrgProducts(orgId, from, to) {
 }
 
 async function _getOrgShipments(orgId, from, to) {
-    const cols = 'id, batch_id, carrier, from_partner_id, to_partner_id, status, estimated_delivery, actual_delivery, created_at';
+    const cols =
+        'id, batch_id, carrier, from_partner_id, to_partner_id, status, estimated_delivery, actual_delivery, created_at';
     if (orgId) {
         const params = [orgId];
-        let q = `SELECT ${cols.split(', ').map(c => 's.' + c).join(', ')} FROM shipments s
+        let q = `SELECT ${cols
+            .split(', ')
+            .map(c => 's.' + c)
+            .join(', ')} FROM shipments s
             INNER JOIN batches b ON s.batch_id = b.id
             INNER JOIN products p ON b.product_id = p.id
             WHERE p.org_id = ?`;
@@ -73,10 +90,15 @@ async function _getOrgEvents(orgId, from, to) {
         let q = `SELECT ${cols} FROM supply_chain_events WHERE org_id = ?`;
         q += dateClause('created_at', from, to, params);
         q += ' LIMIT 2000';
-        return db.prepare(q).all(...params)
+        return db
+            .prepare(q)
+            .all(...params)
             .catch(() => {
                 const p2 = [orgId];
-                let q2 = `SELECT ${cols.split(', ').map(c => 'e.' + c).join(', ')} FROM supply_chain_events e
+                let q2 = `SELECT ${cols
+                    .split(', ')
+                    .map(c => 'e.' + c)
+                    .join(', ')} FROM supply_chain_events e
                     INNER JOIN products p ON e.product_id = p.id
                     WHERE p.org_id = ?`;
                 q2 += dateClause('e.created_at', from, to, p2);
@@ -98,8 +120,7 @@ function getOrgEvents(orgId, from, to) {
 async function _getOrgPartners(orgId) {
     const cols = 'id, name, country, type, trust_score, kyc_status, org_id';
     if (orgId) {
-        return db.all(`SELECT ${cols} FROM partners WHERE org_id = ?`, [orgId])
-            .catch(() => []);
+        return db.all(`SELECT ${cols} FROM partners WHERE org_id = ?`, [orgId]).catch(() => []);
     }
     return db.all(`SELECT ${cols} FROM partners`);
 }
@@ -109,10 +130,15 @@ function getOrgPartners(orgId) {
 
 async function _getOrgViolations(orgId) {
     if (orgId) {
-        return db.all(`
+        return db
+            .all(
+                `
             SELECT v.id, v.partner_id, v.org_id FROM sla_violations v
             WHERE v.org_id = ?
-        `, [orgId]).catch(() => []);
+        `,
+                [orgId]
+            )
+            .catch(() => []);
     }
     return db.all('SELECT id, partner_id, org_id FROM sla_violations');
 }
@@ -135,22 +161,39 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
             getOrgEvents(orgId, from, to),
             getOrgPartners(orgId),
             getOrgViolations(orgId),
-            orgId ? db.all('SELECT * FROM certifications WHERE org_id = ?', [orgId]).catch(() => []) : db.all('SELECT * FROM certifications').catch(() => [])
+            orgId
+                ? db.all('SELECT * FROM certifications WHERE org_id = ?', [orgId]).catch(() => [])
+                : db.all('SELECT * FROM certifications').catch(() => []),
         ]);
 
         // Run ALL engine calculations in parallel with shared data
         // Run engine calculations + quick DB counts for maturity in parallel
-        const [scopeData, leaderboardData, flow, roleMatrix, industryBenchmarks,
-            offsetCountQ, partnerCountQ, orgCountQ] = await Promise.all([
-                engineClient.carbonAggregate(products, shipments, events),
-                engineClient.carbonLeaderboard(partners, shipments, violations),
-                Promise.resolve(carbonEngine.getGovernanceFlow()),
-                Promise.resolve(carbonEngine.getRoleMatrix()),
-                Promise.resolve(carbonEngine.getIndustryBenchmarks()),
-                db.get('SELECT COUNT(*) as c FROM carbon_offsets' + (orgId ? ' WHERE org_id = ?' : ''), orgId ? [orgId] : []).catch(() => ({ c: 0 })),
-                db.get('SELECT COUNT(*) as c FROM partners' + (orgId ? ' WHERE org_id = ?' : ''), orgId ? [orgId] : []).catch(() => ({ c: 0 })),
-                db.get('SELECT COUNT(*) as c FROM organizations').catch(() => ({ c: 0 })),
-            ]);
+        const [
+            scopeData,
+            leaderboardData,
+            flow,
+            roleMatrix,
+            industryBenchmarks,
+            offsetCountQ,
+            partnerCountQ,
+            orgCountQ,
+        ] = await Promise.all([
+            engineClient.carbonAggregate(products, shipments, events),
+            engineClient.carbonLeaderboard(partners, shipments, violations),
+            Promise.resolve(carbonEngine.getGovernanceFlow()),
+            Promise.resolve(carbonEngine.getRoleMatrix()),
+            Promise.resolve(carbonEngine.getIndustryBenchmarks()),
+            db
+                .get(
+                    'SELECT COUNT(*) as c FROM carbon_offsets' + (orgId ? ' WHERE org_id = ?' : ''),
+                    orgId ? [orgId] : []
+                )
+                .catch(() => ({ c: 0 })),
+            db
+                .get('SELECT COUNT(*) as c FROM partners' + (orgId ? ' WHERE org_id = ?' : ''), orgId ? [orgId] : [])
+                .catch(() => ({ c: 0 })),
+            db.get('SELECT COUNT(*) as c FROM organizations').catch(() => ({ c: 0 })),
+        ]);
 
         // Build maturity inline
         const productCount = products.length;
@@ -164,22 +207,64 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
         if (partnerCount > 0) features.push('partner_esg_scoring');
         features.push('risk_integration');
         if (orgs > 1) features.push('cross_tenant_benchmark');
-        let mLevel = 0, mLabel = 'Not Assessed';
-        if (features.length >= 7) { mLevel = 5; mLabel = 'Leader — Net Zero Pathway'; }
-        else if (features.length >= 5) { mLevel = 4; mLabel = 'Advanced — Full Scope Coverage'; }
-        else if (features.length >= 4) { mLevel = 3; mLabel = 'Intermediate — Offset & Risk Integration'; }
-        else if (features.length >= 2) { mLevel = 2; mLabel = 'Developing — Data Collection Active'; }
-        else if (features.length >= 1) { mLevel = 1; mLabel = 'Foundation — Basic Awareness'; }
+        let mLevel = 0,
+            mLabel = 'Not Assessed';
+        if (features.length >= 7) {
+            mLevel = 5;
+            mLabel = 'Leader — Net Zero Pathway';
+        } else if (features.length >= 5) {
+            mLevel = 4;
+            mLabel = 'Advanced — Full Scope Coverage';
+        } else if (features.length >= 4) {
+            mLevel = 3;
+            mLabel = 'Intermediate — Offset & Risk Integration';
+        } else if (features.length >= 2) {
+            mLevel = 2;
+            mLabel = 'Developing — Data Collection Active';
+        } else if (features.length >= 1) {
+            mLevel = 1;
+            mLabel = 'Foundation — Basic Awareness';
+        }
         const maturity = {
-            level: mLevel, current_level: mLevel, label: mLabel,
+            level: mLevel,
+            current_level: mLevel,
+            label: mLabel,
             levels: [
-                { level: 1, name: 'Foundation', description: 'Basic carbon awareness and initial data collection', target: 'Scope 1 tracking' },
-                { level: 2, name: 'Developing', description: 'Active data collection across Scope 1 & 2, initial reporting', target: 'Automated reporting' },
-                { level: 3, name: 'Intermediate', description: 'Offset recording, risk integration, and GRI-aligned reporting', target: 'Scope 3 screening' },
-                { level: 4, name: 'Advanced', description: 'Full Scope 1-3 coverage, partner ESG scoring, materiality assessment', target: 'SBTi alignment' },
-                { level: 5, name: 'Leader', description: 'Net zero pathway with cross-org benchmarks, blockchain-anchored verification', target: 'Net Zero by 2030' },
+                {
+                    level: 1,
+                    name: 'Foundation',
+                    description: 'Basic carbon awareness and initial data collection',
+                    target: 'Scope 1 tracking',
+                },
+                {
+                    level: 2,
+                    name: 'Developing',
+                    description: 'Active data collection across Scope 1 & 2, initial reporting',
+                    target: 'Automated reporting',
+                },
+                {
+                    level: 3,
+                    name: 'Intermediate',
+                    description: 'Offset recording, risk integration, and GRI-aligned reporting',
+                    target: 'Scope 3 screening',
+                },
+                {
+                    level: 4,
+                    name: 'Advanced',
+                    description: 'Full Scope 1-3 coverage, partner ESG scoring, materiality assessment',
+                    target: 'SBTi alignment',
+                },
+                {
+                    level: 5,
+                    name: 'Leader',
+                    description: 'Net zero pathway with cross-org benchmarks, blockchain-anchored verification',
+                    target: 'Net Zero by 2030',
+                },
             ],
-            features_detected: features, products_count: productCount, offsets_count: offsetCount, partners_count: partnerCount,
+            features_detected: features,
+            products_count: productCount,
+            offsets_count: offsetCount,
+            partners_count: partnerCount,
         };
 
         // Build scope response
@@ -201,17 +286,34 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
         // ESG grade
         let offsetCov = 0;
         try {
-            const off = await db.get('SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE status = ?' + (orgId ? ' AND org_id = ?' : ''), orgId ? ['retired', orgId] : ['retired']);
-            offsetCov = Math.min(1, (off?.r || 0) / ((total_emissions_kgCO2e / 1000) || 1));
-        } catch (_) { }
-        const dataCov = products.length > 0 ? products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length : 0;
-        const compScore = (offsetCov * 0.4) + (Math.min(1, 5 / 7) * 0.3) + (dataCov * 0.3);
-        const esgGrade = total_emissions_kgCO2e === 0 ? 'N/A'
-            : compScore >= 0.85 ? 'A' : compScore >= 0.65 ? 'B' : compScore >= 0.45 ? 'C' : compScore >= 0.25 ? 'D' : 'F';
+            const off = await db.get(
+                'SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE status = ?' +
+                    (orgId ? ' AND org_id = ?' : ''),
+                orgId ? ['retired', orgId] : ['retired']
+            );
+            offsetCov = Math.min(1, (off?.r || 0) / (total_emissions_kgCO2e / 1000 || 1));
+        } catch (_) {}
+        const dataCov =
+            products.length > 0 ? products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length : 0;
+        const compScore = offsetCov * 0.4 + Math.min(1, 5 / 7) * 0.3 + dataCov * 0.3;
+        const esgGrade =
+            total_emissions_kgCO2e === 0
+                ? 'N/A'
+                : compScore >= 0.85
+                  ? 'A'
+                  : compScore >= 0.65
+                    ? 'B'
+                    : compScore >= 0.45
+                      ? 'C'
+                      : compScore >= 0.25
+                        ? 'D'
+                        : 'F';
         report.overall_esg_grade = esgGrade;
         report.grade = esgGrade;
         report.standard = report.report_standard || 'GHG Protocol';
-        report.period = report.reporting_period ? `${report.reporting_period.from} — ${report.reporting_period.to}` : new Date().getFullYear().toString();
+        report.period = report.reporting_period
+            ? `${report.reporting_period.from} — ${report.reporting_period.to}`
+            : new Date().getFullYear().toString();
 
         // Build risk factors
         const avgCarbon = products.length > 0 ? total_emissions_kgCO2e / products.length : 0;
@@ -219,20 +321,69 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
         const noDataProducts = products.filter(p => !p.carbon_footprint_kgco2e || p.carbon_footprint_kgco2e === 0);
         const risk_factors = [];
         if (highCarbonProducts.length > 0) {
-            risk_factors.push({ name: 'High-Carbon Products', factor: 'high_carbon_concentration', description: `${highCarbonProducts.length} products exceed 1.5× average`, severity: highCarbonProducts.length > 5 ? 'high' : 'medium', score: Math.min(95, 50 + highCarbonProducts.length * 5), impact: 'Regulatory exposure under CBAM/CSRD' });
+            risk_factors.push({
+                name: 'High-Carbon Products',
+                factor: 'high_carbon_concentration',
+                description: `${highCarbonProducts.length} products exceed 1.5× average`,
+                severity: highCarbonProducts.length > 5 ? 'high' : 'medium',
+                score: Math.min(95, 50 + highCarbonProducts.length * 5),
+                impact: 'Regulatory exposure under CBAM/CSRD',
+            });
         }
         if (noDataProducts.length > 0) {
-            risk_factors.push({ name: 'Carbon Data Gaps', factor: 'data_gaps', description: `${noDataProducts.length} products missing carbon data`, severity: noDataProducts.length > products.length / 2 ? 'high' : 'medium', score: Math.min(90, 40 + noDataProducts.length * 3), impact: 'Audit risk and reporting gaps' });
+            risk_factors.push({
+                name: 'Carbon Data Gaps',
+                factor: 'data_gaps',
+                description: `${noDataProducts.length} products missing carbon data`,
+                severity: noDataProducts.length > products.length / 2 ? 'high' : 'medium',
+                score: Math.min(90, 40 + noDataProducts.length * 3),
+                impact: 'Audit risk and reporting gaps',
+            });
         }
 
         // Build regulatory inline
         const hasData = total_emissions_kgCO2e > 0;
         const regFrameworks = [
-            { id: 'CSRD', name: 'CSRD / ESRS E1', full: 'Corporate Sustainability Reporting Directive', region: 'EU', status: hasData && offsetCount > 0 ? 'compliant' : hasData ? 'partial' : 'gap', icon: '🇪🇺' },
-            { id: 'GRI-305', name: 'GRI 305: Emissions', full: 'Global Reporting Initiative', region: 'Global', status: hasData ? 'compliant' : 'gap', icon: '🌐' },
-            { id: 'CBAM', name: 'EU CBAM', full: 'Carbon Border Adjustment Mechanism', region: 'EU', status: hasData ? 'partial' : 'gap', icon: '🇪🇺' },
-            { id: 'TCFD', name: 'TCFD', full: 'Task Force on Climate-Related Financial Disclosures', region: 'Global', status: hasData ? 'compliant' : 'gap', icon: '🌐' },
-            { id: 'SBTi', name: 'SBTi', full: 'Science Based Targets initiative', region: 'Global', status: hasData && offsetCount > 0 ? 'partial' : 'gap', icon: '🎯' },
+            {
+                id: 'CSRD',
+                name: 'CSRD / ESRS E1',
+                full: 'Corporate Sustainability Reporting Directive',
+                region: 'EU',
+                status: hasData && offsetCount > 0 ? 'compliant' : hasData ? 'partial' : 'gap',
+                icon: '🇪🇺',
+            },
+            {
+                id: 'GRI-305',
+                name: 'GRI 305: Emissions',
+                full: 'Global Reporting Initiative',
+                region: 'Global',
+                status: hasData ? 'compliant' : 'gap',
+                icon: '🌐',
+            },
+            {
+                id: 'CBAM',
+                name: 'EU CBAM',
+                full: 'Carbon Border Adjustment Mechanism',
+                region: 'EU',
+                status: hasData ? 'partial' : 'gap',
+                icon: '🇪🇺',
+            },
+            {
+                id: 'TCFD',
+                name: 'TCFD',
+                full: 'Task Force on Climate-Related Financial Disclosures',
+                region: 'Global',
+                status: hasData ? 'compliant' : 'gap',
+                icon: '🌐',
+            },
+            {
+                id: 'SBTi',
+                name: 'SBTi',
+                full: 'Science Based Targets initiative',
+                region: 'Global',
+                status: hasData && offsetCount > 0 ? 'partial' : 'gap',
+                icon: '🎯',
+            },
         ];
         const regulatory = {
             frameworks: regFrameworks,
@@ -242,7 +393,7 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
 
         // Build benchmark
         const categoryStats = {};
-        for (const p of (scopeData.product_rankings || [])) {
+        for (const p of scopeData.product_rankings || []) {
             const cat = p.category || 'General';
             if (!categoryStats[cat]) categoryStats[cat] = { products: 0, total_kgCO2e: 0, grades: [] };
             categoryStats[cat].products++;
@@ -254,24 +405,45 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
             const benchmark = industryBenchmarks[cat] || industryBenchmarks['_default'];
             const gradeInfo = carbonEngine._gradeByIntensity(avg, cat);
             return {
-                category: cat, your_avg_kgCO2e: Math.round(avg * 100) / 100,
-                industry_p20: benchmark.p20, industry_median: benchmark.median, industry_p80: benchmark.p80,
-                grade: gradeInfo.grade, grade_label: gradeInfo.label,
-                performance: avg <= benchmark.p20 ? 'top_performer' : avg <= benchmark.median ? 'above_average' : avg <= benchmark.p80 ? 'below_average' : 'critical',
-                gap_to_median_pct: Math.round((avg - benchmark.median) / benchmark.median * 100)
+                category: cat,
+                your_avg_kgCO2e: Math.round(avg * 100) / 100,
+                industry_p20: benchmark.p20,
+                industry_median: benchmark.median,
+                industry_p80: benchmark.p80,
+                grade: gradeInfo.grade,
+                grade_label: gradeInfo.label,
+                performance:
+                    avg <= benchmark.p20
+                        ? 'top_performer'
+                        : avg <= benchmark.median
+                          ? 'above_average'
+                          : avg <= benchmark.p80
+                            ? 'below_average'
+                            : 'critical',
+                gap_to_median_pct: Math.round(((avg - benchmark.median) / benchmark.median) * 100),
             };
         });
         const benchmark = {
-            title: 'Industry Carbon Benchmark (v3.0)', your_total_kgCO2e: scopeData.total_emissions_kgCO2e,
+            title: 'Industry Carbon Benchmark (v3.0)',
+            your_total_kgCO2e: scopeData.total_emissions_kgCO2e,
             your_comparison: comparison,
-            insight: comparison.some(c => c.performance === 'top_performer') ? '✅ Top performer in some categories' :
-                comparison.some(c => c.performance === 'above_average') ? '🟡 Above industry average' : '⚠️ Below industry average'
+            insight: comparison.some(c => c.performance === 'top_performer')
+                ? '✅ Top performer in some categories'
+                : comparison.some(c => c.performance === 'above_average')
+                  ? '🟡 Above industry average'
+                  : '⚠️ Below industry average',
         };
 
         res.json({
-            scope, leaderboard: leaderboardData, report,
-            risk: { risk_factors }, regulatory, maturity, flow, roleMatrix: { ...roleMatrix, current_user_role: req.user?.role || 'viewer', eas_version: '3.0' },
-            benchmark
+            scope,
+            leaderboard: leaderboardData,
+            report,
+            risk: { risk_factors },
+            regulatory,
+            maturity,
+            flow,
+            roleMatrix: { ...roleMatrix, current_user_role: req.user?.role || 'viewer', eas_version: '3.0' },
+            benchmark,
         });
     } catch (err) {
         console.error('Carbon bundle error:', err);
@@ -289,11 +461,14 @@ router.get('/footprint/:productId', async (req, res) => {
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
         const events = await db.all('SELECT * FROM supply_chain_events WHERE product_id = ?', [product.id]);
-        const shipments = await db.all(`
+        const shipments = await db.all(
+            `
       SELECT s.* FROM shipments s
       INNER JOIN batches b ON s.batch_id = b.id
       WHERE b.product_id = ?
-    `, [product.id]);
+    `,
+            [product.id]
+        );
 
         const passport = await engineClient.carbonFootprint(product, shipments, events);
 
@@ -312,17 +487,19 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
         const [products, shipments, events] = await Promise.all([
             getOrgProducts(orgId, from, to),
             getOrgShipments(orgId, from, to),
-            getOrgEvents(orgId, from, to)
+            getOrgEvents(orgId, from, to),
         ]);
 
         // Use actual product carbon data
         const total_emissions_kgCO2e = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
 
         // Scope breakdown: use industry-standard ratios for mixed manufacturing/export
-        const s1Pct = 25, s2Pct = 20, s3Pct = 55;
-        const s1Total = Math.round(total_emissions_kgCO2e * s1Pct / 100);
-        const s2Total = Math.round(total_emissions_kgCO2e * s2Pct / 100);
-        const s3Total = Math.round(total_emissions_kgCO2e * s3Pct / 100);
+        const s1Pct = 25,
+            s2Pct = 20,
+            s3Pct = 55;
+        const s1Total = Math.round((total_emissions_kgCO2e * s1Pct) / 100);
+        const s2Total = Math.round((total_emissions_kgCO2e * s2Pct) / 100);
+        const s3Total = Math.round((total_emissions_kgCO2e * s3Pct) / 100);
 
         // Monthly trend from product creation dates
         const monthMap = {};
@@ -331,7 +508,7 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
             if (!dt) return;
             const month = String(dt).slice(0, 7);
             if (!monthMap[month]) monthMap[month] = 0;
-            monthMap[month] += (p.carbon_footprint_kgco2e || 0);
+            monthMap[month] += p.carbon_footprint_kgco2e || 0;
         });
         // Also add shipment-based monthly data
         (shipments || []).forEach(s => {
@@ -355,14 +532,21 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
 
             // Grade per product based on category benchmarks
             let grade = 'C';
-            if (cat.includes('Coffee') || cat.includes('Beverage') || cat.includes('Food') || cat.includes('Fruit') || cat.includes('Snack')) {
+            if (
+                cat.includes('Coffee') ||
+                cat.includes('Beverage') ||
+                cat.includes('Food') ||
+                cat.includes('Fruit') ||
+                cat.includes('Snack')
+            ) {
                 grade = kgCO2e < 50000 ? 'A' : kgCO2e < 100000 ? 'B' : kgCO2e < 200000 ? 'C' : 'D';
             } else if (cat.includes('IoT') || cat.includes('Sensor') || cat.includes('Tracking')) {
                 grade = kgCO2e < 100000 ? 'A' : kgCO2e < 200000 ? 'B' : kgCO2e < 400000 ? 'C' : 'D';
             } else {
                 grade = kgCO2e < 30000 ? 'A' : kgCO2e < 60000 ? 'B' : kgCO2e < 100000 ? 'C' : 'D';
             }
-            const gColor = grade === 'A' ? '#10b981' : grade === 'B' ? '#22c55e' : grade === 'C' ? '#f59e0b' : '#ef4444';
+            const gColor =
+                grade === 'A' ? '#10b981' : grade === 'B' ? '#22c55e' : grade === 'C' ? '#f59e0b' : '#ef4444';
 
             return {
                 name: p.name || p.sku || 'Unknown',
@@ -372,35 +556,67 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
                 intensity: { physical_intensity: intensity, unit: 'kgCO₂e/kg' },
                 grade_info: { grade, color: gColor },
                 confidence: { level: w > 0 ? 3 : 2, label: w > 0 ? 'Industry Average' : 'Proxy Estimate' },
-                percentage: 0
+                percentage: 0,
             };
         });
 
         // Compute percentages
         const totalProd = products_detail.reduce((s, p) => s + p.kgCO2e, 0) || 1;
-        products_detail.forEach(p => { p.percentage = Math.round(p.kgCO2e / totalProd * 1000) / 10; });
+        products_detail.forEach(p => {
+            p.percentage = Math.round((p.kgCO2e / totalProd) * 1000) / 10;
+        });
 
         // Aggregated metrics
-        const avgConf = products_detail.length > 0
-            ? products_detail.reduce((s, p) => s + (p.confidence?.level || 1), 0) / products_detail.length
-            : 1;
-        const avgInt = products_detail.length > 0
-            ? products_detail.reduce((s, p) => s + (p.intensity?.physical_intensity || 0), 0) / products_detail.length
-            : 0;
+        const avgConf =
+            products_detail.length > 0
+                ? products_detail.reduce((s, p) => s + (p.confidence?.level || 1), 0) / products_detail.length
+                : 1;
+        const avgInt =
+            products_detail.length > 0
+                ? products_detail.reduce((s, p) => s + (p.intensity?.physical_intensity || 0), 0) /
+                  products_detail.length
+                : 0;
 
         // Composite ESG grade (same logic as dashboard)
         let offsetCoverage = 0;
         try {
-            const offRes = await db.get('SELECT COALESCE(SUM(quantity_tco2e),0) as retired FROM carbon_offsets WHERE status = ?' + (orgId ? ' AND org_id = ?' : ''), orgId ? ['retired', orgId] : ['retired']);
-            offsetCoverage = Math.min(1, (offRes?.retired || 0) / ((total_emissions_kgCO2e / 1000) || 1));
-        } catch (_) { }
-        const dataCoverage = products.length > 0 ? products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length : 0;
-        const compositeScore = (offsetCoverage * 0.4) + (0.5 * 0.3) + (dataCoverage * 0.3);
-        const overallGrade = total_emissions_kgCO2e === 0 ? 'N/A'
-            : compositeScore >= 0.85 ? 'A' : compositeScore >= 0.65 ? 'B'
-                : compositeScore >= 0.45 ? 'C' : compositeScore >= 0.25 ? 'D' : 'F';
-        const gradeLabels = { A: 'Leader — net zero pathway', B: 'Advanced — strong offset strategy', C: 'Developing — improvement needed', D: 'Below average — action required', F: 'Critical — restructure supply chain' };
-        const gColor = overallGrade === 'A' ? '#10b981' : overallGrade === 'B' ? '#22c55e' : overallGrade === 'C' ? '#f59e0b' : '#ef4444';
+            const offRes = await db.get(
+                'SELECT COALESCE(SUM(quantity_tco2e),0) as retired FROM carbon_offsets WHERE status = ?' +
+                    (orgId ? ' AND org_id = ?' : ''),
+                orgId ? ['retired', orgId] : ['retired']
+            );
+            offsetCoverage = Math.min(1, (offRes?.retired || 0) / (total_emissions_kgCO2e / 1000 || 1));
+        } catch (_) {}
+        const dataCoverage =
+            products.length > 0 ? products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length : 0;
+        const compositeScore = offsetCoverage * 0.4 + 0.5 * 0.3 + dataCoverage * 0.3;
+        const overallGrade =
+            total_emissions_kgCO2e === 0
+                ? 'N/A'
+                : compositeScore >= 0.85
+                  ? 'A'
+                  : compositeScore >= 0.65
+                    ? 'B'
+                    : compositeScore >= 0.45
+                      ? 'C'
+                      : compositeScore >= 0.25
+                        ? 'D'
+                        : 'F';
+        const gradeLabels = {
+            A: 'Leader — net zero pathway',
+            B: 'Advanced — strong offset strategy',
+            C: 'Developing — improvement needed',
+            D: 'Below average — action required',
+            F: 'Critical — restructure supply chain',
+        };
+        const gColor =
+            overallGrade === 'A'
+                ? '#10b981'
+                : overallGrade === 'B'
+                  ? '#22c55e'
+                  : overallGrade === 'C'
+                    ? '#f59e0b'
+                    : '#ef4444';
 
         res.json({
             total_emissions_kgCO2e,
@@ -428,10 +644,11 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
                 net_zero_2050: 0,
                 baseline_year: 2025,
                 baseline_kgCO2e: total_emissions_kgCO2e,
-                note: 'Paris-aligned indicative reduction pathway. Formal SBTi validation requires organization-level inventory and external review.'
+                note: 'Paris-aligned indicative reduction pathway. Formal SBTi validation requires organization-level inventory and external review.',
             },
             methodology: 'GHG-aligned screening framework referencing DEFRA 2025, IEA, FAO emission factors',
-            benchmark_disclosure: 'Industry benchmarks derived from aggregated public datasets (DEFRA, IEA, FAO, SEMI, RJC, NHS Carbon). Intended for comparative performance screening, not regulatory reporting substitution.',
+            benchmark_disclosure:
+                'Industry benchmarks derived from aggregated public datasets (DEFRA, IEA, FAO, SEMI, RJC, NHS Carbon). Intended for comparative performance screening, not regulatory reporting substitution.',
         });
     } catch (err) {
         console.error('Carbon scope error:', err);
@@ -446,7 +663,7 @@ router.get('/leaderboard', cacheMiddleware(120), async (req, res) => {
         const [partners, shipments, violations] = await Promise.all([
             getOrgPartners(orgId),
             getOrgShipments(orgId),
-            getOrgViolations(orgId)
+            getOrgViolations(orgId),
         ]);
 
         const leaderboard = await engineClient.carbonLeaderboard(partners, shipments, violations);
@@ -461,8 +678,8 @@ router.get('/leaderboard', cacheMiddleware(120), async (req, res) => {
                 ...p,
                 // Add emissions field (estimated proportional to partner shipment volume)
                 total_kgCO2e: Math.round((p.metrics?.trust_score || 50) * 0.1 * 100) / 100,
-                emissions: Math.round((p.metrics?.trust_score || 50) * 0.1 * 100) / 100
-            }))
+                emissions: Math.round((p.metrics?.trust_score || 50) * 0.1 * 100) / 100,
+            })),
         });
     } catch (err) {
         console.error('ESG leaderboard error:', err);
@@ -481,7 +698,9 @@ router.get('/report', cacheMiddleware(180), async (req, res) => {
             getOrgEvents(orgId, from, to),
             getOrgPartners(orgId),
             getOrgViolations(orgId),
-            orgId ? db.all('SELECT * FROM certifications WHERE org_id = ?', [orgId]).catch(() => []) : db.all('SELECT * FROM certifications').catch(() => [])
+            orgId
+                ? db.all('SELECT * FROM certifications WHERE org_id = ?', [orgId]).catch(() => [])
+                : db.all('SELECT * FROM certifications').catch(() => []),
         ]);
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
@@ -491,7 +710,9 @@ router.get('/report', cacheMiddleware(180), async (req, res) => {
         // Convert disclosures from Object to Array for client iteration
         if (report.disclosures && !Array.isArray(report.disclosures)) {
             report.disclosures = Object.entries(report.disclosures).map(([code, d]) => ({
-                code, id: code, ...d
+                code,
+                id: code,
+                ...d,
             }));
         }
         // Enrich report with actual product data (not engine estimates)
@@ -503,19 +724,35 @@ router.get('/report', cacheMiddleware(180), async (req, res) => {
         // Override ESG grade with composite scoring (consistent with dashboard/scope)
         let offsetCov = 0;
         try {
-            const off = await db.get('SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE status = ?' + (orgId ? ' AND org_id = ?' : ''), orgId ? ['retired', orgId] : ['retired']);
-            offsetCov = Math.min(1, (off?.r || 0) / ((actualKgCO2e / 1000) || 1));
-        } catch (_) { }
-        const dataCov = products.length > 0 ? products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length : 0;
-        const compScore = (offsetCov * 0.4) + (Math.min(1, 5 / 7) * 0.3) + (dataCov * 0.3);
-        const esgGrade = actualKgCO2e === 0 ? 'N/A'
-            : compScore >= 0.85 ? 'A' : compScore >= 0.65 ? 'B'
-                : compScore >= 0.45 ? 'C' : compScore >= 0.25 ? 'D' : 'F';
+            const off = await db.get(
+                'SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE status = ?' +
+                    (orgId ? ' AND org_id = ?' : ''),
+                orgId ? ['retired', orgId] : ['retired']
+            );
+            offsetCov = Math.min(1, (off?.r || 0) / (actualKgCO2e / 1000 || 1));
+        } catch (_) {}
+        const dataCov =
+            products.length > 0 ? products.filter(p => p.carbon_footprint_kgco2e > 0).length / products.length : 0;
+        const compScore = offsetCov * 0.4 + Math.min(1, 5 / 7) * 0.3 + dataCov * 0.3;
+        const esgGrade =
+            actualKgCO2e === 0
+                ? 'N/A'
+                : compScore >= 0.85
+                  ? 'A'
+                  : compScore >= 0.65
+                    ? 'B'
+                    : compScore >= 0.45
+                      ? 'C'
+                      : compScore >= 0.25
+                        ? 'D'
+                        : 'F';
         report.overall_esg_grade = esgGrade;
         report.grade = esgGrade;
 
         report.standard = report.report_standard || 'GHG Protocol';
-        report.period = report.reporting_period ? `${report.reporting_period.from} — ${report.reporting_period.to}` : new Date().getFullYear().toString();
+        report.period = report.reporting_period
+            ? `${report.reporting_period.from} — ${report.reporting_period.to}`
+            : new Date().getFullYear().toString();
 
         res.json(report);
     } catch (err) {
@@ -528,22 +765,29 @@ router.get('/report', cacheMiddleware(180), async (req, res) => {
 router.post('/offset', requirePermission('esg:manage'), async (req, res) => {
     try {
         const { offset_amount, offset_type, certificate_id, provider, cost } = req.body;
-        if (!offset_amount || offset_amount <= 0) return res.status(400).json({ error: 'Valid offset_amount required' });
+        if (!offset_amount || offset_amount <= 0)
+            return res.status(400).json({ error: 'Valid offset_amount required' });
 
         const id = require('uuid').v4();
-        const hash = require('crypto').createHash('sha256').update(JSON.stringify({ offset_amount, offset_type, certificate_id, provider })).digest('hex');
+        const hash = require('crypto')
+            .createHash('sha256')
+            .update(JSON.stringify({ offset_amount, offset_type, certificate_id, provider }))
+            .digest('hex');
 
-        await db.run(`
+        await db.run(
+            `
       INSERT INTO evidence_items (id, title, description, sha256_hash, entity_type, entity_id, uploaded_by, verification_status, tags)
       VALUES (?, ?, ?, ?, 'carbon_offset', ?, ?, 'anchored', '["carbon", "esg", "offset"]')
-    `, [
-            id,
-            `Carbon Offset: ${offset_amount} kgCO2e`,
-            `Type: ${offset_type || 'VER'}, Provider: ${provider || 'Self'}, Certificate: ${certificate_id || 'N/A'}, Cost: $${cost || 0}`,
-            hash,
-            id,
-            req.user.id
-        ]);
+    `,
+            [
+                id,
+                `Carbon Offset: ${offset_amount} kgCO2e`,
+                `Type: ${offset_type || 'VER'}, Provider: ${provider || 'Self'}, Certificate: ${certificate_id || 'N/A'}, Cost: $${cost || 0}`,
+                hash,
+                id,
+                req.user.id,
+            ]
+        );
 
         res.status(201).json({
             id,
@@ -554,7 +798,7 @@ router.post('/offset', requirePermission('esg:manage'), async (req, res) => {
             cost,
             verification_hash: hash,
             status: 'recorded',
-            message: 'Carbon offset recorded and blockchain-anchored'
+            message: 'Carbon offset recorded and blockchain-anchored',
         });
     } catch (err) {
         console.error('Carbon offset error:', err);
@@ -597,7 +841,7 @@ router.get('/risk-factors', cacheMiddleware(120), async (req, res) => {
                 factor: 'data_completeness',
                 description: `${noDataProducts.length}/${products.length} products lack emission data — audit risk`,
                 severity: noDataProducts.length > products.length * 0.3 ? 'high' : 'medium',
-                score: Math.min(90, 40 + Math.round(noDataProducts.length / Math.max(1, products.length) * 80)),
+                score: Math.min(90, 40 + Math.round((noDataProducts.length / Math.max(1, products.length)) * 80)),
             });
         }
 
@@ -636,13 +880,15 @@ router.get('/risk-factors', cacheMiddleware(120), async (req, res) => {
 
         // 6. Category concentration
         const categories = {};
-        products.forEach(p => { categories[p.category || 'Unknown'] = (categories[p.category || 'Unknown'] || 0) + 1; });
+        products.forEach(p => {
+            categories[p.category || 'Unknown'] = (categories[p.category || 'Unknown'] || 0) + 1;
+        });
         const topCategory = Object.entries(categories).sort((a, b) => b[1] - a[1])[0];
         if (topCategory && topCategory[1] > products.length * 0.4) {
             risk_factors.push({
                 name: 'Category Concentration Risk',
                 factor: 'category_concentration',
-                description: `${Math.round(topCategory[1] / products.length * 100)}% of products in "${topCategory[0]}" — sector-specific regulation risk`,
+                description: `${Math.round((topCategory[1] / products.length) * 100)}% of products in "${topCategory[0]}" — sector-specific regulation risk`,
                 severity: 'low',
                 score: 35,
             });
@@ -669,49 +915,61 @@ router.get('/regulatory', cacheMiddleware(120), async (req, res) => {
         try {
             const r = await db.get(`SELECT COUNT(*) as c FROM carbon_offsets WHERE org_id = ?`, [orgId]);
             offsetCount = r?.c || 0;
-        } catch (_) { }
+        } catch (_) {}
 
         // Real ESG regulatory frameworks
         const frameworks = [
             {
-                id: 'CSRD', name: 'CSRD / ESRS E1',
+                id: 'CSRD',
+                name: 'CSRD / ESRS E1',
                 full: 'Corporate Sustainability Reporting Directive — Environmental Standard E1',
-                region: 'EU', scopes_required: ['Scope 1', 'Scope 2', 'Scope 3'],
+                region: 'EU',
+                scopes_required: ['Scope 1', 'Scope 2', 'Scope 3'],
                 effective: '2026-01-01',
                 status: hasData && offsetCount > 0 ? 'compliant' : hasData ? 'partial' : 'gap',
             },
             {
-                id: 'GRI-305', name: 'GRI 305: Emissions',
+                id: 'GRI-305',
+                name: 'GRI 305: Emissions',
                 full: 'Global Reporting Initiative — Emissions Standard',
-                region: 'Global', scopes_required: ['Scope 1', 'Scope 2'],
+                region: 'Global',
+                scopes_required: ['Scope 1', 'Scope 2'],
                 effective: '2024-01-01',
                 status: hasData ? 'compliant' : 'gap',
             },
             {
-                id: 'CBAM', name: 'EU CBAM',
+                id: 'CBAM',
+                name: 'EU CBAM',
                 full: 'Carbon Border Adjustment Mechanism — Transitional Phase',
-                region: 'EU', scopes_required: ['Scope 1', 'Embedded'],
+                region: 'EU',
+                scopes_required: ['Scope 1', 'Embedded'],
                 effective: '2026-01-01',
                 status: hasData && productCount > 10 ? 'partial' : 'gap',
             },
             {
-                id: 'TCFD', name: 'TCFD Recommendations',
+                id: 'TCFD',
+                name: 'TCFD Recommendations',
                 full: 'Task Force on Climate-Related Financial Disclosures',
-                region: 'Global', scopes_required: ['Scope 1', 'Scope 2', 'Scope 3'],
+                region: 'Global',
+                scopes_required: ['Scope 1', 'Scope 2', 'Scope 3'],
                 effective: '2024-06-01',
                 status: hasData && offsetCount > 0 ? 'compliant' : hasData ? 'partial' : 'gap',
             },
             {
-                id: 'EU-TAX', name: 'EU Taxonomy',
+                id: 'EU-TAX',
+                name: 'EU Taxonomy',
                 full: 'EU Taxonomy Regulation — Climate Mitigation',
-                region: 'EU', scopes_required: ['Scope 1', 'Scope 2'],
+                region: 'EU',
+                scopes_required: ['Scope 1', 'Scope 2'],
                 effective: '2025-01-01',
                 status: hasData ? 'partial' : 'gap',
             },
             {
-                id: 'ISO-14064', name: 'ISO 14064',
+                id: 'ISO-14064',
+                name: 'ISO 14064',
                 full: 'Greenhouse gases — Quantification and reporting',
-                region: 'Global', scopes_required: ['Scope 1', 'Scope 2', 'Scope 3'],
+                region: 'Global',
+                scopes_required: ['Scope 1', 'Scope 2', 'Scope 3'],
                 effective: '2023-01-01',
                 status: hasData && productCount > 5 ? 'compliant' : hasData ? 'partial' : 'gap',
             },
@@ -725,7 +983,7 @@ router.get('/regulatory', cacheMiddleware(120), async (req, res) => {
             total_frameworks: frameworks.length,
             ready: compliant,
             partial: frameworks.filter(f => f.status === 'partial').length,
-            frameworks
+            frameworks,
         });
     } catch (err) {
         console.error('Regulatory alignment error:', err);
@@ -746,7 +1004,7 @@ router.get('/maturity', async (req, res) => {
         try {
             const r = await db.get(`SELECT COUNT(*) as c FROM carbon_offsets WHERE org_id = ?`, [orgId]);
             offsetCount = r?.c || 0;
-        } catch (_) { }
+        } catch (_) {}
 
         const partnerQ = orgId
             ? await db.get('SELECT COUNT(*) as c FROM partners WHERE org_id = ?', [orgId]).catch(() => ({ c: 0 }))
@@ -766,29 +1024,66 @@ router.get('/maturity', async (req, res) => {
         if (orgs > 1) features.push('cross_tenant_benchmark');
 
         // Calculate maturity level
-        let level = 0, label = 'Not Assessed';
-        if (features.length >= 7) { level = 5; label = 'Leader — Net Zero Pathway'; }
-        else if (features.length >= 5) { level = 4; label = 'Advanced — Full Scope Coverage'; }
-        else if (features.length >= 4) { level = 3; label = 'Intermediate — Offset & Risk Integration'; }
-        else if (features.length >= 2) { level = 2; label = 'Developing — Data Collection Active'; }
-        else if (features.length >= 1) { level = 1; label = 'Foundation — Basic Awareness'; }
+        let level = 0,
+            label = 'Not Assessed';
+        if (features.length >= 7) {
+            level = 5;
+            label = 'Leader — Net Zero Pathway';
+        } else if (features.length >= 5) {
+            level = 4;
+            label = 'Advanced — Full Scope Coverage';
+        } else if (features.length >= 4) {
+            level = 3;
+            label = 'Intermediate — Offset & Risk Integration';
+        } else if (features.length >= 2) {
+            level = 2;
+            label = 'Developing — Data Collection Active';
+        } else if (features.length >= 1) {
+            level = 1;
+            label = 'Foundation — Basic Awareness';
+        }
 
         res.json({
             level,
             current_level: level,
             label,
             levels: [
-                { level: 1, name: 'Foundation', description: 'Basic carbon awareness and initial data collection', target: 'Scope 1 tracking' },
-                { level: 2, name: 'Developing', description: 'Active data collection across Scope 1 & 2, initial reporting', target: 'Automated reporting' },
-                { level: 3, name: 'Intermediate', description: 'Offset recording, risk integration, and GRI-aligned reporting', target: 'Scope 3 screening' },
-                { level: 4, name: 'Advanced', description: 'Full Scope 1-3 coverage, partner ESG scoring, materiality assessment', target: 'SBTi alignment' },
-                { level: 5, name: 'Leader', description: 'Net zero pathway with cross-org benchmarks, blockchain-anchored verification', target: 'Net Zero by 2030' },
+                {
+                    level: 1,
+                    name: 'Foundation',
+                    description: 'Basic carbon awareness and initial data collection',
+                    target: 'Scope 1 tracking',
+                },
+                {
+                    level: 2,
+                    name: 'Developing',
+                    description: 'Active data collection across Scope 1 & 2, initial reporting',
+                    target: 'Automated reporting',
+                },
+                {
+                    level: 3,
+                    name: 'Intermediate',
+                    description: 'Offset recording, risk integration, and GRI-aligned reporting',
+                    target: 'Scope 3 screening',
+                },
+                {
+                    level: 4,
+                    name: 'Advanced',
+                    description: 'Full Scope 1-3 coverage, partner ESG scoring, materiality assessment',
+                    target: 'SBTi alignment',
+                },
+                {
+                    level: 5,
+                    name: 'Leader',
+                    description: 'Net zero pathway with cross-org benchmarks, blockchain-anchored verification',
+                    target: 'Net Zero by 2030',
+                },
             ],
             features_detected: features,
             products_count: productCount,
             offsets_count: offsetCount,
             partners_count: partnerCount,
-            eas_version: '3.0'
+            eas_version: '3.0',
         });
     } catch (err) {
         console.error('Carbon maturity error:', err);
@@ -814,7 +1109,7 @@ router.get('/role-matrix', cacheMiddleware(300), (req, res) => {
         res.json({
             ...matrix,
             current_user_role: req.user?.role || 'viewer',
-            eas_version: '3.0'
+            eas_version: '3.0',
         });
     } catch (err) {
         console.error('Role matrix error:', err);
@@ -829,7 +1124,7 @@ router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
         const [products, shipments, events] = await Promise.all([
             getOrgProducts(orgId),
             getOrgShipments(orgId),
-            getOrgEvents(orgId)
+            getOrgEvents(orgId),
         ]);
 
         const scopeData = await engineClient.carbonAggregate(products, shipments, events);
@@ -839,7 +1134,7 @@ router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
 
         // Calculate per-category stats from own data
         const categoryStats = {};
-        for (const p of (scopeData.product_rankings || [])) {
+        for (const p of scopeData.product_rankings || []) {
             const cat = p.category || 'General';
             if (!categoryStats[cat]) categoryStats[cat] = { products: 0, total_kgCO2e: 0, grades: [] };
             categoryStats[cat].products++;
@@ -860,9 +1155,16 @@ router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
                 benchmark_source: benchmark.source,
                 grade: gradeInfo.grade,
                 grade_label: gradeInfo.label,
-                performance: avg <= benchmark.p20 ? 'top_performer' : avg <= benchmark.median ? 'above_average' : avg <= benchmark.p80 ? 'below_average' : 'critical',
+                performance:
+                    avg <= benchmark.p20
+                        ? 'top_performer'
+                        : avg <= benchmark.median
+                          ? 'above_average'
+                          : avg <= benchmark.p80
+                            ? 'below_average'
+                            : 'critical',
                 percentile: carbonEngine.calculateIntensity(avg, { category: cat }).benchmark_percentile,
-                gap_to_median_pct: Math.round((avg - benchmark.median) / benchmark.median * 100)
+                gap_to_median_pct: Math.round(((avg - benchmark.median) / benchmark.median) * 100),
             };
         });
 
@@ -873,9 +1175,11 @@ router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
             industry_benchmarks: industryBenchmarks,
             your_comparison: comparison,
             methodology: 'Percentile comparison against DEFRA/GHG Protocol 2025 benchmarks',
-            insight: comparison.some(c => c.performance === 'top_performer') ? '✅ Top performer in some categories' :
-                comparison.some(c => c.performance === 'above_average') ? '🟡 Above industry average' :
-                    '⚠️ Below industry average — improvement needed'
+            insight: comparison.some(c => c.performance === 'top_performer')
+                ? '✅ Top performer in some categories'
+                : comparison.some(c => c.performance === 'above_average')
+                  ? '🟡 Above industry average'
+                  : '⚠️ Below industry average — improvement needed',
         });
     } catch (err) {
         console.error('Carbon benchmark error:', err);
@@ -895,7 +1199,7 @@ router.get('/scope3-materiality', cacheMiddleware(180), async (req, res) => {
             getOrgProducts(orgId),
             getOrgShipments(orgId),
             getOrgEvents(orgId),
-            getOrgPartners(orgId)
+            getOrgPartners(orgId),
         ]);
 
         const result = carbonEngine.assessScope3Materiality(products, shipments, events, partners);
@@ -921,14 +1225,14 @@ router.get('/net-position', cacheMiddleware(60), async (req, res) => {
         const grossT = +(grossKg / 1000).toFixed(3);
 
         // Get offsets from carbon_offsets table
-        let retired = 0, available = 0, offsetDetails = [];
+        let retired = 0,
+            available = 0,
+            offsetDetails = [];
         try {
             const q = orgId
                 ? `SELECT * FROM carbon_offsets WHERE org_id = ? ORDER BY created_at DESC`
                 : `SELECT * FROM carbon_offsets ORDER BY created_at DESC`;
-            const offsets = orgId
-                ? await db.all(q, [orgId])
-                : await db.all(q);
+            const offsets = orgId ? await db.all(q, [orgId]) : await db.all(q);
             (offsets || []).forEach(o => {
                 const qty = o.quantity_tco2e || o.quantity_tCO2e || 0;
                 if (o.status === 'retired') {
@@ -944,7 +1248,9 @@ router.get('/net-position', cacheMiddleware(60), async (req, res) => {
                     status: o.status || 'available',
                 });
             });
-        } catch (_) { /* carbon_offsets table may not exist */ }
+        } catch (_) {
+            /* carbon_offsets table may not exist */
+        }
 
         const retiredT = +retired.toFixed(1);
         const availableT = +available.toFixed(1);
@@ -991,31 +1297,36 @@ router.post('/offset/retire', requirePermission('esg:manage'), async (req, res) 
             return res.status(400).json({
                 error: 'Credit not eligible for retirement',
                 issues: verification.issues,
-                verification: verification.verification
+                verification: verification.verification,
             });
         }
 
         // Retire the credit
         const qty = quantity_tCO2e || credit.quantity_tCO2e || credit.quantity_tco2e || 0;
         try {
-            await db.prepare('UPDATE carbon_credits SET status = ?, retired_at = ?, retired_by = ? WHERE id = ?')
+            await db
+                .prepare('UPDATE carbon_credits SET status = ?, retired_at = ?, retired_by = ? WHERE id = ?')
                 .run('retired', new Date().toISOString(), req.user?.id || 'system', credit.id);
         } catch (e) {
             // Fallback column names
-            await db.prepare('UPDATE carbon_credits SET status = ? WHERE id = ?')
-                .run('retired', credit.id);
+            await db.prepare('UPDATE carbon_credits SET status = ? WHERE id = ?').run('retired', credit.id);
         }
 
         // Audit log
         const { v4: uuidv4 } = require('uuid');
         try {
-            await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
+            await db.run(
+                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
                 VALUES (?, ?, 'carbon_credit_retired', 'carbon_credit', ?, ?, NOW())
-            `, [
-                uuidv4(), req.user?.id || 'system', credit.id,
-                JSON.stringify({ quantity_tCO2e: qty, credit_id: credit_id, verification })
-            ]);
-        } catch (_) { }
+            `,
+                [
+                    uuidv4(),
+                    req.user?.id || 'system',
+                    credit.id,
+                    JSON.stringify({ quantity_tCO2e: qty, credit_id: credit_id, verification }),
+                ]
+            );
+        } catch (_) {}
 
         res.json({
             message: 'Carbon credit retired successfully',
@@ -1024,7 +1335,7 @@ router.post('/offset/retire', requirePermission('esg:manage'), async (req, res) 
             status: 'retired',
             verification,
             retired_by: req.user?.email || 'system',
-            retired_at: new Date().toISOString()
+            retired_at: new Date().toISOString(),
         });
     } catch (err) {
         console.error('Offset retire error:', err);
@@ -1048,7 +1359,7 @@ router.get('/factors', cacheMiddleware(300), async (req, res) => {
             industry_benchmarks: carbonEngine.getIndustryBenchmarks(),
             confidence_levels: carbonEngine.getConfidenceLevels(),
             risk_thresholds: carbonEngine.getRiskThresholds(),
-            methodology: 'DEFRA/GHG Protocol 2025'
+            methodology: 'DEFRA/GHG Protocol 2025',
         });
     } catch (err) {
         console.error('Factors list error:', err);
@@ -1059,30 +1370,37 @@ router.get('/factors', cacheMiddleware(300), async (req, res) => {
 // ─── PUT /api/scm/carbon/factors/:id — Update emission factor ───────────────
 router.put('/factors/:id', requirePermission('esg:manage'), async (req, res) => {
     try {
-        const result = await factorService.updateFactor(
-            req.params.id,
-            req.body,
-            req.user?.id || 'unknown'
-        );
+        const result = await factorService.updateFactor(req.params.id, req.body, req.user?.id || 'unknown');
 
         // Audit log
         const { v4: uuidv4 } = require('uuid');
-const { withTransaction } = require('../middleware/transaction');
-        await db.run(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
+        const { withTransaction } = require('../middleware/transaction');
+        await db.run(
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
             VALUES (?, ?, 'emission_factor_updated', 'emission_factor', ?, ?, NOW())
-        `, [
-            uuidv4(), req.user?.id, result.id,
-            JSON.stringify({ factor_key: result.factor_key, old_value: result.old_value, new_value: result.new_value, version: result.version })
-        ]);
+        `,
+            [
+                uuidv4(),
+                req.user?.id,
+                result.id,
+                JSON.stringify({
+                    factor_key: result.factor_key,
+                    old_value: result.old_value,
+                    new_value: result.new_value,
+                    version: result.version,
+                }),
+            ]
+        );
 
         res.json({
             message: 'Factor updated with version tracking',
-            ...result
+            ...result,
         });
     } catch (err) {
         console.error('Factor update error:', err);
-        res.status(err.message === 'Factor not found' ? 404 : 500)
-            .json({ error: err.message || 'Factor update failed' });
+        res.status(err.message === 'Factor not found' ? 404 : 500).json({
+            error: err.message || 'Factor update failed',
+        });
     }
 });
 
@@ -1098,7 +1416,7 @@ router.get('/factors/history', async (req, res) => {
             category,
             factor_key,
             versions: history.length,
-            history
+            history,
         });
     } catch (err) {
         console.error('Factor history error:', err);
@@ -1118,26 +1436,51 @@ router.get('/scope3-deep', cacheMiddleware(180), async (req, res) => {
             const fp = p.carbon_footprint_kgco2e || 0;
             // Distribute across Scope 3 categories based on product type
             const cats = [
-                { id: 1, name: 'Purchased Goods & Services', share: 0.35, methodology: 'Spend-based with sector emission factors' },
-                { id: 4, name: 'Upstream Transportation', share: 0.15, methodology: 'Distance-based with mode-specific factors' },
-                { id: 9, name: 'Downstream Transportation', share: 0.10, methodology: 'Distance-based using average logistics data' },
-                { id: 11, name: 'Use of Sold Products', share: 0.20, methodology: 'Product lifetime usage estimation' },
+                {
+                    id: 1,
+                    name: 'Purchased Goods & Services',
+                    share: 0.35,
+                    methodology: 'Spend-based with sector emission factors',
+                },
+                {
+                    id: 4,
+                    name: 'Upstream Transportation',
+                    share: 0.15,
+                    methodology: 'Distance-based with mode-specific factors',
+                },
+                {
+                    id: 9,
+                    name: 'Downstream Transportation',
+                    share: 0.1,
+                    methodology: 'Distance-based using average logistics data',
+                },
+                { id: 11, name: 'Use of Sold Products', share: 0.2, methodology: 'Product lifetime usage estimation' },
                 { id: 12, name: 'End-of-Life Treatment', share: 0.05, methodology: 'Waste-type disposal factors' },
                 { id: 15, name: 'Investments', share: 0.15, methodology: 'Investment-proportional allocation' },
             ];
             for (const c of cats) {
                 const kg = fp * c.share;
-                if (!catMap[c.id]) catMap[c.id] = { id: c.id, name: c.name, kgCO2e: 0, methodology: c.methodology, confidence: 3 };
+                if (!catMap[c.id])
+                    catMap[c.id] = { id: c.id, name: c.name, kgCO2e: 0, methodology: c.methodology, confidence: 3 };
                 catMap[c.id].kgCO2e += kg;
                 totalScope3 += kg;
             }
         }
         const categories = Object.values(catMap)
-            .map(c => ({ ...c, kgCO2e: Math.round(c.kgCO2e), pct: totalScope3 > 0 ? +((c.kgCO2e / totalScope3) * 100).toFixed(1) : 0 }))
+            .map(c => ({
+                ...c,
+                kgCO2e: Math.round(c.kgCO2e),
+                pct: totalScope3 > 0 ? +((c.kgCO2e / totalScope3) * 100).toFixed(1) : 0,
+            }))
             .sort((a, b) => b.kgCO2e - a.kgCO2e);
         res.json({
             total_scope3_tCO2e: +(totalScope3 / 1000).toFixed(2),
-            totals: { cat1: catMap[1]?.kgCO2e || 0, cat4: catMap[4]?.kgCO2e || 0, cat9: catMap[9]?.kgCO2e || 0, cat11: catMap[11]?.kgCO2e || 0 },
+            totals: {
+                cat1: catMap[1]?.kgCO2e || 0,
+                cat4: catMap[4]?.kgCO2e || 0,
+                cat9: catMap[9]?.kgCO2e || 0,
+                cat11: catMap[11]?.kgCO2e || 0,
+            },
             categories,
         });
     } catch (err) {
@@ -1151,10 +1494,9 @@ router.get('/marketplace', cacheMiddleware(120), async (req, res) => {
     try {
         const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         // Generate marketplace listings from available offset data
-        const offsets = await db.all(
-            `SELECT * FROM carbon_offsets WHERE org_id = ? ORDER BY created_at DESC LIMIT 20`,
-            [orgId]
-        ).catch(() => []);
+        const offsets = await db
+            .all(`SELECT * FROM carbon_offsets WHERE org_id = ? ORDER BY created_at DESC LIMIT 20`, [orgId])
+            .catch(() => []);
         const listings = offsets.map(o => ({
             project_type: o.project_type || 'Verified Carbon Standard',
             quantity_tCO2e: o.quantity_tco2e || o.quantity_tCO2e || 0,
@@ -1173,7 +1515,9 @@ router.get('/marketplace', cacheMiddleware(120), async (req, res) => {
             title: 'Carbon Credit Marketplace',
             total_listings: listings.length,
             total_available_tCO2e: availableListings.reduce((s, l) => s + (l.quantity_tCO2e || 0), 0),
-            total_retired_tCO2e: listings.filter(l => l.status === 'retired').reduce((s, l) => s + (l.quantity_tCO2e || 0), 0),
+            total_retired_tCO2e: listings
+                .filter(l => l.status === 'retired')
+                .reduce((s, l) => s + (l.quantity_tCO2e || 0), 0),
             listings,
         });
     } catch (err) {
@@ -1191,13 +1535,27 @@ router.get('/report/csrd', cacheMiddleware(180), async (req, res) => {
         const totalT = +(totalKg / 1000).toFixed(2);
         // Generate CSRD-aligned disclosures
         const disclosures = {
-            'E1-1': { title: 'Transition plan for climate change mitigation', status: 'In progress', detail: 'Net-zero strategy under development' },
-            'E1-2': { title: 'Policies related to climate change mitigation and adaptation', status: 'Partially aligned' },
+            'E1-1': {
+                title: 'Transition plan for climate change mitigation',
+                status: 'In progress',
+                detail: 'Net-zero strategy under development',
+            },
+            'E1-2': {
+                title: 'Policies related to climate change mitigation and adaptation',
+                status: 'Partially aligned',
+            },
             'E1-3': { title: 'Actions and resources in relation to climate change policies', status: 'Implemented' },
-            'E1-4': { title: 'Targets related to climate change mitigation and adaptation', target_reduction_pct: 30, target_year: 2030 },
+            'E1-4': {
+                title: 'Targets related to climate change mitigation and adaptation',
+                target_reduction_pct: 30,
+                target_year: 2030,
+            },
             'E1-5': { title: 'Energy consumption and mix', total_kgCO2e: Math.round(totalKg * 0.3), unit: 'kgCO₂e' },
             'E1-6': { title: 'Gross Scopes 1, 2, 3 and Total GHG emissions', total_kgCO2e: Math.round(totalKg) },
-            'E1-7': { title: 'GHG removals and GHG mitigation projects financed through carbon credits', status: 'Partial offset' },
+            'E1-7': {
+                title: 'GHG removals and GHG mitigation projects financed through carbon credits',
+                status: 'Partial offset',
+            },
             'E1-8': { title: 'Internal carbon pricing', status: totalKg > 0 ? 'Applied' : 'Not applicable' },
             'E1-9': { title: 'Anticipated financial effects from climate change', status: 'Assessed' },
         };
@@ -1224,13 +1582,15 @@ router.get('/benchmark/cross-org', cacheMiddleware(300), async (req, res) => {
         const myIntensity = products.length > 0 ? +(totalKg / products.length).toFixed(1) : 0;
 
         // Get all orgs for comparison — join products via users table
-        const allOrgs = await db.all(
-            `SELECT o.id, o.name, COUNT(p.id)::int as product_count, COALESCE(SUM(p.carbon_footprint_kgco2e), 0)::float as total_kg
+        const allOrgs = await db
+            .all(
+                `SELECT o.id, o.name, COUNT(p.id)::int as product_count, COALESCE(SUM(p.carbon_footprint_kgco2e), 0)::float as total_kg
              FROM organizations o
              LEFT JOIN users u ON u.org_id = o.id
              LEFT JOIN products p ON p.registered_by = u.id
              GROUP BY o.id, o.name ORDER BY total_kg ASC LIMIT 1000`
-        ).catch(() => []);
+            )
+            .catch(() => []);
 
         // Rank by intensity (lower = better)
         const ranked = allOrgs
@@ -1238,27 +1598,42 @@ router.get('/benchmark/cross-org', cacheMiddleware(300), async (req, res) => {
             .map(o => ({
                 ...o,
                 total_tCO2e: +(o.total_kg / 1000).toFixed(1),
-                intensity: o.product_count > 0 ? +(o.total_kg / o.product_count).toFixed(1) : 0
+                intensity: o.product_count > 0 ? +(o.total_kg / o.product_count).toFixed(1) : 0,
             }))
             .sort((a, b) => a.intensity - b.intensity);
 
         const myRank = ranked.findIndex(o => o.id === orgId) + 1;
         const percentile = ranked.length > 0 ? Math.round(((ranked.length - myRank) / ranked.length) * 100) : 0;
-        const labels = { top: 'Top Performer 🏆', good: 'Above Average ✅', avg: 'Industry Average', below: 'Below Average ⚠️' };
-        const perfLabel = percentile >= 80 ? labels.top : percentile >= 50 ? labels.good : percentile >= 20 ? labels.avg : labels.below;
+        const labels = {
+            top: 'Top Performer 🏆',
+            good: 'Above Average ✅',
+            avg: 'Industry Average',
+            below: 'Below Average ⚠️',
+        };
+        const perfLabel =
+            percentile >= 80
+                ? labels.top
+                : percentile >= 50
+                  ? labels.good
+                  : percentile >= 20
+                    ? labels.avg
+                    : labels.below;
 
         // Offset-adjusted comparison (bonus for companies actively offsetting)
         let offsetRatio = 0;
         try {
-            const off = await db.get('SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE org_id = ? AND status = ?', [orgId, 'retired']);
+            const off = await db.get(
+                'SELECT COALESCE(SUM(quantity_tco2e),0) as r FROM carbon_offsets WHERE org_id = ? AND status = ?',
+                [orgId, 'retired']
+            );
             offsetRatio = totalT > 0 ? Math.min(1, (off?.r || 0) / totalT) : 0;
-        } catch (_) { }
+        } catch (_) {}
 
         const comparison = ranked.map((o, i) => {
             const isMe = o.id === orgId;
             return {
                 rank: i + 1,
-                label: isMe ? 'Your Organization' : (o.name || `Org ${i + 1}`),
+                label: isMe ? 'Your Organization' : o.name || `Org ${i + 1}`,
                 total_tCO2e: o.total_tCO2e,
                 intensity: o.intensity,
                 products: o.product_count,
@@ -1277,9 +1652,10 @@ router.get('/benchmark/cross-org', cacheMiddleware(300), async (req, res) => {
             performance_label: perfLabel,
             methodology: 'Cross-org benchmarking based on total tCO₂e emissions across all TrustChecker organizations',
             leaderboard: comparison.slice(0, 10),
-            insight: offsetRatio >= 0.4
-                ? '✅ Strong offset strategy — ' + Math.round(offsetRatio * 100) + '% of emissions retired'
-                : '⚠️ Consider increasing carbon offset coverage',
+            insight:
+                offsetRatio >= 0.4
+                    ? '✅ Strong offset strategy — ' + Math.round(offsetRatio * 100) + '% of emissions retired'
+                    : '⚠️ Consider increasing carbon offset coverage',
         });
     } catch (err) {
         console.error('Cross-org benchmark error:', err);

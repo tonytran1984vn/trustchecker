@@ -1,0 +1,294 @@
+/* Layout, Sidebar, Domain Groups */
+/* ─── Sidebar ───────────────────────────────────────────────── */
+.sidebar {
+  width: 260px;
+  background: rgba(10, 14, 26, 0.92);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04),
+    4px 0 32px rgba(0, 0, 0, 0.4),
+    inset 0 0 80px rgba(0, 240, 255, 0.015);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  height: 100vh;
+  z-index: 100;
+  transition: var(--transition);
+}
+
+.sidebar-header {
+  padding: 20px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-logo .logo-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--gradient-accent);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.25), 0 0 8px rgba(139, 92, 246, 0.15);
+  transition: box-shadow 0.3s ease;
+}
+
+.sidebar-logo:hover .logo-icon {
+  box-shadow: 0 0 32px rgba(0, 240, 255, 0.35), 0 0 12px rgba(139, 92, 246, 0.2);
+}
+
+.sidebar-logo .logo-text {
+  font-weight: 800;
+  font-size: 1.1rem;
+  letter-spacing: -0.5px;
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.sidebar-logo .logo-version {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 12px 10px;
+  overflow-y: auto;
+}
+
+.nav-section {
+  margin-bottom: 20px;
+}
+
+.nav-section-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  padding: 0 12px;
+  margin-bottom: 6px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 500;
+  position: relative;
+  margin-bottom: 1px;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  padding-left: 14px;
+}
+
+.nav-item.active {
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.12) 0%, rgba(139, 92, 246, 0.06) 100%);
+  color: var(--cyan);
+  font-weight: 600;
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: linear-gradient(180deg, var(--cyan), var(--violet));
+  border-radius: 0 3px 3px 0;
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+  animation: navIndicatorGlow 2s ease-in-out infinite;
+}
+
+@keyframes navIndicatorGlow {
+  0%, 100% { box-shadow: 0 0 8px rgba(0, 240, 255, 0.3); }
+  50% { box-shadow: 0 0 14px rgba(0, 240, 255, 0.5); }
+}
+
+.nav-item .nav-icon {
+  font-size: 1.1rem;
+  width: 24px;
+  text-align: center;
+  transition: transform 0.2s ease;
+}
+
+.nav-item:hover .nav-icon {
+  transform: scale(1.1);
+}
+
+.nav-item .nav-badge {
+  margin-left: auto;
+  background: var(--rose);
+  color: white;
+  font-size: 0.6rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+/* v9.1 — Locked feature items */
+.nav-item.nav-locked {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.nav-item.nav-locked:hover {
+  opacity: 0.65;
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.nav-item .nav-lock-icon {
+  margin-left: auto;
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+/* ─── v10 Collapsible Domain Groups ──────────────────────────── */
+.nav-section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+
+.nav-section-label:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.nav-domain-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dot-color, var(--text-muted));
+  flex-shrink: 0;
+  box-shadow: 0 0 6px var(--dot-color, transparent);
+}
+
+.nav-section-label .nav-section-text {
+  flex: 1;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.nav-chevron {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: rotate(90deg);
+  margin-left: auto;
+}
+
+.nav-section.collapsed .nav-chevron {
+  transform: rotate(0deg);
+}
+
+.nav-section-items {
+  max-height: 600px;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.25s ease;
+  opacity: 1;
+}
+
+.nav-section.collapsed .nav-section-items {
+  max-height: 0;
+  opacity: 0;
+}
+
+/* Domain accent colors */
+.nav-section[data-domain="operations"] .nav-domain-dot {
+  --dot-color: var(--cyan);
+}
+
+.nav-section[data-domain="supply-chain"] .nav-domain-dot {
+  --dot-color: var(--emerald);
+}
+
+.nav-section[data-domain="risk"] .nav-domain-dot {
+  --dot-color: var(--rose);
+}
+
+.nav-section[data-domain="compliance"] .nav-domain-dot {
+  --dot-color: var(--amber);
+}
+
+.nav-section[data-domain="digital-assets"] .nav-domain-dot {
+  --dot-color: var(--violet);
+}
+
+.nav-section[data-domain="platform"] .nav-domain-dot {
+  --dot-color: var(--text-secondary);
+}
+
+.nav-section[data-domain="admin"] .nav-domain-dot {
+  --dot-color: var(--text-muted);
+}
+
+.sidebar-org {
+  margin-top: 8px;
+  padding: 4px 0;
+}
+
+/* Sidebar footer */
+.sidebar-footer {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-footer .user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--gradient-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.sidebar-footer .user-info {
+  flex: 1;
+}
+
+.sidebar-footer .user-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.sidebar-footer .user-role {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}

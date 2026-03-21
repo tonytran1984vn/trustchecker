@@ -45,19 +45,23 @@ async function loadKeys() {
     // Try loading from file first
     const keyDir = path.join(__dirname, '..', '..', 'certs');
     const fsp = require('fs').promises;
-const { withTransaction } = require('../middleware/transaction');
+    const { withTransaction } = require('../middleware/transaction');
 
     try {
         const pubKeyPath = process.env.LICENSE_PUBLIC_KEY_PATH || path.join(keyDir, 'license-public.pem');
         await fsp.access(pubKeyPath);
         PUBLIC_KEY = crypto.createPublicKey(await fsp.readFile(pubKeyPath));
-    } catch (_) { /* key not found — will auto-generate for dev */ }
+    } catch (_) {
+        /* key not found — will auto-generate for dev */
+    }
 
     try {
         const privKeyPath = process.env.LICENSE_PRIVATE_KEY_PATH || path.join(keyDir, 'license-private.pem');
         await fsp.access(privKeyPath);
         PRIVATE_KEY = crypto.createPrivateKey(await fsp.readFile(privKeyPath));
-    } catch (_) { /* private key not available — that's fine for customer deployments */ }
+    } catch (_) {
+        /* private key not available — that's fine for customer deployments */
+    }
 
     // Auto-generate keypair for development/testing
     if (!PUBLIC_KEY && process.env.NODE_ENV !== 'production') {
@@ -69,7 +73,6 @@ const { withTransaction } = require('../middleware/transaction');
 }
 
 loadKeys().catch(err => console.error('[license] Key loading failed:', err.message));
-
 
 // ─── Hardware Fingerprint ────────────────────────────────────────────────────
 function getHardwareFingerprint() {
@@ -88,7 +91,6 @@ function getHardwareFingerprint() {
 
     return crypto.createHash('sha256').update(data).digest('hex').substring(0, 32);
 }
-
 
 // ─── License Validation (with signature verification) ────────────────────────
 function validateLicense(licenseKey) {
@@ -185,7 +187,6 @@ function validatePayload(license) {
 // In-memory license state
 let currentLicense = null;
 
-
 // ─── Activate License ────────────────────────────────────────────────────────
 router.post('/activate', authMiddleware, requirePlatformAdmin(), async (req, res) => {
     try {
@@ -237,7 +238,6 @@ router.post('/activate', authMiddleware, requirePlatformAdmin(), async (req, res
     }
 });
 
-
 // ─── License Status ──────────────────────────────────────────────────────────
 router.get('/status', authMiddleware, (req, res) => {
     if (!currentLicense) {
@@ -251,8 +251,7 @@ router.get('/status', authMiddleware, (req, res) => {
 
     // Re-validate to check expiration
     const recheck = validateLicense(currentLicense.key);
-    const status = !recheck.valid ? 'expired' :
-        recheck.in_grace_period ? 'grace_period' : 'active';
+    const status = !recheck.valid ? 'expired' : recheck.in_grace_period ? 'grace_period' : 'active';
 
     res.json({
         status,
@@ -263,7 +262,6 @@ router.get('/status', authMiddleware, (req, res) => {
         hardware_fingerprint: getHardwareFingerprint(),
     });
 });
-
 
 // ─── Deactivate License ──────────────────────────────────────────────────────
 router.post('/deactivate', authMiddleware, requirePlatformAdmin(), async (req, res) => {
@@ -288,7 +286,6 @@ router.post('/deactivate', authMiddleware, requirePlatformAdmin(), async (req, r
     }
 });
 
-
 // ─── Hardware Fingerprint ────────────────────────────────────────────────────
 router.get('/fingerprint', (req, res) => {
     res.json({
@@ -300,7 +297,6 @@ router.get('/fingerprint', (req, res) => {
         message: 'Provide this fingerprint when requesting an on-premise license key',
     });
 });
-
 
 // ─── Generate License (internal/dev only) ────────────────────────────────────
 // This endpoint is only available when PRIVATE_KEY is loaded (dev/license-server)
@@ -314,9 +310,12 @@ router.post('/generate', authMiddleware, requirePlatformAdmin(), async (req, res
 
     try {
         const {
-            org, plan = 'enterprise', features = ['*'],
-            expires_days = 365, max_users = 'unlimited',
-            fingerprint = '*'
+            org,
+            plan = 'enterprise',
+            features = ['*'],
+            expires_days = 365,
+            max_users = 'unlimited',
+            fingerprint = '*',
         } = req.body;
 
         if (!org) return res.status(400).json({ error: 'org is required' });
@@ -357,7 +356,6 @@ router.post('/generate', authMiddleware, requirePlatformAdmin(), async (req, res
     }
 });
 
-
 // ─── Public Key (for verification) ───────────────────────────────────────────
 router.get('/public-key', (req, res) => {
     if (!PUBLIC_KEY) {
@@ -370,6 +368,5 @@ router.get('/public-key', (req, res) => {
         message: 'Use this public key to verify license signatures offline',
     });
 });
-
 
 module.exports = router;

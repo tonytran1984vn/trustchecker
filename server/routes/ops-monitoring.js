@@ -16,8 +16,11 @@ router.use(orgGuard());
 
 // ─── GET /health — Pipeline health (SLO-based) ─────────────────
 router.get('/health', async (req, res) => {
-    try { res.json(opsEngine.checkPipelineHealth()); }
-    catch (err) { res.status(500).json({ error: 'Health check failed' }); }
+    try {
+        res.json(opsEngine.checkPipelineHealth());
+    } catch (err) {
+        res.status(500).json({ error: 'Health check failed' });
+    }
 });
 
 // ─── POST /incidents — Create incident ──────────────────────────
@@ -25,17 +28,35 @@ router.post('/incidents', requirePermission('risk:view'), async (req, res) => {
     try {
         const result = opsEngine.createIncident({
             ...req.body,
-            triggered_by: req.user?.id || 'system'
+            triggered_by: req.user?.id || 'system',
         });
         if (result.error) return res.status(400).json(result);
         // Persist to DB
         const orgId = req.user?.org_id || req.user?.orgId || null;
         try {
-            await db.prepare('INSERT INTO ops_incidents_v2 (id,incident_id,title,description,severity,status,runbook_key,triggered_by,org_id,hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,NOW())')
-                .run(uuidv4(), result.incident_id, result.title, result.description, req.body.severity || 'SEV3', 'open', req.body.runbook_key, req.user?.id, orgId, result.hash);
-        } catch (dbErr) { console.warn('[ops] DB persist failed:', dbErr.message); }
+            await db
+                .prepare(
+                    'INSERT INTO ops_incidents_v2 (id,incident_id,title,description,severity,status,runbook_key,triggered_by,org_id,hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,NOW())'
+                )
+                .run(
+                    uuidv4(),
+                    result.incident_id,
+                    result.title,
+                    result.description,
+                    req.body.severity || 'SEV3',
+                    'open',
+                    req.body.runbook_key,
+                    req.user?.id,
+                    orgId,
+                    result.hash
+                );
+        } catch (dbErr) {
+            console.warn('[ops] DB persist failed:', dbErr.message);
+        }
         res.status(201).json(result);
-    } catch (err) { res.status(500).json({ error: 'Incident creation failed' }); }
+    } catch (err) {
+        res.status(500).json({ error: 'Incident creation failed' });
+    }
 });
 
 // ─── GET /incidents — List incidents ────────────────────────────
@@ -49,7 +70,10 @@ router.get('/incidents', async (req, res) => {
             const params = [];
             let sql = 'SELECT * FROM ops_incidents_v2';
             const conditions = [];
-            if (orgId) { conditions.push('org_id = ?'); params.push(orgId); }
+            if (orgId) {
+                conditions.push('org_id = ?');
+                params.push(orgId);
+            }
             if (req.query.status) {
                 conditions.push('status = ?');
                 params.push(req.query.status);
@@ -66,7 +90,9 @@ router.get('/incidents', async (req, res) => {
             const incidents = opsEngine.getAllIncidents(limit);
             return res.json({ title: 'Ops Incidents', total: incidents.length, incidents });
         }
-    } catch (err) { res.status(500).json({ error: 'Incidents query failed' }); }
+    } catch (err) {
+        res.status(500).json({ error: 'Incidents query failed' });
+    }
 });
 
 // ─── POST /incidents/:id/escalate — Manual escalation ───────────
@@ -90,17 +116,31 @@ router.put('/incidents/:id', requirePermission('risk:view'), async (req, res) =>
         const updates = [];
         const params = [];
 
-        if (status) { updates.push('status = ?'); params.push(status); }
-        if (assignee) { updates.push('assigned_to = ?'); params.push(assignee); }
-        if (severity) { updates.push('severity = ?'); params.push(severity); }
-        if (status === 'resolved') { updates.push('resolved_at = NOW()'); }
+        if (status) {
+            updates.push('status = ?');
+            params.push(status);
+        }
+        if (assignee) {
+            updates.push('assigned_to = ?');
+            params.push(assignee);
+        }
+        if (severity) {
+            updates.push('severity = ?');
+            params.push(severity);
+        }
+        if (status === 'resolved') {
+            updates.push('resolved_at = NOW()');
+        }
         updates.push('updated_at = NOW()');
 
         if (updates.length === 1) return res.status(400).json({ error: 'No fields to update' });
 
         let sql = `UPDATE ops_incidents_v2 SET ${updates.join(', ')} WHERE id = ?`;
         params.push(req.params.id);
-        if (orgId) { sql += ' AND org_id = ?'; params.push(orgId); }
+        if (orgId) {
+            sql += ' AND org_id = ?';
+            params.push(orgId);
+        }
 
         await db.run(sql, params);
         res.json({ ok: true, id: req.params.id, status: status || 'unchanged' });
@@ -116,7 +156,10 @@ router.delete('/incidents/:id', requirePermission('risk:view'), async (req, res)
         const orgId = req.user?.org_id || req.user?.orgId || null;
         let sql = 'DELETE FROM ops_incidents_v2 WHERE id = ?';
         const params = [req.params.id];
-        if (orgId) { sql += ' AND org_id = ?'; params.push(orgId); }
+        if (orgId) {
+            sql += ' AND org_id = ?';
+            params.push(orgId);
+        }
         await db.run(sql, params);
         res.json({ ok: true, deleted: req.params.id });
     } catch (err) {
@@ -124,7 +167,6 @@ router.delete('/incidents/:id', requirePermission('risk:view'), async (req, res)
         res.status(500).json({ error: 'Delete failed' });
     }
 });
-
 
 router.put('/incidents/:id/assign', requirePermission('risk:view'), (req, res) => {
     const { assigned_to } = req.body;
@@ -138,12 +180,7 @@ router.put('/incidents/:id/assign', requirePermission('risk:view'), (req, res) =
 router.put('/incidents/:id/resolve', requirePermission('risk:view'), (req, res) => {
     const { resolution, root_cause } = req.body;
     if (!resolution) return res.status(400).json({ error: 'resolution required' });
-    const result = opsEngine.resolveIncident(
-        req.params.id,
-        req.user?.id || 'unknown',
-        resolution,
-        root_cause || 'TBD'
-    );
+    const result = opsEngine.resolveIncident(req.params.id, req.user?.id || 'unknown', resolution, root_cause || 'TBD');
     if (result.error) return res.status(400).json(result);
     res.json(result);
 });
@@ -164,11 +201,7 @@ router.get('/incidents/:id/timeline', (req, res) => {
 
 // ─── POST /incidents/:id/post-mortem — Create post-mortem ───────
 router.post('/incidents/:id/post-mortem', requirePermission('compliance:review'), (req, res) => {
-    const result = opsEngine.createPostMortem(
-        req.params.id,
-        req.user?.id || 'unknown',
-        req.body
-    );
+    const result = opsEngine.createPostMortem(req.params.id, req.user?.id || 'unknown', req.body);
     if (result.error) return res.status(400).json(result);
     res.status(201).json(result);
 });
@@ -226,7 +259,10 @@ router.get('/bundle', async (req, res) => {
                 const params = [];
                 let sql = 'SELECT * FROM ops_incidents_v2';
                 const conditions = [];
-                if (orgId) { conditions.push('org_id = ?'); params.push(orgId); }
+                if (orgId) {
+                    conditions.push('org_id = ?');
+                    params.push(orgId);
+                }
                 if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
                 sql += ' ORDER BY created_at DESC LIMIT ?';
                 params.push(limit);
@@ -243,9 +279,13 @@ router.get('/bundle', async (req, res) => {
             try {
                 const rows = await db.all('SELECT * FROM platform_feature_flags ORDER BY category, sort_order, key');
                 const flagList = rows.map(r => ({
-                    key: r.key, label: r.label || r.key.replace(/_/g, ' '),
-                    description: r.description || '', enabled: !!r.enabled,
-                    category: r.category || 'general', icon: r.icon || '⚡', color: r.color || '#6b7280',
+                    key: r.key,
+                    label: r.label || r.key.replace(/_/g, ' '),
+                    description: r.description || '',
+                    enabled: !!r.enabled,
+                    category: r.category || 'general',
+                    icon: r.icon || '⚡',
+                    color: r.color || '#6b7280',
                 }));
                 return { flagList };
             } catch {
@@ -259,7 +299,10 @@ router.get('/bundle', async (req, res) => {
     response.incidents = results[1].status === 'fulfilled' ? results[1].value : null;
     response.featureFlags = results[2].status === 'fulfilled' ? results[2].value : null;
     const errors = [];
-    results.forEach((r, i) => { if (r.status === 'rejected') errors.push({ module: ['health','incidents','featureFlags'][i], error: r.reason?.message }); });
+    results.forEach((r, i) => {
+        if (r.status === 'rejected')
+            errors.push({ module: ['health', 'incidents', 'featureFlags'][i], error: r.reason?.message });
+    });
     if (errors.length) response._errors = errors;
 
     res.json(response);

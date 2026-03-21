@@ -28,11 +28,15 @@ const serviceMap = {
 const handler = {
     get(target, prop) {
         if (!target[prop] && serviceMap[prop]) {
-            try { target[prop] = require(serviceMap[prop]); }
-            catch(e) { console.warn('[svc-inject] Failed:', prop, e.message); target[prop] = {}; }
+            try {
+                target[prop] = require(serviceMap[prop]);
+            } catch (e) {
+                console.warn('[svc-inject] Failed:', prop, e.message);
+                target[prop] = {};
+            }
         }
         return target[prop] || {};
-    }
+    },
 };
 
 const serviceProxy = new Proxy(services, handler);

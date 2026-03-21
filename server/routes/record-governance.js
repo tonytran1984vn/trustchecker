@@ -9,10 +9,9 @@
  *   GET    /api/governance/versions/:type/:id       — version history
  */
 
-
 function _safeId(name) {
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error("Invalid identifier: " + name);
-  return name;
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error('Invalid identifier: ' + name);
+    return name;
 }
 
 const express = require('express');
@@ -36,10 +35,7 @@ router.post('/proposals', async (req, res) => {
         }
 
         // Verify entity exists and belongs to org
-        const entity = await db.get(
-            `SELECT id, org_id FROM ${_safeId(entity_type)} WHERE id = ?`,
-            [entity_id]
-        );
+        const entity = await db.get(`SELECT id, org_id FROM ${_safeId(entity_type)} WHERE id = ?`, [entity_id]);
         if (!entity) return res.status(404).json({ error: 'Entity not found' });
         if (req.orgId && entity.org_id !== req.orgId) {
             return res.status(403).json({ error: 'Entity not in your organization' });
@@ -82,16 +78,27 @@ router.get('/proposals', async (req, res) => {
                     WHERE 1=1`;
         const params = [];
 
-        if (req.orgId) { sql += ' AND p.org_id = ?'; params.push(req.orgId); }
-        if (status) { sql += ' AND p.status = ?'; params.push(status); }
-        if (entity_type) { sql += ' AND p.entity_type = ?'; params.push(entity_type); }
+        if (req.orgId) {
+            sql += ' AND p.org_id = ?';
+            params.push(req.orgId);
+        }
+        if (status) {
+            sql += ' AND p.status = ?';
+            params.push(status);
+        }
+        if (entity_type) {
+            sql += ' AND p.entity_type = ?';
+            params.push(entity_type);
+        }
 
         sql += ' ORDER BY p.created_at DESC LIMIT 100';
 
         const proposals = await db.all(sql, params);
         // Parse JSON fields
         proposals.forEach(p => {
-            try { p.proposed_changes = JSON.parse(p.proposed_changes); } catch {}
+            try {
+                p.proposed_changes = JSON.parse(p.proposed_changes);
+            } catch {}
         });
 
         const pending = proposals.filter(p => p.status === 'pending').length;
@@ -105,10 +112,10 @@ router.get('/proposals', async (req, res) => {
 // ─── POST /proposals/:id/approve — Approve + apply + version ──────────────
 router.post('/proposals/:id/approve', requirePermission('governance:approve_update'), async (req, res) => {
     try {
-        const proposal = await db.get(
-            'SELECT * FROM update_proposals WHERE id = ? AND status = ?',
-            [req.params.id, 'pending']
-        );
+        const proposal = await db.get('SELECT * FROM update_proposals WHERE id = ? AND status = ?', [
+            req.params.id,
+            'pending',
+        ]);
         if (!proposal) return res.status(404).json({ error: 'Pending proposal not found' });
         if (req.orgId && proposal.org_id !== req.orgId) {
             return res.status(403).json({ error: 'Proposal not in your organization' });
@@ -119,18 +126,25 @@ router.post('/proposals/:id/approve', requirePermission('governance:approve_upda
             return res.status(403).json({ error: 'Cannot approve your own proposal (SoD)' });
         }
 
-        const changes = typeof proposal.proposed_changes === 'string'
-            ? JSON.parse(proposal.proposed_changes) : proposal.proposed_changes;
+        const changes =
+            typeof proposal.proposed_changes === 'string'
+                ? JSON.parse(proposal.proposed_changes)
+                : proposal.proposed_changes;
 
         // Fetch current record
-        const before = await db.get(
-            `SELECT * FROM ${_safeId(proposal.entity_type)} WHERE id = ?`,
-            [proposal.entity_id]
-        );
+        const before = await db.get(`SELECT * FROM ${_safeId(proposal.entity_type)} WHERE id = ?`, [
+            proposal.entity_id,
+        ]);
         if (!before) return res.status(404).json({ error: 'Target entity no longer exists' });
 
         // Snapshot current version
-        await snapshotVersion(req, proposal.entity_type, proposal.entity_id, before, `Proposal ${req.params.id} approved`);
+        await snapshotVersion(
+            req,
+            proposal.entity_type,
+            proposal.entity_id,
+            before,
+            `Proposal ${req.params.id} approved`
+        );
 
         // Apply changes — build SET clause from proposed_changes
         const setClauses = [];
@@ -145,24 +159,24 @@ router.post('/proposals/:id/approve', requirePermission('governance:approve_upda
         if (setClauses.length > 0) {
             // Temporarily change status to allow DB trigger to pass
             // The trigger allows changes when status itself changes
-            const statusCol = proposal.entity_type === 'partners' ? 'kyc_status'
-                : proposal.entity_type === 'evidence_items' ? 'verification_status' : 'status';
+            const statusCol =
+                proposal.entity_type === 'partners'
+                    ? 'kyc_status'
+                    : proposal.entity_type === 'evidence_items'
+                      ? 'verification_status'
+                      : 'status';
 
             // Step 1: Set status to 'amended' (allows trigger)
-            await db.run(
-                `UPDATE ${_safeId(proposal.entity_type)} SET ${_safeId(statusCol)} = 'amended' WHERE id = ?`,
-                [proposal.entity_id]
-            );
+            await db.run(`UPDATE ${_safeId(proposal.entity_type)} SET ${_safeId(statusCol)} = 'amended' WHERE id = ?`, [
+                proposal.entity_id,
+            ]);
 
             // Step 2: Apply data changes + restore verified status
             setClauses.push(`${_safeId(statusCol)} = ?`);
             values.push(before[statusCol] || 'verified');
             values.push(proposal.entity_id);
 
-            await db.run(
-                `UPDATE ${_safeId(proposal.entity_type)} SET ${setClauses.join(', ')} WHERE id = ?`,
-                values
-            );
+            await db.run(`UPDATE ${_safeId(proposal.entity_type)} SET ${setClauses.join(', ')} WHERE id = ?`, values);
         }
 
         // Mark proposal as approved
@@ -172,13 +186,17 @@ router.post('/proposals/:id/approve', requirePermission('governance:approve_upda
         );
 
         // Fetch after state
-        const after = await db.get(
-            `SELECT * FROM ${_safeId(proposal.entity_type)} WHERE id = ?`,
-            [proposal.entity_id]
-        );
+        const after = await db.get(`SELECT * FROM ${_safeId(proposal.entity_type)} WHERE id = ?`, [proposal.entity_id]);
 
         // Audit
-        await recordMutation(req, proposal.entity_type, proposal.entity_id, before, after, `Proposal ${req.params.id} approved`);
+        await recordMutation(
+            req,
+            proposal.entity_type,
+            proposal.entity_id,
+            before,
+            after,
+            `Proposal ${req.params.id} approved`
+        );
         await appendAuditEntry({
             actor_id: req.user.id,
             action: 'PROPOSAL_APPROVED',
@@ -203,10 +221,10 @@ router.post('/proposals/:id/approve', requirePermission('governance:approve_upda
 // ─── POST /proposals/:id/reject — Reject with reason ─────────────────────
 router.post('/proposals/:id/reject', requirePermission('governance:approve_update'), async (req, res) => {
     try {
-        const proposal = await db.get(
-            'SELECT * FROM update_proposals WHERE id = ? AND status = ?',
-            [req.params.id, 'pending']
-        );
+        const proposal = await db.get('SELECT * FROM update_proposals WHERE id = ? AND status = ?', [
+            req.params.id,
+            'pending',
+        ]);
         if (!proposal) return res.status(404).json({ error: 'Pending proposal not found' });
         if (req.orgId && proposal.org_id !== req.orgId) {
             return res.status(403).json({ error: 'Proposal not in your organization' });
@@ -239,12 +257,17 @@ router.get('/versions/:type/:id', async (req, res) => {
 
         let sql = `SELECT * FROM record_versions WHERE entity_type = ? AND entity_id = ?`;
         const params = [type, id];
-        if (req.orgId) { sql += ' AND org_id = ?'; params.push(req.orgId); }
+        if (req.orgId) {
+            sql += ' AND org_id = ?';
+            params.push(req.orgId);
+        }
         sql += ' ORDER BY version DESC';
 
         const versions = await db.all(sql, params);
         versions.forEach(v => {
-            try { v.data = JSON.parse(v.data); } catch {}
+            try {
+                v.data = JSON.parse(v.data);
+            } catch {}
         });
 
         // Get current record

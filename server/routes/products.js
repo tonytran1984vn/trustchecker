@@ -2,8 +2,8 @@
 const { cacheInvalidate } = require('../middleware/cache-invalidate');
 
 function _safeId(name) {
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error("Invalid identifier: " + name);
-  return name;
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) throw new Error('Invalid identifier: ' + name);
+    return name;
 }
 
 const express = require('express');
@@ -22,23 +22,20 @@ router.use((req, res, next) => {
     next();
 });
 
-
 const PLAN_LIMITS = { free: 50, starter: 500, pro: 5000, enterprise: 100000 };
-
 
 // ATK-06: Product metadata quality validation
 function validateProductQuality(body) {
     const warnings = [];
     if (body.sku && !/^[A-Za-z0-9-_]{3,50}$/.test(body.sku)) warnings.push('SKU format invalid');
-    if (body.origin_country && !/^[A-Z]{2}$/.test(body.origin_country)) warnings.push('origin_country must be ISO 3166-1 alpha-2');
+    if (body.origin_country && !/^[A-Z]{2}$/.test(body.origin_country))
+        warnings.push('origin_country must be ISO 3166-1 alpha-2');
     if (body.manufacturer && body.manufacturer.length < 2) warnings.push('manufacturer name too short');
     if (body.name && body.name.length < 3) warnings.push('product name too short');
     if (body.weight_kg && (body.weight_kg < 0 || body.weight_kg > 100000)) warnings.push('weight_kg out of range');
     if (body.price && body.price < 0) warnings.push('price cannot be negative');
     return warnings;
 }
-
-
 
 // ─── Auth: all product routes require authentication ─────────────────────────
 router.use(authMiddleware);
@@ -73,7 +70,10 @@ router.get('/', async (req, res) => {
         params.push(Number(limit), Math.max(Number(offset) || 0, 0));
 
         const products = await db.prepare(query).all(...params);
-        /* ATK-03 FIX */ const totalQ = req.user.role !== 'super_admin' && req.user.orgId ? 'SELECT COUNT(*) as count FROM products WHERE org_id = ?' : 'SELECT COUNT(*) as count FROM products';
+        /* ATK-03 FIX */ const totalQ =
+            req.user.role !== 'super_admin' && req.user.orgId
+                ? 'SELECT COUNT(*) as count FROM products WHERE org_id = ?'
+                : 'SELECT COUNT(*) as count FROM products';
         const totalP = req.user.role !== 'super_admin' && req.user.orgId ? [req.user.orgId] : [];
         const total = await db.get(totalQ, totalP);
 
@@ -96,7 +96,8 @@ router.get('/generation-history', authMiddleware, async (req, res) => {
             params.push(req.user.orgId);
         }
 
-        const history = await db.all(`
+        const history = await db.all(
+            `
             SELECT p.id, p.name, p.sku, p.category,
                    COUNT(qc.id) as total_codes,
                    MAX(qc.generated_at) as last_generated,
@@ -107,7 +108,9 @@ router.get('/generation-history', authMiddleware, async (req, res) => {
             GROUP BY p.id, p.name, p.sku, p.category
             ORDER BY last_generated DESC
             LIMIT 20
-        `, params);
+        `,
+            params
+        );
 
         res.json({ history });
     } catch (err) {
@@ -123,12 +126,18 @@ router.get('/:id', async (req, res) => {
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
         const qrCodes = await db.all('SELECT * FROM qr_codes WHERE product_id = ?', [req.params.id]);
-        const recentScans = await db.all(`
+        const recentScans = await db.all(
+            `
       SELECT * FROM scan_events WHERE product_id = ? ORDER BY scanned_at DESC LIMIT 10
-    `, [req.params.id]);
-        const trustHistory = await db.all(`
+    `,
+            [req.params.id]
+        );
+        const trustHistory = await db.all(
+            `
       SELECT * FROM trust_scores WHERE product_id = ? ORDER BY calculated_at DESC LIMIT 10
-    `, [req.params.id]);
+    `,
+            [req.params.id]
+        );
 
         res.json({ product, qr_codes: qrCodes, recent_scans: recentScans, trust_history: trustHistory });
     } catch (err) {
@@ -141,7 +150,11 @@ router.get('/:id', async (req, res) => {
 (async () => {
     const carbonCols = ['weight_kg', 'quantity', 'price'];
     for (const col of carbonCols) {
-        try { await db.exec(`ALTER TABLE products ADD COLUMN ${_safeId(col)} REAL DEFAULT 0`); } catch (_) { /* already exists */ }
+        try {
+            await db.exec(`ALTER TABLE products ADD COLUMN ${_safeId(col)} REAL DEFAULT 0`);
+        } catch (_) {
+            /* already exists */
+        }
     }
 })();
 
@@ -149,16 +162,225 @@ router.get('/:id', async (req, res) => {
 router.post('/', requirePermission('product:create'), validate(schemas.createProduct), async (req, res) => {
     try {
         const qualityWarnings = validateProductQuality(req.body);
-    const { name, sku, description, category, manufacturer, batch_number, origin_country, weight_kg, quantity, price } = req.body;
+        const {
+            name,
+            sku,
+            description,
+            category,
+            manufacturer,
+            batch_number,
+            origin_country,
+            weight_kg,
+            quantity,
+            price,
+        } = req.body;
 
         if (!name || !sku) {
             return res.status(400).json({ error: 'Name and SKU are required' });
         }
 
         // v9.5.0: Anti-gaming — validate product metadata quality
-        const ISO_COUNTRIES = new Set(['AF','AL','DZ','AS','AD','AO','AG','AR','AM','AU','AT','AZ','BS','BH','BD','BB','BY','BE','BZ','BJ','BT','BO','BA','BW','BR','BN','BG','BF','BI','KH','CM','CA','CV','CF','TD','CL','CN','CO','KM','CG','CD','CR','CI','HR','CU','CY','CZ','DK','DJ','DM','DO','EC','EG','SV','GQ','ER','EE','SZ','ET','FJ','FI','FR','GA','GM','GE','DE','GH','GR','GD','GT','GN','GW','GY','HT','HN','HU','IS','IN','ID','IR','IQ','IE','IL','IT','JM','JP','JO','KZ','KE','KI','KP','KR','KW','KG','LA','LV','LB','LS','LR','LY','LI','LT','LU','MG','MW','MY','MV','ML','MT','MH','MR','MU','MX','FM','MD','MC','MN','ME','MA','MZ','MM','NA','NR','NP','NL','NZ','NI','NE','NG','MK','NO','OM','PK','PW','PA','PG','PY','PE','PH','PL','PT','QA','RO','RU','RW','KN','LC','VC','WS','SM','ST','SA','SN','RS','SC','SL','SG','SK','SI','SB','SO','ZA','SS','ES','LK','SD','SR','SE','CH','SY','TW','TJ','TZ','TH','TL','TG','TO','TT','TN','TR','TM','TV','UG','UA','AE','GB','US','UY','UZ','VU','VE','VN','YE','ZM','ZW']);
+        const ISO_COUNTRIES = new Set([
+            'AF',
+            'AL',
+            'DZ',
+            'AS',
+            'AD',
+            'AO',
+            'AG',
+            'AR',
+            'AM',
+            'AU',
+            'AT',
+            'AZ',
+            'BS',
+            'BH',
+            'BD',
+            'BB',
+            'BY',
+            'BE',
+            'BZ',
+            'BJ',
+            'BT',
+            'BO',
+            'BA',
+            'BW',
+            'BR',
+            'BN',
+            'BG',
+            'BF',
+            'BI',
+            'KH',
+            'CM',
+            'CA',
+            'CV',
+            'CF',
+            'TD',
+            'CL',
+            'CN',
+            'CO',
+            'KM',
+            'CG',
+            'CD',
+            'CR',
+            'CI',
+            'HR',
+            'CU',
+            'CY',
+            'CZ',
+            'DK',
+            'DJ',
+            'DM',
+            'DO',
+            'EC',
+            'EG',
+            'SV',
+            'GQ',
+            'ER',
+            'EE',
+            'SZ',
+            'ET',
+            'FJ',
+            'FI',
+            'FR',
+            'GA',
+            'GM',
+            'GE',
+            'DE',
+            'GH',
+            'GR',
+            'GD',
+            'GT',
+            'GN',
+            'GW',
+            'GY',
+            'HT',
+            'HN',
+            'HU',
+            'IS',
+            'IN',
+            'ID',
+            'IR',
+            'IQ',
+            'IE',
+            'IL',
+            'IT',
+            'JM',
+            'JP',
+            'JO',
+            'KZ',
+            'KE',
+            'KI',
+            'KP',
+            'KR',
+            'KW',
+            'KG',
+            'LA',
+            'LV',
+            'LB',
+            'LS',
+            'LR',
+            'LY',
+            'LI',
+            'LT',
+            'LU',
+            'MG',
+            'MW',
+            'MY',
+            'MV',
+            'ML',
+            'MT',
+            'MH',
+            'MR',
+            'MU',
+            'MX',
+            'FM',
+            'MD',
+            'MC',
+            'MN',
+            'ME',
+            'MA',
+            'MZ',
+            'MM',
+            'NA',
+            'NR',
+            'NP',
+            'NL',
+            'NZ',
+            'NI',
+            'NE',
+            'NG',
+            'MK',
+            'NO',
+            'OM',
+            'PK',
+            'PW',
+            'PA',
+            'PG',
+            'PY',
+            'PE',
+            'PH',
+            'PL',
+            'PT',
+            'QA',
+            'RO',
+            'RU',
+            'RW',
+            'KN',
+            'LC',
+            'VC',
+            'WS',
+            'SM',
+            'ST',
+            'SA',
+            'SN',
+            'RS',
+            'SC',
+            'SL',
+            'SG',
+            'SK',
+            'SI',
+            'SB',
+            'SO',
+            'ZA',
+            'SS',
+            'ES',
+            'LK',
+            'SD',
+            'SR',
+            'SE',
+            'CH',
+            'SY',
+            'TW',
+            'TJ',
+            'TZ',
+            'TH',
+            'TL',
+            'TG',
+            'TO',
+            'TT',
+            'TN',
+            'TR',
+            'TM',
+            'TV',
+            'UG',
+            'UA',
+            'AE',
+            'GB',
+            'US',
+            'UY',
+            'UZ',
+            'VU',
+            'VE',
+            'VN',
+            'YE',
+            'ZM',
+            'ZW',
+        ]);
         if (origin_country && origin_country.trim() !== '' && !ISO_COUNTRIES.has(origin_country.toUpperCase().trim())) {
-            return res.status(400).json({ error: `Invalid country code: ${origin_country}. Use ISO 3166-1 alpha-2 (e.g., US, VN, SG)` });
+            return res
+                .status(400)
+                .json({ error: `Invalid country code: ${origin_country}. Use ISO 3166-1 alpha-2 (e.g., US, VN, SG)` });
         }
         if (manufacturer && manufacturer.trim().length < 3) {
             return res.status(400).json({ error: 'Manufacturer name must be at least 3 characters' });
@@ -180,43 +402,96 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
         const qrImageBase64 = await QRCode.toDataURL(qrData, {
             width: 300,
             margin: 2,
-            color: { dark: '#0ff', light: '#0a0a1a' }
+            color: { dark: '#0ff', light: '#0a0a1a' },
         });
 
         // Insert product (with carbon fields)
-        await db.run(`
+        await db.run(
+            `
       INSERT INTO products (id, name, sku, description, category, manufacturer, batch_number, origin_country, registered_by, org_id, weight_kg, quantity, price)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [productId, name, sku, description || '', category || '', manufacturer || '', batch_number || '', origin_country || '', req.user.id, req.user.orgId || null,
-            parseFloat(weight_kg) || 0, parseInt(quantity) || 1, parseFloat(price) || 0]);
+    `,
+            [
+                productId,
+                name,
+                sku,
+                description || '',
+                category || '',
+                manufacturer || '',
+                batch_number || '',
+                origin_country || '',
+                req.user.id,
+                req.user.orgId || null,
+                parseFloat(weight_kg) || 0,
+                parseInt(quantity) || 1,
+                parseFloat(price) || 0,
+            ]
+        );
 
         // Insert QR code
-        await db.run(`
+        await db.run(
+            `
       INSERT INTO qr_codes (id, product_id, qr_data, qr_image_base64)
       VALUES (?, ?, ?, ?)
-    `, [qrCodeId, productId, qrData, qrImageBase64]);
+    `,
+            [qrCodeId, productId, qrData, qrImageBase64]
+        );
 
         // Audit log
-        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
-            .run(uuidv4(), req.user.id, 'PRODUCT_REGISTERED', 'product', productId, JSON.stringify({ name, sku, weight_kg, quantity }));
+        await db
+            .prepare(
+                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'PRODUCT_REGISTERED',
+                'product',
+                productId,
+                JSON.stringify({ name, sku, weight_kg, quantity })
+            );
 
         // FIX-9-AUDIT: Log product creation to audit trail
         try {
-            await db.run('INSERT INTO audit_log (actor_id, actor_email, action, entity_type, entity_id, org_id, new_value, ip_address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-                [req.user?.id, req.user?.email, 'PRODUCT_CREATED', 'product', productId, req.user?.orgId || req.user?.org_id, JSON.stringify({ name, sku, manufacturer, origin_country }), req.ip]);
-        } catch(auditErr) { console.error('[Audit]', auditErr.message); }
+            await db.run(
+                'INSERT INTO audit_log (actor_id, actor_email, action, entity_type, entity_id, org_id, new_value, ip_address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+                [
+                    req.user?.id,
+                    req.user?.email,
+                    'PRODUCT_CREATED',
+                    'product',
+                    productId,
+                    req.user?.orgId || req.user?.org_id,
+                    JSON.stringify({ name, sku, manufacturer, origin_country }),
+                    req.ip,
+                ]
+            );
+        } catch (auditErr) {
+            console.error('[Audit]', auditErr.message);
+        }
         // ATK-02-SEAL: Seal product creation into blockchain
-        try { await blockchainEngine.seal('ProductCreated', productId, { sku, name, manufacturer, origin_country }); } catch(e) { console.error('[ATK-02-SEAL]', e.message); }
+        try {
+            await blockchainEngine.seal('ProductCreated', productId, { sku, name, manufacturer, origin_country });
+        } catch (e) {
+            console.error('[ATK-02-SEAL]', e.message);
+        }
         eventBus.emitEvent(EVENT_TYPES.PRODUCT_REGISTERED, {
             product_id: productId,
             name,
             sku,
-            registered_by: req.user.username
+            registered_by: req.user.username,
         });
 
         res.status(201).json({
-            product: { id: productId, name, sku, trust_score: 100, weight_kg: parseFloat(weight_kg) || 0, quantity: parseInt(quantity) || 1 },
-            qr_code: { id: qrCodeId, qr_data: qrData, qr_image_base64: qrImageBase64 }
+            product: {
+                id: productId,
+                name,
+                sku,
+                trust_score: 100,
+                weight_kg: parseFloat(weight_kg) || 0,
+                quantity: parseInt(quantity) || 1,
+            },
+            qr_code: { id: qrCodeId, qr_data: qrData, qr_image_base64: qrImageBase64 },
         });
     } catch (err) {
         console.error('Create product error:', err);
@@ -232,7 +507,8 @@ router.put('/:id', authMiddleware, requirePermission('product:update'), async (r
 
         const { name, description, category, manufacturer, batch_number, origin_country, status } = req.body;
 
-        await db.run(`
+        await db.run(
+            `
       UPDATE products SET 
         name = COALESCE(?, name),
         description = COALESCE(?, description),
@@ -243,7 +519,9 @@ router.put('/:id', authMiddleware, requirePermission('product:update'), async (r
         status = COALESCE(?, status),
         updated_at = NOW()
       WHERE id = ?
-    `, [name, description, category, manufacturer, batch_number, origin_country, status, req.params.id]);
+    `,
+            [name, description, category, manufacturer, batch_number, origin_country, status, req.params.id]
+        );
 
         res.json({ message: 'Product updated', id: req.params.id });
     } catch (err) {
@@ -297,7 +575,7 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
                     code = alphapart + numpart;
                 }
                 attempts++;
-            } while (await db.get('SELECT id FROM qr_codes WHERE qr_data = ?', [code]) && attempts < 50);
+            } while ((await db.get('SELECT id FROM qr_codes WHERE qr_data = ?', [code])) && attempts < 50);
 
             if (attempts >= 50) {
                 return res.status(500).json({ error: 'Unable to generate unique code, please try again' });
@@ -307,46 +585,58 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
             const qrImageBase64 = await QRCode.toDataURL(code, {
                 width: 300,
                 margin: 2,
-                color: { dark: '#0ff', light: '#0a0a1a' }
+                color: { dark: '#0ff', light: '#0a0a1a' },
             });
 
             const qrId = uuidv4();
-            await db.run(`
+            await db.run(
+                `
                 INSERT INTO qr_codes (id, product_id, qr_data, qr_image_base64, org_id, generated_by)
                 VALUES (?, ?, ?, ?, ?, ?)
-            `, [qrId, product_id, code, qrImageBase64, req.user.orgId || null, req.user.id]);
+            `,
+                [qrId, product_id, code, qrImageBase64, req.user.orgId || null, req.user.id]
+            );
 
             generatedCodes.push({
                 id: qrId,
                 code: code,
-                qr_image_base64: qrImageBase64
+                qr_image_base64: qrImageBase64,
             });
         }
 
         // Audit log
-        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
-            .run(uuidv4(), req.user.id, 'CODES_GENERATED', 'product', product_id,
-                JSON.stringify({ quantity, format, codes: generatedCodes.map(c => c.code) }));
+        await db
+            .prepare(
+                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'CODES_GENERATED',
+                'product',
+                product_id,
+                JSON.stringify({ quantity, format, codes: generatedCodes.map(c => c.code) })
+            );
 
         eventBus.emitEvent(EVENT_TYPES.PRODUCT_REGISTERED, {
             product_id,
             product_name: product.name,
             action: 'codes_generated',
-            quantity
+            quantity,
         });
 
         res.status(201).json({
             message: `Generated ${generatedCodes.length} verification codes`,
             product: { id: product.id, name: product.name, sku: product.sku },
             codes: generatedCodes,
-            instructions: 'Print these codes and attach to products. Customers can verify at /check or scan the QR code.'
+            instructions:
+                'Print these codes and attach to products. Customers can verify at /check or scan the QR code.',
         });
     } catch (err) {
         console.error('Generate code error:', err);
         res.status(500).json({ error: 'Failed to generate codes' });
     }
 });
-
 
 // ─── GET /api/products/:id/codes — List codes for a product (paginated) ──────
 router.get('/:id/codes', authMiddleware, async (req, res) => {
@@ -367,7 +657,8 @@ router.get('/:id/codes', authMiddleware, async (req, res) => {
         const total = countResult?.total || 0;
 
         // Get paginated codes
-        const codes = await db.all(`
+        const codes = await db.all(
+            `
             SELECT qc.id, qc.qr_data as code, qc.status, qc.generated_at,
                    COUNT(se.id) as scan_count,
                    MAX(se.scanned_at) as last_scanned
@@ -377,7 +668,9 @@ router.get('/:id/codes', authMiddleware, async (req, res) => {
             GROUP BY qc.id, qc.qr_data, qc.status, qc.generated_at
             ORDER BY qc.generated_at DESC
             LIMIT ? OFFSET ?
-        `, [req.params.id, limit, offset]);
+        `,
+            [req.params.id, limit, offset]
+        );
 
         res.json({
             product: { id: product.id, name: product.name, sku: product.sku },
@@ -385,7 +678,7 @@ router.get('/:id/codes', authMiddleware, async (req, res) => {
             page,
             limit,
             total_pages: Math.ceil(total / limit),
-            codes
+            codes,
         });
     } catch (err) {
         console.error('Get product codes error:', err);
@@ -421,25 +714,37 @@ router.delete('/codes/:codeId', authMiddleware, requirePermission('product:delet
             return res.status(409).json({
                 error: 'Cannot delete scanned codes',
                 scan_count: scanCount.count,
-                message: 'This code has been scanned ' + scanCount.count + ' times. Scanned codes cannot be deleted to ensure data integrity.'
+                message:
+                    'This code has been scanned ' +
+                    scanCount.count +
+                    ' times. Scanned codes cannot be deleted to ensure data integrity.',
             });
         }
 
         // Soft-delete
-        await db.prepare(
-            "UPDATE qr_codes SET status = 'deleted', deleted_at = NOW(), deleted_by = ? WHERE id = ?"
-        ).run(req.user.id, codeId);
+        await db
+            .prepare("UPDATE qr_codes SET status = 'deleted', deleted_at = NOW(), deleted_by = ? WHERE id = ?")
+            .run(req.user.id, codeId);
 
         // Audit log
-        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`)
-            .run(uuidv4(), req.user.id, 'CODE_DELETED', 'qr_code', codeId,
-                JSON.stringify({ code: code.qr_data, product_id: code.product_id }));
+        await db
+            .prepare(
+                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'CODE_DELETED',
+                'qr_code',
+                codeId,
+                JSON.stringify({ code: code.qr_data, product_id: code.product_id })
+            );
 
         res.json({
             message: 'Code deleted successfully',
             code_id: codeId,
             code: code.qr_data,
-            deleted_by: req.user.username
+            deleted_by: req.user.username,
         });
     } catch (err) {
         console.error('Delete code error:', err);
@@ -488,7 +793,8 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
             return res.status(403).json({ error: 'Not authorized to access this product' });
         }
 
-        const codes = await db.all(`
+        const codes = await db.all(
+            `
             SELECT qc.id, qc.qr_data as code, qc.qr_image_base64, qc.status, qc.generated_at,
                    COUNT(se.id) as scan_count,
                    MAX(se.scanned_at) as last_scanned
@@ -497,19 +803,23 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
             WHERE qc.product_id = ? AND qc.status != 'deleted'
             GROUP BY qc.id, qc.qr_data, qc.qr_image_base64, qc.status, qc.generated_at
             ORDER BY qc.generated_at DESC
-        `, [req.params.id]);
+        `,
+            [req.params.id]
+        );
 
         if (codes.length === 0) {
             return res.status(404).json({ error: 'No QR codes found for this product' });
         }
 
-        const safeFileName = product.name.replace(/[^a-zA-Z0-9_\-\u00C0-\u024F\u1E00-\u1EFF ]/g, '').replace(/\s+/g, '_');
+        const safeFileName = product.name
+            .replace(/[^a-zA-Z0-9_\-\u00C0-\u024F\u1E00-\u1EFF ]/g, '')
+            .replace(/\s+/g, '_');
         const dateStr = new Date().toISOString().slice(0, 10);
 
         // ── CSV Format (comma-separated, all fields quoted for Excel) ──
         if (format === 'csv') {
             const BOM = '\uFEFF';
-            const q = (v) => `"${String(v).replace(/"/g, '""')}"`;  // Quote & escape
+            const q = v => `"${String(v).replace(/"/g, '""')}"`; // Quote & escape
             const header = ['No.', 'Code', 'Product', 'SKU', 'Status', 'Created Date', 'Scan Count', 'Last Scanned'];
             const rows = codes.map((c, i) => [
                 q(i + 1),
@@ -519,7 +829,11 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
                 q(c.status || 'active'),
                 q(c.generated_at ? new Date(c.generated_at).toISOString().replace('T', ' ').substring(0, 16) : ''),
                 q(c.scan_count || 0),
-                q(c.last_scanned ? new Date(c.last_scanned).toISOString().replace('T', ' ').substring(0, 16) : 'Not scanned')
+                q(
+                    c.last_scanned
+                        ? new Date(c.last_scanned).toISOString().replace('T', ' ').substring(0, 16)
+                        : 'Not scanned'
+                ),
             ]);
 
             const csvContent = BOM + 'sep=,\n' + header.map(q).join(',') + '\n' + rows.map(r => r.join(',')).join('\n');
@@ -532,8 +846,8 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
         // ── PDF Format (Clean text code list for printing — NO QR images) ──
         if (format === 'pdf') {
             const PDFDocument = require('pdfkit');
-const { withTransaction } = require('../middleware/transaction');
-const { checkAbuse } = require('../middleware/abuse-detection');
+            const { withTransaction } = require('../middleware/transaction');
+            const { checkAbuse } = require('../middleware/abuse-detection');
             const doc = new PDFDocument({ size: 'A4', margin: 40 });
             const buffers = [];
 
@@ -553,21 +867,27 @@ const { checkAbuse } = require('../middleware/abuse-detection');
             const totalPages = Math.ceil(codes.length / codesPerPage);
 
             // Column widths
-            const col1W = 35;  // No.
-            const col3W = 55;  // Status
-            const col4W = 80;  // Date
+            const col1W = 35; // No.
+            const col3W = 55; // Status
+            const col4W = 80; // Date
             const col2W = pageWidth - col1W - col3W - col4W; // Code (flex)
 
             for (let page = 0; page < totalPages; page++) {
                 if (page > 0) doc.addPage();
 
                 // ── Page Header ──
-                doc.fontSize(14).font('Helvetica-Bold')
-                    .text(product.name, 40, 40, { width: pageWidth });
-                doc.fontSize(8).font('Helvetica')
+                doc.fontSize(14).font('Helvetica-Bold').text(product.name, 40, 40, { width: pageWidth });
+                doc.fontSize(8)
+                    .font('Helvetica')
                     .fillColor('#666')
-                    .text(`SKU: ${product.sku}  |  Export: ${dateStr}  |  Total: ${codes.length} codes  |  Page ${page + 1}/${totalPages}`, 40, 58);
-                doc.moveTo(40, 72).lineTo(40 + pageWidth, 72).stroke('#ccc');
+                    .text(
+                        `SKU: ${product.sku}  |  Export: ${dateStr}  |  Total: ${codes.length} codes  |  Page ${page + 1}/${totalPages}`,
+                        40,
+                        58
+                    );
+                doc.moveTo(40, 72)
+                    .lineTo(40 + pageWidth, 72)
+                    .stroke('#ccc');
 
                 // ── Table Header ──
                 const tableTop = headerHeight;
@@ -576,7 +896,9 @@ const { checkAbuse } = require('../middleware/abuse-detection');
                 doc.text('CODE', 40 + col1W, tableTop, { width: col2W });
                 doc.text('STATUS', 40 + col1W + col2W, tableTop, { width: col3W });
                 doc.text('CREATED', 40 + col1W + col2W + col3W, tableTop, { width: col4W });
-                doc.moveTo(40, tableTop + 12).lineTo(40 + pageWidth, tableTop + 12).stroke('#ddd');
+                doc.moveTo(40, tableTop + 12)
+                    .lineTo(40 + pageWidth, tableTop + 12)
+                    .stroke('#ddd');
 
                 // ── Code Rows ──
                 const startIdx = page * codesPerPage;
@@ -588,34 +910,49 @@ const { checkAbuse } = require('../middleware/abuse-detection');
 
                     // Alternating row background
                     if (i % 2 === 0) {
-                        doc.rect(40, y - 2, pageWidth, rowHeight).fill('#f8f9fa').stroke();
+                        doc.rect(40, y - 2, pageWidth, rowHeight)
+                            .fill('#f8f9fa')
+                            .stroke();
                     }
 
                     // Row number
-                    doc.fillColor('#999').fontSize(7).font('Helvetica')
+                    doc.fillColor('#999')
+                        .fontSize(7)
+                        .font('Helvetica')
                         .text(String(globalIdx), 40, y, { width: col1W });
 
                     // Code (monospace, prominent)
-                    doc.fillColor('#111').fontSize(8.5).font('Courier-Bold')
+                    doc.fillColor('#111')
+                        .fontSize(8.5)
+                        .font('Courier-Bold')
                         .text(pageCodes[i].code || '', 40 + col1W, y, { width: col2W });
 
                     // Status
                     const status = pageCodes[i].status || 'active';
                     doc.fillColor(status === 'active' ? '#16a34a' : '#dc2626')
-                        .fontSize(7).font('Helvetica')
+                        .fontSize(7)
+                        .font('Helvetica')
                         .text(status, 40 + col1W + col2W, y, { width: col3W });
 
                     // Date
                     const dateVal = pageCodes[i].generated_at
-                        ? new Date(pageCodes[i].generated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                        ? new Date(pageCodes[i].generated_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                          })
                         : '';
-                    doc.fillColor('#666').fontSize(6.5).font('Helvetica')
+                    doc.fillColor('#666')
+                        .fontSize(6.5)
+                        .font('Helvetica')
                         .text(dateVal, 40 + col1W + col2W + col3W, y, { width: col4W });
                 }
 
                 // Bottom line
                 const bottomY = tableTop + 16 + pageCodes.length * rowHeight;
-                doc.moveTo(40, bottomY).lineTo(40 + pageWidth, bottomY).stroke('#ddd');
+                doc.moveTo(40, bottomY)
+                    .lineTo(40 + pageWidth, bottomY)
+                    .stroke('#ddd');
             }
 
             doc.end();
@@ -623,7 +960,6 @@ const { checkAbuse } = require('../middleware/abuse-detection');
         }
 
         return res.status(400).json({ error: 'Invalid format. Use: csv or pdf' });
-
     } catch (err) {
         console.error('Export codes error:', err);
         res.status(500).json({ error: 'Failed to export QR codes' });

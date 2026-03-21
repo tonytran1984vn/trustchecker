@@ -61,16 +61,12 @@ router.get('/forecast-demand', cacheMiddleware(60), async (req, res) => {
             data = history.map(h => h.quantity);
         }
 
-        const forecast = await engineClient.holtWintersForecast(
-            data,
-            parseInt(season_length),
-            parseInt(periods_ahead)
-        );
+        const forecast = await engineClient.holtWintersForecast(data, parseInt(season_length), parseInt(periods_ahead));
 
         res.json({
             algorithm: 'Holt-Winters Triple Exponential Smoothing',
             product_id: product_id || 'all',
-            ...forecast
+            ...forecast,
         });
     } catch (err) {
         console.error('Forecast error:', err);
@@ -95,11 +91,13 @@ router.post('/monte-carlo', async (req, res) => {
         WHERE actual_delivery IS NOT NULL AND estimated_delivery IS NOT NULL
       `);
             if (shipments.length > 0) {
-                const delays = shipments.map(s =>
-                    (new Date(s.actual_delivery) - new Date(s.estimated_delivery)) / 3600000
+                const delays = shipments.map(
+                    s => (new Date(s.actual_delivery) - new Date(s.estimated_delivery)) / 3600000
                 );
                 params.avg_delay = delays.reduce((a, b) => a + b, 0) / delays.length;
-                params.delay_stddev = Math.sqrt(delays.reduce((a, d) => a + Math.pow(d - params.avg_delay, 2), 0) / delays.length);
+                params.delay_stddev = Math.sqrt(
+                    delays.reduce((a, d) => a + Math.pow(d - params.avg_delay, 2), 0) / delays.length
+                );
             }
         }
 
@@ -112,14 +110,14 @@ router.post('/monte-carlo', async (req, res) => {
         } catch (workerErr) {
             console.warn('Python engine failed, falling back to JS:', workerErr.message);
             const advancedAI = require('../engines/intelligence/advanced-scm-ai');
-const { withTransaction } = require('../middleware/transaction');
+            const { withTransaction } = require('../middleware/transaction');
             result = advancedAI.monteCarloRisk(params, simCount);
         }
 
         res.json({
             algorithm: 'Monte Carlo Risk Simulation',
             input_params: params,
-            ...result
+            ...result,
         });
     } catch (err) {
         console.error('Monte Carlo error:', err);
@@ -149,7 +147,7 @@ router.get('/delay-root-cause', cacheMiddleware(120), async (req, res) => {
 
         res.json({
             algorithm: 'Multi-Factor Causal Delay Analysis',
-            ...analysis
+            ...analysis,
         });
     } catch (err) {
         console.error('Delay analysis error:', err);
@@ -180,7 +178,10 @@ router.get('/demand-sensing', async (req, res) => {
 
         // Generate synthetic data if still insufficient
         if (salesData.length < 5) {
-            salesData = Array.from({ length: 30 }, (_, i) => 50 + Math.round(Math.sin(i / 7 * Math.PI) * 15 + (Math.random() - 0.5) * 10));
+            salesData = Array.from(
+                { length: 30 },
+                (_, i) => 50 + Math.round(Math.sin((i / 7) * Math.PI) * 15 + (Math.random() - 0.5) * 10)
+            );
         }
 
         const sensing = await engineClient.demandSensing(salesData, parseFloat(threshold));
@@ -188,7 +189,7 @@ router.get('/demand-sensing', async (req, res) => {
         res.json({
             algorithm: 'CUSUM Change-Point Detection',
             data_source: scans.length >= 5 ? 'scan_events' : 'synthetic',
-            ...sensing
+            ...sensing,
         });
     } catch (err) {
         console.error('Demand sensing error:', err);
@@ -212,7 +213,7 @@ router.post('/what-if', async (req, res) => {
             current_inventory: Math.round(avgInventory),
             daily_demand: Math.round(avgInventory / 30),
             avg_order_value: 500,
-            redundant_partners: Math.max(0, totalPartners - 3)
+            redundant_partners: Math.max(0, totalPartners - 3),
         };
 
         const result = await engineClient.whatIfSimulate(scenario, currentState);
@@ -220,7 +221,7 @@ router.post('/what-if', async (req, res) => {
         res.json({
             algorithm: 'What-If Scenario Simulation',
             current_state: currentState,
-            ...result
+            ...result,
         });
     } catch (err) {
         console.error('What-if error:', err);

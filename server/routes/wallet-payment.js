@@ -27,15 +27,24 @@ router.post('/ssi/did/create', async (req, res) => {
         const didId = `did:trust:${crypto.randomBytes(16).toString('hex')}`;
         const keyPair = {
             public: crypto.randomBytes(32).toString('hex'),
-            private_hash: crypto.createHash('sha256').update(crypto.randomBytes(32)).digest('hex')
+            private_hash: crypto.createHash('sha256').update(crypto.randomBytes(32)).digest('hex'),
         };
 
         // Blockchain seal for DID creation
         const seal = await blockchainEngine.seal('DIDCreated', didId, { owner: req.user.id });
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'DID_CREATED', 'ssi', didId,
-                JSON.stringify({ did: didId, display_name, public_key: keyPair.public, blockchain_seal: seal.seal_id }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'DID_CREATED',
+                'ssi',
+                didId,
+                JSON.stringify({ did: didId, display_name, public_key: keyPair.public, blockchain_seal: seal.seal_id })
+            );
 
         res.status(201).json({
             did: didId,
@@ -44,7 +53,7 @@ router.post('/ssi/did/create', async (req, res) => {
             blockchain_seal: seal,
             status: 'active',
             created_at: new Date().toISOString(),
-            note: 'This is a simulated DID for demonstration. In production, this would be anchored to a public blockchain (e.g. Ethereum, Polygon).'
+            note: 'This is a simulated DID for demonstration. In production, this would be anchored to a public blockchain (e.g. Ethereum, Polygon).',
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -62,9 +71,14 @@ router.get('/ssi/did', async (req, res) => {
         res.json({
             dids: dids.map(d => {
                 const details = JSON.parse(d.details || '{}');
-                return { did: d.did, display_name: details.display_name, public_key: details.public_key, created_at: d.created_at };
+                return {
+                    did: d.did,
+                    display_name: details.display_name,
+                    public_key: details.public_key,
+                    created_at: d.created_at,
+                };
             }),
-            total: dids.length
+            total: dids.length,
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -75,7 +89,8 @@ router.get('/ssi/did', async (req, res) => {
 router.post('/ssi/credential/issue', requireRole('operator'), async (req, res) => {
     try {
         const { subject_did, credential_type, claims } = req.body;
-        if (!subject_did || !credential_type) return res.status(400).json({ error: 'subject_did and credential_type required' });
+        if (!subject_did || !credential_type)
+            return res.status(400).json({ error: 'subject_did and credential_type required' });
 
         const credId = `vc:trust:${uuidv4()}`;
         const credential = {
@@ -85,22 +100,35 @@ router.post('/ssi/credential/issue', requireRole('operator'), async (req, res) =
             issuanceDate: new Date().toISOString(),
             credentialSubject: {
                 id: subject_did,
-                ...claims
-            }
+                ...claims,
+            },
         };
 
         const credHash = crypto.createHash('sha256').update(JSON.stringify(credential)).digest('hex');
-        const seal = await blockchainEngine.seal('VCIssued', credId, { hash: credHash, subject: subject_did, type: credential_type });
+        const seal = await blockchainEngine.seal('VCIssued', credId, {
+            hash: credHash,
+            subject: subject_did,
+            type: credential_type,
+        });
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'VC_ISSUED', 'ssi', credId,
-                JSON.stringify({ credential_id: credId, subject_did, type: credential_type, hash: credHash }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'VC_ISSUED',
+                'ssi',
+                credId,
+                JSON.stringify({ credential_id: credId, subject_did, type: credential_type, hash: credHash })
+            );
 
         res.status(201).json({
             credential_id: credId,
             credential,
             proof: { type: 'TrustChainSeal', blockchain_seal: seal, hash: credHash },
-            status: 'active'
+            status: 'active',
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -113,11 +141,15 @@ router.post('/ssi/credential/verify', async (req, res) => {
         const { credential_id } = req.body;
         if (!credential_id) return res.status(400).json({ error: 'credential_id required' });
 
-        const record = await db.get("SELECT * FROM audit_log WHERE action = 'VC_ISSUED' AND entity_id = ?", [credential_id]);
+        const record = await db.get("SELECT * FROM audit_log WHERE action = 'VC_ISSUED' AND entity_id = ?", [
+            credential_id,
+        ]);
         if (!record) return res.status(404).json({ error: 'Credential not found', valid: false });
 
         const details = JSON.parse(record.details || '{} LIMIT 1000');
-        const revoked = await db.get("SELECT * FROM audit_log WHERE action = 'VC_REVOKED' AND entity_id = ?", [credential_id]);
+        const revoked = await db.get("SELECT * FROM audit_log WHERE action = 'VC_REVOKED' AND entity_id = ?", [
+            credential_id,
+        ]);
 
         res.json({
             credential_id,
@@ -128,7 +160,7 @@ router.post('/ssi/credential/verify', async (req, res) => {
             type: details.type,
             issued_at: record.timestamp,
             hash: details.hash,
-            verified_at: new Date().toISOString()
+            verified_at: new Date().toISOString(),
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -160,12 +192,15 @@ router.post('/payment/checkout', async (req, res) => {
             checkout_url: `/checkout/${sessionId}`,
         };
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
             .run(uuidv4(), req.user.id, 'CHECKOUT_CREATED', 'payment', sessionId, JSON.stringify(checkout));
 
         res.status(201).json({
             ...checkout,
-            note: 'Simulated payment gateway. In production, this would redirect to Stripe/PayPal.'
+            note: 'Simulated payment gateway. In production, this would redirect to Stripe/PayPal.',
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -178,28 +213,53 @@ router.post('/payment/confirm', async (req, res) => {
         const { session_id } = req.body;
         if (!session_id) return res.status(400).json({ error: 'session_id required' });
 
-        const session = await db.get("SELECT * FROM audit_log WHERE action = 'CHECKOUT_CREATED' AND entity_id = ? AND actor_id = ?", [session_id, req.user.id]);
+        const session = await db.get(
+            "SELECT * FROM audit_log WHERE action = 'CHECKOUT_CREATED' AND entity_id = ? AND actor_id = ?",
+            [session_id, req.user.id]
+        );
         if (!session) return res.status(404).json({ error: 'Checkout session not found' });
 
         const details = JSON.parse(session.details || '{}');
         const paymentId = `pi_${crypto.randomBytes(16).toString('hex')} LIMIT 1000`;
 
         // Create payment record
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'PAYMENT_CONFIRMED', 'payment', paymentId,
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'PAYMENT_CONFIRMED',
+                'payment',
+                paymentId,
                 JSON.stringify({
-                    session_id, payment_id: paymentId,
-                    amount: details.amount, currency: details.currency,
-                    plan_name: details.plan_name, method: details.payment_method
-                }));
+                    session_id,
+                    payment_id: paymentId,
+                    amount: details.amount,
+                    currency: details.currency,
+                    plan_name: details.plan_name,
+                    method: details.payment_method,
+                })
+            );
 
         // Auto-upgrade plan if applicable
         // Plan names must match billing system: free, starter, pro, enterprise
-        const planMap = { 'Starter': 'starter', 'starter': 'starter', 'Pro': 'pro', 'pro': 'pro', 'Enterprise': 'enterprise', 'enterprise': 'enterprise' };
+        const planMap = {
+            Starter: 'starter',
+            starter: 'starter',
+            Pro: 'pro',
+            pro: 'pro',
+            Enterprise: 'enterprise',
+            enterprise: 'enterprise',
+        };
         const tier = planMap[details.plan_name];
         if (tier) {
-            await db.prepare("UPDATE billing_plans SET plan_name = ?, status = 'active', updated_at = NOW() WHERE user_id = ?")
-                .run(tier, req.user.id);  // Use lowercase tier, not display name
+            await db
+                .prepare(
+                    "UPDATE billing_plans SET plan_name = ?, status = 'active', updated_at = NOW() WHERE user_id = ?"
+                )
+                .run(tier, req.user.id); // Use lowercase tier, not display name
         }
 
         res.json({
@@ -210,7 +270,7 @@ router.post('/payment/confirm', async (req, res) => {
             currency: details.currency,
             plan_name: details.plan_name,
             receipt_url: `/receipt/${paymentId}`,
-            confirmed_at: new Date().toISOString()
+            confirmed_at: new Date().toISOString(),
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -229,9 +289,9 @@ router.get('/payment/history', async (req, res) => {
             payments: payments.map(p => ({
                 payment_id: p.payment_id,
                 ...JSON.parse(p.details || '{}'),
-                date: p.timestamp
+                date: p.timestamp,
             })),
-            total: payments.length
+            total: payments.length,
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -244,15 +304,32 @@ router.post('/payment/refund', async (req, res) => {
         const { payment_id, reason } = req.body;
         if (!payment_id) return res.status(400).json({ error: 'payment_id required' });
 
-        const payment = await db.get("SELECT * FROM audit_log WHERE action = 'PAYMENT_CONFIRMED' AND entity_id = ? AND actor_id = ?", [payment_id, req.user.id]);
+        const payment = await db.get(
+            "SELECT * FROM audit_log WHERE action = 'PAYMENT_CONFIRMED' AND entity_id = ? AND actor_id = ?",
+            [payment_id, req.user.id]
+        );
         if (!payment) return res.status(404).json({ error: 'Payment not found' });
 
         const details = JSON.parse(payment.details || '{}');
         const refundId = `re_${crypto.randomBytes(16).toString('hex')} LIMIT 1000`;
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'PAYMENT_REFUNDED', 'payment', refundId,
-                JSON.stringify({ payment_id, refund_id: refundId, amount: details.amount, reason: reason || 'User requested' }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'PAYMENT_REFUNDED',
+                'payment',
+                refundId,
+                JSON.stringify({
+                    payment_id,
+                    refund_id: refundId,
+                    amount: details.amount,
+                    reason: reason || 'User requested',
+                })
+            );
 
         res.json({
             refund_id: refundId,
@@ -260,7 +337,7 @@ router.post('/payment/refund', async (req, res) => {
             amount: details.amount,
             status: 'refunded',
             reason: reason || 'User requested',
-            processed_at: new Date().toISOString()
+            processed_at: new Date().toISOString(),
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -280,13 +357,15 @@ router.get('/ipfs/stats', requirePermission('wallet:manage'), async (req, res) =
         const orgP = orgId ? [orgId] : [];
         const evidenceCount = (await db.get('SELECT COUNT(*) as c FROM evidence_items' + orgF, orgP))?.c || 0;
         const sealCount = (await db.get('SELECT COUNT(*) as c FROM blockchain_seals' + orgF, orgP))?.c || 0;
-        const nftCount = (await db.get('SELECT COUNT(*) as c FROM nft_certificates' + (orgF ? ' WHERE org_id = ?' : ''), orgP))?.c || 0;
+        const nftCount =
+            (await db.get('SELECT COUNT(*) as c FROM nft_certificates' + (orgF ? ' WHERE org_id = ?' : ''), orgP))?.c ||
+            0;
         const totalEvents = (await db.get('SELECT COUNT(*) as c FROM supply_chain_events' + orgF, orgP))?.c || 0;
 
         // Estimated storage (simulated)
-        const evidenceStorageMB = evidenceCount * 0.5;  // ~500KB avg per evidence item
-        const sealStorageMB = sealCount * 0.002;        // ~2KB per seal
-        const nftStorageMB = nftCount * 0.01;           // ~10KB per NFT metadata
+        const evidenceStorageMB = evidenceCount * 0.5; // ~500KB avg per evidence item
+        const sealStorageMB = sealCount * 0.002; // ~2KB per seal
+        const nftStorageMB = nftCount * 0.01; // ~10KB per NFT metadata
 
         const totalStorageMB = evidenceStorageMB + sealStorageMB + nftStorageMB;
         const costPerGB = 0.08; // Filecoin/IPFS average cost per GB/month
@@ -311,15 +390,16 @@ router.get('/ipfs/stats', requirePermission('wallet:manage'), async (req, res) =
                 provider: 'TrustChain (simulated IPFS/Filecoin)',
                 pinning_service: 'Self-hosted',
                 replication_factor: 3,
-                availability: '99.9%'
+                availability: '99.9%',
             },
-            recommendations: totalStorageMB > 1000 ? [
-                { action: 'Enable data compression', savings: '~30%' },
-                { action: 'Archive old evidence items', savings: '~20%' },
-                { action: 'Use tiered storage', savings: '~15%' }
-            ] : [
-                { action: 'Current usage is within optimal range', savings: 'N/A' }
-            ]
+            recommendations:
+                totalStorageMB > 1000
+                    ? [
+                          { action: 'Enable data compression', savings: '~30%' },
+                          { action: 'Archive old evidence items', savings: '~20%' },
+                          { action: 'Use tiered storage', savings: '~15%' },
+                      ]
+                    : [{ action: 'Current usage is within optimal range', savings: 'N/A' }],
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
@@ -329,12 +409,29 @@ router.get('/ipfs/stats', requirePermission('wallet:manage'), async (req, res) =
 // ─── GET /ipfs/pins — List pinned content ───────────────────
 router.get('/ipfs/pins', requirePermission('nft:manage'), async (req, res) => {
     try {
-        const recentSeals = await db.all('SELECT id, event_type, data_hash, sealed_at as created_at FROM blockchain_seals ORDER BY sealed_at DESC LIMIT 20');
-        const recentEvidence = await db.all('SELECT id, title, sha256_hash, created_at FROM evidence_items ORDER BY created_at DESC LIMIT 20');
+        const recentSeals = await db.all(
+            'SELECT id, event_type, data_hash, sealed_at as created_at FROM blockchain_seals ORDER BY sealed_at DESC LIMIT 20'
+        );
+        const recentEvidence = await db.all(
+            'SELECT id, title, sha256_hash, created_at FROM evidence_items ORDER BY created_at DESC LIMIT 20'
+        );
 
         const pins = [
-            ...recentSeals.map(s => ({ cid: s.data_hash, type: 'blockchain_seal', ref_id: s.id, created_at: s.created_at, status: 'pinned' })),
-            ...recentEvidence.map(e => ({ cid: e.sha256_hash, type: 'evidence', ref_id: e.id, title: e.title, created_at: e.created_at, status: 'pinned' }))
+            ...recentSeals.map(s => ({
+                cid: s.data_hash,
+                type: 'blockchain_seal',
+                ref_id: s.id,
+                created_at: s.created_at,
+                status: 'pinned',
+            })),
+            ...recentEvidence.map(e => ({
+                cid: e.sha256_hash,
+                type: 'evidence',
+                ref_id: e.id,
+                title: e.title,
+                created_at: e.created_at,
+                status: 'pinned',
+            })),
         ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
         res.json({ pins: pins.slice(0, 30), total: pins.length });

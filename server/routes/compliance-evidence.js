@@ -15,16 +15,16 @@ router.use(requirePermission('compliance:manage'));
 router.get('/snapshot', async (req, res) => {
     try {
         const orgId = req.orgId;
-        const [
-            userCount, mfaEnabled, activeSessionCount,
-            auditLogCount, rls, recentChanges
-        ] = await Promise.all([
+        const [userCount, mfaEnabled, activeSessionCount, auditLogCount, rls, recentChanges] = await Promise.all([
             db.get('SELECT COUNT(*) as c FROM users WHERE org_id = $1', [orgId]),
             db.get('SELECT COUNT(*) as c FROM users WHERE mfa_secret IS NOT NULL AND org_id = $1', [orgId]),
-            db.get('SELECT COUNT(*) as c FROM sessions WHERE last_active > NOW() - INTERVAL \'24 hours\''),
+            db.get("SELECT COUNT(*) as c FROM sessions WHERE last_active > NOW() - INTERVAL '24 hours'"),
             db.get('SELECT COUNT(*) as c FROM audit_log WHERE org_id = $1', [orgId]),
-            db.get("SELECT count(*) as c FROM pg_policies"),
-            db.all('SELECT action, COUNT(*) as count FROM audit_log WHERE org_id = $1 AND timestamp > NOW() - INTERVAL \'30 days\' GROUP BY action ORDER BY count DESC LIMIT 10', [orgId]),
+            db.get('SELECT count(*) as c FROM pg_policies'),
+            db.all(
+                "SELECT action, COUNT(*) as count FROM audit_log WHERE org_id = $1 AND timestamp > NOW() - INTERVAL '30 days' GROUP BY action ORDER BY count DESC LIMIT 10",
+                [orgId]
+            ),
         ]);
 
         res.json({
@@ -36,7 +36,7 @@ router.get('/snapshot', async (req, res) => {
                 access_controls: {
                     total_users: userCount?.c || 0,
                     mfa_enabled_users: mfaEnabled?.c || 0,
-                    mfa_coverage: userCount?.c ? ((mfaEnabled?.c || 0) / userCount.c * 100).toFixed(1) + '%' : '0%',
+                    mfa_coverage: userCount?.c ? (((mfaEnabled?.c || 0) / userCount.c) * 100).toFixed(1) + '%' : '0%',
                     active_sessions_24h: activeSessionCount?.c || 0,
                     password_policy: 'ENFORCED (min 12 chars, complexity required)',
                     session_timeout: 'Platform admin: 15min, Users: 24h',
@@ -67,7 +67,7 @@ router.get('/snapshot', async (req, res) => {
                     uptime_monitoring: 'PM2 process manager',
                     log_aggregation: 'Structured JSON logs with OpenTelemetry',
                 },
-            }
+            },
         });
     } catch (e) {
         res.status(500).json({ error: 'Failed to generate compliance snapshot' });
@@ -96,8 +96,8 @@ router.get('/access-review', async (req, res) => {
             users: users.map(u => ({
                 ...u,
                 needs_review: !u.last_login || new Date() - new Date(u.last_login) > 90 * 86400000,
-                mfa_compliant: u.mfa_enabled
-            }))
+                mfa_compliant: u.mfa_enabled,
+            })),
         });
     } catch (e) {
         res.status(500).json({ error: 'Failed to generate access review' });
@@ -119,18 +119,24 @@ router.get('/incident-log', async (req, res) => {
             total: incidents.length,
             open: incidents.filter(i => i.status === 'open').length,
             resolved: incidents.filter(i => i.status === 'resolved' || i.status === 'closed').length,
-            avg_resolution_hours: incidents.filter(i => i.resolved_at).length > 0
-                ? (incidents.filter(i => i.resolved_at).reduce((sum, i) =>
-                    sum + (new Date(i.resolved_at) - new Date(i.created_at)) / 3600000, 0
-                  ) / incidents.filter(i => i.resolved_at).length).toFixed(1)
-                : 'N/A'
+            avg_resolution_hours:
+                incidents.filter(i => i.resolved_at).length > 0
+                    ? (
+                          incidents
+                              .filter(i => i.resolved_at)
+                              .reduce(
+                                  (sum, i) => sum + (new Date(i.resolved_at) - new Date(i.created_at)) / 3600000,
+                                  0
+                              ) / incidents.filter(i => i.resolved_at).length
+                      ).toFixed(1)
+                    : 'N/A',
         };
         res.json({
             report_type: 'Security Incident Log',
             generated_at: new Date().toISOString(),
             org_id: orgId,
             summary: stats,
-            incidents
+            incidents,
         });
     } catch (e) {
         res.status(500).json({ error: 'Failed to generate incident log' });

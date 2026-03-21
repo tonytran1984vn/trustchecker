@@ -20,7 +20,7 @@ function sessionTimeout() {
                 code: 'SESSION_TIMEOUT',
                 message: isPlatform
                     ? 'Platform admin sessions expire after 15 minutes of inactivity'
-                    : 'Session expired, please login again'
+                    : 'Session expired, please login again',
             });
         }
         next();

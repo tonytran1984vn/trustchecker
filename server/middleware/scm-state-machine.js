@@ -1,6 +1,6 @@
 /**
  * Product Lifecycle State Machine V2 — Anti-Fraud + High-Scale
- * 
+ *
  * Event-driven, immutable, hash-chained.
  * State = computed from event chain, never updated directly.
  */
@@ -9,56 +9,56 @@ const db = require('../db');
 
 // ─── STANDARDIZED EVENT TYPES ─────────────────────────────────
 const EVENT_TYPES = {
-    PRODUCT_CREATED:     'PRODUCT_CREATED',
-    PRODUCT_PRODUCED:    'PRODUCT_PRODUCED',
-    SHIPPED:             'SHIPPED',
-    RECEIVED_WAREHOUSE:  'RECEIVED_WAREHOUSE',
-    DISTRIBUTED:         'DISTRIBUTED',
-    RECEIVED_RETAIL:     'RECEIVED_RETAIL',
-    SOLD:                'SOLD',
-    SCANNED:             'SCANNED',
-    RETURNED:            'RETURNED',
-    BLOCKED:             'BLOCKED',
+    PRODUCT_CREATED: 'PRODUCT_CREATED',
+    PRODUCT_PRODUCED: 'PRODUCT_PRODUCED',
+    SHIPPED: 'SHIPPED',
+    RECEIVED_WAREHOUSE: 'RECEIVED_WAREHOUSE',
+    DISTRIBUTED: 'DISTRIBUTED',
+    RECEIVED_RETAIL: 'RECEIVED_RETAIL',
+    SOLD: 'SOLD',
+    SCANNED: 'SCANNED',
+    RETURNED: 'RETURNED',
+    BLOCKED: 'BLOCKED',
     // Legacy compat
-    commission:          'commission',
-    pack:                'pack',
-    ship:                'ship',
-    receive:             'receive',
-    sell:                'sell',
-    return_event:        'return',
+    commission: 'commission',
+    pack: 'pack',
+    ship: 'ship',
+    receive: 'receive',
+    sell: 'sell',
+    return_event: 'return',
 };
 
 // ─── VALID TRANSITIONS ────────────────────────────────────────
 const VALID_TRANSITIONS = {
-    '_initial':           ['commission', 'PRODUCT_CREATED'],
-    'commission':         ['pack', 'PRODUCT_PRODUCED', 'ship'],
-    'PRODUCT_CREATED':    ['PRODUCT_PRODUCED', 'pack', 'ship'],
-    'pack':               ['ship', 'SHIPPED'],
-    'PRODUCT_PRODUCED':   ['SHIPPED', 'ship'],
-    'ship':               ['receive', 'RECEIVED_WAREHOUSE'],
-    'SHIPPED':            ['RECEIVED_WAREHOUSE', 'receive'],
-    'receive':            ['sell', 'ship', 'return', 'DISTRIBUTED', 'RECEIVED_RETAIL'],
-    'RECEIVED_WAREHOUSE': ['DISTRIBUTED', 'SHIPPED', 'ship', 'sell', 'RETURNED'],
-    'DISTRIBUTED':        ['RECEIVED_RETAIL', 'receive', 'sell', 'SOLD'],
-    'RECEIVED_RETAIL':    ['SOLD', 'sell'],
-    'sell':               ['return', 'SCANNED', 'RETURNED'],
-    'SOLD':               ['SCANNED', 'RETURNED', 'return'],
-    'SCANNED':            ['RETURNED', 'return'],
-    'return':             ['destroy', 'commission', 'BLOCKED'],
-    'RETURNED':           ['BLOCKED', 'destroy', 'commission'],
+    _initial: ['commission', 'PRODUCT_CREATED'],
+    commission: ['pack', 'PRODUCT_PRODUCED', 'ship'],
+    PRODUCT_CREATED: ['PRODUCT_PRODUCED', 'pack', 'ship'],
+    pack: ['ship', 'SHIPPED'],
+    PRODUCT_PRODUCED: ['SHIPPED', 'ship'],
+    ship: ['receive', 'RECEIVED_WAREHOUSE'],
+    SHIPPED: ['RECEIVED_WAREHOUSE', 'receive'],
+    receive: ['sell', 'ship', 'return', 'DISTRIBUTED', 'RECEIVED_RETAIL'],
+    RECEIVED_WAREHOUSE: ['DISTRIBUTED', 'SHIPPED', 'ship', 'sell', 'RETURNED'],
+    DISTRIBUTED: ['RECEIVED_RETAIL', 'receive', 'sell', 'SOLD'],
+    RECEIVED_RETAIL: ['SOLD', 'sell'],
+    sell: ['return', 'SCANNED', 'RETURNED'],
+    SOLD: ['SCANNED', 'RETURNED', 'return'],
+    SCANNED: ['RETURNED', 'return'],
+    return: ['destroy', 'commission', 'BLOCKED'],
+    RETURNED: ['BLOCKED', 'destroy', 'commission'],
 };
 
 // ─── RBAC MATRIX ──────────────────────────────────────────────
 const RBAC_MATRIX = {
-    factory:     ['commission', 'pack', 'ship', 'PRODUCT_CREATED', 'PRODUCT_PRODUCED', 'SHIPPED'],
-    warehouse:   ['receive', 'ship', 'RECEIVED_WAREHOUSE', 'SHIPPED', 'DISTRIBUTED'],
+    factory: ['commission', 'pack', 'ship', 'PRODUCT_CREATED', 'PRODUCT_PRODUCED', 'SHIPPED'],
+    warehouse: ['receive', 'ship', 'RECEIVED_WAREHOUSE', 'SHIPPED', 'DISTRIBUTED'],
     distributor: ['receive', 'ship', 'sell', 'DISTRIBUTED', 'RECEIVED_RETAIL', 'SHIPPED'],
-    retailer:    ['receive', 'sell', 'return', 'RECEIVED_RETAIL', 'SOLD', 'RETURNED'],
-    customer:    ['SCANNED', 'RETURNED', 'return'],
-    admin:       ['*'], // All events
-    owner:       ['*'],
-    operator:    ['*'],
-    system:      ['*'],
+    retailer: ['receive', 'sell', 'return', 'RECEIVED_RETAIL', 'SOLD', 'RETURNED'],
+    customer: ['SCANNED', 'RETURNED', 'return'],
+    admin: ['*'], // All events
+    owner: ['*'],
+    operator: ['*'],
+    system: ['*'],
 };
 
 // ─── HASH COMPUTATION ─────────────────────────────────────────
@@ -128,18 +128,33 @@ async function validateTransition(productId, batchId, newEventType) {
     if (!allowedNext) {
         // Check if terminal (BLOCKED)
         if (['BLOCKED', 'destroy'].includes(currentState)) {
-            return { valid: false, currentState, error: 'Terminal state "' + currentState + '" — no further events allowed' };
+            return {
+                valid: false,
+                currentState,
+                error: 'Terminal state "' + currentState + '" — no further events allowed',
+            };
         }
         return { valid: false, currentState, error: 'Unknown state "' + currentState + '"' };
     }
-    
+
     // Allow BLOCKED/RETURNED from any state
     if (['BLOCKED', 'RETURNED', 'return'].includes(newEventType)) {
         return { valid: true, currentState };
     }
 
     if (!allowedNext.includes(newEventType)) {
-        return { valid: false, currentState, error: 'Invalid transition: "' + currentState + '" → "' + newEventType + '". Allowed: [' + allowedNext.join(', ') + ']' };
+        return {
+            valid: false,
+            currentState,
+            error:
+                'Invalid transition: "' +
+                currentState +
+                '" → "' +
+                newEventType +
+                '". Allowed: [' +
+                allowedNext.join(', ') +
+                ']',
+        };
     }
 
     // INV-1: Location mutex
@@ -154,7 +169,11 @@ async function validateTransition(productId, batchId, newEventType) {
                 [productId, 'receive', 'RECEIVED_WAREHOUSE', 'RECEIVED_RETAIL', 'ship', 'SHIPPED']
             );
             if (!lastReceive && ['ship', 'SHIPPED'].includes(newEventType)) {
-                return { valid: false, currentState, error: 'Product is in transit — must be received before shipping again' };
+                return {
+                    valid: false,
+                    currentState,
+                    error: 'Product is in transit — must be received before shipping again',
+                };
             }
         }
     }
@@ -162,7 +181,11 @@ async function validateTransition(productId, batchId, newEventType) {
     // INV-5: Scan only after sell (configurable)
     if (['SCANNED'].includes(newEventType)) {
         if (!['sell', 'SOLD', 'SCANNED'].includes(currentState)) {
-            return { valid: false, currentState, error: 'Scan only allowed after SOLD state. Current: ' + currentState };
+            return {
+                valid: false,
+                currentState,
+                error: 'Scan only allowed after SOLD state. Current: ' + currentState,
+            };
         }
     }
 
@@ -184,13 +207,33 @@ function validateRBAC(actorRole, eventType) {
     if (!allowed) return { valid: false, error: 'Unknown role: ' + actorRole };
     if (allowed.includes('*')) return { valid: true };
     if (!allowed.includes(eventType)) {
-        return { valid: false, error: 'Role "' + actorRole + '" cannot create event "' + eventType + '". Allowed: [' + allowed.join(', ') + ']' };
+        return {
+            valid: false,
+            error:
+                'Role "' +
+                actorRole +
+                '" cannot create event "' +
+                eventType +
+                '". Allowed: [' +
+                allowed.join(', ') +
+                ']',
+        };
     }
     return { valid: true };
 }
 
 // ─── INSERT EVENT (via stored procedure) ──────────────────────
-async function insertProductEvent(productId, eventType, actorId, actorRole, locationId, partnerId, batchId, orgId, metadata) {
+async function insertProductEvent(
+    productId,
+    eventType,
+    actorId,
+    actorRole,
+    locationId,
+    partnerId,
+    batchId,
+    orgId,
+    metadata
+) {
     // Validate RBAC
     const rbac = validateRBAC(actorRole, eventType);
     if (!rbac.valid) return { success: false, error: rbac.error, code: 'RBAC_DENIED' };
@@ -199,12 +242,26 @@ async function insertProductEvent(productId, eventType, actorId, actorRole, loca
     const sig = computeSignature({ productId, eventType, actorId, timestamp: new Date().toISOString() });
 
     try {
-        const result = await db.get(
-            'SELECT * FROM insert_product_event($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-            [productId, eventType, actorId || 'system', actorRole || 'system', locationId, partnerId, batchId, orgId, JSON.stringify(metadata || {}), sig]
-        );
-        return { success: true, event_id: result?.event_id, hash: result?.computed_hash, from: result?.from_st, to: result?.to_st };
-    } catch(e) {
+        const result = await db.get('SELECT * FROM insert_product_event($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)', [
+            productId,
+            eventType,
+            actorId || 'system',
+            actorRole || 'system',
+            locationId,
+            partnerId,
+            batchId,
+            orgId,
+            JSON.stringify(metadata || {}),
+            sig,
+        ]);
+        return {
+            success: true,
+            event_id: result?.event_id,
+            hash: result?.computed_hash,
+            from: result?.from_st,
+            to: result?.to_st,
+        };
+    } catch (e) {
         if (e.message.includes('INVALID_TRANSITION')) {
             return { success: false, error: e.message, code: 'INVALID_TRANSITION' };
         }
@@ -223,12 +280,18 @@ async function verifyChainIntegrity(productId) {
 
     const issues = [];
     let prevHash = '0000000000000000000000000000000000000000000000000000000000000000';
-    
+
     for (let i = 0; i < events.length; i++) {
         const e = events[i];
         // Check prev_event_hash links
         if (e.prev_event_hash !== prevHash && e.prev_event_hash !== 'MIGRATION_NO_PREV_HASH') {
-            issues.push({ event: i + 1, id: e.id, issue: 'prev_hash mismatch', expected: prevHash.substring(0, 16), got: (e.prev_event_hash || '').substring(0, 16) });
+            issues.push({
+                event: i + 1,
+                id: e.id,
+                issue: 'prev_hash mismatch',
+                expected: prevHash.substring(0, 16),
+                got: (e.prev_event_hash || '').substring(0, 16),
+            });
         }
         prevHash = e.hash;
     }
@@ -255,9 +318,13 @@ async function checkDuplicateReceive(productId, batchId, eventType) {
 
 async function validatePartner(partnerId, orgId) {
     if (!partnerId) return { valid: true };
-    const partner = await db.get('SELECT id, name, status FROM partners WHERE id = $1 AND org_id = $2', [partnerId, orgId]);
+    const partner = await db.get('SELECT id, name, status FROM partners WHERE id = $1 AND org_id = $2', [
+        partnerId,
+        orgId,
+    ]);
     if (!partner) return { valid: false, error: 'Partner "' + partnerId + '" not found' };
-    if (['suspended', 'blocked'].includes(partner.status)) return { valid: false, error: 'Partner "' + partner.name + '" is ' + partner.status };
+    if (['suspended', 'blocked'].includes(partner.status))
+        return { valid: false, error: 'Partner "' + partner.name + '" is ' + partner.status };
     return { valid: true, partner };
 }
 
@@ -266,8 +333,12 @@ async function validateBatchQuantity(batchId, eventType) {
     const batch = await db.get('SELECT quantity, status FROM batches WHERE id = $1', [batchId]);
     if (!batch) return { valid: true };
     if (batch.status === 'recalled') return { valid: false, error: 'Batch is recalled' };
-    const shipped = await db.get("SELECT COUNT(*) as cnt FROM product_events WHERE batch_id = $1 AND event_type IN ('ship','sell','SHIPPED','SOLD')", [batchId]);
-    if (shipped && shipped.cnt >= batch.quantity) return { valid: false, error: 'Batch quantity exceeded: ' + shipped.cnt + '/' + batch.quantity };
+    const shipped = await db.get(
+        "SELECT COUNT(*) as cnt FROM product_events WHERE batch_id = $1 AND event_type IN ('ship','sell','SHIPPED','SOLD')",
+        [batchId]
+    );
+    if (shipped && shipped.cnt >= batch.quantity)
+        return { valid: false, error: 'Batch quantity exceeded: ' + shipped.cnt + '/' + batch.quantity };
     return { valid: true, remaining: batch.quantity - (shipped?.cnt || 0) };
 }
 

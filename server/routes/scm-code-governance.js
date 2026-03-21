@@ -46,7 +46,9 @@ router.use(authMiddleware);
         actor_name TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT NOW()
     )`);
-    } catch (e) { console.error('format_rules table init:', e.message); }
+    } catch (e) {
+        console.error('format_rules table init:', e.message);
+    }
 })();
 
 // GOV-1: All routes require authentication
@@ -66,13 +68,16 @@ router.get('/format-rules', async (req, res) => {
             whereClause += ' AND fr.org_id = ?';
             params.push(orgId);
         }
-        const rules = await db.all(`
+        const rules = await db.all(
+            `
             SELECT fr.*,
                    (SELECT COUNT(*) FROM qr_codes qc WHERE qc.qr_data LIKE fr.prefix || '%') as codes_generated
             FROM format_rules fr
             WHERE ${whereClause}
             ORDER BY fr.created_at DESC
-         LIMIT 1000`, params);
+         LIMIT 1000`,
+            params
+        );
         res.json({ rules, total: rules.length });
     } catch (err) {
         console.error('List format rules error:', err);
@@ -87,16 +92,45 @@ router.post('/format-rules', async (req, res) => {
         if (!name) return res.status(400).json({ error: 'Rule name is required' });
 
         const id = uuidv4();
-        const example = generateExample(prefix || '', separator || '-', parseInt(code_length) || 24, charset || 'ALPHANUMERIC_UPPER');
+        const example = generateExample(
+            prefix || '',
+            separator || '-',
+            parseInt(code_length) || 24,
+            charset || 'ALPHANUMERIC_UPPER'
+        );
 
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO format_rules (id, name, prefix, pattern, separator, code_length, charset, check_digit_algo, description, example, org_id, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [id, name, prefix || '', pattern || '', separator || '-', parseInt(code_length) || 24, charset || 'ALPHANUMERIC_UPPER', check_digit_algo || 'HMAC-SHA256', description || '', example, req.user?.org_id || req.user?.orgId || null, req.user?.id || null]);
+        `,
+            [
+                id,
+                name,
+                prefix || '',
+                pattern || '',
+                separator || '-',
+                parseInt(code_length) || 24,
+                charset || 'ALPHANUMERIC_UPPER',
+                check_digit_algo || 'HMAC-SHA256',
+                description || '',
+                example,
+                req.user?.org_id || req.user?.orgId || null,
+                req.user?.id || null,
+            ]
+        );
 
         // Audit log
-        await db.run(`INSERT INTO format_rules_audit (id, rule_id, action, changes, actor_id, actor_name) VALUES (?, ?, 'created', ?, ?, ?)`,
-            [uuidv4(), id, JSON.stringify({ name, prefix, pattern, code_length, charset }), req.user?.id || '', req.user?.username || '']);
+        await db.run(
+            `INSERT INTO format_rules_audit (id, rule_id, action, changes, actor_id, actor_name) VALUES (?, ?, 'created', ?, ?, ?)`,
+            [
+                uuidv4(),
+                id,
+                JSON.stringify({ name, prefix, pattern, code_length, charset }),
+                req.user?.id || '',
+                req.user?.username || '',
+            ]
+        );
 
         const rule = await db.get('SELECT * FROM format_rules WHERE id = ?', [id]);
         res.status(201).json(rule);
@@ -112,26 +146,48 @@ router.put('/format-rules/:id', async (req, res) => {
         const existing = await db.get('SELECT * FROM format_rules WHERE id = ?', [req.params.id]);
         if (!existing) return res.status(404).json({ error: 'Rule not found' });
 
-        const { name, prefix, pattern, separator, code_length, charset, check_digit_algo, description, status } = req.body;
+        const { name, prefix, pattern, separator, code_length, charset, check_digit_algo, description, status } =
+            req.body;
         const changes = {};
         if (name !== undefined && name !== existing.name) changes.name = { from: existing.name, to: name };
         if (prefix !== undefined && prefix !== existing.prefix) changes.prefix = { from: existing.prefix, to: prefix };
-        if (pattern !== undefined && pattern !== existing.pattern) changes.pattern = { from: existing.pattern, to: pattern };
+        if (pattern !== undefined && pattern !== existing.pattern)
+            changes.pattern = { from: existing.pattern, to: pattern };
         if (status !== undefined && status !== existing.status) changes.status = { from: existing.status, to: status };
 
-        const example = generateExample(prefix || existing.prefix, separator || existing.separator, parseInt(code_length) || existing.code_length, charset || existing.charset);
+        const example = generateExample(
+            prefix || existing.prefix,
+            separator || existing.separator,
+            parseInt(code_length) || existing.code_length,
+            charset || existing.charset
+        );
 
-        await db.run(`
+        await db.run(
+            `
             UPDATE format_rules SET name=?, prefix=?, pattern=?, separator=?, code_length=?, charset=?, check_digit_algo=?, description=?, example=?, status=?, updated_at=NOW()
             WHERE id=?
-        `, [name || existing.name, prefix ?? existing.prefix, pattern ?? existing.pattern, separator || existing.separator,
-        parseInt(code_length) || existing.code_length, charset || existing.charset, check_digit_algo || existing.check_digit_algo,
-        description ?? existing.description, example, status || existing.status, req.params.id]);
+        `,
+            [
+                name || existing.name,
+                prefix ?? existing.prefix,
+                pattern ?? existing.pattern,
+                separator || existing.separator,
+                parseInt(code_length) || existing.code_length,
+                charset || existing.charset,
+                check_digit_algo || existing.check_digit_algo,
+                description ?? existing.description,
+                example,
+                status || existing.status,
+                req.params.id,
+            ]
+        );
 
         // Audit log
         if (Object.keys(changes).length > 0) {
-            await db.run(`INSERT INTO format_rules_audit (id, rule_id, action, changes, actor_id, actor_name) VALUES (?, ?, 'updated', ?, ?, ?)`,
-                [uuidv4(), req.params.id, JSON.stringify(changes), req.user?.id || '', req.user?.username || '']);
+            await db.run(
+                `INSERT INTO format_rules_audit (id, rule_id, action, changes, actor_id, actor_name) VALUES (?, ?, 'updated', ?, ?, ?)`,
+                [uuidv4(), req.params.id, JSON.stringify(changes), req.user?.id || '', req.user?.username || '']
+            );
         }
 
         const updated = await db.get('SELECT * FROM format_rules WHERE id = ?', [req.params.id]);
@@ -149,8 +205,10 @@ router.delete('/format-rules/:id', async (req, res) => {
         if (!existing) return res.status(404).json({ error: 'Rule not found' });
 
         await db.run(`UPDATE format_rules SET status='deleted', updated_at=NOW() WHERE id=?`, [req.params.id]);
-        await db.run(`INSERT INTO format_rules_audit (id, rule_id, action, changes, actor_id, actor_name) VALUES (?, ?, 'deleted', '{}', ?, ?)`,
-            [uuidv4(), req.params.id, req.user?.id || '', req.user?.username || '']);
+        await db.run(
+            `INSERT INTO format_rules_audit (id, rule_id, action, changes, actor_id, actor_name) VALUES (?, ?, 'deleted', '{}', ?, ?)`,
+            [uuidv4(), req.params.id, req.user?.id || '', req.user?.username || '']
+        );
 
         res.json({ success: true, id: req.params.id });
     } catch (err) {
@@ -176,9 +234,11 @@ router.post('/format-rules/test', async (req, res) => {
             // No rules — just check basic entropy
             const entropy = shannonEntropy(code);
             return res.json({
-                code, results: [], overall: 'no_rules',
+                code,
+                results: [],
+                overall: 'no_rules',
                 entropy: { bits: parseFloat(entropy.toFixed(3)), passed: entropy >= 4.0 },
-                message: 'No active format rules. Basic entropy check performed.'
+                message: 'No active format rules. Basic entropy check performed.',
             });
         }
 
@@ -225,7 +285,12 @@ router.post('/format-rules/test', async (req, res) => {
             // Entropy check
             const entropy = shannonEntropy(code);
             const entropyOk = entropy >= 3.5;
-            checks.push({ name: 'Entropy', expected: '≥ 3.5 bits', actual: parseFloat(entropy.toFixed(3)), passed: entropyOk });
+            checks.push({
+                name: 'Entropy',
+                expected: '≥ 3.5 bits',
+                actual: parseFloat(entropy.toFixed(3)),
+                passed: entropyOk,
+            });
             if (!entropyOk) passed = false;
 
             return { rule_id: rule.id, rule_name: rule.name, passed, checks };
@@ -242,12 +307,66 @@ router.post('/format-rules/test', async (req, res) => {
 // ─── GET /api/scm/code-gov/format-rules/templates — Pre-built templates ─────
 router.get('/format-rules/templates', async (req, res) => {
     const templates = [
-        { name: 'TrustChecker Standard', prefix: 'TK-', separator: '-', code_length: 28, charset: 'ALPHANUMERIC_UPPER', check_digit_algo: 'HMAC-SHA256', pattern: '^TK-[A-Z]+-\\d{4}-\\d{10,}-[A-Z0-9]$', description: 'Default TrustChecker format: TK-{SKU}-{YEAR}-{TIMESTAMP}{RANDOM}-{CHECK}' },
-        { name: 'GS1 / EAN-13', prefix: '', separator: '', code_length: 13, charset: 'NUMERIC', check_digit_algo: 'Modulo-10', pattern: '^\\d{13}$', description: 'Standard 13-digit EAN barcode format' },
-        { name: 'GS1-128 / SSCC', prefix: '00', separator: '', code_length: 18, charset: 'NUMERIC', check_digit_algo: 'Modulo-10', pattern: '^\\d{18}$', description: 'Serial Shipping Container Code (18 digits)' },
-        { name: 'Custom Alphanumeric', prefix: '', separator: '-', code_length: 16, charset: 'ALPHANUMERIC_UPPER', check_digit_algo: 'CRC-32', pattern: '^[A-Z0-9\\-]{12,20}$', description: 'Flexible alphanumeric format with custom length' },
-        { name: 'UUID-Based', prefix: '', separator: '-', code_length: 36, charset: 'HEX', check_digit_algo: 'None', pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', description: 'UUID v4 format — globally unique, no collision' },
-        { name: 'Short Numeric Code', prefix: '', separator: '', code_length: 8, charset: 'NUMERIC', check_digit_algo: 'Luhn', pattern: '^\\d{8}$', description: 'Short 8-digit numeric for retail labels' },
+        {
+            name: 'TrustChecker Standard',
+            prefix: 'TK-',
+            separator: '-',
+            code_length: 28,
+            charset: 'ALPHANUMERIC_UPPER',
+            check_digit_algo: 'HMAC-SHA256',
+            pattern: '^TK-[A-Z]+-\\d{4}-\\d{10,}-[A-Z0-9]$',
+            description: 'Default TrustChecker format: TK-{SKU}-{YEAR}-{TIMESTAMP}{RANDOM}-{CHECK}',
+        },
+        {
+            name: 'GS1 / EAN-13',
+            prefix: '',
+            separator: '',
+            code_length: 13,
+            charset: 'NUMERIC',
+            check_digit_algo: 'Modulo-10',
+            pattern: '^\\d{13}$',
+            description: 'Standard 13-digit EAN barcode format',
+        },
+        {
+            name: 'GS1-128 / SSCC',
+            prefix: '00',
+            separator: '',
+            code_length: 18,
+            charset: 'NUMERIC',
+            check_digit_algo: 'Modulo-10',
+            pattern: '^\\d{18}$',
+            description: 'Serial Shipping Container Code (18 digits)',
+        },
+        {
+            name: 'Custom Alphanumeric',
+            prefix: '',
+            separator: '-',
+            code_length: 16,
+            charset: 'ALPHANUMERIC_UPPER',
+            check_digit_algo: 'CRC-32',
+            pattern: '^[A-Z0-9\\-]{12,20}$',
+            description: 'Flexible alphanumeric format with custom length',
+        },
+        {
+            name: 'UUID-Based',
+            prefix: '',
+            separator: '-',
+            code_length: 36,
+            charset: 'HEX',
+            check_digit_algo: 'None',
+            pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+            description: 'UUID v4 format — globally unique, no collision',
+        },
+        {
+            name: 'Short Numeric Code',
+            prefix: '',
+            separator: '',
+            code_length: 8,
+            charset: 'NUMERIC',
+            check_digit_algo: 'Luhn',
+            pattern: '^\\d{8}$',
+            description: 'Short 8-digit numeric for retail labels',
+        },
     ];
     res.json({ templates });
 });
@@ -256,13 +375,16 @@ router.get('/format-rules/templates', async (req, res) => {
 router.get('/format-rules/audit', async (req, res) => {
     try {
         const limit = Math.min(parseInt(req.query.limit) || 50, 200);
-        const logs = await db.all(`
+        const logs = await db.all(
+            `
             SELECT a.*, fr.name as rule_name
             FROM format_rules_audit a
             LEFT JOIN format_rules fr ON fr.id = a.rule_id
             ORDER BY a.created_at DESC
             LIMIT ?
-        `, [limit]);
+        `,
+            [limit]
+        );
         res.json({ logs, total: logs.length });
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch audit logs' });
@@ -288,7 +410,7 @@ router.get('/format-rules/stats', async (req, res) => {
             total_rules: rules.length,
             active_rules: rules.filter(r => r.status === 'active').length,
             total_codes: totalCodes,
-            rules: stats
+            rules: stats,
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch stats' });
@@ -299,9 +421,12 @@ router.get('/format-rules/stats', async (req, res) => {
  * Generate an example code based on rule params
  */
 function generateExample(prefix, separator, length, charset) {
-    const chars = charset === 'NUMERIC' ? '0123456789' :
-        charset === 'HEX' ? '0123456789ABCDEF' :
-            'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const chars =
+        charset === 'NUMERIC'
+            ? '0123456789'
+            : charset === 'HEX'
+              ? '0123456789ABCDEF'
+              : 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     const remaining = Math.max(4, length - prefix.length);
     let code = prefix;
     for (let i = 0; i < remaining; i++) {
@@ -344,7 +469,7 @@ router.get('/entropy-config', authMiddleware, async (req, res) => {
             allowed_charsets: 'alphanumeric_upper',
             check_digit_algorithm: 'HMAC-SHA256',
             require_prefix: true,
-            prefix_format: '{TENANT}-{YEAR}-'
+            prefix_format: '{TENANT}-{YEAR}-',
         };
 
         const merged = { ...defaults };
@@ -372,8 +497,9 @@ router.post('/entropy-check', authMiddleware, async (req, res) => {
             entropy_bits: parseFloat(entropy.toFixed(3)),
             min_required: minRequired,
             passed,
-            recommendation: passed ? 'Code meets entropy requirements' :
-                `Entropy too low (${entropy.toFixed(2)} < ${minRequired}). Use more varied characters or increase length.`
+            recommendation: passed
+                ? 'Code meets entropy requirements'
+                : `Entropy too low (${entropy.toFixed(2)} < ${minRequired}). Use more varied characters or increase length.`,
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to check entropy' });
@@ -390,7 +516,11 @@ router.post('/bulk-entropy-check', authMiddleware, async (req, res) => {
         const minRequired = parseFloat(min_entropy) || 4.0;
         const results = codes.map(code => {
             const entropy = shannonEntropy(code);
-            return { code: code.substring(0, 8) + '***', entropy: parseFloat(entropy.toFixed(3)), passed: entropy >= minRequired };
+            return {
+                code: code.substring(0, 8) + '***',
+                entropy: parseFloat(entropy.toFixed(3)),
+                passed: entropy >= minRequired,
+            };
         });
         const passRate = results.filter(r => r.passed).length / results.length;
 
@@ -400,7 +530,7 @@ router.post('/bulk-entropy-check', authMiddleware, async (req, res) => {
             failed: results.filter(r => !r.passed).length,
             pass_rate: (passRate * 100).toFixed(1) + '%',
             min_required: minRequired,
-            results: results.slice(0, 50) // cap display
+            results: results.slice(0, 50), // cap display
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to check bulk entropy' });
@@ -430,17 +560,23 @@ router.post('/generation-limits', authMiddleware, requirePermission('settings:up
         // Check if limit already exists for org
         const existing = await db.get('SELECT id FROM generation_limits WHERE org_id = ?', [org_id]);
         if (existing) {
-            await db.run(`
+            await db.run(
+                `
                 UPDATE generation_limits SET max_per_hour = ?, max_per_day = ?, max_per_month = ?, max_batch_size = ?, updated_at = NOW()
                 WHERE org_id = ?
-            `, [max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000, org_id]);
+            `,
+                [max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000, org_id]
+            );
             return res.json({ id: existing.id, org_id, status: 'updated' });
         }
 
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO generation_limits (id, org_id, max_per_hour, max_per_day, max_per_month, max_batch_size, current_hour, current_day, current_month, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, NOW(), NOW())
-        `, [id, org_id, max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000]);
+        `,
+            [id, org_id, max_per_hour || 1000, max_per_day || 10000, max_per_month || 100000, max_batch_size || 5000]
+        );
 
         res.status(201).json({ id, org_id, status: 'created' });
     } catch (err) {
@@ -456,9 +592,9 @@ router.post('/generation-check', authMiddleware, async (req, res) => {
         if (!limit) return res.json({ allowed: true, message: 'No limit configured for this tenant' });
 
         const count = parseInt(requested_count) || 1;
-        const hourOk = (limit.current_hour + count) <= limit.max_per_hour;
-        const dayOk = (limit.current_day + count) <= limit.max_per_day;
-        const monthOk = (limit.current_month + count) <= limit.max_per_month;
+        const hourOk = limit.current_hour + count <= limit.max_per_hour;
+        const dayOk = limit.current_day + count <= limit.max_per_day;
+        const monthOk = limit.current_month + count <= limit.max_per_month;
         const batchOk = count <= limit.max_batch_size;
         const allowed = hourOk && dayOk && monthOk && batchOk;
 
@@ -469,9 +605,17 @@ router.post('/generation-check', authMiddleware, async (req, res) => {
                 hour: { current: limit.current_hour, max: limit.max_per_hour, ok: hourOk },
                 day: { current: limit.current_day, max: limit.max_per_day, ok: dayOk },
                 month: { current: limit.current_month, max: limit.max_per_month, ok: monthOk },
-                batch: { max: limit.max_batch_size, ok: batchOk }
+                batch: { max: limit.max_batch_size, ok: batchOk },
             },
-            blocked_reason: !allowed ? (!batchOk ? 'Batch size exceeds limit' : !hourOk ? 'Hourly limit reached' : !dayOk ? 'Daily limit reached' : 'Monthly limit reached') : null
+            blocked_reason: !allowed
+                ? !batchOk
+                    ? 'Batch size exceeds limit'
+                    : !hourOk
+                      ? 'Hourly limit reached'
+                      : !dayOk
+                        ? 'Daily limit reached'
+                        : 'Monthly limit reached'
+                : null,
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to check generation limit' });
@@ -487,13 +631,14 @@ router.get('/registry/stats', authMiddleware, async (req, res) => {
     try {
         const total = (await db.get('SELECT COUNT(*) as c FROM code_registry'))?.c || 0;
         const byTenant = await db.all('SELECT org_id, COUNT(*) as count FROM code_registry GROUP BY org_id');
-        const collisions = (await db.get('SELECT COUNT(*) as c FROM code_registry WHERE collision_detected = 1'))?.c || 0;
+        const collisions =
+            (await db.get('SELECT COUNT(*) as c FROM code_registry WHERE collision_detected = 1'))?.c || 0;
 
         res.json({
             total_codes_registered: total,
             collisions_detected: collisions,
             collision_rate: total > 0 ? ((collisions / total) * 100).toFixed(4) + '%' : '0%',
-            by_org: byTenant
+            by_org: byTenant,
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch registry stats' });
@@ -519,11 +664,17 @@ router.post('/registry/check', authMiddleware, async (req, res) => {
                 same_org: sameTenant,
                 existing_org: sameTenant ? org_id : '[REDACTED]',
                 registered_at: existing.created_at,
-                action: sameTenant ? 'Duplicate within tenant — reject' : 'Cross-org collision — reject and alert Super Admin'
+                action: sameTenant
+                    ? 'Duplicate within tenant — reject'
+                    : 'Cross-org collision — reject and alert Super Admin',
             });
         }
 
-        res.json({ collision: false, hmac_hash: hmacHash.substring(0, 16) + '...', message: 'Code is unique across all tenants' });
+        res.json({
+            collision: false,
+            hmac_hash: hmacHash.substring(0, 16) + '...',
+            message: 'Code is unique across all tenants',
+        });
     } catch (err) {
         res.status(500).json({ error: 'Failed to check collision' });
     }
@@ -549,25 +700,31 @@ router.post('/registry/register', authMiddleware, async (req, res) => {
                 await db.run('UPDATE code_registry SET collision_detected = 1 WHERE id = ?', [existing.id]);
             } else {
                 const id = uuidv4();
-                await db.run(`
+                await db.run(
+                    `
                     INSERT INTO code_registry (id, org_id, hmac_hash, code_prefix, collision_detected, created_at)
                     VALUES (?, ?, ?, ?, 0, NOW())
-                `, [id, org_id, hmacHash, code.substring(0, 6)]);
+                `,
+                    [id, org_id, hmacHash, code.substring(0, 6)]
+                );
                 registered++;
             }
         }
 
         // Update generation counters
-        await db.run(`
+        await db.run(
+            `
             UPDATE generation_limits SET current_hour = current_hour + ?, current_day = current_day + ?, current_month = current_month + ?, updated_at = NOW()
             WHERE org_id = ?
-        `, [registered, registered, registered, org_id]);
+        `,
+            [registered, registered, registered, org_id]
+        );
 
         res.status(201).json({
             submitted: codes.length,
             registered,
             collisions,
-            collision_rate: codes.length > 0 ? ((collisions / codes.length) * 100).toFixed(2) + '%' : '0%'
+            collision_rate: codes.length > 0 ? ((collisions / codes.length) * 100).toFixed(2) + '%' : '0%',
         });
     } catch (err) {
         console.error('Register codes error:', err);

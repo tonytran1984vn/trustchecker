@@ -1,6 +1,6 @@
 /**
  * TrustChecker v9.4 — Web Application Firewall Middleware
- * 
+ *
  * Request-level security filtering against:
  * SQL injection, XSS, path traversal, bot detection,
  * suspicious headers, and IP+endpoint rate limiting.
@@ -17,7 +17,7 @@ const SQL_INJECTION_PATTERNS = [
     /('\s*(or|and)\s+')/i,
     /(benchmark\s*\(|sleep\s*\(|waitfor\s+delay)/i,
     /(char\s*\(|concat\s*\(|concat_ws\s*\()/i,
-    /('--\s*$|'\s*#\s*$|'\s*;)/i,  // Auth bypass: quote + comment (admin'--)
+    /('--\s*$|'\s*#\s*$|'\s*;)/i, // Auth bypass: quote + comment (admin'--)
 ];
 
 const XSS_PATTERNS = [
@@ -34,21 +34,32 @@ const XSS_PATTERNS = [
 ];
 
 const PATH_TRAVERSAL_PATTERNS = [
-    /(\.\.\/)/, /(\.\.\%2[fF])/, /(\.\.\%5[cC])/,
+    /(\.\.\/)/,
+    /(\.\.\%2[fF])/,
+    /(\.\.\%5[cC])/,
     /(\/etc\/(passwd|shadow|hosts))/i,
     /(\/proc\/self)/i,
     /(%00|\\x00)/,
 ];
 
 const BLOCKED_USER_AGENTS = [
-    /sqlmap/i, /nikto/i, /nessus/i, /w3af/i, /burp/i,
-    /havij/i, /nmap/i, /masscan/i, /dirbuster/i,
-    /gobuster/i, /wfuzz/i, /nuclei/i,
+    /sqlmap/i,
+    /nikto/i,
+    /nessus/i,
+    /w3af/i,
+    /burp/i,
+    /havij/i,
+    /nmap/i,
+    /masscan/i,
+    /dirbuster/i,
+    /gobuster/i,
+    /wfuzz/i,
+    /nuclei/i,
 ];
 
 const SUSPICIOUS_HEADERS = [
-    'x-forwarded-host',  // Header injection
-    'x-original-url',    // Path override
+    'x-forwarded-host', // Header injection
+    'x-original-url', // Path override
     'x-rewrite-url',
 ];
 
@@ -142,7 +153,9 @@ class WAF {
                 this.stats[`blockedBy${result.category}`] = (this.stats[`blockedBy${result.category}`] || 0) + 1;
 
                 if (this.logBlocked) {
-                    console.warn(`[WAF] BLOCKED ${req.method} ${req.path} from ${clientIP} — ${result.reason} (${result.category})`);
+                    console.warn(
+                        `[WAF] BLOCKED ${req.method} ${req.path} from ${clientIP} — ${result.reason} (${result.category})`
+                    );
                 }
 
                 return res.status(403).json({
@@ -197,7 +210,11 @@ class WAF {
             // Path Traversal
             for (const pattern of PATH_TRAVERSAL_PATTERNS) {
                 if (pattern.test(val)) {
-                    return { blocked: true, reason: `Path traversal detected: ${val.slice(0, 50)}`, category: 'Traversal' };
+                    return {
+                        blocked: true,
+                        reason: `Path traversal detected: ${val.slice(0, 50)}`,
+                        category: 'Traversal',
+                    };
                 }
             }
         }
@@ -259,15 +276,23 @@ class WAF {
 
     // ─── Management ─────────────────────────────────────────────────
 
-    addWhitelist(ip) { this.whitelist.add(ip); }
-    removeWhitelist(ip) { this.whitelist.delete(ip); }
-    addRule(rule) { this.customRules.push(rule); }
+    addWhitelist(ip) {
+        this.whitelist.add(ip);
+    }
+    removeWhitelist(ip) {
+        this.whitelist.delete(ip);
+    }
+    addRule(rule) {
+        this.customRules.push(rule);
+    }
 
     getStats() {
         return {
             ...this.stats,
-            blockRate: this.stats.totalRequests > 0
-                ? Math.round((this.stats.blockedRequests / this.stats.totalRequests) * 10000) / 100 : 0,
+            blockRate:
+                this.stats.totalRequests > 0
+                    ? Math.round((this.stats.blockedRequests / this.stats.totalRequests) * 10000) / 100
+                    : 0,
             whitelistSize: this.whitelist.size,
             customRuleCount: this.customRules.length,
         };

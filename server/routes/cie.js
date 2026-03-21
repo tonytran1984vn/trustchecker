@@ -1,7 +1,7 @@
 /**
  * CIE v2.0 API Routes
  * Carbon Integrity Engine — Backend API for passports, snapshots, anchoring, and org config
- * 
+ *
  * Endpoints:
  *   POST   /api/cie/passport           — Create/seal a CIP
  *   GET    /api/cie/passport/:id        — Get CIP details + snapshot
@@ -58,38 +58,72 @@ router.post('/passport', requirePermission('esg:manage'), async (req, res) => {
         const status = seal ? (risk.action === 'approved' ? 'sealed' : risk.action) : 'draft';
 
         // Create passport
-        await d.prepare(`INSERT INTO cie_passports 
+        await d
+            .prepare(
+                `INSERT INTO cie_passports 
             (id, cip_id, org_id, product_name, batch_id, scope_1, scope_2, scope_3, total_emission, 
              benchmark_score, risk_score, risk_action, status, methodology, factor_version, sealed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, cipId, orgId, product_name, batch_id || null,
-                scope_1 || 0, scope_2 || 0, scope_3 || 0, total,
-                benchmark_score || 0, risk.composite_risk, risk.action, status,
-                cie.METHODOLOGY.id, cie.ACTIVE_FACTOR_VERSION,
-                seal ? new Date().toISOString() : null);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            )
+            .run(
+                id,
+                cipId,
+                orgId,
+                product_name,
+                batch_id || null,
+                scope_1 || 0,
+                scope_2 || 0,
+                scope_3 || 0,
+                total,
+                benchmark_score || 0,
+                risk.composite_risk,
+                risk.action,
+                status,
+                cie.METHODOLOGY.id,
+                cie.ACTIVE_FACTOR_VERSION,
+                seal ? new Date().toISOString() : null
+            );
 
         // If sealed, create snapshot capsule
         let snapshot = null;
         if (status === 'sealed') {
             snapshot = cie.createSnapshotCapsule(cipId, {
-                scope_1, scope_2, scope_3,
+                scope_1,
+                scope_2,
+                scope_3,
                 governance_chain: 'CO→IVU→Compliance→BC',
                 benchmark_ref: `IND-${product_name.toUpperCase().replace(/\s+/g, '-')}-${new Date().getFullYear()}-Q${Math.ceil((new Date().getMonth() + 1) / 3)}`,
             });
-            await d.prepare(`INSERT INTO cie_snapshots
+            await d
+                .prepare(
+                    `INSERT INTO cie_snapshots
                 (id, cip_id, org_id, capsule_hash, data_hash, method_version, method_hash, 
                  factor_version, factor_hash, governance_chain, benchmark_ref, scope_snapshot, risk_thresholds)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-                .run(uuidv4(), cipId, orgId, snapshot.capsule_hash, snapshot.data_hash,
-                    snapshot.method_version, snapshot.method_hash,
-                    snapshot.factor_version, snapshot.factor_hash,
-                    snapshot.governance_chain, snapshot.benchmark_ref,
-                    JSON.stringify(snapshot.scope_snapshot), JSON.stringify(snapshot.risk_thresholds_at_seal));
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                )
+                .run(
+                    uuidv4(),
+                    cipId,
+                    orgId,
+                    snapshot.capsule_hash,
+                    snapshot.data_hash,
+                    snapshot.method_version,
+                    snapshot.method_hash,
+                    snapshot.factor_version,
+                    snapshot.factor_hash,
+                    snapshot.governance_chain,
+                    snapshot.benchmark_ref,
+                    JSON.stringify(snapshot.scope_snapshot),
+                    JSON.stringify(snapshot.risk_thresholds_at_seal)
+                );
         }
 
         res.status(201).json({
-            cip_id: cipId, status, risk,
-            total_emission: total, unit: 'kgCO2e',
+            cip_id: cipId,
+            status,
+            risk,
+            total_emission: total,
+            unit: 'kgCO2e',
             methodology: cie.METHODOLOGY.id,
             factor_version: cie.ACTIVE_FACTOR_VERSION,
             snapshot: snapshot ? { capsule_hash: snapshot.capsule_hash, storage: 'WORM' } : null,
@@ -108,12 +142,17 @@ router.get('/passports', async (req, res) => {
         const { status, limit = 50 } = req.query;
         let q = 'SELECT * FROM cie_passports WHERE org_id = ?';
         const params = [orgId];
-        if (status) { q += ' AND status = ?'; params.push(status); }
+        if (status) {
+            q += ' AND status = ?';
+            params.push(status);
+        }
         q += ' ORDER BY created_at DESC LIMIT ?';
         params.push(parseInt(limit));
         const rows = await d.prepare(q).all(...params);
         res.json({ passports: rows || [], total: (rows || []).length });
-    } catch (err) { res.status(500).json({ error: 'Failed to list passports' }); }
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to list passports' });
+    }
 });
 
 // GET /api/cie/passport/:cipId — Get single CIP with snapshot
@@ -125,7 +164,9 @@ router.get('/passport/:cipId', async (req, res) => {
         const snapshot = await d.prepare('SELECT * FROM cie_snapshots WHERE cip_id = ?').get(req.params.cipId);
         const anchors = await d.prepare('SELECT * FROM cie_anchors WHERE target_id = ?').all(req.params.cipId);
         res.json({ passport, snapshot: snapshot || null, anchors: anchors || [] });
-    } catch (err) { res.status(500).json({ error: 'Failed to get passport' }); }
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to get passport' });
+    }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -153,11 +194,21 @@ router.post('/anchor', requirePermission('esg:manage'), async (req, res) => {
         const anchor = cie.generateAnchorHash(type, data);
         const id = uuidv4();
 
-        await d.prepare(`INSERT INTO cie_anchors 
+        await d
+            .prepare(
+                `INSERT INTO cie_anchors 
             (id, org_id, anchor_type, target_id, anchor_hash, payload_hash, chain, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed')`)
-            .run(id, orgId, anchor.anchor_type, target_id || null,
-                anchor.anchor_hash, anchor.payload_hash, anchor.chain);
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed')`
+            )
+            .run(
+                id,
+                orgId,
+                anchor.anchor_type,
+                target_id || null,
+                anchor.anchor_hash,
+                anchor.payload_hash,
+                anchor.chain
+            );
 
         res.status(201).json({ id, ...anchor, status: 'confirmed' });
     } catch (err) {
@@ -171,10 +222,13 @@ router.get('/anchors', async (req, res) => {
     try {
         const d = getDb();
         const orgId = req.user?.org_id || req.user?.orgId;
-        const rows = await d.prepare('SELECT * FROM cie_anchors WHERE org_id = ? ORDER BY created_at DESC LIMIT 50')
+        const rows = await d
+            .prepare('SELECT * FROM cie_anchors WHERE org_id = ? ORDER BY created_at DESC LIMIT 50')
             .all(orgId);
         res.json({ anchors: rows || [] });
-    } catch (err) { res.status(500).json({ error: 'Failed to list anchors' }); }
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to list anchors' });
+    }
 });
 
 // GET /api/cie/snapshot/:cipId — Get snapshot capsule
@@ -186,7 +240,9 @@ router.get('/snapshot/:cipId', async (req, res) => {
         snap.scope_snapshot = JSON.parse(snap.scope_snapshot || '{}');
         snap.risk_thresholds = JSON.parse(snap.risk_thresholds || '{}');
         res.json(snap);
-    } catch (err) { res.status(500).json({ error: 'Failed to get snapshot' }); }
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to get snapshot' });
+    }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -239,7 +295,9 @@ router.get('/config', async (req, res) => {
         config.risk_thresholds = JSON.parse(config.risk_thresholds || '{}');
         config.rme_countries = JSON.parse(config.rme_countries || '["EU"]');
         res.json(config);
-    } catch (err) { res.status(500).json({ error: 'Failed to get config' }); }
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to get config' });
+    }
 });
 
 // PUT /api/cie/config — Update tenant CIE config
@@ -257,13 +315,27 @@ router.put('/config', requirePermission('org:settings_update'), async (req, res)
 
         // Update fields individually
         if (tier) await d.prepare('UPDATE cie_tenant_config SET tier = ? WHERE org_id = ?').run(tier, orgId);
-        if (batch_limit) await d.prepare('UPDATE cie_tenant_config SET batch_limit = ? WHERE org_id = ?').run(batch_limit, orgId);
-        if (modules) await d.prepare('UPDATE cie_tenant_config SET modules = ?::jsonb WHERE org_id = ?').run(JSON.stringify(modules), orgId);
-        if (risk_thresholds) await d.prepare('UPDATE cie_tenant_config SET risk_thresholds = ?::jsonb WHERE org_id = ?').run(JSON.stringify(risk_thresholds), orgId);
-        if (rme_countries) await d.prepare('UPDATE cie_tenant_config SET rme_countries = ?::jsonb WHERE org_id = ?').run(JSON.stringify(rme_countries), orgId);
-        if (mgb_enabled != null) await d.prepare('UPDATE cie_tenant_config SET mgb_enabled = ? WHERE org_id = ?').run(!!mgb_enabled, orgId);
-        if (snapshot_enabled != null) await d.prepare('UPDATE cie_tenant_config SET snapshot_enabled = ? WHERE org_id = ?').run(!!snapshot_enabled, orgId);
-        await d.prepare("UPDATE cie_tenant_config SET updated_at = NOW() WHERE org_id = ?").run(orgId);
+        if (batch_limit)
+            await d.prepare('UPDATE cie_tenant_config SET batch_limit = ? WHERE org_id = ?').run(batch_limit, orgId);
+        if (modules)
+            await d
+                .prepare('UPDATE cie_tenant_config SET modules = ?::jsonb WHERE org_id = ?')
+                .run(JSON.stringify(modules), orgId);
+        if (risk_thresholds)
+            await d
+                .prepare('UPDATE cie_tenant_config SET risk_thresholds = ?::jsonb WHERE org_id = ?')
+                .run(JSON.stringify(risk_thresholds), orgId);
+        if (rme_countries)
+            await d
+                .prepare('UPDATE cie_tenant_config SET rme_countries = ?::jsonb WHERE org_id = ?')
+                .run(JSON.stringify(rme_countries), orgId);
+        if (mgb_enabled != null)
+            await d.prepare('UPDATE cie_tenant_config SET mgb_enabled = ? WHERE org_id = ?').run(!!mgb_enabled, orgId);
+        if (snapshot_enabled != null)
+            await d
+                .prepare('UPDATE cie_tenant_config SET snapshot_enabled = ? WHERE org_id = ?')
+                .run(!!snapshot_enabled, orgId);
+        await d.prepare('UPDATE cie_tenant_config SET updated_at = NOW() WHERE org_id = ?').run(orgId);
 
         const config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(orgId);
         res.json({ message: 'Config updated', config });
@@ -284,10 +356,21 @@ router.get('/overview', async (req, res) => {
         const orgId = req.user?.org_id || req.user?.orgId;
 
         const total = (await d.prepare('SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ?').get(orgId))?.c || 0;
-        const sealed = (await d.prepare("SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ? AND status = 'sealed'").get(orgId))?.c || 0;
-        const blocked = (await d.prepare("SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ? AND status = 'block_approval'").get(orgId))?.c || 0;
+        const sealed =
+            (
+                await d
+                    .prepare("SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ? AND status = 'sealed'")
+                    .get(orgId)
+            )?.c || 0;
+        const blocked =
+            (
+                await d
+                    .prepare("SELECT COUNT(*) as c FROM cie_passports WHERE org_id = ? AND status = 'block_approval'")
+                    .get(orgId)
+            )?.c || 0;
         const anchors = (await d.prepare('SELECT COUNT(*) as c FROM cie_anchors WHERE org_id = ?').get(orgId))?.c || 0;
-        const snapshots = (await d.prepare('SELECT COUNT(*) as c FROM cie_snapshots WHERE org_id = ?').get(orgId))?.c || 0;
+        const snapshots =
+            (await d.prepare('SELECT COUNT(*) as c FROM cie_snapshots WHERE org_id = ?').get(orgId))?.c || 0;
 
         res.json({
             version: 'CIE v2.0',
@@ -298,7 +381,9 @@ router.get('/overview', async (req, res) => {
             methodology: cie.METHODOLOGY.id,
             factor_version: cie.ACTIVE_FACTOR_VERSION,
         });
-    } catch (err) { res.status(500).json({ error: 'Overview failed' }); }
+    } catch (err) {
+        res.status(500).json({ error: 'Overview failed' });
+    }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -350,7 +435,8 @@ router.post('/roles/check', (req, res) => {
     const { role_id, action } = req.body;
     if (!role_id || !action) return res.status(400).json({ error: 'role_id and action required' });
     res.json({
-        role_id, action,
+        role_id,
+        action,
         allowed: cieRoles.canPerform(role_id, action),
         blocked: cieRoles.isBlocked(role_id, action),
         replay_level: cieRoles.getReplayLevel(role_id),
@@ -382,4 +468,3 @@ router.get('/architecture', (req, res) => {
 });
 
 module.exports = router;
-

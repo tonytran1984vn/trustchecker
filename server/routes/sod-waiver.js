@@ -1,11 +1,11 @@
 /**
  * SoD Waiver Management API
- * 
+ *
  * Company Admins can manage Separation of Duties waivers for small orgs
  * where one person may need to hold conflicting permissions.
- * 
+ *
  * All waivers are audit-logged and time-limited.
- * 
+ *
  * GET    /api/sod/waivers       — List active waivers
  * POST   /api/sod/waivers       — Create waiver
  * DELETE /api/sod/waivers/:pair — Remove waiver
@@ -50,7 +50,11 @@ router.get('/waivers', async (req, res) => {
         }
 
         let config;
-        try { config = JSON.parse(org.sod_waivers); } catch (_) { config = { waivers: [] }; }
+        try {
+            config = JSON.parse(org.sod_waivers);
+        } catch (_) {
+            config = { waivers: [] };
+        }
 
         const waivers = (config.waivers || []).map((w, i) => ({
             index: i,
@@ -89,22 +93,30 @@ router.post('/waivers', async (req, res) => {
         }
 
         // Validate pair is actually a known SoD conflict
-        const isValid = SOD_CONFLICTS.some(([p1, p2]) =>
-            (pair[0] === p1 && pair[1] === p2) || (pair[0] === p2 && pair[1] === p1)
+        const isValid = SOD_CONFLICTS.some(
+            ([p1, p2]) => (pair[0] === p1 && pair[1] === p2) || (pair[0] === p2 && pair[1] === p1)
         );
         if (!isValid) {
-            return res.status(400).json({ error: 'Pair is not a recognized SoD conflict', valid_conflicts: SOD_CONFLICTS });
+            return res
+                .status(400)
+                .json({ error: 'Pair is not a recognized SoD conflict', valid_conflicts: SOD_CONFLICTS });
         }
 
         // Load existing waivers
         const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [orgId]);
         let config;
-        try { config = JSON.parse(org?.sod_waivers || '{}'); } catch (_) { config = {}; }
+        try {
+            config = JSON.parse(org?.sod_waivers || '{}');
+        } catch (_) {
+            config = {};
+        }
         if (!config.waivers) config.waivers = [];
 
         // Check for duplicate
-        const exists = config.waivers.some(w =>
-            w.pair && ((w.pair[0] === pair[0] && w.pair[1] === pair[1]) || (w.pair[0] === pair[1] && w.pair[1] === pair[0]))
+        const exists = config.waivers.some(
+            w =>
+                w.pair &&
+                ((w.pair[0] === pair[0] && w.pair[1] === pair[1]) || (w.pair[0] === pair[1] && w.pair[1] === pair[0]))
         );
         if (exists) {
             return res.status(409).json({ error: 'Waiver for this pair already exists' });
@@ -122,7 +134,9 @@ router.post('/waivers', async (req, res) => {
 
         await db.run('UPDATE organizations SET sod_waivers = ? WHERE id = ?', [JSON.stringify(config), orgId]);
 
-        console.log(`[RBAC] SoD WAIVER created: tenant=${orgId}, pair=[${pair}], by=${req.user.email}, reason="${reason}"`);
+        console.log(
+            `[RBAC] SoD WAIVER created: tenant=${orgId}, pair=[${pair}], by=${req.user.email}, reason="${reason}"`
+        );
 
         res.json({ success: true, waiver: newWaiver, total: config.waivers.length });
     } catch (err) {
@@ -147,12 +161,21 @@ router.delete('/waivers', async (req, res) => {
 
         const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [orgId]);
         let config;
-        try { config = JSON.parse(org?.sod_waivers || '{}'); } catch (_) { config = {}; }
+        try {
+            config = JSON.parse(org?.sod_waivers || '{}');
+        } catch (_) {
+            config = {};
+        }
         if (!config.waivers) config.waivers = [];
 
         const before = config.waivers.length;
-        config.waivers = config.waivers.filter(w =>
-            !(w.pair && ((w.pair[0] === pair[0] && w.pair[1] === pair[1]) || (w.pair[0] === pair[1] && w.pair[1] === pair[0])))
+        config.waivers = config.waivers.filter(
+            w =>
+                !(
+                    w.pair &&
+                    ((w.pair[0] === pair[0] && w.pair[1] === pair[1]) ||
+                        (w.pair[0] === pair[1] && w.pair[1] === pair[0]))
+                )
         );
 
         if (config.waivers.length === before) {

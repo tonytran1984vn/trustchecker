@@ -1,9 +1,9 @@
 /**
  * Feature Gate Middleware — Plan-Based Access Control
- * 
+ *
  * Controls access to modules based on the user's billing plan.
  * Plans: free → core → pro → enterprise (each includes all lower tiers).
- * 
+ *
  * Usage:
  *   const { requireFeature } = require('../middleware/featureGate');
  *   router.get('/radar', requireFeature('risk_radar'), handler);
@@ -78,9 +78,9 @@ function hasAccess(userPlan, requiredPlan) {
 /**
  * Express middleware — gates access to a feature based on user plan.
  * If the user doesn't have access, returns 403 with upgrade info.
- * 
+ *
  * Admin role bypasses all feature gates.
- * 
+ *
  * @param {string} feature - Feature key from FEATURE_PLANS
  */
 function requireFeature(feature) {
@@ -104,8 +104,8 @@ function requireFeature(feature) {
             plans: {
                 core: '$29/mo — Fraud detection, reports, SCM tracking',
                 pro: '$79/mo — AI analytics, risk radar, inventory, logistics',
-                enterprise: '$199/mo — Carbon/ESG, digital twin, EPCIS, blockchain'
-            }
+                enterprise: '$199/mo — Carbon/ESG, digital twin, EPCIS, blockchain',
+            },
         });
     };
 }
@@ -127,5 +127,5 @@ module.exports = {
     getRequiredPlan,
     getFeaturesForPlan,
     FEATURE_PLANS,
-    PLAN_HIERARCHY
+    PLAN_HIERARCHY,
 };

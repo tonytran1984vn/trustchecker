@@ -2,7 +2,7 @@
  * Fee Distribution Routes v2.0 — Constitutional Enforcement
  * Validator Incentives + Partner Revenue Sharing + Payouts
  * Endpoints: 8 | Mount: /api/distribution
- * 
+ *
  * CONSTITUTIONAL: Payouts and distributions require dual-key treasury enforcement
  */
 const express = require('express');
@@ -30,25 +30,41 @@ function logConstitutionalAction(req, action, result) {
     console.log(`[CONSTITUTIONAL-AUDIT] ${JSON.stringify(entry)}`);
     try {
         const db = require('../db');
-        db.prepare(`INSERT INTO audit_log (id, action, actor_id, actor_role, resource_type, resource_id, details, ip_address, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(uuidv4(), `CONSTITUTIONAL:${action}`, entry.user_id, entry.role, 'constitutional_enforcement', action,
-                JSON.stringify({ allowed: entry.allowed, reason: entry.reason }), entry.ip, entry.timestamp);
-    } catch (e) { /* fallback to console */ }
+        db.prepare(
+            `INSERT INTO audit_log (id, action, actor_id, actor_role, resource_type, resource_id, details, ip_address, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+            uuidv4(),
+            `CONSTITUTIONAL:${action}`,
+            entry.user_id,
+            entry.role,
+            'constitutional_enforcement',
+            action,
+            JSON.stringify({ allowed: entry.allowed, reason: entry.reason }),
+            entry.ip,
+            entry.timestamp
+        );
+    } catch (e) {
+        /* fallback to console */
+    }
 }
 
 function requireConstitutionalWithAudit(action) {
     return (req, res, next) => {
         if (!req.user) return res.status(401).json({ error: 'Authentication required' });
         const constitutionalRBAC = require('../engines/governance-module').constitutionalRbac;
-const { withTransaction } = require('../middleware/transaction');
+        const { withTransaction } = require('../middleware/transaction');
         const result = constitutionalRBAC.enforce(req.user.role, action);
         logConstitutionalAction(req, action, result);
         if (!result.allowed) {
             return res.status(403).json({
-                error: 'Constitutional constraint violation', code: 'CONSTITUTIONAL_BLOCK',
-                action, role: req.user.role, reason: result.reason,
-                charter: result.charter, article: result.article,
+                error: 'Constitutional constraint violation',
+                code: 'CONSTITUTIONAL_BLOCK',
+                action,
+                role: req.user.role,
+                reason: result.reason,
+                charter: result.charter,
+                article: result.article,
             });
         }
         req._constitutional = result;
@@ -61,10 +77,15 @@ function requireDualKey(action, requiredRoles) {
         const secondApprover = req.headers['x-second-approver'];
         const secondRole = req.headers['x-second-approver-role'];
         if (!secondApprover || !secondRole) {
-            logConstitutionalAction(req, action, { allowed: false, reason: `Dual-key required: ${requiredRoles.join(' + ')}` });
+            logConstitutionalAction(req, action, {
+                allowed: false,
+                reason: `Dual-key required: ${requiredRoles.join(' + ')}`,
+            });
             return res.status(403).json({
-                error: 'Dual-key authorization required', code: 'DUAL_KEY_REQUIRED',
-                action, required_roles: requiredRoles,
+                error: 'Dual-key authorization required',
+                code: 'DUAL_KEY_REQUIRED',
+                action,
+                required_roles: requiredRoles,
                 instruction: 'Provide x-second-approver and x-second-approver-role headers',
             });
         }
@@ -72,9 +93,16 @@ function requireDualKey(action, requiredRoles) {
             return res.status(403).json({ error: 'Self-approval not allowed', code: 'DUAL_KEY_SELF_REJECT' });
         }
         if (!requiredRoles.includes(secondRole)) {
-            return res.status(403).json({ error: `Role mismatch`, code: 'DUAL_KEY_ROLE_MISMATCH', required: requiredRoles });
+            return res
+                .status(403)
+                .json({ error: `Role mismatch`, code: 'DUAL_KEY_ROLE_MISMATCH', required: requiredRoles });
         }
-        req._dual_key = { first: req.user.id, second: secondApprover, first_role: req.user.role, second_role: secondRole };
+        req._dual_key = {
+            first: req.user.id,
+            second: secondApprover,
+            first_role: req.user.role,
+            second_role: secondRole,
+        };
         next();
     };
 }
@@ -106,7 +134,10 @@ router.get('/partners/balances', requirePermission('admin:manage'), (req, res) =
 
 router.get('/history', requirePermission('admin:manage'), (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
-    res.json({ distributions: distribution.getDistributionHistory(limit), payouts: distribution.getPayoutHistory(limit) });
+    res.json({
+        distributions: distribution.getDistributionHistory(limit),
+        payouts: distribution.getPayoutHistory(limit),
+    });
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -114,29 +145,25 @@ router.get('/history', requirePermission('admin:manage'), (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 
 // Distribute to validators → constitutional (treasury domain)
-router.post('/validators/distribute',
-    requireConstitutionalWithAudit('monetization.treasury.payout'),
-    (req, res) => {
-        const { total_revenue, validators } = req.body;
-        if (!total_revenue) return res.status(400).json({ error: 'total_revenue required' });
-        const result = distribution.calculateValidatorDistribution(total_revenue, validators || []);
-        res.status(201).json(result);
-    }
-);
+router.post('/validators/distribute', requireConstitutionalWithAudit('monetization.treasury.payout'), (req, res) => {
+    const { total_revenue, validators } = req.body;
+    if (!total_revenue) return res.status(400).json({ error: 'total_revenue required' });
+    const result = distribution.calculateValidatorDistribution(total_revenue, validators || []);
+    res.status(201).json(result);
+});
 
 // Partner revenue calculation → constitutional
-router.post('/partners/calculate',
-    requireConstitutionalWithAudit('monetization.treasury.payout'),
-    (req, res) => {
-        const { partner_id, referral_volume, transaction_revenue } = req.body;
-        if (!partner_id || !transaction_revenue) return res.status(400).json({ error: 'partner_id and transaction_revenue required' });
-        const result = distribution.calculatePartnerRevenue(partner_id, referral_volume || 0, transaction_revenue);
-        res.json(result);
-    }
-);
+router.post('/partners/calculate', requireConstitutionalWithAudit('monetization.treasury.payout'), (req, res) => {
+    const { partner_id, referral_volume, transaction_revenue } = req.body;
+    if (!partner_id || !transaction_revenue)
+        return res.status(400).json({ error: 'partner_id and transaction_revenue required' });
+    const result = distribution.calculatePartnerRevenue(partner_id, referral_volume || 0, transaction_revenue);
+    res.json(result);
+});
 
 // Process payout → constitutional + DUAL-KEY (treasury operation)
-router.post('/payout',
+router.post(
+    '/payout',
     requireConstitutionalWithAudit('monetization.treasury.payout'),
     requireDualKey('monetization.treasury.payout', ['risk_committee', 'compliance_officer']),
     (req, res) => {
