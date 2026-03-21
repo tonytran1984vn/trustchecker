@@ -15,7 +15,6 @@ const { eventBus, EVENT_TYPES } = require('../events');
 const { validate, schemas } = require('../middleware/validate');
 const blockchainEngine = require('../engines/infrastructure/blockchain');
 const { orgGuard } = require('../middleware/org-middleware');
-const { orgGuard } = require('../middleware/org-middleware');
 
 const router = express.Router();
 
