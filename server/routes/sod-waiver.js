@@ -135,9 +135,7 @@ router.post('/waivers', async (req, res) => {
 
         await db.run('UPDATE organizations SET sod_waivers = ? WHERE id = ?', [JSON.stringify(config), orgId]);
 
-        console.log(
-            `[RBAC] SoD WAIVER created: tenant=${orgId}, pair=[${pair}], by=${req.user.email}, reason="${reason}"`
-        );
+        logger.info('SoD waiver created', { orgId, pair, approvedBy: req.user.email, reason });
 
         res.json({ success: true, waiver: newWaiver, total: config.waivers.length });
     } catch (err) {
@@ -185,7 +183,7 @@ router.delete('/waivers', async (req, res) => {
 
         await db.run('UPDATE organizations SET sod_waivers = ? WHERE id = ?', [JSON.stringify(config), orgId]);
 
-        console.log(`[RBAC] SoD WAIVER removed: tenant=${orgId}, pair=[${pair}], by=${req.user.email}`);
+        logger.info('SoD waiver removed', { orgId, pair, removedBy: req.user.email });
 
         res.json({ success: true, remaining: config.waivers.length });
     } catch (err) {

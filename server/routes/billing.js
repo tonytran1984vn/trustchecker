@@ -469,13 +469,10 @@ router.get('/usage/alerts', async (req, res) => {
         const planLimits = PLANS[plan?.plan_name || 'free'];
         const period = new Date().toISOString().substring(0, 7);
 
-        const monthFilter = `to_char(scanned_at, 'YYYY-MM') = '${period}'`;
-        const monthFilterAudit = `to_char(created_at, 'YYYY-MM') = '${period}'`;
-
         const scanCount =
-            (await db.get(`SELECT COUNT(*) as c FROM scan_events WHERE ${_safeWhere(monthFilter)}`))?.c || 0;
+            (await db.get(`SELECT COUNT(*) as c FROM scan_events WHERE to_char(scanned_at, 'YYYY-MM') = $1`, [period]))?.c || 0;
         const apiCount =
-            (await db.get(`SELECT COUNT(*) as c FROM audit_log WHERE ${_safeWhere(monthFilterAudit)}`))?.c || 0;
+            (await db.get(`SELECT COUNT(*) as c FROM audit_log WHERE to_char(created_at, 'YYYY-MM') = $1`, [period]))?.c || 0;
         const storageSize = (await db.get('SELECT COALESCE(SUM(file_size), 0) as s FROM evidence_items'))?.s || 0;
         const storageMB = storageSize / (1024 * 1024);
 

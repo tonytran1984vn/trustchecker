@@ -30,6 +30,7 @@ jobs:
       DATABASE_URL: postgresql://test:test@localhost:5432/trustchecker_test
       NODE_ENV: test
       JWT_SECRET: test-jwt-secret-ci
+      ENCRYPTION_KEY: test-encryption-key-32chars-ci-test!
       DISABLE_RATE_LIMIT: 'true'
 
     steps:
@@ -43,6 +44,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Lint
+        run: npx eslint server/ --max-warnings=10 || echo "Lint warnings found"
 
       - name: Generate Prisma client
         run: npx prisma generate
@@ -67,11 +71,32 @@ jobs:
           username: root
           password: ${{ secrets.VPS_PASSWORD }}
           script: |
+            set -e
             cd /opt/trustchecker
+
+            # Save current commit for rollback
+            PREV_COMMIT=$(git rev-parse HEAD)
+            echo "Previous commit: $PREV_COMMIT"
+
+            # Pull latest
             git pull origin master
             npm ci --production
             npx prisma generate
+
+            # Restart with health check
             pm2 restart trustchecker
-            sleep 5
-            curl -sf http://localhost:4000/healthz || exit 1
-            echo "Deploy successful"
+            sleep 20
+
+            # Health check with rollback on failure
+            if curl -sf http://localhost:4000/healthz > /dev/null 2>&1; then
+              echo "✅ Deploy successful ($(git rev-parse --short HEAD))"
+            else
+              echo "❌ Health check failed — rolling back to $PREV_COMMIT"
+              git checkout $PREV_COMMIT
+              npm ci --production
+              npx prisma generate
+              pm2 restart trustchecker
+              sleep 15
+              curl -sf http://localhost:4000/healthz || echo "⚠️ Rollback also failed"
+              exit 1
+            fi

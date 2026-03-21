@@ -3,10 +3,11 @@
  * Graceful shutdown, SIGTERM/SIGINT, unhandled rejections, uncaught exceptions.
  */
 const { cache: cacheModule } = require('../cache');
+const logger = require('../lib/logger');
 
 function setupShutdown(server, { db, redis, eventBus, partitionManager, waf, replicaManager }) {
     const shutdown = async (signal) => {
-        console.log(`\n🔻 ${signal} received — shutting down gracefully...`);
+        logger.info(`${signal} received — shutting down gracefully`);
         server.close();
         // Stop event bus & partition scheduler (guard for optional methods)
         if (eventBus?.stop) await eventBus.stop();
@@ -14,15 +15,10 @@ function setupShutdown(server, { db, redis, eventBus, partitionManager, waf, rep
         // v9.4: Stop WAF and read replica health checks
         if (waf?.stop) waf.stop();
         if (replicaManager?.stop) replicaManager.stop();
-        // Save database before disconnecting
-        if (db.save) {
-            try { await db.save(); console.log('💾 Database saved'); }
-            catch (e) { console.error('DB save failed:', e.message); }
-        }
+        // Disconnect database
         if (db.disconnect) await db.disconnect();
         if (redis && redis.disconnect) await redis.disconnect();
-        console.log(`📊 Final cache stats:`, await cacheModule.stats());
-        console.log('✅ Shutdown complete');
+        logger.info('Shutdown complete', { cacheStats: await cacheModule.stats() });
         process.exit(0);
     };
     process.on('SIGTERM', () => shutdown('SIGTERM'));
@@ -30,19 +26,16 @@ function setupShutdown(server, { db, redis, eventBus, partitionManager, waf, rep
 
     // ─── Process Error Handlers ──────────────────────────────────────
     process.on('unhandledRejection', (reason, promise) => {
-        console.error('⚠️ Unhandled Promise Rejection:', reason);
+        logger.error('Unhandled Promise Rejection', { reason: String(reason) });
         // Don't crash — log and continue
     });
 
     process.on('uncaughtException', (err) => {
-        console.error('💥 Uncaught Exception:', err);
-        // Save DB before crash
-        if (db.save) {
-            try { const data = db.db?.export(); if (data) { require('fs').writeFileSync(db._dbPath, Buffer.from(data)); } } catch (e) { /* noop */ }
-        }
+        logger.error('Uncaught Exception — process will exit', { error: err.message, stack: err.stack });
         // Always exit — a corrupted process is worse than a restart
         process.exit(1);
     });
 }
 
 module.exports = { setupShutdown };
+

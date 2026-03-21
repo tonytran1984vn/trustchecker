@@ -607,7 +607,7 @@ router.post('/batches/:id/recall', authMiddleware, requirePermission('batch:mana
         `,
             [req.params.id]
         );
-        console.log('[BatchRecall] QR codes revoked for batch:', req.params.id);
+        logger.info('Batch recall: QR codes revoked', { batchId: req.params.id });
 
         // Find affected shipments
         const affectedShipments = await db.all("SELECT * FROM shipments WHERE batch_id = ? AND status != 'delivered'", [
