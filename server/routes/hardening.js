@@ -345,6 +345,18 @@ router.post('/carbon-registry/retire', requirePermission('admin:manage'), (req, 
     if (result.error) return res.status(400).json(result);
     res.json(result);
 });
+// BFF: Single endpoint for workspace init — consolidates 7 individual APIs into 1 call
+router.get('/carbon-registry/workspace-init', (req, res) => {
+    res.json({
+        jurisdictions: carbonReg.getJurisdictions(),
+        protocol: carbonReg.getProtocol(),
+        compliance_matrix: carbonReg.getComplianceMatrix(),
+        fee_model: carbonReg.getFeeModel(),
+        revenue_projection: carbonReg.projectRevenue(req.query),
+        defensibility: carbonReg.getDefensibilityMetrics(),
+        stats: carbonReg.getRegistryStats(),
+    });
+});
 router.get('/carbon-registry/defensibility', (req, res) => { res.json(carbonReg.getDefensibilityMetrics()); });
 router.get('/carbon-registry/stats', (req, res) => { res.json(carbonReg.getRegistryStats()); });
 

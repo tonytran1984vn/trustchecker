@@ -23,10 +23,28 @@ export function renderWorkspace({ domain, title, subtitle, icon, tabs, activeTab
   // Find active tab config
   const active = tabs.find(t => t.id === currentTab) || tabs[0];
 
-  // Render tab content
+  // Render tab content (supports both sync string and async Promise<string>)
   let tabContent = '';
   if (active && typeof active.render === 'function') {
-    tabContent = active.render();
+    const result = active.render();
+    if (result && typeof result.then === 'function') {
+      // Async render — show skeleton now, inject HTML when resolved
+      tabContent = `<div class="ws-loading"><div class="spinner"></div><span style="color:var(--text-muted);margin-left:8px">Loading tab…</span></div>`;
+      result.then(html => {
+        const container = document.querySelector(`[data-ws-domain="${domain}"] .ws-content`);
+        if (container && State._wsTab?.[domain] === active.id) {
+          container.innerHTML = html;
+          // Run tab init if available
+          if (typeof active.init === 'function') active.init();
+        }
+      }).catch(err => {
+        console.error(`[workspace] Async render failed for tab ${active.id}:`, err);
+        const container = document.querySelector(`[data-ws-domain="${domain}"] .ws-content`);
+        if (container) container.innerHTML = `<div class="ws-loading" style="color:#ef4444">Failed to load tab</div>`;
+      });
+    } else {
+      tabContent = result;
+    }
   } else {
     tabContent = `<div class="ws-loading">Loading…</div>`;
   }
