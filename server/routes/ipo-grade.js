@@ -6,8 +6,10 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware } = require('../auth');
+const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 const oversight = require('../engines/governance-module').externalOversight;
 const car = require('../engines/intelligence/realtime-car-engine');
@@ -162,7 +164,6 @@ router.post('/regscenario/simulate', (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 
 const narrative = new Proxy({}, { get: (_, fn) => () => ({ status: "archived", message: fn + " has been archived" }) }); // ARCHIVED: was market-narrative-engine
-const { withTransaction } = require('../middleware/transaction');
 
 router.get('/narrative/full', (req, res) => { res.json(narrative.getFullNarrative()); });
 router.get('/narrative/investor-summary', (req, res) => { res.json(narrative.getInvestorSummary()); });

@@ -186,7 +186,7 @@ router.put('/data/incidents/:id', async (req, res) => {
             const current = await db.get('SELECT status FROM ops_incidents_v2 WHERE id = ?', [req.params.id]);
             if (current && VALID_TRANSITIONS[current.status] && !VALID_TRANSITIONS[current.status].includes(status)) {
                 return res.status(400).json({
-                    error: `Invalid transition: ${current.status} → ${status}. Allowed: ${VALID_TRANSITIONS[current.status].join(', ')} LIMIT 1000`
+                    error: `Invalid transition: ${current.status} → ${status}. Allowed: ${VALID_TRANSITIONS[current.status].join(', ')}`
                 });
             }
         }
@@ -210,7 +210,7 @@ router.put('/data/incidents/:id', async (req, res) => {
                 // Severity downgrade — log explicitly for compliance
                 await db.run(
                     "INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id, timestamp) VALUES (?, ?, 'SEVERITY_DOWNGRADED', 'incident', ?, ?, ?, NOW())",
-                    [require('uuid LIMIT 1000').v4(), req.user.id, req.params.id, 
+                    [require('uuid').v4(), req.user.id, req.params.id, 
                      JSON.stringify({ old_severity: current.severity, new_severity: severity, reason: req.body.reason || 'Not provided' }),
                      req.orgId || req.user.org_id]
                 );
@@ -234,7 +234,7 @@ router.put('/data/incidents/:id', async (req, res) => {
         }
         if (updates.length === 1) return res.status(400).json({ error: 'No valid fields to update' });
         params.push(req.params.id);
-        let sql = `UPDATE ops_incidents_v2 SET ${updates.join(', ')} WHERE id = ? LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000`;
+        let sql = `UPDATE ops_incidents_v2 SET ${updates.join(', ')} WHERE id = ?`;
         if (orgId) { sql += ' AND org_id = ?'; params.push(orgId); }
         await db.prepare(sql).run(...params);
         res.json({ success: true });
@@ -322,7 +322,7 @@ router.post('/suppliers/onboard', requirePermission('supplier:onboard'), async (
         if (existing) {
             return res.status(409).json({
                 error: 'duplicate_entity',
-                message: `Supplier "${existing.name}" already exists (${existing.id}) LIMIT 1000`,
+                message: `Supplier "${existing.name}" already exists (${existing.id})`,
                 existingSupplier: existing
             });
         }
@@ -364,7 +364,7 @@ router.post('/suppliers/:id/locations', requirePermission('supplier:onboard'), a
             'SELECT id FROM partner_locations WHERE partner_id = ? AND country = ? AND address = ?',
             [id, country, address || '']
         );
-        if (existing) return res.status(409).json({ error: `${country} location already exists LIMIT 1000` });
+        if (existing) return res.status(409).json({ error: `${country} location already exists` });
 
         const locId = uuidv4();
         await db.run(
