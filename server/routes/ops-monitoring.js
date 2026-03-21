@@ -208,4 +208,61 @@ router.get('/slos', (req, res) => {
     res.json({ title: 'SLO Thresholds', slos: opsEngine.getSLOs(), severities: opsEngine.getSeverities() });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// BUNDLE — Single call returning ALL Ops workspace data (replaces 3 calls)
+// Supports Partial Response: each module returns independently.
+// ═══════════════════════════════════════════════════════════════════════════════
+router.get('/bundle', async (req, res) => {
+    const orgId = req.user?.org_id || req.user?.orgId || null;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+
+    const results = await Promise.allSettled([
+        // Module 1: Health
+        (async () => opsEngine.checkPipelineHealth())(),
+
+        // Module 2: Incidents
+        (async () => {
+            try {
+                const params = [];
+                let sql = 'SELECT * FROM ops_incidents_v2';
+                const conditions = [];
+                if (orgId) { conditions.push('org_id = ?'); params.push(orgId); }
+                if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
+                sql += ' ORDER BY created_at DESC LIMIT ?';
+                params.push(limit);
+                const incidents = await db.all(sql, params);
+                return { title: 'Ops Incidents', total: incidents.length, incidents };
+            } catch {
+                const incidents = opsEngine.getAllIncidents(limit);
+                return { title: 'Ops Incidents', total: incidents.length, incidents };
+            }
+        })(),
+
+        // Module 3: Feature Flags
+        (async () => {
+            try {
+                const rows = await db.all('SELECT * FROM platform_feature_flags ORDER BY category, sort_order, key');
+                const flagList = rows.map(r => ({
+                    key: r.key, label: r.label || r.key.replace(/_/g, ' '),
+                    description: r.description || '', enabled: !!r.enabled,
+                    category: r.category || 'general', icon: r.icon || '⚡', color: r.color || '#6b7280',
+                }));
+                return { flagList };
+            } catch {
+                return { flagList: [] };
+            }
+        })(),
+    ]);
+
+    const response = { _bundleVersion: 1 };
+    response.health = results[0].status === 'fulfilled' ? results[0].value : null;
+    response.incidents = results[1].status === 'fulfilled' ? results[1].value : null;
+    response.featureFlags = results[2].status === 'fulfilled' ? results[2].value : null;
+    const errors = [];
+    results.forEach((r, i) => { if (r.status === 'rejected') errors.push({ module: ['health','incidents','featureFlags'][i], error: r.reason?.message }); });
+    if (errors.length) response._errors = errors;
+
+    res.json(response);
+});
+
 module.exports = router;

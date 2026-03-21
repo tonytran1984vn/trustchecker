@@ -16,36 +16,27 @@ import { renderPage as renderRiskFeed } from './risk-feed.js';
 // Tabs 2-5: lazy
 const lazy = (loader) => () => loader().then(m => m.renderPage());
 
-// ── Phased API Loading ──────────────────────────────────────
+// ── BFF Bundle API Loading (1 call replaces 2) ──────────────────
 if (!window._saRiskCache) window._saRiskCache = {};
 const cache = window._saRiskCache;
 if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 30000)) {
     cache._loading = true;
 
-    // Phase 1: Tab 1 (Monitoring) API (immediate)
-    const phase1 = API.get('/risk-graph/fraud-feed').catch(() => ({ alerts: [], summary: {}, topTenants: [], topTypes: [], insights: [] })).then(data => {
-        cache.fraudFeed = data;
-    });
-
-    // Phase 2: Background API (delayed 500ms)
-    const phase2 = new Promise(resolve => {
-        setTimeout(() => {
-            API.get('/risk-graph/risk-analytics').catch(() => ({})).then(data => {
-                cache.riskAnalytics = data;
-                resolve();
-            });
-        }, 500);
-    });
-
-    window._saRiskReady = Promise.all([phase1, phase2]).then(() => {
-        cache._loadedAt = Date.now();
-        cache._loading = false;
-        console.log('[SA Risk] Phase 1 (1) + Phase 2 (1) APIs loaded ✓');
-        return cache;
-    });
+    window._saRiskReady = API.get('/risk-graph/bundle')
+        .catch(() => ({ fraudFeed: null, riskAnalytics: null }))
+        .then(data => {
+            cache.fraudFeed = data.fraudFeed;
+            cache.riskAnalytics = data.riskAnalytics;
+            if (data._errors) console.warn('[SA Risk] Bundle partial errors:', data._errors);
+            cache._loadedAt = Date.now();
+            cache._loading = false;
+            console.log('[SA Risk] Bundle loaded (1 call) ✓');
+            return cache;
+        });
 } else if (cache._loadedAt) {
     window._saRiskReady = Promise.resolve(cache);
 }
+
 
 export function renderPage() {
     return renderWorkspace({

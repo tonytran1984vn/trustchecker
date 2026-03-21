@@ -340,5 +340,90 @@ router.get('/risk-analytics', cacheMiddleware(120), async (req, res) => {
     } catch (err) { console.error('risk-analytics err:', err); res.status(500).json({ error: 'Risk analytics failed' }); }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// BUNDLE — Single call returning ALL Risk workspace data (replaces 2 calls)
+// Supports Partial Response: each module returns independently, failures return null.
+// ═══════════════════════════════════════════════════════════════════════════════
+router.get('/bundle', cacheMiddleware(120), async (req, res) => {
+    const orgId = req.user?.org_id || req.user?.orgId || null;
+    const orgFilter = orgId ? ' WHERE p.org_id = ?' : '';
+    const orgParams = orgId ? [orgId] : [];
+    const orgFilterProduct = orgId ? ' AND p.org_id = ?' : '';
+    const orgParamsProduct = orgId ? [orgId] : [];
+
+    const results = await Promise.allSettled([
+        // ── Module 1: Fraud Feed ──
+        (async () => {
+            const alerts = await db.all(`
+                SELECT fa.id, fa.alert_type, fa.severity, fa.description, fa.status, fa.created_at, fa.details,
+                       p.name as product_name, p.sku, p.category,
+                       o.name as tenant_name, o.slug as tenant_slug
+                FROM fraud_alerts fa
+                LEFT JOIN products p ON fa.product_id = p.id
+                LEFT JOIN users u ON p.registered_by = u.id
+                LEFT JOIN organizations o ON u.org_id = o.id
+                ${orgFilter}
+                ORDER BY fa.created_at DESC LIMIT 100
+            `, [...orgParams]).catch(() => []);
+            const total = alerts.length;
+            const open = alerts.filter(a => a.status === 'open').length;
+            const investigating = alerts.filter(a => a.status === 'investigating').length;
+            const critical = alerts.filter(a => a.severity === 'critical').length;
+            const high = alerts.filter(a => a.severity === 'high').length;
+            const tenantMap = {};
+            alerts.forEach(a => { const t = a.tenant_name || 'Unknown'; tenantMap[t] = (tenantMap[t] || 0) + 1; });
+            const topTenants = Object.entries(tenantMap).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, count]) => ({ name, count, pct: Math.round(count / total * 100) }));
+            const typeMap = {};
+            alerts.forEach(a => { typeMap[a.alert_type] = (typeMap[a.alert_type] || 0) + 1; });
+            const topTypes = Object.entries(typeMap).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([type, count]) => ({ type, count }));
+            const insights = [];
+            if (critical > 0) insights.push({ level: 'critical', msg: `${critical} CRITICAL alerts require immediate action — including ${alerts.filter(a => a.severity === 'critical').map(a => a.alert_type).filter((v, i, a) => a.indexOf(v) === i).join(', ')}` });
+            if (open > total * 0.5) insights.push({ level: 'warning', msg: `${Math.round(open / total * 100)}% of alerts are Open — resource allocation for investigation needed` });
+            if (topTenants[0]?.pct > 30) insights.push({ level: 'warning', msg: `${topTenants[0].name} accounts for ${topTenants[0].pct}% of total alerts — dedicated tenant audit recommended` });
+            const counterfeitCount = typeMap['counterfeit'] || 0;
+            if (counterfeitCount >= 3) insights.push({ level: 'danger', msg: `${counterfeitCount} counterfeit cases detected — recommend strengthening QR verification` });
+            if (insights.length === 0) insights.push({ level: 'info', msg: 'No critical alerts — system is operating normally' });
+            return { alerts, summary: { total, open, investigating, resolved: total - open - investigating, critical, high, medium: total - critical - high }, topTenants, topTypes, insights };
+        })(),
+
+        // ── Module 2: Risk Analytics ──
+        (async () => {
+            const [suspRows, regionRows, catRows, patternRows, benchRows] = await Promise.all([
+                orgId
+                    ? db.all(`SELECT o.id, o.name, o.slug, o.plan, o.status as tenant_status, COUNT(fa.id) as fraud_count, SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count, SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count, AVG(CASE WHEN se.fraud_score IS NOT NULL THEN se.fraud_score ELSE 0 END) as avg_fraud_score, COUNT(DISTINCT fa.alert_type) as pattern_types FROM organizations o LEFT JOIN users u2 ON u2.org_id = o.id LEFT JOIN products p ON p.registered_by = u2.id LEFT JOIN fraud_alerts fa ON fa.product_id = p.id LEFT JOIN scan_events se ON se.product_id = p.id AND se.result IN ('suspicious','failed') WHERE o.id = ? GROUP BY o.id, o.name, o.slug, o.plan, o.status HAVING COUNT(fa.id) > 0 ORDER BY fraud_count DESC LIMIT 20`, [orgId]).catch(() => [])
+                    : db.all(`SELECT o.id, o.name, o.slug, o.plan, o.status as tenant_status, COUNT(fa.id) as fraud_count, SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count, SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count, 0 as avg_fraud_score, COUNT(DISTINCT fa.alert_type) as pattern_types FROM organizations o LEFT JOIN fraud_alerts fa ON fa.org_id = o.id GROUP BY o.id, o.name, o.slug, o.plan, o.status HAVING COUNT(fa.id) > 0 ORDER BY fraud_count DESC LIMIT 20`).catch(() => []),
+                orgId
+                    ? db.all(`SELECT se.geo_country, COUNT(*) as total, SUM(CASE WHEN se.result IN ('suspicious','failed') THEN 1 ELSE 0 END) as risky FROM scan_events se LEFT JOIN products p ON se.product_id = p.id WHERE se.geo_country IS NOT NULL AND p.org_id = ? GROUP BY se.geo_country ORDER BY risky DESC LIMIT 20`, [orgId]).catch(() => [])
+                    : db.all(`SELECT geo_country, COUNT(*) as total, SUM(CASE WHEN result IN ('suspicious','failed') THEN 1 ELSE 0 END) as risky FROM scan_events WHERE geo_country IS NOT NULL AND scanned_at > NOW() - INTERVAL '90 days' GROUP BY geo_country ORDER BY risky DESC LIMIT 20`).catch(() => []),
+                orgId
+                    ? db.all(`SELECT p.category, COUNT(fa.id) as fraud_count, 0 as scan_count FROM products p LEFT JOIN fraud_alerts fa ON fa.product_id = p.id WHERE p.category IS NOT NULL AND p.org_id = ? GROUP BY p.category ORDER BY fraud_count DESC LIMIT 10`, [orgId]).catch(() => [])
+                    : db.all(`SELECT p.category, COUNT(fa.id) as fraud_count, 0 as scan_count FROM products p LEFT JOIN fraud_alerts fa ON fa.product_id = p.id WHERE p.category IS NOT NULL GROUP BY p.category ORDER BY fraud_count DESC LIMIT 10`).catch(() => []),
+                orgId
+                    ? db.all(`SELECT fa.alert_type, COUNT(*) as incidents, SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical, SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count FROM fraud_alerts fa LEFT JOIN products p ON fa.product_id = p.id WHERE p.org_id = ? GROUP BY fa.alert_type ORDER BY incidents DESC LIMIT 15`, [orgId]).catch(() => [])
+                    : db.all(`SELECT alert_type, COUNT(*) as incidents, SUM(CASE WHEN severity='critical' THEN 1 ELSE 0 END) as critical, SUM(CASE WHEN status='open' THEN 1 ELSE 0 END) as open_count FROM fraud_alerts GROUP BY alert_type ORDER BY incidents DESC LIMIT 15`).catch(() => []),
+                orgId
+                    ? db.all(`SELECT o.name, o.slug, COUNT(DISTINCT se.id) as scan_count, SUM(CASE WHEN se.result IN ('suspicious','failed') THEN 1 ELSE 0 END) as bad_scans, COUNT(DISTINCT fa.id) as fraud_count, AVG(ts.score) as avg_trust FROM organizations o LEFT JOIN users u3 ON u3.org_id = o.id LEFT JOIN products p ON p.registered_by = u3.id LEFT JOIN scan_events se ON se.product_id = p.id LEFT JOIN fraud_alerts fa ON fa.product_id = p.id LEFT JOIN trust_scores ts ON ts.product_id = p.id WHERE o.id = ? GROUP BY o.name, o.slug ORDER BY fraud_count DESC LIMIT 15`, [orgId]).catch(() => [])
+                    : db.all(`SELECT o.name, o.slug, (SELECT COUNT(*)::INT FROM scan_events se JOIN products p ON se.product_id = p.id WHERE p.org_id = o.id AND se.scanned_at > NOW() - INTERVAL '90 days') as scan_count, (SELECT COUNT(*)::INT FROM scan_events se JOIN products p ON se.product_id = p.id WHERE p.org_id = o.id AND se.result IN ('suspicious','failed') AND se.scanned_at > NOW() - INTERVAL '90 days') as bad_scans, (SELECT COUNT(*)::INT FROM fraud_alerts WHERE org_id = o.id) as fraud_count, (SELECT AVG(score) FROM trust_scores WHERE org_id = o.id) as avg_trust FROM organizations o WHERE o.status = 'active' ORDER BY fraud_count DESC LIMIT 15`).catch(() => []),
+            ]);
+            const suspiciousTenants = suspRows.map(t => ({ ...t, org_id: t.id, status: t.tenant_status || 'active', risk_score: Math.min(99, Math.round(t.critical_count * 15 + t.open_count * 5 + t.fraud_count * 2 + (t.avg_fraud_score || 0) * 30)), top_patterns: [] }));
+            const regionMap = { VN:'Asia-Pacific',SG:'Asia-Pacific',TH:'Asia-Pacific',JP:'Asia-Pacific',KR:'Asia-Pacific',CN:'Asia-Pacific',IN:'Asia-Pacific',AU:'Asia-Pacific',KH:'Asia-Pacific',DE:'Europe',FR:'Europe',GB:'Europe',NL:'Europe',CH:'Europe',IT:'Europe',US:'North America',AE:'Middle East',IR:'Middle East' };
+            const regions = {};
+            regionRows.forEach(r => { const reg = regionMap[r.geo_country] || 'Other'; if (!regions[reg]) regions[reg] = { total: 0, risky: 0 }; regions[reg].total += parseInt(r.total); regions[reg].risky += parseInt(r.risky); });
+            const riskByRegion = Object.entries(regions).map(([name, d]) => ({ name, total: d.total, risky: d.risky, pct: Math.round(d.risky / (d.total || 1) * 100) })).sort((a, b) => b.risky - a.risky);
+            const heatmap = benchRows.map(t => ({ name: t.name, industry: '—', scans: parseInt(t.scan_count || 0), dupRate: t.scan_count ? Math.round(parseInt(t.bad_scans || 0) / parseInt(t.scan_count) * 1000) / 10 : 0, fraudCount: parseInt(t.fraud_count || 0), avgTrust: t.avg_trust ? Math.round(parseFloat(t.avg_trust)) : 0, tier: parseInt(t.fraud_count || 0) >= 8 ? 'High' : parseInt(t.fraud_count || 0) >= 3 ? 'Medium' : 'Low' })).sort((a, b) => b.fraudCount - a.fraudCount);
+            return { suspiciousTenants, riskByRegion, riskByCategory: catRows, fraudPatterns: patternRows, heatmap };
+        })(),
+    ]);
+
+    // Partial Response: return whatever succeeded
+    const response = { _bundleVersion: 1 };
+    response.fraudFeed = results[0].status === 'fulfilled' ? results[0].value : null;
+    response.riskAnalytics = results[1].status === 'fulfilled' ? results[1].value : null;
+    if (results[0].status === 'rejected') response._errors = [...(response._errors || []), { module: 'fraudFeed', error: results[0].reason?.message }];
+    if (results[1].status === 'rejected') response._errors = [...(response._errors || []), { module: 'riskAnalytics', error: results[1].reason?.message }];
+
+    res.json(response);
+});
+
 module.exports = router;
 

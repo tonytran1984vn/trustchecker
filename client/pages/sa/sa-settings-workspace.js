@@ -12,41 +12,28 @@ import { renderPage as renderServices } from './services-status.js';
 // Tab 2: lazy
 const lazyIncidents = () => import('./incidents.js').then(m => m.renderPage());
 
-// ── Phased API Loading ──────────────────────────────────────
+// ── BFF Bundle API Loading (1 call replaces 3) ──────────────────
 if (!window._saOpsCache) window._saOpsCache = {};
 const opsCache = window._saOpsCache;
 if (!opsCache._loading && (!opsCache._loadedAt || Date.now() - opsCache._loadedAt > 30000)) {
     opsCache._loading = true;
 
-    // Phase 1: Tab 1 (System Health) API (immediate)
-    const phase1 = API.get('/ops/health').catch(() => null).then(data => {
-        opsCache.health = data;
-    });
-
-    // Phase 2: Background APIs (delayed 500ms)
-    const phase2 = new Promise(resolve => {
-        setTimeout(() => {
-            Promise.allSettled([
-                API.get('/ops/incidents?limit=20').catch(() => ({ incidents: [] })),
-                API.get('/platform/feature-flags').catch(() => ({})),
-            ]).then(results => {
-                const v = results.map(r => r.value);
-                opsCache.incidents = v[0];
-                opsCache.featureFlags = v[1];
-                resolve();
-            });
-        }, 500);
-    });
-
-    window._saOpsReady = Promise.all([phase1, phase2]).then(() => {
-        opsCache._loadedAt = Date.now();
-        opsCache._loading = false;
-        console.log('[SA Ops] Phase 1 (1) + Phase 2 (2) APIs loaded ✓');
-        return opsCache;
-    });
+    window._saOpsReady = API.get('/ops/bundle')
+        .catch(() => ({ health: null, incidents: null, featureFlags: null }))
+        .then(data => {
+            opsCache.health = data.health;
+            opsCache.incidents = data.incidents;
+            opsCache.featureFlags = data.featureFlags;
+            if (data._errors) console.warn('[SA Ops] Bundle partial errors:', data._errors);
+            opsCache._loadedAt = Date.now();
+            opsCache._loading = false;
+            console.log('[SA Ops] Bundle loaded (1 call) ✓');
+            return opsCache;
+        });
 } else if (opsCache._loadedAt) {
     window._saOpsReady = Promise.resolve(opsCache);
 }
+
 
 // ═══════════════════════════════════════════════════════════════
 // Feature Flags Tab (DB-backed via platform_feature_flags table)
