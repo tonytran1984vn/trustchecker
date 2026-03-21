@@ -1,2 +1,10 @@
-// Re-export from nested directory (auto-generated fix for directory structure)
-module.exports = require('./platform-ops-engine');
+/**
+ * Platform Ops Engine (consolidated)
+ * Merges: observability, ops-monitoring, infrastructure-metrics, infrastructure-custody
+ */
+module.exports = {
+  observability: require("./observability"),
+  opsMonitoring: require("./ops-monitoring"),
+  infrastructureMetrics: require("./infrastructure-metrics"),
+  infrastructureCustody: require("./infrastructure-custody"),
+};
