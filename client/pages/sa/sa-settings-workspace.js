@@ -7,26 +7,41 @@ import { icon } from '../../core/icons.js';
 import { State } from '../../core/state.js';
 import { API } from '../../core/api.js';
 import { showToast } from '../../components/toast.js';
+// Tab 1: eager
 import { renderPage as renderServices } from './services-status.js';
-import { renderPage as renderIncidents } from './incidents.js';
+// Tab 2: lazy
+const lazyIncidents = () => import('./incidents.js').then(m => m.renderPage());
 
-// Prefetch all Operations APIs in parallel on workspace entry
+// ── Phased API Loading ──────────────────────────────────────
 if (!window._saOpsCache) window._saOpsCache = {};
 const opsCache = window._saOpsCache;
 if (!opsCache._loading && (!opsCache._loadedAt || Date.now() - opsCache._loadedAt > 30000)) {
     opsCache._loading = true;
-    window._saOpsReady = Promise.allSettled([
-        API.get('/ops/health').catch(() => null),
-        API.get('/ops/incidents?limit=20').catch(() => ({ incidents: [] })),
-        API.get('/platform/feature-flags').catch(() => ({})),
-    ]).then(results => {
-        const v = results.map(r => r.value);
-        opsCache.health = v[0];
-        opsCache.incidents = v[1];
-        opsCache.featureFlags = v[2];
+
+    // Phase 1: Tab 1 (System Health) API (immediate)
+    const phase1 = API.get('/ops/health').catch(() => null).then(data => {
+        opsCache.health = data;
+    });
+
+    // Phase 2: Background APIs (delayed 500ms)
+    const phase2 = new Promise(resolve => {
+        setTimeout(() => {
+            Promise.allSettled([
+                API.get('/ops/incidents?limit=20').catch(() => ({ incidents: [] })),
+                API.get('/platform/feature-flags').catch(() => ({})),
+            ]).then(results => {
+                const v = results.map(r => r.value);
+                opsCache.incidents = v[0];
+                opsCache.featureFlags = v[1];
+                resolve();
+            });
+        }, 500);
+    });
+
+    window._saOpsReady = Promise.all([phase1, phase2]).then(() => {
         opsCache._loadedAt = Date.now();
         opsCache._loading = false;
-        console.log('[SA Ops] All 3 APIs prefetched ✓');
+        console.log('[SA Ops] Phase 1 (1) + Phase 2 (2) APIs loaded ✓');
         return opsCache;
     });
 } else if (opsCache._loadedAt) {
@@ -762,7 +777,7 @@ export function renderPage() {
     const isSA = role === 'superadmin' || role === 'super_admin' || role === 'sa' || role === 'platform_admin';
     const tabs = [
         { id: 'health', label: 'System Health', icon: icon('server', 14), render: renderServices },
-        { id: 'incidents', label: 'Incidents', icon: icon('alert', 14), render: renderIncidents },
+        { id: 'incidents', label: 'Incidents', icon: icon('alert', 14), render: lazyIncidents },
     ];
     // Feature Flags & Notifications only visible for platform admins
     if (isSA) {
