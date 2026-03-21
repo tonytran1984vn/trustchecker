@@ -221,11 +221,12 @@ class PrismaBackend {
   /**
    * Execute a query with RLS context.
    * Reads orgId from AsyncLocalStorage (per-request, no race condition).
-   * Connection safety: double-release guard, query cancellation, slow query logging.
+   * Connection safety: cancel-race guard, query cancellation, slow query logging.
    */
   async _withRLS(fn) {
     const client = await this._pool.connect();
     let released = false;
+    let finished = false;  // Cancel-race guard: prevents cancelling wrong query after PID reuse
     let timeoutId = null;
     const queryStart = Date.now();
 
@@ -240,23 +241,34 @@ class PrismaBackend {
         await client.query("SET app.current_org = ''");
       }
 
-      // Application-level timeout with query cancellation
+      // Application-level timeout with query cancellation + race guard
       const result = await Promise.race([
-        fn(client),
+        fn(client).then(res => { finished = true; return res; }),
         new Promise((_, reject) => {
           timeoutId = setTimeout(async () => {
-            // Cancel the running query in PostgreSQL (not just JS-side reject)
+            // Cancel-race guard: don't cancel if query already finished
+            // This prevents killing a different query on the same PID
+            if (finished) return;
+
             try {
               if (client.processID) {
-                await this._pool.query('SELECT pg_cancel_backend($1)', [client.processID]);
-                logger.warn('Query cancelled via pg_cancel_backend', {
+                const cancelResult = await this._pool.query(
+                  'SELECT pg_cancel_backend($1)', [client.processID]
+                );
+                const success = cancelResult.rows?.[0]?.pg_cancel_backend ?? false;
+                logger.warn('Query cancellation attempted', {
+                  success,
                   processID: client.processID,
                   requestId: ctx.requestId,
+                  path: ctx.path,
                   timeout: APP_QUERY_TIMEOUT,
                 });
               }
             } catch (cancelErr) {
-              logger.error('Failed to cancel query', { error: cancelErr.message });
+              logger.error('Failed to cancel query', {
+                error: cancelErr.message,
+                processID: client.processID,
+              });
             }
             reject(new Error(`Query timeout (${APP_QUERY_TIMEOUT}ms)`));
           }, APP_QUERY_TIMEOUT);
@@ -282,6 +294,19 @@ class PrismaBackend {
         released = true;
       }
     }
+  }
+
+  /**
+   * Tag a SQL query with request context as a comment.
+   * Visible in pg_stat_activity.query for production debugging.
+   * Usage: db.get(db.tag(sql), params)
+   */
+  tag(sql) {
+    const ctx = safeGetContext();
+    if (ctx.requestId) {
+      return `/* req:${ctx.requestId.slice(0, 8)} ${ctx.path ? 'path:' + ctx.path.slice(0, 30) : ''} */ ${sql}`;
+    }
+    return sql;
   }
 
   // ─── Public API ──────────────────────────────────────────────
