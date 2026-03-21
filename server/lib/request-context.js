@@ -115,11 +115,34 @@ function runInContext(fn) {
     return (...args) => asyncLocalStorage.run(currentStore, () => fn(...args));
 }
 
+/**
+ * Run a function with a system context (not a request context).
+ * Use for boot-time initialization, cron jobs, background tasks,
+ * and event consumers — prevents false-positive leak warnings.
+ *
+ * Example:
+ *   await runWithSystemContext('boot:db-init', async () => { await db.run(...) });
+ *   await runWithSystemContext('cron:cleanup', async () => { ... });
+ */
+function runWithSystemContext(source, fn) {
+    const ctx = {
+        requestId: `sys-${crypto.randomUUID().slice(0, 8)}`,
+        orgId: null,
+        userId: null,
+        sessionId: null,
+        startTime: Date.now(),
+        method: 'SYSTEM',
+        path: source,
+    };
+    return asyncLocalStorage.run(ctx, fn);
+}
+
 module.exports = {
     requestContextMiddleware,
     getContext,
     safeGetContext,
     updateContext,
     runInContext,
+    runWithSystemContext,
 };
 
