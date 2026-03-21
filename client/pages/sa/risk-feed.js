@@ -1,6 +1,7 @@
 /**
  * Super Admin – Global Fraud Feed (Real-time)
  * Connects to /api/risk-graph/fraud-feed for real DB data
+ * Uses CSS vars for full dark/light theme support
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
@@ -50,11 +51,13 @@ function timeAgo(iso) {
 
 const SEV_ICON = { critical: '🔴', high: '🟠', medium: '🟡', low: '🟢' };
 const STATUS_COLOR = { open: '#ef4444', investigating: '#3b82f6', resolved: '#22c55e' };
+
+/* ── Dark-theme-friendly insight styles ── */
 const INSIGHT_STYLE = {
-  critical: 'background:linear-gradient(135deg,#fef2f2,#fee2e2);border-left:4px solid #dc2626;color:#991b1b',
-  danger: 'background:linear-gradient(135deg,#fff7ed,#ffedd5);border-left:4px solid #ea580c;color:#9a3412',
-  warning: 'background:linear-gradient(135deg,#fefce8,#fef9c3);border-left:4px solid #ca8a04;color:#854d0e',
-  info: 'background:linear-gradient(135deg,#eff6ff,#dbeafe);border-left:4px solid #3b82f6;color:#1e40af',
+  critical: 'background:rgba(239,68,68,0.12);border-left:4px solid #ef4444;color:var(--text-primary)',
+  danger:   'background:rgba(249,115,22,0.12);border-left:4px solid #f97316;color:var(--text-primary)',
+  warning:  'background:rgba(234,179,8,0.12);border-left:4px solid #eab308;color:var(--text-primary)',
+  info:     'background:rgba(59,130,246,0.12);border-left:4px solid #3b82f6;color:var(--text-primary)',
 };
 const INSIGHT_ICON = { critical: '🚨', danger: '⚠️', warning: '⚡', info: 'ℹ️' };
 
@@ -70,6 +73,73 @@ function renderContent() {
   const s = d.summary || {};
 
   return `
+    <style>
+      .rf-card {
+        background: var(--bg-card, rgba(15,23,42,0.6));
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      .rf-kpi {
+        background: var(--bg-card, rgba(15,23,42,0.6));
+        border: 1px solid var(--border);
+        border-radius: 12px; padding: 12px 14px;
+        text-align: center; transition: transform 0.2s;
+      }
+      .rf-kpi:hover { transform: translateY(-2px); }
+      .rf-kpi-val { font-size: 1.3rem; font-weight: 800; font-family:'JetBrains Mono',monospace; }
+      .rf-kpi-label { font-size: 0.65rem; color: var(--text-muted); font-weight: 600; }
+      .rf-insight {
+        padding: 10px 14px; border-radius: 8px; font-size: 0.78rem; line-height: 1.5;
+      }
+      .rf-rank {
+        width:18px; height:18px; border-radius:50%; color:#fff;
+        font-size:0.6rem; display:flex; align-items:center; justify-content:center;
+        font-weight:700; flex-shrink:0;
+      }
+      .rf-row {
+        display:flex; align-items:center; gap:8px; padding:5px 0;
+        border-bottom:1px solid var(--border); font-size:0.78rem;
+      }
+      .rf-row:last-child { border-bottom:none; }
+      .rf-type-bar {
+        flex:2; height:6px; background:var(--bg-secondary); border-radius:3px; overflow:hidden;
+      }
+      .rf-type-fill {
+        height:100%; border-radius:3px;
+        background:linear-gradient(90deg,#3b82f6,#8b5cf6);
+      }
+      .rf-table { width:100%; border-collapse:collapse; font-size:0.76rem; }
+      .rf-table th {
+        padding:8px 12px; text-align:left; font-size:0.68rem;
+        color:var(--text-muted); font-weight:600;
+        background:var(--bg-secondary);
+      }
+      .rf-table td { padding:8px 12px; }
+      .rf-table tr { border-bottom:1px solid var(--border); transition:background 0.15s; }
+      .rf-table tbody tr:hover { background:rgba(148,163,184,0.06); }
+      .rf-badge {
+        display:inline-block; padding:2px 8px; border-radius:10px;
+        font-size:0.7rem; font-weight:600;
+        background:var(--bg-secondary); color:var(--text-secondary);
+      }
+      .rf-status {
+        display:inline-block; padding:2px 10px; border-radius:10px;
+        font-size:0.68rem; font-weight:600; color:#fff;
+      }
+      .rf-pager {
+        padding:4px 10px; border:1px solid var(--border); border-radius:6px;
+        font-size:0.72rem; cursor:pointer; background:var(--bg-card);
+        color:var(--text-primary); transition:all 0.15s;
+      }
+      .rf-pager:hover:not(:disabled) { border-color:var(--cyan); }
+      .rf-pager:disabled { opacity:0.4; cursor:default; }
+      .rf-pager-active {
+        background:#3b82f6 !important; color:#fff !important;
+        border-color:#3b82f6 !important; font-weight:700;
+      }
+    </style>
+
     <div class="sa-page">
       <div class="sa-page-title">
         <h1>${icon('radio', 28)} Global Fraud Feed</h1>
@@ -87,13 +157,13 @@ function renderContent() {
       </div>
 
       <!-- ═══ Executive Alert Panel ═══ -->
-      <div style="background:#fff;border-radius:14px;padding:16px 20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.06)">
+      <div class="rf-card" style="padding:16px 20px;margin-bottom:16px">
         <div style="font-size:0.82rem;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px">
           ${icon('alert-triangle', 16)} <span>Alerts & Recommendations for Admin</span>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
           ${(d.insights || []).map(i => `
-            <div style="${INSIGHT_STYLE[i.level] || INSIGHT_STYLE.info};padding:10px 14px;border-radius:8px;font-size:0.78rem;line-height:1.5">
+            <div class="rf-insight" style="${INSIGHT_STYLE[i.level] || INSIGHT_STYLE.info}">
               <strong>${INSIGHT_ICON[i.level] || '📋'} ${i.level.toUpperCase()}</strong>: ${i.msg}
             </div>
           `).join('')}
@@ -102,24 +172,26 @@ function renderContent() {
 
       <!-- ═══ Top Risk Tenants + Type Breakdown ═══ -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-        <div style="background:#fff;border-radius:14px;padding:14px 18px;box-shadow:0 1px 4px rgba(0,0,0,0.06)">
-          <div style="font-size:0.75rem;font-weight:700;margin-bottom:8px;color:#64748b">🏢 TOP RISK ORGANIZATIONS</div>
+        <div class="rf-card" style="padding:14px 18px">
+          <div style="font-size:0.75rem;font-weight:700;margin-bottom:8px;color:var(--text-muted)">🏢 TOP RISK ORGANIZATIONS</div>
           ${(d.topTenants || []).map((t, i) => `
-            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:0.78rem">
-              <span style="width:18px;height:18px;border-radius:50%;background:${['#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#64748b'][i]};color:#fff;font-size:0.6rem;display:flex;align-items:center;justify-content:center;font-weight:700">${i + 1}</span>
+            <div class="rf-row">
+              <span class="rf-rank" style="background:${['#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#64748b'][i]}">
+                ${i + 1}
+              </span>
               <span style="flex:1;font-weight:600">${t.name}</span>
               <span style="font-weight:700;color:#ef4444">${t.count}</span>
-              <span style="font-size:0.65rem;color:#94a3b8">(${t.pct}%)</span>
+              <span style="font-size:0.65rem;color:var(--text-muted)">(${t.pct}%)</span>
             </div>
           `).join('')}
         </div>
-        <div style="background:#fff;border-radius:14px;padding:14px 18px;box-shadow:0 1px 4px rgba(0,0,0,0.06)">
-          <div style="font-size:0.75rem;font-weight:700;margin-bottom:8px;color:#64748b">📊 ALERT TYPES</div>
+        <div class="rf-card" style="padding:14px 18px">
+          <div style="font-size:0.75rem;font-weight:700;margin-bottom:8px;color:var(--text-muted)">📊 ALERT TYPES</div>
           ${(d.topTypes || []).map(t => `
-            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:0.78rem">
+            <div class="rf-row">
               <span style="flex:1;font-weight:500">${t.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</span>
-              <div style="flex:2;height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden">
-                <div style="height:100%;width:${Math.round(t.count / (s.total || 1) * 100)}%;background:linear-gradient(90deg,#3b82f6,#8b5cf6);border-radius:3px"></div>
+              <div class="rf-type-bar">
+                <div class="rf-type-fill" style="width:${Math.round(t.count / (s.total || 1) * 100)}%"></div>
               </div>
               <span style="font-weight:700;min-width:24px;text-align:right">${t.count}</span>
             </div>
@@ -139,61 +211,54 @@ function renderContent() {
       const showTo = Math.min(startIdx + pageSize, totalAlerts);
 
       return `
-      <div style="background:#fff;border-radius:14px;padding:0;box-shadow:0 1px 4px rgba(0,0,0,0.06);overflow:hidden">
-        <div style="padding:14px 18px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div class="rf-card">
+        <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
           <span style="font-size:0.82rem;font-weight:700">${icon('list', 16)} Fraud Alert Feed (${totalAlerts} alerts)</span>
           <div style="display:flex;align-items:center;gap:12px">
-            <div style="display:flex;align-items:center;gap:4px;font-size:0.72rem;color:#64748b">
+            <div style="display:flex;align-items:center;gap:4px;font-size:0.72rem;color:var(--text-muted)">
               <span>Show</span>
-              <select onchange="window._rfPageSize(Number(this.value))" style="border:1px solid #e2e8f0;border-radius:6px;padding:2px 6px;font-size:0.72rem;background:#fff;cursor:pointer">
+              <select onchange="window._rfPageSize(Number(this.value))" style="border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:0.72rem;background:var(--bg-secondary);color:var(--text-primary);cursor:pointer">
                 ${[10, 20, 50, 100].map(n => '<option value="' + n + '"' + (n === pageSize ? ' selected' : '') + '>' + n + '</option>').join('')}
               </select>
               <span>/ page</span>
             </div>
-            <span style="font-size:0.65rem;color:#94a3b8">Updated: ${loadedAt ? new Date(loadedAt).toLocaleTimeString('en-US') : '—'}</span>
+            <span style="font-size:0.65rem;color:var(--text-muted)">Updated: ${loadedAt ? new Date(loadedAt).toLocaleTimeString('en-US') : '—'}</span>
           </div>
         </div>
         <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:0.76rem">
+          <table class="rf-table">
             <thead>
-              <tr style="background:#f8fafc">
-                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">SEV</th>
-                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">TIME</th>
-                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">ORGANIZATION</th>
-                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">TYPE</th>
-                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">DESCRIPTION</th>
-                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">PRODUCT</th>
-                <th style="padding:8px 12px;text-align:left;font-size:0.68rem;color:#64748b;font-weight:600">STATUS</th>
+              <tr>
+                <th>SEV</th><th>TIME</th><th>ORGANIZATION</th>
+                <th>TYPE</th><th>DESCRIPTION</th><th>PRODUCT</th><th>STATUS</th>
               </tr>
             </thead>
             <tbody>
               ${pageAlerts.map(a => `
-                <tr style="border-bottom:1px solid #f1f5f9;transition:background 0.15s" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
-                  <td style="padding:8px 12px">${SEV_ICON[a.severity] || '⚪'}</td>
-                  <td style="padding:8px 12px;color:#64748b;white-space:nowrap">${timeAgo(a.created_at)}</td>
-                  <td style="padding:8px 12px;font-weight:600">${a.tenant_name || '—'}</td>
-                  <td style="padding:8px 12px"><span style="background:#f1f5f9;padding:2px 8px;border-radius:10px;font-size:0.7rem;font-weight:600">${(a.alert_type || '').replace(/_/g, ' ')}</span></td>
-                  <td style="padding:8px 12px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(a.description || '').replace(/"/g, '&quot;')}">${a.description || '—'}</td>
-                  <td style="padding:8px 12px;color:#64748b;font-size:0.72rem">${a.product_name || '—'} <span style="color:#94a3b8;font-size:0.65rem">${a.sku ? '(' + a.sku + ')' : ''}</span></td>
-                  <td style="padding:8px 12px"><span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:0.68rem;font-weight:600;color:#fff;background:${STATUS_COLOR[a.status] || '#94a3b8'}">${a.status}</span></td>
+                <tr>
+                  <td>${SEV_ICON[a.severity] || '⚪'}</td>
+                  <td style="color:var(--text-muted);white-space:nowrap">${timeAgo(a.created_at)}</td>
+                  <td style="font-weight:600">${a.tenant_name || '—'}</td>
+                  <td><span class="rf-badge">${(a.alert_type || '').replace(/_/g, ' ')}</span></td>
+                  <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(a.description || '').replace(/"/g, '&quot;')}">${a.description || '—'}</td>
+                  <td style="color:var(--text-muted);font-size:0.72rem">${a.product_name || '—'} <span style="color:var(--text-muted);font-size:0.65rem">${a.sku ? '(' + a.sku + ')' : ''}</span></td>
+                  <td><span class="rf-status" style="background:${STATUS_COLOR[a.status] || '#94a3b8'}">${a.status}</span></td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
         </div>
         ${totalPages > 1 ? `
-        <div style="padding:12px 18px;border-top:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:0.72rem;color:#94a3b8">Showing ${showFrom}–${showTo} / ${totalAlerts}</span>
+        <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:0.72rem;color:var(--text-muted)">Showing ${showFrom}–${showTo} / ${totalAlerts}</span>
           <div style="display:flex;gap:4px;align-items:center">
-            <button onclick="window._rfPage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}
-              style="padding:4px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:0.72rem;cursor:${currentPage <= 1 ? 'default' : 'pointer'};background:${currentPage <= 1 ? '#f8fafc' : '#fff'};color:${currentPage <= 1 ? '#cbd5e1' : '#334155'}">← Prev</button>
+            <button onclick="window._rfPage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''} class="rf-pager">← Prev</button>
             ${Array.from({ length: totalPages }, (_, i) => i + 1).filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1).reduce((acc, p, idx, arr) => {
-        if (idx > 0 && p - arr[idx - 1] > 1) acc.push('<span style="color:#94a3b8;font-size:0.72rem">…</span>');
-        acc.push('<button onclick="window._rfPage(' + p + ')" style="padding:4px 10px;border:1px solid ' + (p === currentPage ? '#3b82f6' : '#e2e8f0') + ';border-radius:6px;font-size:0.72rem;cursor:pointer;background:' + (p === currentPage ? '#3b82f6' : '#fff') + ';color:' + (p === currentPage ? '#fff' : '#334155') + ';font-weight:' + (p === currentPage ? '700' : '400') + '">' + p + '</button>');
+        if (idx > 0 && p - arr[idx - 1] > 1) acc.push('<span style="color:var(--text-muted);font-size:0.72rem">…</span>');
+        acc.push('<button onclick="window._rfPage(' + p + ')" class="rf-pager' + (p === currentPage ? ' rf-pager-active' : '') + '">' + p + '</button>');
         return acc;
       }, []).join('')}
-            <button onclick="window._rfPage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}
-              style="padding:4px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:0.72rem;cursor:${currentPage >= totalPages ? 'default' : 'pointer'};background:${currentPage >= totalPages ? '#f8fafc' : '#fff'};color:${currentPage >= totalPages ? '#cbd5e1' : '#334155'}">Next →</button>
+            <button onclick="window._rfPage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''} class="rf-pager">Next →</button>
           </div>
         </div>
         ` : ''}
@@ -204,10 +269,10 @@ function renderContent() {
 }
 
 function kpi(ic, val, label, color) {
-  return `<div style="background:#fff;border-radius:12px;padding:12px 14px;box-shadow:0 1px 4px rgba(0,0,0,0.06);text-align:center">
+  return `<div class="rf-kpi">
       <div style="font-size:1.4rem">${ic}</div>
-      <div style="font-size:1.3rem;font-weight:800;color:${color}">${val}</div>
-      <div style="font-size:0.65rem;color:#94a3b8;font-weight:600">${label}</div>
+      <div class="rf-kpi-val" style="color:${color}">${val}</div>
+      <div class="rf-kpi-label">${label}</div>
     </div>`;
 }
 

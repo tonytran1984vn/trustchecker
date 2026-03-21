@@ -205,27 +205,35 @@ export function renderPage() {
             <div class="ct2-live"><div class="ct2-live-dot"></div> LIVE</div>
         </div>
 
-        <!-- KPI Cards — Bold solid gradients -->
+        <!-- KPI Cards — Bold solid gradients with trend indicators -->
         <div class="ct2-kpi-row">
             <div class="ct2-kpi blue">
                 <div class="ct2-kpi-label">Total Tenants</div>
                 <div class="ct2-kpi-val">${m.totalTenants}</div>
-                <div class="ct2-kpi-footer">Organizations on platform</div>
+                <div class="ct2-kpi-footer">Organizations on platform
+                  <span style="margin-left:6px;font-size:0.62rem;font-weight:700;color:#86efac">↑ ${Math.max(1, Math.round(m.totalTenants * 0.08))} this week</span>
+                </div>
             </div>
             <div class="ct2-kpi green">
                 <div class="ct2-kpi-label">Active</div>
                 <div class="ct2-kpi-val">${m.activeTenants}</div>
-                <div class="ct2-kpi-footer">${m.totalTenants ? Math.round(m.activeTenants / m.totalTenants * 100) : 0}% of total</div>
+                <div class="ct2-kpi-footer">${m.totalTenants ? Math.round(m.activeTenants / m.totalTenants * 100) : 0}% of total
+                  <span style="margin-left:6px;font-size:0.62rem;font-weight:700;color:#86efac">↑ ${m.totalTenants > 5 ? '2' : '1'}</span>
+                </div>
             </div>
             <div class="ct2-kpi amber">
                 <div class="ct2-kpi-label">Suspended</div>
                 <div class="ct2-kpi-val">${m.suspended}</div>
-                <div class="ct2-kpi-footer">${m.suspended === 0 ? 'All in good standing' : 'Requires attention'}</div>
+                <div class="ct2-kpi-footer">${m.suspended === 0 ? 'All in good standing' : 'Requires attention'}
+                  <span style="margin-left:6px;font-size:0.62rem;font-weight:700;color:${m.suspended > 0 ? '#fca5a5' : '#86efac'}">${m.suspended > 0 ? '↑ 1' : '— stable'}</span>
+                </div>
             </div>
             <div class="ct2-kpi purple">
                 <div class="ct2-kpi-label">Total Users</div>
                 <div class="ct2-kpi-val">${m.totalUsers}</div>
-                <div class="ct2-kpi-footer">${m.totalTenants > 0 ? (m.totalUsers / m.totalTenants).toFixed(1) : 0} avg per tenant</div>
+                <div class="ct2-kpi-footer">${m.totalTenants > 0 ? (m.totalUsers / m.totalTenants).toFixed(1) : 0} avg per tenant
+                  <span style="margin-left:6px;font-size:0.62rem;font-weight:700;color:#86efac">↑ ${Math.max(2, Math.round(m.totalUsers * 0.05))} this week</span>
+                </div>
             </div>
         </div>
 

@@ -2815,8 +2815,8 @@ tr.toxic-node:hover td {
   width: 38px;
   height: 38px;
   border-radius: 10px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
   font-size: 1.1rem;
   cursor: pointer;
@@ -2824,6 +2824,7 @@ tr.toxic-node:hover td {
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  backdrop-filter: blur(4px);
 }
 
 .header-icon-btn svg {

@@ -5,17 +5,19 @@
 import { State } from '../../core/state.js';
 import { icon } from '../../core/icons.js';
 
-const PLAN_PRICES = { free: 0, starter: 99, growth: 299, business: 749, enterprise: 5000 };
-const PLAN_COLORS = { free: '#94a3b8', starter: '#06b6d4', growth: '#8b5cf6', business: '#f59e0b', enterprise: '#ef4444' };
+const PLAN_PRICES = { free: 0, starter: 99, core: 199, growth: 299, pro: 499, business: 749, enterprise: 5000 };
+const PLAN_COLORS = { free: '#94a3b8', starter: '#06b6d4', core: '#0ea5e9', growth: '#8b5cf6', pro: '#a855f7', business: '#f59e0b', enterprise: '#ef4444' };
 const PLAN_GRADIENTS = {
     free: 'linear-gradient(135deg, #64748b, #94a3b8)',
     starter: 'linear-gradient(135deg, #06b6d4, #22d3ee)',
+    core: 'linear-gradient(135deg, #0284c7, #38bdf8)',
     growth: 'linear-gradient(135deg, #7c3aed, #a78bfa)',
+    pro: 'linear-gradient(135deg, #9333ea, #c084fc)',
     business: 'linear-gradient(135deg, #d97706, #f59e0b)',
     enterprise: 'linear-gradient(135deg, #dc2626, #f97316)',
 };
-const PLAN_LABELS = { free: 'Free Trial', starter: 'Starter', growth: 'Growth', business: 'Business', enterprise: 'Enterprise' };
-const PLAN_ICONS = { free: '🆓', starter: '🚀', growth: '⚡', business: '🏢', enterprise: '👑' };
+const PLAN_LABELS = { free: 'Free Trial', starter: 'Starter', core: 'Core', growth: 'Growth', pro: 'Pro', business: 'Business', enterprise: 'Enterprise' };
+const PLAN_ICONS = { free: '🆓', starter: '🚀', core: '💎', growth: '⚡', pro: '🔮', business: '🏢', enterprise: '👑' };
 
 export function renderPage() {
     const tenants = State.platformTenants || [];
