@@ -10,11 +10,9 @@ const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const epcisEngine = require('../engines/core/epcis-engine');
 const { cacheMiddleware } = require('../cache');
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── GET /api/scm/epcis/events — Query EPCIS events ─────────────────────────
 router.get('/events', async (req, res) => {

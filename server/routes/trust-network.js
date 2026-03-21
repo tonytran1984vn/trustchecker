@@ -21,7 +21,6 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const db = require('../db');
 const { authMiddleware } = require('../auth');
-const { orgGuard } = require('../middleware/org-middleware');
 const { eventBus } = require('../events');
 
 const router = express.Router();
@@ -189,7 +188,6 @@ router.post('/join/:token', async function (req, res) {
 // AUTHENTICATED ENDPOINTS
 // ═══════════════════════════════════════════════════════════════════════════════
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // POST /invite — Send supplier network invitation
 router.post('/invite', async function (req, res) {

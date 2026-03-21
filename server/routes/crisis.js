@@ -9,10 +9,8 @@ const router = express.Router();
 const { authMiddleware, requirePermission } = require('../auth');
 const crisis = require('../engines/crisis-module').crisis;
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── GET /status — Current crisis level + active kill-switches ─────
 router.get('/status', (req, res) => {

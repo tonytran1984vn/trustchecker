@@ -14,10 +14,8 @@ const { parsePagination } = require('../middleware/pagination');
 
 const { authMiddleware, requireRole, requireTenantAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
-const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 const incentive = require('../engines/economics-engine').incentiveArchitecture;
 const entity = require('../engines/legal-entity-module').entityStructuring;

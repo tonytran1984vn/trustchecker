@@ -11,11 +11,9 @@ const router = require('express').Router();
 const db = require('../db');
 const { authMiddleware } = require('../auth');
 const { cacheMiddleware } = require('../cache');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── GET /credit-score — Green Credit Score & Factors ────────────────
 router.get('/credit-score', cacheMiddleware(120), async (req, res) => {

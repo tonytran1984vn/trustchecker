@@ -8,10 +8,8 @@ const router = express.Router();
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const webhookEngine = require('../engines/infrastructure/webhookEngine');
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 router.use(requirePermission('webhook:manage'));
 
 // ─── GET / — List all webhook subscriptions ─────────────────

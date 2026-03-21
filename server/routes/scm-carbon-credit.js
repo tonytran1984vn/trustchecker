@@ -16,11 +16,9 @@ const ccme = require('../engines/intelligence/carbon-credit-engine');
 const { cacheMiddleware } = require('../cache');
 const { v4: uuidv4 } = require('uuid');
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── Ensure tables ──────────────────────────────────────────────────────────
 const init = async () => {

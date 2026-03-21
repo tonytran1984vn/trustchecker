@@ -8,9 +8,7 @@ const db = require('../db');
 const { authMiddleware } = require('../auth');
 const reputation = require('../engines/intelligence/reputation-engine');
 const { cacheMiddleware } = require('../cache');
-const { orgGuard } = require('../middleware/org-middleware');
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // GET /trust-score — Company trust score
 router.get('/trust-score', cacheMiddleware(120), async (req, res) => {

@@ -8,7 +8,6 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const { orgGuard } = require('../middleware/org-middleware');
 const { requireScope, scopeFilter } = require('../auth/scope-engine');
 const engineClient = require('../engines/infrastructure/engine-client');
 const { eventBus } = require('../events');
@@ -18,7 +17,6 @@ const router = express.Router();
 
 // GOV-1: All routes require authentication + org context + scope loading
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── GET /api/scm/partners – List partners ───────────────────────────────────
 router.get('/', scopeFilter('supplier'), async (req, res) => {

@@ -9,11 +9,9 @@ const db = require('../db');
 const { authMiddleware, requireRole } = require('../auth');
 const carbonEngine = require('../engines/intelligence/carbon-engine');
 const { cacheMiddleware } = require('../cache');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── GET /dashboard — Carbon Officer Overview KPIs ──────────────────────────
 router.get('/dashboard', cacheMiddleware(60), async (req, res) => {

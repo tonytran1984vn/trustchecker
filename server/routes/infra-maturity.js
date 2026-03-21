@@ -9,11 +9,9 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware, requirePermission, requireConstitutional } = require('../auth');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ═══════════════════════════════════════════════════════════════════
 // IMMUTABLE DENY LOGGER

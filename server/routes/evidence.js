@@ -15,7 +15,6 @@ const fs = require('fs');
 const multer = require('multer');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const { orgGuard } = require('../middleware/org-middleware');
 
 // Ensure evidence upload directory exists
 const EVIDENCE_DIR = path.join(__dirname, '..', '..', 'data', 'evidence');
@@ -72,7 +71,6 @@ const upload = multer({
 });
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // Org-scoped helper: builds WHERE clause for evidence_items
 function evidenceOrgFilter(orgId) {

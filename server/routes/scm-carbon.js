@@ -15,10 +15,8 @@ const engineClient = require('../engines/infrastructure/engine-client');
 const carbonEngine = require('../engines/intelligence/carbon-engine');
 const factorService = require('../engines/carbon-support').factorService;
 const { cacheMiddleware } = require('../cache');
-const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── Helper: org-scoped data fetchers with optional date range ────────────
 // Data cache (60s TTL) — prevents duplicate DB calls when 9 endpoints fire simultaneously

@@ -28,13 +28,11 @@ const { v4: uuidv4 } = require('uuid');
 let db;
 function getDb() {
     if (!db) db = require('../db');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
     return db;
 }
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // Tables managed by Prisma migrations (schema.prisma: CiePassport, CieSnapshot, CieAnchor, CieTenantConfig)
 logger.info('✅ CIE v2.0 routes loaded (PostgreSQL via Prisma)');

@@ -10,14 +10,12 @@ const blockchainEngine = require('../engines/infrastructure/blockchain');
 const engineClient = require('../engines/infrastructure/engine-client');
 const { eventBus } = require('../events');
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 const router = express.Router();
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── POST /api/scm/shipments – Create shipment ──────────────────────────────
 router.post('/shipments', authMiddleware, requirePermission('logistics:create'), async (req, res) => {

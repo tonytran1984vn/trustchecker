@@ -14,10 +14,8 @@ const { parsePagination } = require('../middleware/pagination');
 
 const { authMiddleware, requireRole, requireConstitutional, requireTenantAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
-const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 const revGov = require('../engines/economics-engine').revenueGovernance;
 const jurisdiction = require('../engines/regulatory-engine').jurisdictionalRisk;

@@ -23,10 +23,8 @@ const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
 const { appendAuditEntry } = require('../utils/audit-chain');
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // Actions that require dual approval
 const DUAL_APPROVAL_ACTIONS = ['gdpr:purge', 'constitutional:amend'];

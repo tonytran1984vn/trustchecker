@@ -15,11 +15,9 @@ const { authMiddleware } = require('../auth');
 const { cacheMiddleware } = require('../cache');
 const crypto = require('crypto');
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── Init table (PostgreSQL-compatible) ────────────────────────────────────────
 (async () => {

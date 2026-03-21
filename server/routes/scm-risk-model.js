@@ -9,13 +9,11 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const { orgGuard } = require('../middleware/org-middleware');
 
 const router = express.Router();
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── GET /api/scm/models – List all model versions ──────────────────────────
 router.get('/models', authMiddleware, async (req, res) => {

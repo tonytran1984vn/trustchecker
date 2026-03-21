@@ -6,10 +6,8 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware } = require('../auth');
-const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 const oversight = require('../engines/governance-module').externalOversight;
 const car = require('../engines/intelligence/realtime-car-engine');

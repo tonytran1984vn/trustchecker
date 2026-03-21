@@ -15,7 +15,6 @@ const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { eventBus, EVENT_TYPES } = require('../events');
 const { validate, schemas } = require('../middleware/validate');
 const blockchainEngine = require('../engines/infrastructure/blockchain');
-const { orgGuard } = require('../middleware/org-middleware');
 
 const router = express.Router();
 
@@ -41,7 +40,6 @@ function validateProductQuality(body) {
 
 // ─── Auth: all product routes require authentication ─────────────────────────
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── GET /api/products ───────────────────────────────────────────────────────
 router.get('/', async (req, res) => {

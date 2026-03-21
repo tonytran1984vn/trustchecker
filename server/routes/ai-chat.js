@@ -10,10 +10,8 @@ const db = require('../db');
 const { authMiddleware } = require('../auth');
 const aiAssistant = require('../engines/infrastructure/ai-assistant');
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── POST /ask — Ask the AI assistant ───────────────────────
 router.post('/ask', async (req, res) => {

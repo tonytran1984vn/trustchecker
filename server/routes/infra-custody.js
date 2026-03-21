@@ -9,9 +9,7 @@ const { parsePagination } = require('../middleware/pagination');
 const { authMiddleware, requirePermission } = require('../auth');
 const custodyEngine = require('../engines/platform-ops-engine').infrastructureCustody;
 const { cacheMiddleware } = require('../cache');
-const { orgGuard } = require('../middleware/org-middleware');
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // GET /security — Security posture assessment
 router.get('/security', cacheMiddleware(120), async (req, res) => {

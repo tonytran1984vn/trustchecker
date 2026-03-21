@@ -24,7 +24,6 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const pricing = require('../engines/infrastructure/pricing-engine');
 const { getDetailedUsage, getOverageCharges } = require('../middleware/usage-meter');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 // ─── POST /webhook — Webhook receiver with signature verification ────
@@ -86,7 +85,6 @@ router.get('/pricing', async (req, res) => {
 });
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 const PLANS = pricing.PLANS;
 

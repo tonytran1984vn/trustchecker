@@ -7,13 +7,11 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
-const { orgGuard } = require('../middleware/org-middleware');
 const opsEngine = require('../engines/platform-ops-engine').opsMonitoring;
 const { v4: uuidv4 } = require('uuid');
 const { withTransaction } = require('../middleware/transaction');
 const logger = require('../lib/logger');
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── GET /health — Pipeline health (SLO-based) ─────────────────
 router.get('/health', async (req, res) => {

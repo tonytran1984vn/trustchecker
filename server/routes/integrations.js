@@ -15,12 +15,10 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const { authMiddleware, requirePermission } = require('../auth');
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 // All routes require authentication
 router.use(authMiddleware);
-router.use(orgGuard());
 router.use(requirePermission('settings:update'));
 
 // Encryption for API keys at rest — MUST set ENCRYPTION_KEY in production

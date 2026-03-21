@@ -8,14 +8,12 @@ const crypto = require('crypto');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { safeParse } = require('../utils/safe-json');
-const { orgGuard } = require('../middleware/org-middleware');
 const { withTransaction } = require('../middleware/transaction');
 const logger = require('../lib/logger');
 
 const router = express.Router();
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── GET /api/scm/forensic/cases – List forensic cases ──────────────────────
 router.get('/cases', authMiddleware, async (req, res) => {

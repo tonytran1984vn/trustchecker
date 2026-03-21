@@ -14,10 +14,8 @@ const { parsePagination } = require('../middleware/pagination');
 
 const { authMiddleware, requireRole, requireTenantAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
-const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 const dataOwn = new Proxy({}, { get: (_, fn) => () => ({ status: 'archived', message: fn + ' has been archived' }) }); // ARCHIVED: was data-ownership-engine
 const metrics = require('../engines/platform-ops-engine').infrastructureMetrics;

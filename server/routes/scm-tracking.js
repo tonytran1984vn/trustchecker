@@ -17,7 +17,6 @@ const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const blockchainEngine = require('../engines/infrastructure/blockchain');
 const { eventBus, EVENT_TYPES } = require('../events');
 const { validate, schemas } = require('../middleware/validate');
-const { orgGuard } = require('../middleware/org-middleware');
 
 const router = express.Router();
 
@@ -28,7 +27,6 @@ router.use((req, res, next) => {
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── POST /api/scm/events – Record EPCIS event ──────────────────────────────
 // BS-DEFENSE: Idempotency + Replay detection on SCM events

@@ -22,11 +22,9 @@ const {
     isCAForbidden,
     isHighRiskRole,
 } = require('../auth/rbac');
-const { orgGuard } = require('../middleware/org-middleware');
 
 // All routes require auth + org context + org admin
 router.use(authMiddleware);
-router.use(orgGuard());
 router.use(requireTenantAdmin());
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -8,10 +8,8 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── POST /assess — Assess product sustainability ──────────
 router.post('/assess', requirePermission('sustainability:create'), async (req, res) => {

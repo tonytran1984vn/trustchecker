@@ -17,7 +17,6 @@ const { bulkScanDetector, replayDetector } = require('../middleware/blind-spot-d
 async function checkQrReuse(qrCodeId, qrData, ipAddr, deviceFp, db) {
     const crypto = require('crypto');
 const logger = require('../lib/logger');
-const { orgGuard } = require('../middleware/org-middleware');
     const ipHash = crypto
         .createHash('sha256')
         .update(ipAddr || '')
@@ -94,7 +93,6 @@ router.use((req, res, next) => {
 
 // All routes require authentication
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── POST /api/qr/validate ──────────────────────────────────────────────────
 // The core real-time validation endpoint

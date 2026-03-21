@@ -10,11 +10,9 @@ const router = express.Router();
 const { authMiddleware, requirePermission } = require('../auth');
 const distribution = require('../engines/economics-engine').feeDistribution;
 const { v4: uuidv4 } = require('uuid');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ═══════════════════════════════════════════════════════════════════
 // Constitutional enforcement + audit (same pattern as infra-maturity)

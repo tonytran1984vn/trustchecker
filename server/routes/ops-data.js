@@ -10,14 +10,12 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const { orgGuard } = require('../middleware/org-middleware');
 const { appendAuditEntry } = require('../utils/audit-chain');
 const { validate } = require('../middleware/validate');
 const schemas = require('../lib/schemas');
 const logger = require('../lib/logger');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 function getOrgId(req) {
     return req.user?.org_id || req.user?.orgId || null;

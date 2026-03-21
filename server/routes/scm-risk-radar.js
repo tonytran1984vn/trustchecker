@@ -16,11 +16,9 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/infrastructure/engine-client');
 const { cacheMiddleware } = require('../cache');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── GET /api/scm/risk/radar — Full 8-vector risk assessment ─────────────────
 // Cache 60s — queries 8 full tables

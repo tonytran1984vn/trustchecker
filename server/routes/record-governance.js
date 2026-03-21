@@ -18,14 +18,12 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
-const { orgGuard } = require('../middleware/org-middleware');
 const { snapshotVersion, recordMutation, appendAuditEntry } = require('../utils/audit-chain');
 const { withTransaction } = require('../middleware/transaction');
 const logger = require('../lib/logger');
 
 const router = express.Router();
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── POST /proposals — Submit correction proposal ─────────────────────────
 router.post('/proposals', async (req, res) => {

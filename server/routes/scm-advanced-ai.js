@@ -14,10 +14,8 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/infrastructure/engine-client');
 const { cacheMiddleware } = require('../cache');
-const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ─── GET /api/scm/ai/forecast-demand — Holt-Winters demand forecast ─────────
 // Cache 60s — forecast doesn't change rapidly

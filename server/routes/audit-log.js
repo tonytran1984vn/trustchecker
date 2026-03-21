@@ -15,7 +15,6 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 // All routes require auth + audit_log:view permission

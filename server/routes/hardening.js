@@ -9,9 +9,7 @@ const { authMiddleware, requirePermission } = require('../auth');
 const riskGov = require('../engines/risk-model-engine').governance;
 const saConstraints = require('../engines/infrastructure/sa-constraints');
 const observability = require('../engines/platform-ops-engine').observability;
-const { orgGuard } = require('../middleware/org-middleware');
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // ═══════════════════════════════════════════════════════════════════
 // RISK MODEL GOVERNANCE (5 endpoints)

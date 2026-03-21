@@ -4,10 +4,8 @@
  */
 const express = require('express');
 const { authMiddleware, requirePermission } = require('../auth');
-const { orgGuard } = require('../middleware/org-middleware');
 const router = express.Router();
 router.use(authMiddleware);
-router.use(orgGuard());
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const { withTransaction } = require('../middleware/transaction');

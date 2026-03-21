@@ -9,10 +9,8 @@ const { authMiddleware, requirePermission } = require('../auth');
 const riskGraph = require('../engines/core/risk-graph-engine');
 const { cacheMiddleware } = require('../cache');
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 router.use(authMiddleware);
-router.use(orgGuard());
 
 // GET /behavior — Behavioral risk analysis
 router.get('/behavior', cacheMiddleware(120), async (req, res) => {

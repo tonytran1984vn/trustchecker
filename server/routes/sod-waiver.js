@@ -18,7 +18,6 @@ const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
 const { SOD_CONFLICTS } = require('../auth/rbac');
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 // All routes require auth + role management permission
