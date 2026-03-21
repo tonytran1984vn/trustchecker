@@ -98,7 +98,7 @@ router.get('/', async (req, res) => {
 
 
 // Readiness probe (matches old healthz.js API)
-router.get(/ready, async (req, res) => {
+router.get('/ready', async (req, res) => {
     try {
         await db.get("SELECT 1 as ok");
         res.json({ status: "ready", database: "connected" });

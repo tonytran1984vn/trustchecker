@@ -23,12 +23,12 @@ const router = express.Router();
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const cie = require('../engines/intelligence/cie-engine');
 const { v4: uuidv4 } = require('uuid');
+const logger = require('../lib/logger');
 
 // Lazy DB reference
 let db;
 function getDb() {
     if (!db) db = require('../db');
-const logger = require('../lib/logger');
     return db;
 }
 
