@@ -129,6 +129,55 @@ const qrScan = {
     }),
 };
 
+// ── Ops Data ────────────────────────────────────────────────────────────────
+const createIncident = z.object({
+    title: z.string().min(2, 'Title required').max(200),
+    description: z.string().max(2000).optional(),
+    severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).default('medium'),
+    module: z.string().max(50).optional(),
+    assignedTo: z.string().uuid().optional(),
+});
+
+const updateIncident = z.object({
+    status: z.enum(['open', 'investigating', 'escalated', 'resolved', 'closed']).optional(),
+    resolution: z.string().max(2000).optional(),
+    rootCause: z.string().max(2000).optional(),
+    assigned_to: z.string().uuid().optional(),
+    severity: z.enum(['critical', 'high', 'medium', 'low', 'info']).optional(),
+    reason: z.string().max(500).optional(),
+}).refine(data => Object.keys(data).length > 0, 'At least one field required');
+
+const createPurchaseOrder = z.object({
+    supplier: z.string().min(1).max(200),
+    product: z.string().min(1).max(200),
+    quantity: z.number().int().min(1).max(999999),
+    unit: z.string().max(20).default('pcs'),
+    unitPrice: z.number().min(0).max(9999999),
+    deliveryDate: z.string().max(50).optional(),
+    paymentTerms: z.string().max(50).default('NET-30'),
+    contractRef: z.string().max(100).optional(),
+});
+
+const createQualityCheck = z.object({
+    batchId: z.string().uuid().optional(),
+    checkType: z.enum(['incoming', 'in_process', 'final', 'random']).default('incoming'),
+    checkpoint: z.string().max(200).optional(),
+    product: z.string().max(200).optional(),
+    result: z.enum(['pass', 'fail', 'conditional']).default('pass'),
+    score: z.number().int().min(0).max(100).default(100),
+    defectsFound: z.number().int().min(0).default(0),
+    notes: z.string().max(2000).optional(),
+});
+
+const onboardSupplier = z.object({
+    name: z.string().min(2, 'Supplier name required').max(200),
+    type: z.string().min(1, 'Type required').max(50),
+    country: z.string().min(2, 'Country required').max(100),
+    contactEmail: z.string().email().optional().or(z.literal('')),
+    contactPhone: z.string().max(30).optional(),
+    notes: z.string().max(2000).optional(),
+});
+
 module.exports = {
     qrScan,
     uuid, paginationQuery, idParam,
@@ -141,4 +190,7 @@ module.exports = {
     createEvidence,
     assignRole,
     ingestEPCIS,
+    createIncident, updateIncident,
+    createPurchaseOrder, createQualityCheck,
+    onboardSupplier,
 };

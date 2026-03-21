@@ -255,9 +255,9 @@ router.get('/gdpr/export/:userId', requireRole('operator'), async (req, res) => 
         const userId = req.params.userId;
         const userData = {
             user: await db.get('SELECT id, username, email, role, company, created_at FROM users WHERE id = ?', [userId]),
-            sessions: await db.all('SELECT id, ip_address, created_at, last_active FROM sessions WHERE user_id = ?', [userId]),
+            sessions: await db.all('SELECT id, ip_address, created_at, last_active FROM sessions WHERE user_id = ? ORDER BY last_active DESC LIMIT 100', [userId]),
             scan_events: await db.all('SELECT id, scan_type, scanned_at FROM scan_events WHERE org_id IN (SELECT org_id FROM users WHERE id = ?) LIMIT 100', [userId]),
-            audit_logs: await db.all('SELECT * FROM audit_log WHERE actor_id = ?', [userId]),
+            audit_logs: await db.all('SELECT * FROM audit_log WHERE actor_id = ? ORDER BY timestamp DESC LIMIT 200', [userId]),
         };
         res.json({ exported_at: new Date().toISOString(), data: userData });
     } catch (e) {
@@ -337,7 +337,7 @@ router.get('/businesses/:id/risk-report', async (req, res) => {
         if (!biz) return res.status(404).json({ error: 'Business not found' });
 
         const checks = await db.all('SELECT * FROM kyc_checks WHERE business_id = ? ORDER BY created_at DESC LIMIT 1000', [req.params.id]);
-        const sanctions = await db.all('SELECT * FROM sanction_hits WHERE business_id = ?', [req.params.id]);
+        const sanctions = await db.all('SELECT * FROM sanction_hits WHERE business_id = ? LIMIT 100', [req.params.id]);
 
         const avgScore = checks.length > 0 ? checks.reduce((s, c) => s + (c.score || 0), 0) / checks.length : 0;
         const sanctionRisk = sanctions.length > 0 ? 'critical' : 'none';

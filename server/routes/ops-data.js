@@ -12,6 +12,8 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { orgGuard } = require('../middleware/org-middleware');
 const { appendAuditEntry } = require('../utils/audit-chain');
+const { validate } = require('../middleware/validate');
+const schemas = require('../lib/schemas');
 
 router.use(authMiddleware);
 router.use(orgGuard());
@@ -33,7 +35,7 @@ router.get('/purchase-orders', async (req, res) => {
     } catch (e) { res.json({ orders: [] }); }
 });
 
-router.post('/purchase-orders', requirePermission('po:create'), async (req, res) => {
+router.post('/purchase-orders', requirePermission('po:create'), validate({ body: schemas.createPurchaseOrder }), async (req, res) => {
     try {
         const orgId = getOrgId(req);
         const { supplier, product, quantity, unit, unitPrice, deliveryDate, paymentTerms, contractRef } = req.body;
@@ -97,7 +99,7 @@ router.get('/quality-checks', async (req, res) => {
     } catch (e) { res.json({ checks: [] }); }
 });
 
-router.post('/quality-checks', async (req, res) => {
+router.post('/quality-checks', validate({ body: schemas.createQualityCheck }), async (req, res) => {
     try {
         const orgId = getOrgId(req);
         const { batchId, checkType, checkpoint, product, result, score, defectsFound, notes } = req.body;
@@ -143,7 +145,7 @@ router.get('/data/incidents', async (req, res) => {
     } catch (e) { res.json({ incidents: [] }); }
 });
 
-router.post('/data/incidents', async (req, res) => {
+router.post('/data/incidents', validate({ body: schemas.createIncident }), async (req, res) => {
     // v9.5.0: Rate limit — max 50 incidents per hour per org
     const orgId = getOrgId(req);
     const recentCount = await db.get(
@@ -165,7 +167,7 @@ router.post('/data/incidents', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/data/incidents/:id', async (req, res) => {
+router.put('/data/incidents/:id', validate({ body: schemas.updateIncident }), async (req, res) => {
     try {
         const orgId = getOrgId(req);
         const { status, resolution, rootCause, assigned_to, severity } = req.body;
@@ -308,7 +310,7 @@ router.get('/supplier-scoring', async (req, res) => {
 });
 
 // POST /suppliers/onboard — create new supplier + initial location
-router.post('/suppliers/onboard', requirePermission('supplier:onboard'), async (req, res) => {
+router.post('/suppliers/onboard', requirePermission('supplier:onboard'), validate({ body: schemas.onboardSupplier }), async (req, res) => {
     try {
         const { name, type, country, contactEmail, contactPhone, notes } = req.body;
         if (!name || !country || !type) {

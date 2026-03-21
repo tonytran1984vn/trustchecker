@@ -50,8 +50,8 @@ jobs:
       - name: Push DB schema
         run: npx prisma db push --accept-data-loss
 
-      - name: Run tests
-        run: npm test -- --forceExit --detectOpenHandles --passWithNoTests
+      - name: Run tests with coverage
+        run: npm test -- --forceExit --detectOpenHandles --passWithNoTests --coverage
 
   deploy:
     needs: lint-and-test

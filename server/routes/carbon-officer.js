@@ -21,8 +21,8 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
         let products = [], shipments = [], events = [];
         try {
             const pq = orgId
-                ? await db.all('SELECT * FROM products WHERE org_id = ?', [orgId])
-                : await db.all('SELECT * FROM products');
+                ? await db.all('SELECT * FROM products WHERE org_id = ? LIMIT 500', [orgId])
+                : await db.all('SELECT * FROM products LIMIT 500');
             products = pq || [];
         } catch (_) { }
 
@@ -32,7 +32,7 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
                     INNER JOIN batches b ON s.batch_id = b.id
                     INNER JOIN products p ON b.product_id = p.id
                     WHERE p.org_id = ? LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000 LIMIT 1000`, [orgId])
-                : await db.all('SELECT * FROM shipments');
+                : await db.all('SELECT * FROM shipments LIMIT 500');
             shipments = sq || [];
         } catch (_) { }
 

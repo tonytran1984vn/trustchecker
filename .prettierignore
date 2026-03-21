@@ -1,0 +1,9 @@
+node_modules
+client/public
+client/dist
+backup
+scripts
+*.min.js
+*.min.css
+trustchecker_dump.sql
+package-lock.json
