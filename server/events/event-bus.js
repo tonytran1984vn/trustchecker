@@ -1,5 +1,5 @@
 /**
- * TrustChecker v9.2 — Event Bus (Redis Streams + In-Memory Fallback)
+ * TrustChecker v9.5.1 — Event Bus (Redis Streams + In-Memory Fallback)
  * ═══════════════════════════════════════════════════════════
  * Domain event publishing and consumption with:
  *   - Redis Streams (XADD/XREADGROUP) for production
@@ -8,6 +8,7 @@
  *   - Schema validation before publish
  *   - Dead letter queue integration for failed processing
  *   - Per-tenant context propagation in event envelopes
+ *   - v9.5.1: Structured logging, auto context from AsyncLocalStorage
  *
  * Usage:
  *   const eventBus = require('./events/event-bus');
@@ -20,12 +21,14 @@
 const EventEmitter = require('events');
 const { validateEvent, getSchemaVersion } = require('./schema-registry');
 const dlq = require('./dead-letter');
+const logger = require('../lib/logger');
+const { safeGetContext, runInContext } = require('../lib/request-context');
 
 const crypto = require('crypto');
 
 // ─── Configuration ───────────────────────────────────────────
 const CONFIG = {
-    streamPrefix: 'events:',
+    streamPrefix: 'tc:events:',      // v9.5.1: prefixed with tc: for namespace clarity
     consumerGroupPrefix: 'cg:',
     maxRetries: 3,
     retryDelays: [1000, 5000, 15000], // exponential backoff ms
@@ -35,18 +38,30 @@ const CONFIG = {
     enableValidation: true,
 };
 
+// ─── Publisher ACL (shared) ──────────────────────────────────
+const PUBLISHER_ACL = {
+    'FRAUD_DETECTED': ['fraud-engine', 'anomaly-engine', 'scan-guard'],
+    'TRUST_SCORE_UPDATED': ['trust-engine'],
+    'KILL_SWITCH_ACTIVATED': ['kill-switch-engine', 'platform-admin'],
+    'SCAN_COMPLETED': ['qr-routes', 'mobile-scan'],
+    'CONTAGION_DETECTED': ['contagion-engine'],
+};
+
 // ─── Event Envelope ──────────────────────────────────────────
 function createEnvelope(type, data, context = {}) {
+    // Auto-fill context from AsyncLocalStorage if not provided
+    const reqCtx = safeGetContext();
+
     return {
         id: `evt-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`,
         type,
         version: getSchemaVersion(type),
         data,
         context: {
-            orgId: context.orgId || null,
-            userId: context.userId || null,
+            orgId: context.orgId || reqCtx.orgId || null,
+            userId: context.userId || reqCtx.userId || null,
             tenantPlan: context.tenantPlan || null,
-            traceId: context.traceId || null,
+            traceId: context.traceId || reqCtx.requestId || null,
             source: context.source || 'api',
         },
         timestamp: new Date().toISOString(),
@@ -78,23 +93,13 @@ class RedisEventBus {
     /**
      * Publish a domain event to Redis Stream.
      */
-
-    // A-16: Publisher ACL — restrict who can publish certain events
-    static PUBLISHER_ACL = {
-        'FRAUD_DETECTED': ['fraud-engine', 'anomaly-engine', 'scan-guard'],
-        'TRUST_SCORE_UPDATED': ['trust-engine'],
-        'KILL_SWITCH_ACTIVATED': ['kill-switch-engine', 'platform-admin'],
-        'SCAN_COMPLETED': ['qr-routes', 'mobile-scan'],
-        'CONTAGION_DETECTED': ['contagion-engine'],
-    };
-
     async publish(type, data, context = {}) {
-        // A-16: Check publisher authorization
-        const allowed = SafeEventBus.PUBLISHER_ACL[type];
+        // ACL check
+        const allowed = PUBLISHER_ACL[type];
         if (allowed && context.publisher && !allowed.includes(context.publisher)) {
-            console.warn(`[EVENT-BUS] Unauthorized publish: ${context.publisher} → ${type}`);
+            logger.warn('Event publish unauthorized', { publisher: context.publisher, type });
             this._stats.failed++;
-            return; // Silently reject
+            return;
         }
 
         // v9.5.0: Throttle — max 1 event per type per org per 500ms
@@ -130,7 +135,7 @@ class RedisEventBus {
             this._stats.published++;
             return envelope;
         } catch (err) {
-            console.error(`[event-bus] Publish failed for '${type}':`, err.message);
+            logger.error('Event publish failed', { type, error: err.message });
             throw err;
         }
     }
@@ -198,14 +203,13 @@ class RedisEventBus {
                 }
             } catch (err) {
                 if (err.message !== 'Connection is closed') {
-                    console.error(`[event-bus] Poller error for ${key}:`, err.message);
+                    logger.error('Event poller error', { key, error: err.message });
                 }
             }
 
             // Schedule next poll
             if (this._running) {
-                // Use blockMs as backoff when no messages, 100ms when actively processing
-                const nextDelay = results ? 100 : CONFIG.blockMs;
+                const nextDelay = 100;
                 const timer = setTimeout(poll, nextDelay);
                 this._pollers.set(key, timer);
             }
@@ -225,7 +229,7 @@ class RedisEventBus {
             const raw = fields[fields.indexOf('envelope') + 1];
             envelope = JSON.parse(raw);
         } catch {
-            console.error(`[event-bus] Invalid message format: ${msgId}`);
+            logger.error('Invalid event message format', { msgId });
             await client.xack(streamKey, groupName, msgId);
             return;
         }
@@ -242,7 +246,11 @@ class RedisEventBus {
             } catch (err) {
                 attempts++;
                 lastError = err;
-                console.warn(`[event-bus] Attempt ${attempts}/${CONFIG.maxRetries} failed for ${envelope.type}: ${err.message}`);
+                logger.warn('Event handler retry', {
+                    type: envelope.type,
+                    attempt: `${attempts}/${CONFIG.maxRetries}`,
+                    error: err.message,
+                });
 
                 if (attempts < CONFIG.maxRetries) {
                     const delay = CONFIG.retryDelays[attempts - 1] || 15000;
@@ -283,23 +291,13 @@ class InMemoryEventBus {
         this._throttleMap = new Map(); // v9.5.0: Event throttle
     }
 
-
-    // A-16: Publisher ACL — restrict who can publish certain events
-    static PUBLISHER_ACL = {
-        'FRAUD_DETECTED': ['fraud-engine', 'anomaly-engine', 'scan-guard'],
-        'TRUST_SCORE_UPDATED': ['trust-engine'],
-        'KILL_SWITCH_ACTIVATED': ['kill-switch-engine', 'platform-admin'],
-        'SCAN_COMPLETED': ['qr-routes', 'mobile-scan'],
-        'CONTAGION_DETECTED': ['contagion-engine'],
-    };
-
     async publish(type, data, context = {}) {
-        // A-16: Check publisher authorization
-        const allowed = SafeEventBus.PUBLISHER_ACL[type];
+        // ACL check
+        const allowed = PUBLISHER_ACL[type];
         if (allowed && context.publisher && !allowed.includes(context.publisher)) {
-            console.warn(`[EVENT-BUS] Unauthorized publish: ${context.publisher} → ${type}`);
+            logger.warn('Event publish unauthorized', { publisher: context.publisher, type });
             this._stats.failed++;
-            return; // Silently reject
+            return;
         }
 
         // v9.5.0: Throttle — max 1 event per type per org per 500ms
@@ -328,7 +326,6 @@ class InMemoryEventBus {
 
     async subscribe(eventType, consumerGroup, handler) {
         this._emitter.on(eventType, (envelope) => {
-            // Wrap in async IIFE with error handling to prevent unhandled rejections
             (async () => {
                 let attempts = 0;
                 while (attempts < CONFIG.maxRetries) {
@@ -344,13 +341,13 @@ class InMemoryEventBus {
                             try {
                                 await dlq.push(consumerGroup, envelope, err, { attempts });
                             } catch (dlqErr) {
-                                console.error(`[event-bus] DLQ push failed for ${consumerGroup}:`, dlqErr.message);
+                                logger.error('DLQ push failed', { consumerGroup, error: dlqErr.message });
                             }
                         }
                     }
                 }
             })().catch(err => {
-                console.error(`[event-bus] Unhandled error in subscriber ${consumerGroup}:`, err.message);
+                logger.error('Unhandled event subscriber error', { consumerGroup, error: err.message });
             });
         });
     }
@@ -370,6 +367,7 @@ class InMemoryEventBus {
 const USE_REDIS = !!process.env.REDIS_URL;
 const eventBus = USE_REDIS ? new RedisEventBus() : new InMemoryEventBus();
 
-console.log(`📡 Event bus: ${USE_REDIS ? 'Redis Streams' : 'In-Memory'}`);
+logger.info('Event bus initialized', { backend: USE_REDIS ? 'redis-streams' : 'in-memory' });
 
 module.exports = eventBus;
+
