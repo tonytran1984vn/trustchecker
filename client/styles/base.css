@@ -55,6 +55,22 @@
   --shadow-glow-lg: 0 0 50px rgba(0, 240, 255, 0.15), 0 0 100px rgba(139, 92, 246, 0.08);
   --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 
+  /* ── Semantic Colors (dark) ── */
+  --color-success: #10b981;
+  --color-success-bg: rgba(16, 185, 129, 0.15);
+  --color-success-text: #34d399;
+  --color-warning: #f59e0b;
+  --color-warning-bg: rgba(245, 158, 11, 0.15);
+  --color-warning-text: #fbbf24;
+  --color-danger: #f43f5e;
+  --color-danger-bg: rgba(244, 63, 94, 0.12);
+  --color-danger-text: #fb7185;
+  --color-info: #3b82f6;
+  --color-info-bg: rgba(59, 130, 246, 0.12);
+  --color-info-text: #60a5fa;
+  --color-neutral: #6b7280;
+  --color-neutral-bg: rgba(107, 114, 128, 0.15);
+
   /* Radius */
   --radius-sm: 6px;
   --radius-md: 10px;
