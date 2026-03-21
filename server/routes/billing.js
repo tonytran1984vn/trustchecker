@@ -37,6 +37,7 @@ router.post('/webhook', async (req, res) => {
                 return res.status(401).json({ error: 'Missing webhook signature' });
             }
             const crypto = require('crypto');
+const { orgGuard } = require('../middleware/org-middleware');
             const expectedSig = crypto
                 .createHmac('sha256', WEBHOOK_SECRET)
                 .update(JSON.stringify(req.body))
@@ -754,7 +755,6 @@ router.post('/pricing/reset', requireSuperAdmin(), async (req, res) => {
 // TRANSACTION FEE INFRASTRUCTURE (per-transaction pricing)
 // ═══════════════════════════════════════════════════════════════════
 const txFeeEngine = require('../engines/economics-engine').transactionFee;
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 // ─── GET /transaction-fees — Fee schedule ────────────────────────────

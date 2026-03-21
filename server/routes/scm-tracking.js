@@ -16,6 +16,7 @@ const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const blockchainEngine = require('../engines/infrastructure/blockchain');
 const { eventBus, EVENT_TYPES } = require('../events');
 const { validate, schemas } = require('../middleware/validate');
+const { orgGuard } = require('../middleware/org-middleware');
 
 const router = express.Router();
 
@@ -676,7 +677,6 @@ router.get('/verify-signature/:eventId', async (req, res) => {
         const event = await db.get('SELECT * FROM product_events WHERE id = $1', [req.params.eventId]);
         if (!event) return res.status(404).json({ error: 'Event not found' });
         const { verifySignature } = require('../middleware/scm-state-machine');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
         const result = verifySignature(
             {

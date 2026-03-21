@@ -4,13 +4,13 @@
  */
 const express = require('express');
 const { authMiddleware, requirePermission } = require('../auth');
+const { orgGuard } = require('../middleware/org-middleware');
 const router = express.Router();
 router.use(authMiddleware);
 router.use(orgGuard());
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 
 const ENC_KEY = process.env.ENCRYPTION_KEY || 'trustchecker-settings-key-DEV-ONLY';
 const CIPHER_KEY = crypto.createHash('sha256').update(ENC_KEY).digest();

@@ -8,6 +8,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const { orgGuard } = require('../middleware/org-middleware');
 
 const router = express.Router();
 
@@ -504,7 +505,6 @@ router.put('/models/:id/status', authMiddleware, async (req, res) => {
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES ($1, $2, $3, $4, $5, $6)`,
             [
                 require('uuid').v4(),
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
                 req.user?.id,
                 'MODEL_STATUS_CHANGED',

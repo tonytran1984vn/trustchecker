@@ -9,6 +9,7 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware, requirePermission, requireConstitutional } = require('../auth');
+const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
 router.use(orgGuard());
@@ -280,7 +281,6 @@ router.get('/regulatory/sanctions/:country', (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 const sla = new Proxy({}, { get: (_, fn) => () => ({ status: 'archived', message: fn + ' has been archived' }) }); // ARCHIVED: was enterprise-sla-engine
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
 
 router.get('/sla/tiers', (req, res) => {

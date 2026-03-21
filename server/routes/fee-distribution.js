@@ -10,6 +10,7 @@ const router = express.Router();
 const { authMiddleware, requirePermission } = require('../auth');
 const distribution = require('../engines/economics-engine').feeDistribution;
 const { v4: uuidv4 } = require('uuid');
+const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
 router.use(orgGuard());
@@ -55,7 +56,6 @@ function requireConstitutionalWithAudit(action) {
         if (!req.user) return res.status(401).json({ error: 'Authentication required' });
         const constitutionalRBAC = require('../engines/governance-module').constitutionalRbac;
         const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
         const result = constitutionalRBAC.enforce(req.user.role, action);
         logConstitutionalAction(req, action, result);

@@ -14,6 +14,8 @@ const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { eventBus, EVENT_TYPES } = require('../events');
 const { validate, schemas } = require('../middleware/validate');
 const blockchainEngine = require('../engines/infrastructure/blockchain');
+const { orgGuard } = require('../middleware/org-middleware');
+const { orgGuard } = require('../middleware/org-middleware');
 
 const router = express.Router();
 
@@ -849,7 +851,6 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
             const PDFDocument = require('pdfkit');
             const { withTransaction } = require('../middleware/transaction');
             const { checkAbuse } = require('../middleware/abuse-detection');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
             const doc = new PDFDocument({ size: 'A4', margin: 40 });
             const buffers = [];

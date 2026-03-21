@@ -13,6 +13,7 @@ const express = require('express');
 const router = express.Router();
 const { authMiddleware, requireRole, requireTenantAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
+const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
 router.use(orgGuard());
@@ -21,7 +22,6 @@ const econ = require('../engines/economics-engine').economicLogic;
 const forensic = require('../engines/legal-entity-module').forensicLogic;
 const jurisLogic = require('../engines/regulatory-engine').jurisdictionLogic;
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 
 // ═══════════════════════════════════════════════════════════════════
 // ECONOMIC LOGIC — /economic-logic [L3+ admin]

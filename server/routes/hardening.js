@@ -9,6 +9,7 @@ const { authMiddleware, requirePermission } = require('../auth');
 const riskGov = require('../engines/risk-model-engine').governance;
 const saConstraints = require('../engines/infrastructure/sa-constraints');
 const observability = require('../engines/platform-ops-engine').observability;
+const { orgGuard } = require('../middleware/org-middleware');
 router.use(authMiddleware);
 router.use(orgGuard());
 
@@ -419,7 +420,6 @@ router.get('/platform/isolation', requirePermission('admin:manage'), (req, res) 
 
 const carbonReg = require('../engines/carbon-support').registry;
 const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 
 router.get('/carbon-registry/jurisdictions', (req, res) => {
     res.json(carbonReg.getJurisdictions());

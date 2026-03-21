@@ -14,6 +14,7 @@ const engineClient = require('../engines/infrastructure/engine-client');
 const carbonEngine = require('../engines/intelligence/carbon-engine');
 const factorService = require('../engines/carbon-support').factorService;
 const { cacheMiddleware } = require('../cache');
+const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
 router.use(orgGuard());
@@ -1376,7 +1377,6 @@ router.put('/factors/:id', requirePermission('esg:manage'), async (req, res) => 
         // Audit log
         const { v4: uuidv4 } = require('uuid');
         const { withTransaction } = require('../middleware/transaction');
-const { orgGuard } = require('../middleware/org-middleware');
 const logger = require('../lib/logger');
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
