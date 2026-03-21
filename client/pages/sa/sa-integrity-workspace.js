@@ -1,12 +1,15 @@
 /**
  * Integrity Workspace — SA Domain (Data Immutability)
- * Tabs: Chain Health | Sealing Policy | Key Management | Crypto Governance
+ * Tabs: Sealing Policy | Key Management | Crypto Governance
+ *
+ * PERF: Tab 1 (Sealing Policy) loaded eagerly, tabs 2-3 lazy-loaded on click.
  */
 import { renderWorkspace } from '../../components/workspace.js';
 import { icon } from '../../core/icons.js';
-import { renderPage as renderKeys } from './key-management.js';
+// Tab 1: eager
 import { renderPage as renderDataGov } from './data-governance.js';
-import { renderPage as renderCryptoGov } from '../infra/cryptographic-governance.js';
+// Tabs 2-3: lazy
+const lazy = (loader) => () => loader().then(m => m.renderPage());
 
 export function renderPage() {
     return renderWorkspace({
@@ -16,8 +19,8 @@ export function renderPage() {
         icon: icon('key', 24),
         tabs: [
             { id: 'data-gov', label: 'Sealing Policy', icon: icon('lock', 14), render: renderDataGov },
-            { id: 'keys', label: 'Key Management', icon: icon('key', 14), render: renderKeys },
-            { id: 'crypto-gov', label: 'Crypto Governance', icon: icon('key', 14), render: renderCryptoGov },
+            { id: 'keys', label: 'Key Management', icon: icon('key', 14), render: lazy(() => import('./key-management.js')) },
+            { id: 'crypto-gov', label: 'Crypto Governance', icon: icon('key', 14), render: lazy(() => import('../infra/cryptographic-governance.js')) },
         ],
     });
 }
