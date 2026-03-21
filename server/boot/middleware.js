@@ -3,6 +3,7 @@ const { dataClassification } = require('../security/data-classification');
  * Boot: Middleware Setup
  * Applies security, observability, versioning, metering, and org middleware.
  * v9.4.2: Added global orgGuard for multi-tenant isolation on ALL /api/ routes.
+ * v9.5.1: AsyncLocalStorage request context for per-request isolation.
  */
 
 function setupMiddleware(app, redis) {
@@ -21,6 +22,12 @@ function setupMiddleware(app, redis) {
 
     // Trust proxy (Nginx reverse proxy) — so req.ip uses X-Forwarded-For
     app.set('trust proxy', 1);
+
+    // ─── v9.5.1: Request Context (AsyncLocalStorage) ─────────────────────────
+    // MUST be first — provides per-request isolated context for RLS, tracing, audit.
+    // Replaces singleton db._rlsOrgId which had race conditions.
+    const { requestContextMiddleware } = require('../lib/request-context');
+    app.use(requestContextMiddleware);
 
     // v9.4: WAF first — block malicious requests early
     app.use(waf.middleware());
@@ -55,6 +62,7 @@ function setupMiddleware(app, redis) {
     // don't explicitly call orgGuard() in their route file.
     // Routes that DON'T need org scoping are skipped below.
     const { orgGuard } = require('../middleware/org-middleware');
+    const { updateContext } = require('../lib/request-context');
     const _globalOrgGuard = orgGuard({ allowPlatform: true, loadScopes: false });
     app.use('/api/', (req, res, next) => {
         // Only apply if auth has already set req.user
@@ -68,10 +76,22 @@ function setupMiddleware(app, redis) {
             return next();
         }
         req._orgGuardApplied = true;
-        return _globalOrgGuard(req, res, next);
+
+        // Wrap orgGuard — after it resolves, update AsyncLocalStorage context
+        return _globalOrgGuard(req, res, (err) => {
+            if (err) return next(err);
+            // Propagate resolved identity into request-scoped context
+            updateContext({
+                orgId: req.orgId || req.user?.orgId || req.user?.org_id || null,
+                userId: req.user?.id || null,
+                sessionId: req.user?.session_id || null,
+            });
+            next();
+        });
     });
 
     return { waf, apiGateway, metrics, slo };
 }
 
 module.exports = { setupMiddleware };
+

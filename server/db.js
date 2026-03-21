@@ -1,8 +1,12 @@
 /**
- * TrustChecker v9.4 — Database Layer (PostgreSQL ONLY)
+ * TrustChecker v9.5.1 — Database Layer (PostgreSQL ONLY)
  *
  * PostgreSQL via Prisma. No SQLite.
  * DATABASE_URL must be set (via .env or PM2 ecosystem).
+ *
+ * v9.5.1: AsyncLocalStorage-based RLS context (fixes race condition).
+ *         Connection safety: double-release guard, app-level query timeout.
+ *         SQL translator logging (10% sampled for migration tracking).
  *
  * API:
  *   db.get(sql, params)     → Promise<row|null>
@@ -12,21 +16,28 @@
  *   db._readyPromise        → Promise (await in boot sequence)
  */
 
-const path = require('path');
+const logger = require('./lib/logger');
+const { getContext } = require('./lib/request-context');
 
 // D-05: PgBouncer integration
 const DB_URL = process.env.PGBOUNCER_URL || process.env.DATABASE_URL;
 
 if (!DB_URL) {
-  console.error('\n❌ FATAL: DATABASE_URL is not set!');
-  console.error('   Set it in .env or PM2 ecosystem.config.js');
-  console.error('   Example: DATABASE_URL=postgresql://user:pass@localhost:5432/trustchecker\n');
+  logger.error('FATAL: DATABASE_URL is not set. Set it in .env or PM2 ecosystem.config.js');
   process.exit(1);
 }
 
 // ═══════════════════════════════════════════════════════════════════
 // POSTGRESQL BACKEND (Prisma + pg adapter)
 // ═══════════════════════════════════════════════════════════════════
+
+// Application-level query timeout (ms) — safety net above PG statement_timeout
+const APP_QUERY_TIMEOUT = 35000;
+
+// SQL translator logging: sample rate (0.0 = off, 1.0 = all)
+const SQL_LOG_SAMPLE_RATE = 0.1;
+let _translationCount = 0;
+let _translationSkipCount = 0;
 
 class PrismaBackend {
   constructor() {
@@ -37,10 +48,11 @@ class PrismaBackend {
     // Create pg Pool from DATABASE_URL
     this._pool = new Pool({
             connectionString: DB_URL,
-            max: 50,                        // Scale: 50 connections (was default 10)
-            idleTimeoutMillis: 30000,        // Close idle after 30s
-            connectionTimeoutMillis: 5000,   // Fail fast if pool exhausted
-            statement_timeout: 30000,        // Kill queries > 30s
+            max: 50,                                  // Scale: 50 connections
+            idleTimeoutMillis: 30000,                  // Close idle after 30s
+            connectionTimeoutMillis: 5000,             // Fail fast if pool exhausted
+            statement_timeout: 30000,                  // Kill queries > 30s
+            idle_in_transaction_session_timeout: 10000, // Kill idle transactions after 10s
         });
     const adapter = new PrismaPg(this._pool);
 
@@ -56,7 +68,9 @@ class PrismaBackend {
     // Test connection
     const client = await this._pool.connect();
     client.release();
-    console.log('✅ PostgreSQL connected via Prisma (adapter-pg)');
+    logger.info('PostgreSQL connected via Prisma (adapter-pg)', {
+      pool: { max: 50, statementTimeout: '30s', idleInTransaction: '10s' }
+    });
     this.ready = true;
     return this;
   }
@@ -132,7 +146,7 @@ class PrismaBackend {
 
     // Skip DDL — Prisma handles schema via migrations
     if (/^\s*CREATE\s+(TABLE|INDEX)/i.test(t)) {
-      console.warn('[DB] ⚠️ DDL statement skipped (use Prisma migrations):', t.slice(0, 80));
+      logger.warn('[DB] DDL statement skipped (use Prisma migrations)', { sql: t.slice(0, 80) });
       return null;
     }
 
@@ -155,6 +169,20 @@ class PrismaBackend {
     // Append ON CONFLICT DO NOTHING for INSERT OR IGNORE
     if (hadOrIgnore) t += ' ON CONFLICT DO NOTHING';
 
+    // ─── SQL Translator Logging (10% sampled) ────────────────────
+    if (t !== sql) {
+      _translationCount++;
+      if (Math.random() < SQL_LOG_SAMPLE_RATE) {
+        logger.debug('SQL translated', {
+          original: sql.slice(0, 120),
+          translated: t.slice(0, 120),
+          totalTranslations: _translationCount,
+        });
+      }
+    } else {
+      _translationSkipCount++;
+    }
+
     return t;
   }
 
@@ -173,35 +201,55 @@ class PrismaBackend {
     return out;
   }
 
-  // ─── RLS Context ────────────────────────────────────────────
-  // Set per-request org context for PostgreSQL Row Level Security.
-  // orgGuard middleware calls setOrgContext() before route handlers.
+  // ─── RLS Context (AsyncLocalStorage-based) ─────────────────
+  // v9.5.1: orgId is now read from per-request AsyncLocalStorage context.
+  // Previously used singleton _rlsOrgId which had race conditions.
 
-  _rlsOrgId = '';
-
+  // Legacy compat: setOrgContext/clearOrgContext are no-ops now.
+  // orgGuard calls updateContext() which sets orgId in AsyncLocalStorage.
   setOrgContext(orgId) {
-    this._rlsOrgId = orgId || '';
+    // Legacy no-op — context is now managed by AsyncLocalStorage
+    // Kept for backward compatibility with any code that still calls this.
   }
 
   clearOrgContext() {
-    this._rlsOrgId = '';
+    // Legacy no-op
   }
 
   /**
    * Execute a query with RLS context.
-   * Acquires a dedicated pg client, sets app.current_org, runs query, releases.
+   * Reads orgId from AsyncLocalStorage (per-request, no race condition).
+   * Connection safety: double-release guard + application-level timeout.
    */
   async _withRLS(fn) {
     const client = await this._pool.connect();
+    let released = false;
+
     try {
-      if (this._rlsOrgId) {
-        await client.query(`SET app.current_org = '${this._rlsOrgId.replace(/'/g, "''")}'`);
+      // Read org context from AsyncLocalStorage (per-request isolated)
+      const ctx = getContext();
+      const orgId = ctx.orgId || '';
+
+      if (orgId) {
+        await client.query('SET app.current_org = $1', [orgId]);
       } else {
         await client.query("SET app.current_org = ''");
       }
-      return await fn(client);
+
+      // Application-level timeout as safety net
+      const result = await Promise.race([
+        fn(client),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Query timeout (${APP_QUERY_TIMEOUT}ms)`)), APP_QUERY_TIMEOUT)
+        ),
+      ]);
+
+      return result;
     } finally {
-      client.release();
+      if (!released) {
+        client.release();
+        released = true;
+      }
     }
   }
 
@@ -216,7 +264,8 @@ class PrismaBackend {
       });
       return result.rows.length > 0 ? this._convert(result.rows[0]) : null;
     } catch (e) {
-      console.error('DB.get error:', e.message, '\nSQL:', t);
+      const ctx = getContext();
+      logger.error('DB.get error', { error: e.message, sql: t.slice(0, 200), requestId: ctx.requestId });
       throw e;
     }
   }
@@ -230,7 +279,8 @@ class PrismaBackend {
       });
       return result.rows.map(r => this._convert(r));
     } catch (e) {
-      console.error('DB.all error:', e.message, '\nSQL:', t);
+      const ctx = getContext();
+      logger.error('DB.all error', { error: e.message, sql: t.slice(0, 200), requestId: ctx.requestId });
       throw e;
     }
   }
@@ -243,7 +293,8 @@ class PrismaBackend {
         return client.query(t, params);
       });
     } catch (e) {
-      console.error('DB.run error:', e.message, '\nSQL:', t);
+      const ctx = getContext();
+      logger.error('DB.run error', { error: e.message, sql: t.slice(0, 200), requestId: ctx.requestId });
       throw e;
     }
     return this;
@@ -283,10 +334,15 @@ class PrismaBackend {
   /** Direct Prisma client for type-safe queries in new code */
   get client() { return this.prisma; }
 
+  /** SQL translator stats (for monitoring) */
+  getTranslatorStats() {
+    return { translated: _translationCount, native: _translationSkipCount };
+  }
+
   async disconnect() {
     await this.prisma.$disconnect();
     await this._pool.end();
-    console.log('🔌 PostgreSQL disconnected');
+    logger.info('PostgreSQL disconnected', this.getTranslatorStats());
   }
 }
 
@@ -296,3 +352,4 @@ class PrismaBackend {
 
 const db = new PrismaBackend();
 module.exports = db;
+
