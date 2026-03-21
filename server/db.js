@@ -17,7 +17,7 @@
  */
 
 const logger = require('./lib/logger');
-const { getContext } = require('./lib/request-context');
+const { safeGetContext } = require('./lib/request-context');
 
 // D-05: PgBouncer integration
 const DB_URL = process.env.PGBOUNCER_URL || process.env.DATABASE_URL;
@@ -33,6 +33,8 @@ if (!DB_URL) {
 
 // Application-level query timeout (ms) — safety net above PG statement_timeout
 const APP_QUERY_TIMEOUT = 35000;
+// Slow query threshold (ms) — queries exceeding this are logged as warnings
+const SLOW_QUERY_THRESHOLD = 500;
 
 // SQL translator logging: sample rate (0.0 = off, 1.0 = all)
 const SQL_LOG_SAMPLE_RATE = 0.1;
@@ -219,15 +221,17 @@ class PrismaBackend {
   /**
    * Execute a query with RLS context.
    * Reads orgId from AsyncLocalStorage (per-request, no race condition).
-   * Connection safety: double-release guard + application-level timeout.
+   * Connection safety: double-release guard, query cancellation, slow query logging.
    */
   async _withRLS(fn) {
     const client = await this._pool.connect();
     let released = false;
+    let timeoutId = null;
+    const queryStart = Date.now();
 
     try {
       // Read org context from AsyncLocalStorage (per-request isolated)
-      const ctx = getContext();
+      const ctx = safeGetContext();
       const orgId = ctx.orgId || '';
 
       if (orgId) {
@@ -236,16 +240,43 @@ class PrismaBackend {
         await client.query("SET app.current_org = ''");
       }
 
-      // Application-level timeout as safety net
+      // Application-level timeout with query cancellation
       const result = await Promise.race([
         fn(client),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Query timeout (${APP_QUERY_TIMEOUT}ms)`)), APP_QUERY_TIMEOUT)
-        ),
+        new Promise((_, reject) => {
+          timeoutId = setTimeout(async () => {
+            // Cancel the running query in PostgreSQL (not just JS-side reject)
+            try {
+              if (client.processID) {
+                await this._pool.query('SELECT pg_cancel_backend($1)', [client.processID]);
+                logger.warn('Query cancelled via pg_cancel_backend', {
+                  processID: client.processID,
+                  requestId: ctx.requestId,
+                  timeout: APP_QUERY_TIMEOUT,
+                });
+              }
+            } catch (cancelErr) {
+              logger.error('Failed to cancel query', { error: cancelErr.message });
+            }
+            reject(new Error(`Query timeout (${APP_QUERY_TIMEOUT}ms)`));
+          }, APP_QUERY_TIMEOUT);
+        }),
       ]);
+
+      // Slow query detection
+      const duration = Date.now() - queryStart;
+      if (duration > SLOW_QUERY_THRESHOLD) {
+        logger.warn('Slow query detected', {
+          duration,
+          requestId: ctx.requestId,
+          orgId: orgId || '(none)',
+          path: ctx.path,
+        });
+      }
 
       return result;
     } finally {
+      if (timeoutId) clearTimeout(timeoutId);
       if (!released) {
         client.release();
         released = true;
@@ -264,7 +295,7 @@ class PrismaBackend {
       });
       return result.rows.length > 0 ? this._convert(result.rows[0]) : null;
     } catch (e) {
-      const ctx = getContext();
+      const ctx = safeGetContext();
       logger.error('DB.get error', { error: e.message, sql: t.slice(0, 200), requestId: ctx.requestId });
       throw e;
     }
@@ -279,7 +310,7 @@ class PrismaBackend {
       });
       return result.rows.map(r => this._convert(r));
     } catch (e) {
-      const ctx = getContext();
+      const ctx = safeGetContext();
       logger.error('DB.all error', { error: e.message, sql: t.slice(0, 200), requestId: ctx.requestId });
       throw e;
     }
@@ -293,7 +324,7 @@ class PrismaBackend {
         return client.query(t, params);
       });
     } catch (e) {
-      const ctx = getContext();
+      const ctx = safeGetContext();
       logger.error('DB.run error', { error: e.message, sql: t.slice(0, 200), requestId: ctx.requestId });
       throw e;
     }

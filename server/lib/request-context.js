@@ -6,8 +6,9 @@
  * that caused race conditions between concurrent requests.
  *
  * Usage:
- *   const { getContext } = require('./request-context');
- *   const ctx = getContext();  // { requestId, orgId, userId, sessionId, startTime }
+ *   const { getContext, safeGetContext } = require('./request-context');
+ *   const ctx = getContext();      // Returns {} if outside request (silent)
+ *   const ctx = safeGetContext();  // Returns {} + logs warning if missing
  *
  * Middleware entry point:
  *   app.use(requestContextMiddleware);  // Must be before orgGuard
@@ -22,6 +23,10 @@ const { AsyncLocalStorage } = require('async_hooks');
 const crypto = require('crypto');
 
 const asyncLocalStorage = new AsyncLocalStorage();
+
+// Track context leak warnings (avoid log flood — max 1 per path per minute)
+const _leakWarnings = new Map();
+const LEAK_WARN_INTERVAL = 60000;
 
 /**
  * Express middleware — creates a new context for each request.
@@ -56,6 +61,35 @@ function getContext() {
 }
 
 /**
+ * Get context with leak detection — logs warning when called outside a request.
+ * Use in critical paths (DB queries, audit logging) to detect context loss early.
+ */
+function safeGetContext() {
+    const store = asyncLocalStorage.getStore();
+    if (!store) {
+        // Rate-limited warning to avoid log flood
+        const caller = new Error().stack?.split('\n')[2]?.trim() || 'unknown';
+        const now = Date.now();
+        const lastWarn = _leakWarnings.get(caller) || 0;
+        if (now - lastWarn > LEAK_WARN_INTERVAL) {
+            _leakWarnings.set(caller, now);
+            // Lazy-load logger to avoid circular dependency at module load time
+            try {
+                const logger = require('./logger');
+                logger.warn('Request context missing — possible AsyncLocalStorage leak', {
+                    caller: caller.slice(0, 120),
+                    hint: 'Wrap with runInContext() if calling from setTimeout/EventEmitter',
+                });
+            } catch (_) {
+                console.warn('[CONTEXT LEAK]', caller.slice(0, 120));
+            }
+        }
+        return {};
+    }
+    return store;
+}
+
+/**
  * Update the current context (e.g., after auth resolves orgId).
  * Call from middleware:
  *   updateContext({ orgId: req.user.org_id, userId: req.user.id });
@@ -84,6 +118,8 @@ function runInContext(fn) {
 module.exports = {
     requestContextMiddleware,
     getContext,
+    safeGetContext,
     updateContext,
     runInContext,
 };
+
