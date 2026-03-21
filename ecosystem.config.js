@@ -3,6 +3,8 @@ module.exports = {
         name: 'trustchecker',
         script: 'server/index.js',
         cwd: '/opt/trustchecker',
+        exec_mode: 'cluster',
+        instances: 4,
         env: {
             NODE_ENV: 'production',
             PORT: 4000,
@@ -13,6 +15,10 @@ module.exports = {
         },
         max_memory_restart: '500M',
         restart_delay: 3000,
-        max_restarts: 10
+        max_restarts: 10,
+        kill_timeout: 10000,
+        listen_timeout: 8000,
+        merge_logs: true,
+        log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     }]
 };
