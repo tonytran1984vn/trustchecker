@@ -84,7 +84,7 @@ function buildServicesFromHealth(health) {
         { name: 'Blockchain Node', status: mintCheck?.status || overallStatus, uptime: uptimeCheck?.actual || 99.90, latency: mintCheck ? mintCheck.actual + 'ms' : '485ms', rps: '156' },
         { name: 'Cache (Redis)', status: overallHealthy ? 'healthy' : overallStatus, uptime: 99.99, latency: '2ms', rps: '98.7%' },
         { name: 'Queue (RabbitMQ)', status: backlogCheck?.status || overallStatus, uptime: 99.80, latency: '18ms', rps: backlogCheck ? String(backlogCheck.actual) : '42' },
-        { name: 'Database', status: mrvCheck?.status || overallStatus, uptime: uptimeCheck?.actual || 99.97, latency: mrvC ? mrvC.actual + 'ms' : '34ms', rps: '94.2%' },
+        { name: 'Database', status: mrvCheck?.status || overallStatus, uptime: uptimeCheck?.actual || 99.97, latency: mrvCheck ? mrvCheck.actual + 'ms' : '34ms', rps: '94.2%' },
     ];
     return svcs.map(s => {
         const meta = SERVICE_META[s.name] || { icon: '🔧', gradient: 'linear-gradient(135deg,#64748b,#475569)' };
