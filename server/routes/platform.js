@@ -21,6 +21,48 @@ const { clearCacheByPrefix } = require('../cache');
 router.use(authMiddleware);
 router.use(requirePlatformAdmin());
 
+// ─── GET /orgs/check-availability — Real-time name/slug uniqueness check ────
+router.get('/orgs/check-availability', async (req, res) => {
+    try {
+        const { name, slug } = req.query;
+        const result = { name_available: true, slug_available: true, suggestions: [] };
+
+        if (name) {
+            const existing = await db.get(
+                'SELECT id FROM organizations WHERE LOWER(name) = LOWER(?)', [name]
+            );
+            result.name_available = !existing;
+        }
+
+        if (slug) {
+            const existing = await db.get(
+                'SELECT id FROM organizations WHERE slug = ?', [slug]
+            );
+            result.slug_available = !existing;
+
+            if (existing) {
+                // Generate 3 slug suggestions
+                const rand = () => Math.floor(100 + Math.random() * 900); // 3-digit
+                const suffixes = ['ltd', String(rand()), 'co'];
+                const suggestions = [];
+                for (const s of suffixes) {
+                    const candidate = `${slug}-${s}`;
+                    const taken = await db.get(
+                        'SELECT id FROM organizations WHERE slug = ?', [candidate]
+                    );
+                    if (!taken) suggestions.push(candidate);
+                }
+                result.suggestions = suggestions;
+            }
+        }
+
+        res.json(result);
+    } catch (err) {
+        console.error('[Platform] Check availability error:', err);
+        res.status(500).json({ error: 'Failed to check availability' });
+    }
+});
+
 // ─── POST /orgs — Create new org/company ──────────────────────────────
 router.post('/orgs', async (req, res) => {
     try {

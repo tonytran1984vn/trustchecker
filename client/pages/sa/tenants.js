@@ -20,6 +20,45 @@ let createError = '';
 let creating = false;
 let createdCredentials = null;
 
+// ─── Name/Slug Validation State ──────────────────────────
+let nameStatus = null; // null | 'checking' | 'available' | 'taken'
+let slugStatus = null;
+let slugSuggestions = [];
+let _checkTimer = null;
+
+async function checkAvailability(name, slug) {
+  if (!name && !slug) return;
+  nameStatus = 'checking'; slugStatus = 'checking';
+  window.render();
+  try {
+    const params = new URLSearchParams();
+    if (name) params.set('name', name);
+    if (slug) params.set('slug', slug);
+    const res = await API.get(`/platform/orgs/check-availability?${params}`);
+    nameStatus = name ? (res.name_available ? 'available' : 'taken') : null;
+    slugStatus = slug ? (res.slug_available ? 'available' : 'taken') : null;
+    slugSuggestions = res.suggestions || [];
+  } catch {
+    nameStatus = null; slugStatus = null; slugSuggestions = [];
+  }
+  window.render();
+}
+
+function debouncedCheck() {
+  clearTimeout(_checkTimer);
+  _checkTimer = setTimeout(() => {
+    const nameEl = document.getElementById('ct-name');
+    const slugEl = document.getElementById('ct-slug');
+    const name = nameEl?.value?.trim();
+    const slug = slugEl?.value?.trim();
+    if (name && name.length >= 2) {
+      checkAvailability(name, slug);
+    } else {
+      nameStatus = null; slugStatus = null; slugSuggestions = []; window.render();
+    }
+  }, 400);
+}
+
 const PLAN_MRR = { free: 0, starter: 99, growth: 299, business: 749, enterprise: 5000 };
 
 async function loadTenants() {
@@ -90,7 +129,7 @@ function copyText(text) {
   navigator.clipboard?.writeText(text).then(() => window.showToast?.('📋 Copied to clipboard!', 'success'));
 }
 
-function closeModal() { showCreateModal = false; createError = ''; creating = false; createdCredentials = null; window.render(); }
+function closeModal() { showCreateModal = false; createError = ''; creating = false; createdCredentials = null; nameStatus = null; slugStatus = null; slugSuggestions = []; window.render(); }
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && showCreateModal) { e.preventDefault(); closeModal(); }
@@ -408,12 +447,14 @@ function renderModal() {
           <div style="display:grid;grid-template-columns:1fr 140px 140px;gap:10px;margin-bottom:12px">
             <div class="phx-form-group" style="margin:0">
               <label class="phx-label" style="font-size:0.7rem;margin-bottom:3px">Company name <span class="phx-req">*</span></label>
-              <input class="phx-input" type="text" name="name" id="ct-name" required placeholder="e.g. Amazon CA" autocomplete="off" style="padding:7px 10px;font-size:0.82rem"
-                oninput="document.getElementById('ct-slug').value=window._saSlugify(this.value)">
+              <input class="phx-input" type="text" name="name" id="ct-name" required placeholder="e.g. Amazon CA" autocomplete="off" style="padding:7px 10px;font-size:0.82rem${nameStatus === 'taken' ? ';border-color:#ef4444' : nameStatus === 'available' ? ';border-color:#10b981' : ''}"
+                oninput="document.getElementById('ct-slug').value=window._saSlugify(this.value);window._saCheckAvail()">
+              ${nameStatus === 'checking' ? '<div class="avail-msg avail-check">⏳ Checking...</div>' : nameStatus === 'taken' ? '<div class="avail-msg avail-taken">❌ Name already exists — please choose a different name</div>' : nameStatus === 'available' ? '<div class="avail-msg avail-ok">✅ Name available</div>' : ''}
             </div>
             <div class="phx-form-group" style="margin:0">
               <label class="phx-label" style="font-size:0.7rem;margin-bottom:3px">Slug <span style="font-weight:400;font-size:0.58rem;color:var(--text-muted)">(auto)</span></label>
-              <input class="phx-input" type="text" name="slug" id="ct-slug" required placeholder="amazon-ca" pattern="[a-z0-9\\-]+" autocomplete="off" style="padding:7px 10px;font-size:0.82rem;color:var(--text-muted);background:var(--bg-secondary,#f1f5f9)">
+              <input class="phx-input" type="text" name="slug" id="ct-slug" required placeholder="amazon-ca" pattern="[a-z0-9\\-]+" autocomplete="off" style="padding:7px 10px;font-size:0.82rem;color:var(--text-muted);background:var(--bg-secondary,#f1f5f9)${slugStatus === 'taken' ? ';border-color:#ef4444' : slugStatus === 'available' ? ';border-color:#10b981' : ''}" oninput="window._saCheckAvail()">
+              ${slugStatus === 'checking' ? '<div class="avail-msg avail-check">⏳ Checking...</div>' : slugStatus === 'taken' ? `<div class="avail-msg avail-taken">❌ Slug already taken${slugSuggestions.length ? ' — try:' : ''}</div>${slugSuggestions.length ? '<div class="slug-suggestions">' + slugSuggestions.map(s => `<button type="button" class="slug-chip" onclick="window._saPickSlug('${s}')">${s}</button>`).join('') + '</div>' : ''}` : slugStatus === 'available' ? '<div class="avail-msg avail-ok">✅ Slug available</div>' : ''}
             </div>
             <div class="phx-form-group" style="margin:0">
               <label class="phx-label" style="font-size:0.7rem;margin-bottom:3px">CIE Tier</label>
@@ -428,6 +469,13 @@ function renderModal() {
           </div>
 
           <style>
+            .avail-msg{font-size:0.65rem;margin-top:2px;font-weight:600}
+            .avail-ok{color:#10b981}
+            .avail-taken{color:#ef4444}
+            .avail-check{color:#94a3b8}
+            .slug-suggestions{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+            .slug-chip{padding:3px 8px;border-radius:12px;border:1px solid #3b82f6;background:rgba(59,130,246,0.06);color:#3b82f6;font-size:0.62rem;font-weight:600;cursor:pointer;transition:all 0.15s;font-family:monospace}
+            .slug-chip:hover{background:#3b82f6;color:#fff}
             .ff-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
             .ff-chip{display:flex;align-items:center;gap:4px;padding:5px 10px;border-radius:20px;border:1px solid var(--border,#e2e8f0);cursor:pointer;transition:all 0.15s;font-size:0.72rem;font-weight:500;user-select:none;white-space:nowrap}
             .ff-chip:hover{background:rgba(59,130,246,0.06);border-color:rgba(59,130,246,0.4)}
@@ -644,8 +692,8 @@ function renderModal() {
 
           <div class="phx-modal-foot" style="padding:10px 0 0">
             <button type="button" class="phx-btn-secondary" style="padding:8px 18px;font-size:0.78rem" onclick="window._saCloseCreate()">Cancel</button>
-            <button type="submit" class="phx-btn-primary" style="padding:8px 18px;font-size:0.78rem" ${creating ? 'disabled' : ''}>
-              ${creating ? '<span class="phx-spinner-sm"></span> Creating...' : `${icon('plus', 14)} Create organization`}
+            <button type="submit" class="phx-btn-primary" style="padding:8px 18px;font-size:0.78rem" ${creating || nameStatus === 'taken' || slugStatus === 'taken' ? 'disabled' : ''}>
+              ${creating ? '<span class="phx-spinner-sm"></span> Creating...' : nameStatus === 'taken' || slugStatus === 'taken' ? '⚠ Fix conflicts above' : `${icon('plus', 14)} Create organization`}
             </button>
           </div>
         </form>
@@ -662,6 +710,11 @@ window._saCloseCreate = closeModal;
 window._saSlugify = slugify;
 window._saGenPw = genPassword;
 window._saCopy = copyText;
+window._saCheckAvail = debouncedCheck;
+window._saPickSlug = (slug) => {
+  const el = document.getElementById('ct-slug');
+  if (el) { el.value = slug; debouncedCheck(); }
+};
 window._saCopyAll = () => {
   if (!createdCredentials) return;
   const c = createdCredentials;
