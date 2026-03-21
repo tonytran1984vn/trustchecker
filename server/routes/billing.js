@@ -326,7 +326,11 @@ router.get('/compare', async (req, res) => {
 // ─── GET /invoices ──────────────────────────────────────────
 router.get('/invoices', async (req, res) => {
     try {
-        const invoices = await db.all('SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC LIMIT 1000', [req.user.id]);
+        // Super admin sees ALL platform invoices; regular users see only their own
+        const isSuperAdmin = req.user?.role === 'super_admin' || req.user?.user_type === 'platform';
+        const invoices = isSuperAdmin
+            ? await db.all('SELECT * FROM invoices ORDER BY created_at DESC LIMIT 1000')
+            : await db.all('SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC LIMIT 1000', [req.user.id]);
         res.json({ invoices });
     } catch (e) {
         safeError(res, 'Operation failed', e);
