@@ -109,9 +109,11 @@ function requestSanitizer() {
             }
         }
 
-        // Sanitize query params
+        // Sanitize query params (in-place: req.query is read-only in Express)
         if (req.query && typeof req.query === 'object') {
-            req.query = sanitizeValue(req.query);
+            const sanitized = sanitizeValue(req.query);
+            Object.keys(req.query).forEach(k => delete req.query[k]);
+            Object.assign(req.query, sanitized);
         }
 
         next();

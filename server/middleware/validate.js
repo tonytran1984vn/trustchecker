@@ -45,7 +45,9 @@ function validate(schemas) {
                     });
                 }
             } else {
-                req.query = result.data;
+                // In-place mutation: req.query is a getter in Express, cannot be reassigned
+                Object.keys(req.query).forEach(k => delete req.query[k]);
+                Object.assign(req.query, result.data);
             }
         }
 
