@@ -25,6 +25,7 @@ const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const pricing = require('../engines/infrastructure/pricing-engine');
 const { getDetailedUsage, getOverageCharges } = require('../middleware/usage-meter');
 const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 // ─── POST /webhook — Webhook receiver with signature verification ────
 router.post('/webhook', async (req, res) => {
@@ -755,7 +756,6 @@ router.post('/pricing/reset', requireSuperAdmin(), async (req, res) => {
 // TRANSACTION FEE INFRASTRUCTURE (per-transaction pricing)
 // ═══════════════════════════════════════════════════════════════════
 const txFeeEngine = require('../engines/economics-engine').transactionFee;
-const logger = require('../lib/logger');
 
 // ─── GET /transaction-fees — Fee schedule ────────────────────────────
 router.get('/transaction-fees', (req, res) => {

@@ -16,6 +16,8 @@ const { bulkScanDetector, replayDetector } = require('../middleware/blind-spot-d
 // TC-21-REUSE-CHECK: Detect QR code reuse pattern
 async function checkQrReuse(qrCodeId, qrData, ipAddr, deviceFp, db) {
     const crypto = require('crypto');
+const logger = require('../lib/logger');
+const { orgGuard } = require('../middleware/org-middleware');
     const ipHash = crypto
         .createHash('sha256')
         .update(ipAddr || '')
@@ -82,7 +84,6 @@ const trustEngine = require('../engines/core/trust');
 const blockchainEngine = require('../engines/infrastructure/blockchain');
 const { eventBus, EVENT_TYPES } = require('../events');
 const { validate, schemas } = require('../middleware/validate');
-const { orgGuard } = require('../middleware/org-middleware');
 
 const router = express.Router();
 
@@ -1220,7 +1221,6 @@ router.post('/mobile-scan', bulkScanDetector, replayDetector, validate(schemas.q
 // No auth required. Rate limited per IP. Returns limited data + signup CTA.
 const rateLimit = require('express-rate-limit');
 const { withTransaction } = require('../middleware/transaction');
-const logger = require('../lib/logger');
 const publicCheckLimiter = rateLimit({
     windowMs: 60_000,
     max: 10,

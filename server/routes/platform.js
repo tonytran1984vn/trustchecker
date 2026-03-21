@@ -16,6 +16,7 @@ const db = require('../db');
 const { authMiddleware } = require('../auth/core');
 const { requirePlatformAdmin } = require('../auth/rbac');
 const { clearCacheByPrefix } = require('../cache');
+const logger = require('../lib/logger');
 
 // All routes require auth + platform admin
 router.use(authMiddleware);
@@ -372,7 +373,6 @@ router.post('/email-settings/test', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 const slackService = require('../services/slack');
 const { withTransaction } = require('../middleware/transaction');
-const logger = require('../lib/logger');
 
 // GET /channel-settings/:channel
 router.get('/channel-settings/:channel', async (req, res) => {
