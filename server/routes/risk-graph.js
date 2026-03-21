@@ -99,7 +99,7 @@ router.get(
     async (req, res) => {
         try {
             const orgs = await db.all('SELECT * FROM organizations WHERE status = ?', ['active']).catch(() => []);
-            const orgs = [];
+            const orgDataList = [];
             for (const o of orgs) {
                 const scanCount = await db
                     .get(
@@ -125,7 +125,7 @@ router.get(
                         [o.id]
                     )
                     .catch(() => []);
-                orgs.push({
+                orgDataList.push({
                     id: o.id,
                     name: o.name,
                     slug: o.slug,
@@ -138,7 +138,7 @@ router.get(
                         typeof o.feature_flags === 'string' ? JSON.parse(o.feature_flags || '{}') : o.feature_flags,
                 });
             }
-            res.json(riskGraph.detectCrossOrgPatterns(orgs));
+            res.json(riskGraph.detectCrossOrgPatterns(orgDataList));
         } catch (err) {
             res.status(500).json({ error: 'Cross-org analysis failed' });
         }
