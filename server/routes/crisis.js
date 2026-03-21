@@ -19,7 +19,7 @@ router.get('/status', (req, res) => {
 
 // ─── POST /kill-switch/org/:id — Halt specific org ───────────
 router.post('/kill-switch/org/:id', requirePermission('admin:manage'), (req, res) => {
-    const result = crisis.killTenant(
+    const result = crisis.killOrg(
         req.params.id,
         req.user?.id || 'unknown',
         req.body.reason || 'No reason provided',

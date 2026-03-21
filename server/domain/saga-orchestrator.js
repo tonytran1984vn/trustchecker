@@ -241,7 +241,7 @@ class SagaOrchestrator {
      * Start a saga by key with trigger data.
      * @param {string} sagaKey - SAGA_DEFINITIONS key
      * @param {Object} triggerData - Event data that triggered the saga
-     * @param {Object} context - Tenant context, user info, etc.
+     * @param {Object} context - Org context, user info, etc.
      * @returns {SagaInstance}
      */
     async start(sagaKey, triggerData, context = {}) {

@@ -5,7 +5,7 @@ require("dotenv").config();
  * Supports dual-mode: PostgreSQL (Prisma) or SQLite (sql.js)
  *
  * Boot sequence is split into focused modules:
- *   boot/middleware.js  — Security, observability, versioning, metering, tenant
+ *   boot/middleware.js  — Security, observability, versioning, metering, org
  *   boot/routes.js      — Declarative route table (36 routes, auto v1 alias)
  *   boot/health.js      — Health, metrics, SLO, domain diagnostics, frontend
  *   boot/shutdown.js    — Graceful shutdown & process error handlers
@@ -203,7 +203,7 @@ async function boot() {
     const { replicaManager } = require('./data/read-replica');
     const queryStore = new QueryStore(db, redis?.getRedisClient?.() || null);
 
-    // 5. Apply middleware chain (WAF → security → observability → versioning → metering → tenant)
+    // 5. Apply middleware chain (WAF → security → observability → versioning → metering → org)
     const { setupMiddleware } = require('./boot/middleware');
     const { waf, apiGateway, metrics, slo } = setupMiddleware(app, redis);
 

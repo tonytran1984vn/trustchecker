@@ -171,9 +171,9 @@ const VALID_ROLES = [
     'admin', // System roles
     'executive',
     'ops_manager',
-    'risk_officer', // Tenant / Business roles
+    'risk_officer', // Org / Business roles
     'compliance_officer',
-    'developer', // Tenant / Business roles
+    'developer', // Org / Business roles
     'manager',
     'operator',
     'viewer', // Legacy roles

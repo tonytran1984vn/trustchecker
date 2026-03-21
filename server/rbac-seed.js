@@ -224,7 +224,7 @@ const PERMISSIONS = [
     { resource: 'cie_risk_config', action: 'set_threshold', scope: 'global', level: 'platform', desc: 'Set global anomaly threshold' },
     { resource: 'cie_ivu_registry', action: 'manage', scope: 'global', level: 'platform', desc: 'Manage IVU validator registry' },
     { resource: 'cie_ivu_registry', action: 'verify_qual', scope: 'global', level: 'platform', desc: 'Verify IVU qualification' },
-    // Tenant-level CIE (SoD-enforced)
+    // Org-level CIE (SoD-enforced)
     { resource: 'cie_passport', action: 'submit', scope: 'org', level: 'business', desc: 'Submit emission data and create CIP draft' },
     { resource: 'cie_passport', action: 'calculate', scope: 'org', level: 'business', desc: 'Execute deterministic emission calculation (system)' },
     { resource: 'cie_passport', action: 'review', scope: 'org', level: 'business', desc: 'Review CIP data quality' },
@@ -733,7 +733,7 @@ const DEFAULT_BUSINESS_ROLES = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 4. DEFAULT TENANT + TEST USERS
+// 4. DEFAULT ORG + TEST USERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const DEFAULT_ORG = {
@@ -961,7 +961,7 @@ async function seed() {
     }
     console.log(`  → company_admin: ${orgAndBizPerms.length} permissions (org + business)\n`);
 
-    // ── 3. Seed Default Tenant ──────────────────────────────────────────────
+    // ── 3. Seed Default Org ──────────────────────────────────────────────
     console.log('🏢 Seeding default org...');
     await db.run(
         `INSERT OR IGNORE INTO organizations (id, name, slug, plan, feature_flags, status) VALUES (?, ?, ?, ?, ?, ?)`,

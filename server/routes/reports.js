@@ -423,7 +423,7 @@ router.get('/export/:entity', requirePermission('report:export'), async (req, re
             },
         };
 
-        // Org-scoped export: filter tenant data
+        // Org-scoped export: filter org data
         const config = entityMap[entity];
         if (!config)
             return res.status(400).json({ error: `Invalid entity. Choose: ${Object.keys(entityMap).join(', ')}` });

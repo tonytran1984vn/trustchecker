@@ -1,7 +1,7 @@
 /**
  * Super Admin – Platform Users (Live API)
  * ════════════════════════════════════════
- * Manages infrastructure-level users only (NOT business/tenant users).
+ * Manages infrastructure-level users only (NOT business/org users).
  * Platform ≠ Business — strict separation of concerns.
  */
 import { API } from '../../core/api.js';

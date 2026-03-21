@@ -3,7 +3,7 @@
  * Kill-Switch Controller + Crisis Level Classification + Escalation Matrix
  * 
  * Features:
- *   - Kill-switch: per-tenant, per-module, or system-wide halt
+ *   - Kill-switch: per-org, per-module, or system-wide halt
  *   - 5 Crisis Levels: MONITOR → YELLOW → ORANGE → RED → BLACK
  *   - Dual-Key Authorization: RED/BLACK require 2 authorized roles
  *   - Auto-Deactivation Timer: prevent indefinite lockouts
@@ -78,7 +78,7 @@ const PLAYBOOKS = {
     data_breach: {
         name: 'Data Breach Response', severity: 'RED',
         steps: [
-            { seq: 1, action: 'Activate kill-switch for affected tenant', role: 'platform_security', sla_min: 5 },
+            { seq: 1, action: 'Activate kill-switch for affected org', role: 'platform_security', sla_min: 5 },
             { seq: 2, action: 'Isolate affected database partitions', role: 'ops_manager', sla_min: 10 },
             { seq: 3, action: 'Forensic snapshot of audit logs', role: 'auditor', sla_min: 15 },
             { seq: 4, action: 'Notify affected users per GDPR Art.33', role: 'compliance_officer', sla_min: 60 },
@@ -173,10 +173,10 @@ class CrisisEngine {
         };
     }
 
-    // ─── Kill-Switch: Tenant ──────────────────────────────────────
+    // ─── Kill-Switch: Org ──────────────────────────────────────
 
-    killTenant(tenantId, activatedBy, reason, role) {
-        return this._activateKillSwitch('tenant', tenantId, activatedBy, reason, role, 'RED');
+    killOrg(orgId, activatedBy, reason, role) {
+        return this._activateKillSwitch('org', orgId, activatedBy, reason, role, 'RED');
     }
 
     // ─── Kill-Switch: Module ──────────────────────────────────────
@@ -361,7 +361,7 @@ class CrisisEngine {
         return this.auditTrail.slice(-limit).reverse();
     }
 
-    // ─── Check if module/tenant is halted ─────────────────────────
+    // ─── Check if module/org is halted ─────────────────────────
 
     isHalted(type, target) {
         // Check global halt

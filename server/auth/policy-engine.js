@@ -14,7 +14,7 @@
 const db = require('../db');
 const { hasPermission, hasAnyPermission, checkSoD, getUserPermissions } = require('./rbac');
 
-// ─── Tenant-level KYC approver roles ─────────────────────────────────────────
+// ─── Org-level KYC approver roles ─────────────────────────────────────────
 const KYC_APPROVER_ROLES = ['org_owner', 'company_admin', 'executive', 'compliance_officer'];
 
 // ─── Identity SoD rules ─────────────────────────────────────────────────────
@@ -44,19 +44,19 @@ const ORG_SCOPED_TABLES = {
 async function evaluate(user, action, resourceId, opts = {}) {
     if (!user) return deny('Authentication required', 'AUTH_REQUIRED');
 
-    // ─── Step 1: Platform vs Tenant boundary ─────────────────────
-    // Platform admins bypass standard RBAC but NOT constitutional, identity SoD, or tenant data mutation
+    // ─── Step 1: Platform vs Org boundary ─────────────────────
+    // Platform admins bypass standard RBAC but NOT constitutional, identity SoD, or org data mutation
     const isPlatformAdmin = user.user_type === 'platform' && (user.role === 'super_admin' || user.role === 'platform_security');
 
-    // Phase 5: Platform admin cannot MUTATE tenant business data
+    // Phase 5: Platform admin cannot MUTATE org business data
     const HTTP_MUTATING = ['POST', 'PUT', 'PATCH', 'DELETE'];
     const isMutating = opts.req && HTTP_MUTATING.includes(opts.req.method);
-    const TENANT_DATA_ACTIONS = ['po:', 'supplier:', 'product:', 'evidence:'];
-    const isTenantDataAction = TENANT_DATA_ACTIONS.some(prefix => action.startsWith(prefix));
+    const ORG_DATA_ACTIONS = ['po:', 'supplier:', 'product:', 'evidence:'];
+    const isOrgDataAction = ORG_DATA_ACTIONS.some(prefix => action.startsWith(prefix));
 
-    if (isPlatformAdmin && isMutating && isTenantDataAction) {
+    if (isPlatformAdmin && isMutating && isOrgDataAction) {
         return deny(
-            'Platform admin cannot mutate tenant business data. View only.',
+            'Platform admin cannot mutate org business data. View only.',
             'PLATFORM_MUTATE_DENIED',
             { action, method: opts.req?.method }
         );
@@ -92,8 +92,8 @@ async function evaluate(user, action, resourceId, opts = {}) {
         }
     }
 
-    // ─── Step 4: Org-scoping (tenant isolation) ──────────────────
-    // Verify user's org matches resource's org to prevent cross-tenant access
+    // ─── Step 4: Org-scoping (org isolation) ──────────────────
+    // Verify user's org matches resource's org to prevent cross-org access
     if (resourceId && user.user_type !== 'platform') {
         const orgId = user.org_id || user.orgId;
         if (orgId) {
@@ -114,8 +114,8 @@ async function evaluate(user, action, resourceId, opts = {}) {
                 } catch (e) {
                     // Table might not have org_id — skip silently
                 }
-            } else if (isTenantDataAction) {
-                // Phase 5: Unmapped tenant data action → DENY by default (fail-closed)
+            } else if (isOrgDataAction) {
+                // Phase 5: Unmapped org data action → DENY by default (fail-closed)
                 return deny(
                     'Org-scope check required but no mapping found for this action',
                     'ORG_SCOPE_UNMAPPED',

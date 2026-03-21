@@ -1022,10 +1022,10 @@ function renderSidebar() {
       'scm-ai',
       'compliance', 'anomaly', 'reports',
     ],
-    // L3: Tenant Governance
-    org_owner: '*', // legal representative — full tenant oversight
-    company_admin: '*', // operational tenant admin
-    admin: '*', // company admin sees everything within tenant
+    // L3: Org Governance
+    org_owner: '*', // legal representative — full org oversight
+    company_admin: '*', // operational org admin
+    admin: '*', // company admin sees everything within org
     security_officer: [
       'dashboard', 'fraud', 'evidence',
       'scm-leaks', 'scm-trustgraph',

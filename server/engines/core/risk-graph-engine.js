@@ -1,6 +1,6 @@
 /**
  * Risk Graph Engine v2.0
- * Behavioral risk analysis, fraud graph, link analysis, cross-tenant patterns
+ * Behavioral risk analysis, fraud graph, link analysis, cross-org patterns
  * v2.0 adds: DB-backed risk graph, multi-hop propagation, unified risk scoring
  */
 
@@ -210,13 +210,13 @@ class RiskGraphEngine {
     }
 
     /**
-     * Cross-tenant fraud pattern detection (Super Admin)
+     * Cross-org fraud pattern detection (Super Admin)
      */
-    detectCrossTenantPatterns(tenants = []) {
+    detectCrossOrgPatterns(orgs = []) {
         const patterns = [];
 
         const globalDevices = {};
-        tenants.forEach(t => {
+        orgs.forEach(t => {
             (t.devices || []).forEach(d => {
                 if (!globalDevices[d]) globalDevices[d] = [];
                 globalDevices[d].push(t.org_id);
@@ -224,10 +224,10 @@ class RiskGraphEngine {
         });
         const sharedDevices = Object.entries(globalDevices).filter(([_, ts]) => new Set(ts).size > 1);
         if (sharedDevices.length > 0)
-            patterns.push({ type: 'cross_tenant_device', severity: 'critical', count: sharedDevices.length, detail: 'Same device used across multiple tenants' });
+            patterns.push({ type: 'cross_org_device', severity: 'critical', count: sharedDevices.length, detail: 'Same device used across multiple orgs' });
 
         const creditFlows = {};
-        tenants.forEach(t => {
+        orgs.forEach(t => {
             (t.transfers || []).forEach(tr => {
                 const key = `${tr.from}→${tr.to}`;
                 creditFlows[key] = (creditFlows[key] || 0) + 1;
@@ -238,10 +238,10 @@ class RiskGraphEngine {
             return creditFlows[`${to}→${from}`] > 0;
         });
         if (circular.length > 0)
-            patterns.push({ type: 'circular_credits', severity: 'critical', count: circular.length, detail: 'Circular credit transfers between tenants' });
+            patterns.push({ type: 'circular_credits', severity: 'critical', count: circular.length, detail: 'Circular credit transfers between orgs' });
 
         return {
-            title: 'Cross-Tenant Fraud Detection', tenants_analyzed: tenants.length,
+            title: 'Cross-Org Fraud Detection', orgs_analyzed: orgs.length,
             patterns_found: patterns.length, patterns,
             risk_level: patterns.some(p => p.severity === 'critical') ? 'critical' : patterns.length > 0 ? 'medium' : 'low',
             analyzed_at: new Date().toISOString()

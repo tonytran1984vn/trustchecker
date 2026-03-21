@@ -210,7 +210,7 @@ const CONSTITUTIONAL_POWERS = {
         article: 1,
         max_duration_hours: 4,
     },
-    'crisis.killswitch.tenant': {
+    'crisis.killswitch.org': {
         allowed: ['admin'],
         denied: ['blockchain_operator', 'ivu_validator'],
         requires: null,

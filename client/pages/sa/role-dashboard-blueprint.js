@@ -7,13 +7,13 @@ import { icon } from '../../core/icons.js';
 const BLUEPRINTS = [
     {
         role: 'Super Admin', color: '#ef4444', icon: '<span class="status-dot red"></span>', focus: 'Ecosystem Risk & Engine Governance', timeHorizon: 'Real-time + Monthly', kpis: [
-            'Total scan volume (all tenants)', 'Cross-tenant anomaly clusters', 'Risk engine model version', 'API latency P99', 'Error rate by connector', 'Tenant SLA compliance'
+            'Total scan volume (all orgs)', 'Cross-org anomaly clusters', 'Risk engine model version', 'API latency P99', 'Error rate by connector', 'Org SLA compliance'
         ], sections: [
-            { name: 'Control Tower', desc: 'Bird\'s eye: scan volume, risk distribution, tenant health across ecosystem', dataLevel: 'Aggregated cross-tenant' },
-            { name: 'Cross-Tenant Intelligence', desc: 'Detect patterns spanning multiple brands: same region, same counterfeit cluster', dataLevel: 'Pattern-level (no SKU detail)' },
+            { name: 'Control Tower', desc: 'Bird\'s eye: scan volume, risk distribution, org health across ecosystem', dataLevel: 'Aggregated cross-org' },
+            { name: 'Cross-Org Intelligence', desc: 'Detect patterns spanning multiple brands: same region, same counterfeit cluster', dataLevel: 'Pattern-level (no SKU detail)' },
             { name: 'Engine Governance', desc: 'Model version, recalibration queue, A/B test results, deployment gate', dataLevel: 'System config' },
             { name: 'Platform Health', desc: 'API load, scan latency, integration status, error rates', dataLevel: 'Infrastructure metrics' },
-        ], doesNot: 'View individual SKUs, consumer data, or tenant-specific cases. Sees ecosystem patterns only.'
+        ], doesNot: 'View individual SKUs, consumer data, or org-specific cases. Sees ecosystem patterns only.'
     },
 
     {

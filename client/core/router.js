@@ -104,14 +104,14 @@ const PAGE_LOADERS = {
 
     // ─── Super Admin (Platform Governance) pages ────────
     'control-tower': () => import('../pages/sa/control-tower.js'),
-    'sa-tenants': () => import('../pages/sa/tenants.js'),
-    'sa-create-tenant': () => import('../pages/sa/tenants.js'),    // reuse tenant list (create modal)
-    'sa-suspended': () => import('../pages/sa/tenants.js'),        // reuse with filter
-    'sa-archived': () => import('../pages/sa/tenants.js'),         // reuse with filter
-    'sa-tenant-detail': () => import('../pages/sa/tenant-detail.js'),
+    'sa-orgs': () => import('../pages/sa/orgs.js'),
+    'sa-create-org': () => import('../pages/sa/orgs.js'),    // reuse org list (create modal)
+    'sa-suspended': () => import('../pages/sa/orgs.js'),        // reuse with filter
+    'sa-archived': () => import('../pages/sa/orgs.js'),         // reuse with filter
+    'sa-org-detail': () => import('../pages/sa/org-detail.js'),
     'sa-risk-feed': () => import('../pages/sa/risk-feed.js'),
     'sa-risk-analytics': () => import('../pages/sa/risk-analytics.js'),
-    'sa-suspicious': () => import('../pages/sa/suspicious-tenants.js'),
+    'sa-suspicious': () => import('../pages/sa/suspicious-orgs.js'),
     'sa-ai-engine': () => import('../pages/sa/ai-engine.js'),
     'sa-platform-users': () => import('../pages/sa/platform-users.js'),
     'sa-platform-roles': () => import('../pages/sa/platform-roles.js'),
@@ -333,7 +333,7 @@ export function navigate(page, opts = {}) {
     const redirect = _roleRedirects[userRole]?.[page];
     if (redirect) page = redirect;
 
-    // Support both navigate('page', {tenantId:'x'}) and navigate('page', {skipPush:true})
+    // Support both navigate('page', {orgId:'x'}) and navigate('page', {skipPush:true})
     const skipPush = opts.skipPush || false;
     const params = { ...opts };
     delete params.skipPush;
@@ -350,9 +350,9 @@ export function navigate(page, opts = {}) {
     // Update browser URL via History API
     if (!skipPush) {
         let url = _basePath + '/' + page;
-        // Append sub-path for detail pages (e.g. /sa-tenant-detail/UUID)
-        if (page === 'sa-tenant-detail' && params.tenantId) {
-            url += '/' + params.tenantId;
+        // Append sub-path for detail pages (e.g. /sa-org-detail/UUID)
+        if (page === 'sa-org-detail' && params.orgId) {
+            url += '/' + params.orgId;
         }
         history.pushState({ page, params }, '', url);
     }
@@ -484,18 +484,18 @@ export async function loadPageData(page) {
             render();
         } else if (page === 'sa-financial') {
             // Check if prefetched by control-tower
-            if (State._saFinancialPrefetched && State.billingData && State.platformTenants) {
+            if (State._saFinancialPrefetched && State.billingData && State.platformOrgs) {
                 render();
             } else {
-                // Financial workspace needs billing + pricing + tenants data
-                const [planRes, usageRes, invoiceRes, tenantRes] = await Promise.all([
+                // Financial workspace needs billing + pricing + orgs data
+                const [planRes, usageRes, invoiceRes, orgRes] = await Promise.all([
                     API.get('/billing/plan'),
                     API.get('/billing/usage'),
                     API.get('/billing/invoices'),
                     API.get('/platform/orgs').catch(() => ({ orgs: [] })),
                 ]);
                 State.billingData = { plan: planRes.plan, available: planRes.available_plans, period: usageRes.period, usage: usageRes.usage, invoices: invoiceRes.invoices };
-                State.platformTenants = Array.isArray(tenantRes) ? tenantRes : (tenantRes.orgs || []);
+                State.platformOrgs = Array.isArray(orgRes) ? orgRes : (orgRes.orgs || []);
                 try {
                     const pRes = await fetch(API.base + '/billing/pricing');
                     if (pRes.ok) State.pricingAdminData = await pRes.json();
@@ -993,14 +993,14 @@ export function getPageFromURL() {
     // Remove leading slash and trailing slash
     p = p.replace(/^\/+|\/+$/g, '');
 
-    // Handle detail pages with sub-path: sa-tenant-detail/UUID
-    if (p.startsWith('sa-tenant-detail/')) {
+    // Handle detail pages with sub-path: sa-org-detail/UUID
+    if (p.startsWith('sa-org-detail/')) {
         const parts = p.split('/');
-        const tenantId = parts[1];
-        if (tenantId) {
-            State.pageParams = { tenantId };
+        const orgId = parts[1];
+        if (orgId) {
+            State.pageParams = { orgId };
         }
-        return 'sa-tenant-detail';
+        return 'sa-org-detail';
     }
 
     // If empty or index.html, route based on role

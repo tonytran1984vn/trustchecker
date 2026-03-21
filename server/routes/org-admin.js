@@ -15,7 +15,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { authMiddleware } = require('../auth/core');
 const {
-    requireTenantAdmin,
+    requireOrgAdmin,
     checkPlanGuardrail,
     checkSoD,
     getPermissionsForRole,
@@ -25,7 +25,7 @@ const {
 
 // All routes require auth + org context + org admin
 router.use(authMiddleware);
-router.use(requireTenantAdmin());
+router.use(requireOrgAdmin());
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROLE MANAGEMENT
@@ -50,7 +50,7 @@ router.get('/roles', async (req, res) => {
 
         res.json({ roles });
     } catch (err) {
-        logger.error('[TenantAdmin] List roles error:', err);
+        logger.error('[OrgAdmin] List roles error:', err);
         res.status(500).json({ error: 'Failed to list roles' });
     }
 });
@@ -134,7 +134,7 @@ router.post('/roles', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.status(201).json({ id: roleId, name, display_name, permissions_mapped: mapped, message: 'Role created' });
     } catch (err) {
-        logger.error('[TenantAdmin] Create role error:', err);
+        logger.error('[OrgAdmin] Create role error:', err);
         res.status(500).json({ error: 'Failed to create role' });
     }
 });
@@ -220,7 +220,7 @@ router.put('/roles/:id', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Role updated', id: req.params.id });
     } catch (err) {
-        logger.error('[TenantAdmin] Update role error:', err);
+        logger.error('[OrgAdmin] Update role error:', err);
         res.status(500).json({ error: 'Failed to update role' });
     }
 });
@@ -251,7 +251,7 @@ router.delete('/roles/:id', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Role deleted', id: req.params.id });
     } catch (err) {
-        logger.error('[TenantAdmin] Delete role error:', err);
+        logger.error('[OrgAdmin] Delete role error:', err);
         res.status(500).json({ error: 'Failed to delete role' });
     }
 });
@@ -282,7 +282,7 @@ router.get('/permissions', async (req, res) => {
 
         res.json({ permissions, matrix: Object.values(matrix) });
     } catch (err) {
-        logger.error('[TenantAdmin] List permissions error:', err);
+        logger.error('[OrgAdmin] List permissions error:', err);
         res.status(500).json({ error: 'Failed to list permissions' });
     }
 });
@@ -316,7 +316,7 @@ router.get('/users', async (req, res) => {
 
         res.json({ users });
     } catch (err) {
-        logger.error('[TenantAdmin] List users error:', err);
+        logger.error('[OrgAdmin] List users error:', err);
         res.status(500).json({ error: 'Failed to list users' });
     }
 });
@@ -353,7 +353,7 @@ router.post('/users', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.status(201).json({ id: userId, username, email, role, message: 'User created' });
     } catch (err) {
-        logger.error('[TenantAdmin] Create user error:', err);
+        logger.error('[OrgAdmin] Create user error:', err);
         res.status(500).json({ error: 'Failed to create user' });
     }
 });
@@ -507,7 +507,7 @@ router.put('/users/:id/roles', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Roles assigned', user_id: req.params.id, roles: role_ids });
     } catch (err) {
-        logger.error('[TenantAdmin] Assign roles error:', err);
+        logger.error('[OrgAdmin] Assign roles error:', err);
         res.status(500).json({ error: 'Failed to assign roles' });
     }
 });
@@ -539,13 +539,13 @@ router.delete('/users/:id', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'User removed from org', user_id: req.params.id });
     } catch (err) {
-        logger.error('[TenantAdmin] Delete user error:', err);
+        logger.error('[OrgAdmin] Delete user error:', err);
         res.status(500).json({ error: 'Failed to remove user' });
     }
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TENANT AUDIT LOG
+// ORG AUDIT LOG
 // ═══════════════════════════════════════════════════════════════════════════════
 
 router.get('/audit', async (req, res) => {
@@ -562,7 +562,7 @@ router.get('/audit', async (req, res) => {
         );
         res.json({ logs });
     } catch (err) {
-        logger.error('[TenantAdmin] Audit error:', err);
+        logger.error('[OrgAdmin] Audit error:', err);
         res.status(500).json({ error: 'Failed to load audit logs' });
     }
 });
@@ -653,7 +653,7 @@ router.post('/approvals/:id/approve', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Role approved and assigned', approval_id: req.params.id, role: approval.role_name });
     } catch (err) {
-        logger.error('[TenantAdmin] Approve error:', err);
+        logger.error('[OrgAdmin] Approve error:', err);
         res.status(500).json({ error: 'Failed to approve' });
     }
 });
@@ -700,7 +700,7 @@ router.post('/approvals/:id/reject', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Role assignment rejected', approval_id: req.params.id });
     } catch (err) {
-        logger.error('[TenantAdmin] Reject error:', err);
+        logger.error('[OrgAdmin] Reject error:', err);
         res.status(500).json({ error: 'Failed to reject' });
     }
 });
@@ -780,7 +780,7 @@ router.get('/governance/dashboard', async (req, res) => {
             role_distribution: roleDistribution,
         });
     } catch (err) {
-        logger.error('[TenantAdmin] Governance dashboard error:', err);
+        logger.error('[OrgAdmin] Governance dashboard error:', err);
         res.status(500).json({ error: 'Failed to load governance data' });
     }
 });
@@ -1333,7 +1333,7 @@ router.post('/appoint-admin', async (req, res) => {
                 : `${email} promoted to Company Admin.`,
         });
     } catch (err) {
-        logger.error('[TenantAdmin] Appoint admin error:', err);
+        logger.error('[OrgAdmin] Appoint admin error:', err);
         res.status(500).json({ error: 'Failed to appoint Company Admin' });
     }
 });
@@ -1423,7 +1423,7 @@ router.get('/owner/dashboard', requireOrgOwner(), async (req, res) => {
             // NEW: Last 5 critical actions for quick view
             db
                 .all(
-                    `SELECT al.action, al.timestamp, u.email as actor_email FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id WHERE al.action IN ('TENANT_FREEZE','FORCE_REAUTH','REVOKE_ALL_SESSIONS','ROLE_SUSPENDED','CA_APPOINTED','ROLE_APPOINTED','HIGH_RISK_ROLE_APPROVED','SELF_ELEVATION_BLOCKED') AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1)) ORDER BY al.timestamp DESC LIMIT 5`,
+                    `SELECT al.action, al.timestamp, u.email as actor_email FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id WHERE al.action IN ('ORG_FREEZE','FORCE_REAUTH','REVOKE_ALL_SESSIONS','ROLE_SUSPENDED','CA_APPOINTED','ROLE_APPOINTED','HIGH_RISK_ROLE_APPROVED','SELF_ELEVATION_BLOCKED') AND (al.actor_id IN (SELECT id FROM users WHERE org_id = $1) OR al.entity_id IN (SELECT id FROM users WHERE org_id = $1)) ORDER BY al.timestamp DESC LIMIT 5`,
                     [tid]
                 )
                 .catch(() => []),
@@ -1539,7 +1539,7 @@ router.get('/owner/critical-actions', requireOrgOwner(), async (req, res) => {
              FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id
              WHERE al.action IN (
                  'RISK_MODEL_DEPLOY','CARBON_MINT','SCHEMA_CHANGE','REGULATORY_EXPORT',
-                 'CA_APPOINTED','ORG_CREATED','TENANT_FREEZE','FORCE_REAUTH',
+                 'CA_APPOINTED','ORG_CREATED','ORG_FREEZE','FORCE_REAUTH',
                  'REVOKE_ALL_SESSIONS','ROLE_SUSPENDED','EMERGENCY_AUDIT_EXPORT',
                  'PERMISSION_CEILING_BLOCKED','SELF_ELEVATION_BLOCKED','NEW_IP_LOGIN','ROLE_EXPIRED'
              )
@@ -1568,7 +1568,7 @@ router.post('/owner/emergency', requireOrgOwner(), async (req, res) => {
         }
 
         const VALID_ACTIONS = [
-            'TENANT_FREEZE',
+            'ORG_FREEZE',
             'FORCE_REAUTH',
             'REVOKE_ALL_SESSIONS',
             'SUSPEND_ROLE',
@@ -1580,7 +1580,7 @@ router.post('/owner/emergency', requireOrgOwner(), async (req, res) => {
 
         let result = {};
 
-        if (action === 'TENANT_FREEZE') {
+        if (action === 'ORG_FREEZE') {
             await db.run(
                 `UPDATE organizations SET settings = jsonb_set(COALESCE(settings::jsonb, '{}'::jsonb), '{frozen}', 'true') WHERE id = $1`,
                 [tid]

@@ -52,7 +52,7 @@ const BOARD_KPI_SPEC = {
         kpis: [
             { id: 'BD-I1', name: 'Evidence Tamper Alerts', unit: 'count', target: 0, red: '>0', amber: null, green: '0', source: 'Hash chain verification engine' },
             { id: 'BD-I2', name: 'Privileged Access Events', unit: 'count/month', target: '<5', red: '>10', amber: '5-10', green: '<5', source: 'SA constraints log' },
-            { id: 'BD-I3', name: 'Cross-Tenant Anomaly', unit: 'count', target: 0, red: '>0', amber: null, green: '0', source: 'Tenant isolation engine' },
+            { id: 'BD-I3', name: 'Cross-Org Anomaly', unit: 'count', target: 0, red: '>0', amber: null, green: '0', source: 'Org isolation engine' },
             { id: 'BD-I4', name: 'Public Anchor Failure', unit: 'count', target: 0, red: '>2', amber: '1-2', green: '0', source: 'Blockchain anchor service' }
         ]
     },
@@ -104,7 +104,7 @@ const AUDIT_CHARTER = {
         { id: 'AS-02', area: 'Model Version Control', description: 'MDLC gate evidence, deployment hash verification, rollback audit', frequency: 'Quarterly', method: 'Full version chain validation' },
         { id: 'AS-03', area: 'Carbon Minting Process', description: 'MRV data integrity, dual validation check, registry anchor verification', frequency: 'Quarterly', method: 'Full trace from MRV → mint → anchor' },
         { id: 'AS-04', area: 'Billing Reconciliation', description: 'Usage meters vs invoices, wallet balance integrity', frequency: 'Quarterly', method: 'Full reconciliation ±0.1% tolerance' },
-        { id: 'AS-05', area: 'Cross-Tenant Isolation', description: 'API boundary testing, data leakage attempt, tenant separation', frequency: 'Quarterly', method: 'Penetration-style isolation test' },
+        { id: 'AS-05', area: 'Cross-Org Isolation', description: 'API boundary testing, data leakage attempt, org separation', frequency: 'Quarterly', method: 'Penetration-style isolation test' },
         { id: 'AS-06', area: 'SoD Enforcement', description: 'Role conflict detection, approval chain integrity, dual-control verification', frequency: 'Quarterly', method: 'Full SoD matrix validation' }
     ],
     cycles: [
@@ -237,7 +237,7 @@ class InstitutionalEngine {
 
     generateBoardDashboard(actuals = {}) {
         const {
-            tamper_alerts = 0, privileged_events = 3, cross_tenant_anomaly = 0, anchor_failure = 0,
+            tamper_alerts = 0, privileged_events = 3, cross_org_anomaly = 0, anchor_failure = 0,
             drift_msi = 0.88, fp_rate = 4.2, auto_decision_pct = 99.8, threshold_overrides = 1,
             credits_minted = 8500, credits_retired = 3200, mrv_validation_pct = 100, carbon_top_jurisdiction_pct = 28,
             dispute_rate = 0.6, wallet_mismatch = 0.02, revenue_top_pct = 22, usage_cv = 14
@@ -250,7 +250,7 @@ class InstitutionalEngine {
         };
 
         const values = {
-            'BD-I1': tamper_alerts, 'BD-I2': privileged_events, 'BD-I3': cross_tenant_anomaly, 'BD-I4': anchor_failure,
+            'BD-I1': tamper_alerts, 'BD-I2': privileged_events, 'BD-I3': cross_org_anomaly, 'BD-I4': anchor_failure,
             'BD-M1': drift_msi, 'BD-M2': fp_rate, 'BD-M3': auto_decision_pct, 'BD-M4': threshold_overrides,
             'BD-C1': credits_minted, 'BD-C2': credits_retired, 'BD-C3': mrv_validation_pct, 'BD-C4': carbon_top_jurisdiction_pct,
             'BD-F1': dispute_rate, 'BD-F2': wallet_mismatch, 'BD-F3': revenue_top_pct, 'BD-F4': usage_cv

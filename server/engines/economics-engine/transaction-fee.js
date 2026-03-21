@@ -152,12 +152,12 @@ class TransactionFeeEngine {
 
     // ─── Record transaction event ─────────────────────────────────
 
-    recordTransaction(tenantId, type, metadata = {}) {
+    recordTransaction(orgId, type, metadata = {}) {
         const schedule = FEE_SCHEDULE[type];
         if (!schedule) return { error: `Unknown transaction type: ${type}` };
 
         const period = new Date().toISOString().slice(0, 7); // YYYY-MM
-        const key = `${tenantId}:${period}`;
+        const key = `${orgId}:${period}`;
         const agg = this.monthlyAggregates.get(key) || {};
         agg[type] = (agg[type] || 0) + 1;
         this.monthlyAggregates.set(key, agg);
@@ -166,7 +166,7 @@ class TransactionFeeEngine {
 
         const tx = {
             id: uuidv4(),
-            org_id: tenantId,
+            org_id: orgId,
             type,
             period,
             volume_this_month: agg[type],
@@ -204,7 +204,7 @@ class TransactionFeeEngine {
         // Aggregate from monthly aggregates
         for (const [key, agg] of this.monthlyAggregates) {
             if (!key.endsWith(targetPeriod)) continue;
-            const tenantId = key.split(':')[0];
+            const orgId = key.split(':')[0];
 
             for (const [type, count] of Object.entries(agg)) {
                 if (!byType[type]) byType[type] = { name: FEE_SCHEDULE[type]?.name, count: 0, revenue: 0 };
@@ -234,11 +234,11 @@ class TransactionFeeEngine {
         };
     }
 
-    // ─── Tenant Invoice ───────────────────────────────────────────
+    // ─── Org Invoice ───────────────────────────────────────────
 
-    generateTenantInvoice(tenantId, period) {
+    generateOrgInvoice(orgId, period) {
         const targetPeriod = period || new Date().toISOString().slice(0, 7);
-        const key = `${tenantId}:${targetPeriod}`;
+        const key = `${orgId}:${targetPeriod}`;
         const agg = this.monthlyAggregates.get(key) || {};
 
         const lineItems = [];
@@ -259,7 +259,7 @@ class TransactionFeeEngine {
 
         return {
             invoice_id: uuidv4(),
-            org_id: tenantId,
+            org_id: orgId,
             period: targetPeriod,
             line_items: lineItems,
             subtotal: Math.round(total * 100) / 100,

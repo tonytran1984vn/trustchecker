@@ -1,5 +1,5 @@
 /**
- * TrustChecker – Tenant Integration Settings (Company Admin)
+ * TrustChecker – Org Integration Settings (Company Admin)
  * Per-org API keys, webhooks, SMTP, carrier, ERP config
  */
 const express = require('express');
@@ -33,8 +33,8 @@ function mask(val) {
     return !val || val.length < 8 ? '••••••••' : val.substring(0, 4) + '••••' + val.substring(val.length - 4);
 }
 
-// ─── Schema: Tenant-level integration categories ────────────────
-const TENANT_SCHEMA = {
+// ─── Schema: Org-level integration categories ────────────────
+const ORG_SCHEMA = {
     webhooks: {
         label: 'Outgoing Webhooks',
         icon: '🔗',
@@ -129,10 +129,10 @@ const TENANT_SCHEMA = {
 };
 
 module.exports = function (db) {
-    // GET /schema — Return available tenant integration categories
+    // GET /schema — Return available org integration categories
     router.get('/schema', (req, res) => {
         const schema = {};
-        for (const [cat, def] of Object.entries(TENANT_SCHEMA)) {
+        for (const [cat, def] of Object.entries(ORG_SCHEMA)) {
             schema[cat] = { ...def, settings: def.settings.map(s => ({ ...s })) };
         }
         res.json(schema);
@@ -144,7 +144,7 @@ module.exports = function (db) {
             const orgId = req.user?.org_id || req.user?.orgId;
             if (!orgId) return res.json({});
             const rows = await db.all(
-                'SELECT * FROM tenant_integrations WHERE org_id = ? ORDER BY category, setting_key LIMIT 1000',
+                'SELECT * FROM org_integrations WHERE org_id = ? ORDER BY category, setting_key LIMIT 1000',
                 [orgId]
             );
             const result = {};
@@ -171,7 +171,7 @@ module.exports = function (db) {
             const orgId = req.user?.org_id || req.user?.orgId;
             if (!orgId) return res.status(400).json({ error: 'No organization' });
             const { category } = req.params;
-            const schema = TENANT_SCHEMA[category];
+            const schema = ORG_SCHEMA[category];
             if (!schema) return res.status(400).json({ error: `Unknown category: ${category}` });
 
             const settings = req.body;
@@ -184,18 +184,18 @@ module.exports = function (db) {
 
                 const storedValue = def.secret ? encrypt(val) : val;
                 const existing = await db.get(
-                    'SELECT id FROM tenant_integrations WHERE org_id = ? AND category = ? AND setting_key = ?',
+                    'SELECT id FROM org_integrations WHERE org_id = ? AND category = ? AND setting_key = ?',
                     [orgId, category, def.key]
                 );
 
                 if (existing) {
                     await db.run(
-                        'UPDATE tenant_integrations SET setting_value = ?, is_secret = ?, updated_by = ?, updated_at = NOW() WHERE id = ?',
+                        'UPDATE org_integrations SET setting_value = ?, is_secret = ?, updated_by = ?, updated_at = NOW() WHERE id = ?',
                         [storedValue, def.secret, req.user?.username || 'admin', existing.id]
                     );
                 } else {
                     await db.run(
-                        'INSERT INTO tenant_integrations (id, org_id, category, setting_key, setting_value, is_secret, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        'INSERT INTO org_integrations (id, org_id, category, setting_key, setting_value, is_secret, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
                         [uuidv4(), orgId, category, def.key, storedValue, def.secret, req.user?.username || 'admin']
                     );
                 }
@@ -206,13 +206,13 @@ module.exports = function (db) {
             if (category === 'api_keys') {
                 for (const keyName of ['primary_key', 'secondary_key']) {
                     const exists = await db.get(
-                        'SELECT id FROM tenant_integrations WHERE org_id = ? AND category = ? AND setting_key = ?',
+                        'SELECT id FROM org_integrations WHERE org_id = ? AND category = ? AND setting_key = ?',
                         [orgId, category, keyName]
                     );
                     if (!exists) {
                         const apiKey = 'tc_' + crypto.randomBytes(24).toString('hex');
                         await db.run(
-                            'INSERT INTO tenant_integrations (id, org_id, category, setting_key, setting_value, is_secret, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                            'INSERT INTO org_integrations (id, org_id, category, setting_key, setting_value, is_secret, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
                             [uuidv4(), orgId, category, keyName, encrypt(apiKey), true, req.user?.username || 'admin']
                         );
                         updated.push(keyName + ' (auto-generated)');
@@ -231,7 +231,7 @@ module.exports = function (db) {
         try {
             const orgId = req.user?.org_id || req.user?.orgId;
             if (!orgId) return res.status(400).json({ error: 'No organization' });
-            await db.run('DELETE FROM tenant_integrations WHERE org_id = ? AND category = ?', [
+            await db.run('DELETE FROM org_integrations WHERE org_id = ? AND category = ?', [
                 orgId,
                 req.params.category,
             ]);
@@ -250,17 +250,17 @@ module.exports = function (db) {
             for (const keyName of ['primary_key', 'secondary_key']) {
                 const apiKey = 'tc_' + crypto.randomBytes(24).toString('hex');
                 const existing = await db.get(
-                    'SELECT id FROM tenant_integrations WHERE org_id = ? AND category = ? AND setting_key = ?',
+                    'SELECT id FROM org_integrations WHERE org_id = ? AND category = ? AND setting_key = ?',
                     [orgId, 'api_keys', keyName]
                 );
                 if (existing) {
-                    await db.run('UPDATE tenant_integrations SET setting_value = ?, updated_at = NOW() WHERE id = ?', [
+                    await db.run('UPDATE org_integrations SET setting_value = ?, updated_at = NOW() WHERE id = ?', [
                         encrypt(apiKey),
                         existing.id,
                     ]);
                 } else {
                     await db.run(
-                        'INSERT INTO tenant_integrations (id, org_id, category, setting_key, setting_value, is_secret, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        'INSERT INTO org_integrations (id, org_id, category, setting_key, setting_value, is_secret, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
                         [uuidv4(), orgId, 'api_keys', keyName, encrypt(apiKey), true, req.user?.username || 'admin']
                     );
                 }

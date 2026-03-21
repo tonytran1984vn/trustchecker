@@ -1,5 +1,5 @@
 /**
- * Org Middleware — Multi-Org Isolation
+ * Org Middleware — Multi-Tenancy Isolation
  *
  * Extracts org context from JWT claims or subdomain and injects
  * into every request for downstream use by routes and DB queries.
@@ -17,7 +17,7 @@
 
 const config = require('../config');
 
-// ─── Extract Org Context ─────────────────────────────────────────────────────
+// ─── Extract Org Context ──────────────────────────────────────────────────
 function orgMiddleware(req, res, next) {
     // Skip for public routes and auth routes
     if (req.path.startsWith('/public') || req.path.startsWith('/auth')) {
@@ -36,9 +36,9 @@ function orgMiddleware(req, res, next) {
         req.isSuperAdmin = req.user.role === 'super_admin';
     }
     // 2. From X-Org-ID header (service-to-service)
-    else if (req.headers['x-org-id'] || req.headers['x-org-id']) {
+    else if (req.headers['x-org-id']) {
         // Validate format: UUID only (prevent injection)
-        const orgHeader = req.headers['x-org-id'] || req.headers['x-org-id'];
+        const orgHeader = req.headers['x-org-id'];
         if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgHeader)) {
             req.orgId = orgHeader;
         }
@@ -59,7 +59,7 @@ function orgMiddleware(req, res, next) {
     next();
 }
 
-// ─── Require Org — Guard Middleware ───────────────────────────────────────────
+// ─── Require Org — Guard Middleware ────────────────────────────────────────
 function requireOrg(req, res, next) {
     if (!req.orgId && !req.orgSlug) {
         return res.status(403).json({
@@ -101,10 +101,10 @@ async function applyOrgContext(db, req) {
     }
 }
 
-// ─── Org-Scoped Query Helper ─────────────────────────────────────────────────
+// ─── Org-Scoped Query Helper ──────────────────────────────────────────────
 /**
  * Wraps a query to automatically inject org_id filter using parameterized queries.
- * Use for shared-schema multi-org (Free/Starter/Pro plans).
+ * Use for shared-schema tenancy (Free/Starter/Pro plans).
  *
  * SECURITY FIX v9.1.1: Returns { query, params } instead of interpolated string.
  *
@@ -145,9 +145,4 @@ module.exports = {
     requireOrg,
     applyOrgContext,
     injectOrgFilter,
-    // Backward-compatible aliases
-    orgMiddleware: orgMiddleware,
-    requireOrg: requireOrg,
-    applyOrgContext: applyOrgContext,
-    injectOrgFilter: injectOrgFilter,
 };

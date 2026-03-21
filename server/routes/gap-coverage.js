@@ -12,7 +12,7 @@ const express = require('express');
 const router = express.Router();
 const { parsePagination } = require('../middleware/pagination');
 
-const { authMiddleware, requireRole, requireTenantAdmin } = require('../auth');
+const { authMiddleware, requireRole, requireOrgAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
 
 router.use(authMiddleware);
@@ -26,25 +26,25 @@ const { withTransaction } = require('../middleware/transaction');
 // DATA OWNERSHIP — /data-ownership [L3+ admin]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/data-ownership/framework', requireTenantAdmin(), (req, res) => {
+router.get('/data-ownership/framework', requireOrgAdmin(), (req, res) => {
     res.json(dataOwn.getFullFramework());
 });
-router.get('/data-ownership/ownership', requireTenantAdmin(), (req, res) => {
+router.get('/data-ownership/ownership', requireOrgAdmin(), (req, res) => {
     res.json(dataOwn.getOwnership());
 });
-router.get('/data-ownership/exit-protocol', requireTenantAdmin(), (req, res) => {
+router.get('/data-ownership/exit-protocol', requireOrgAdmin(), (req, res) => {
     res.json(dataOwn.getExitProtocol());
 });
-router.get('/data-ownership/immutability', requireTenantAdmin(), (req, res) => {
+router.get('/data-ownership/immutability', requireOrgAdmin(), (req, res) => {
     res.json(dataOwn.getImmutability());
 });
-router.get('/data-ownership/merkle-export', requireTenantAdmin(), (req, res) => {
+router.get('/data-ownership/merkle-export', requireOrgAdmin(), (req, res) => {
     res.json(dataOwn.getMerkleExport());
 });
-router.get('/data-ownership/deletion-certificate', requireTenantAdmin(), (req, res) => {
+router.get('/data-ownership/deletion-certificate', requireOrgAdmin(), (req, res) => {
     res.json(dataOwn.getDeletionCertificate());
 });
-router.get('/data-ownership/sovereignty', requireTenantAdmin(), (req, res) => {
+router.get('/data-ownership/sovereignty', requireOrgAdmin(), (req, res) => {
     res.json(dataOwn.getSovereignty());
 });
 
@@ -52,13 +52,13 @@ router.get('/data-ownership/sovereignty', requireTenantAdmin(), (req, res) => {
 // INFRASTRUCTURE METRICS — /infra-metrics [L3+ admin read, L4+ surveillance]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/infra-metrics/framework', requireTenantAdmin(), (req, res) => {
+router.get('/infra-metrics/framework', requireOrgAdmin(), (req, res) => {
     res.json(metrics.getFullFramework());
 });
-router.get('/infra-metrics/network', requireTenantAdmin(), (req, res) => {
+router.get('/infra-metrics/network', requireOrgAdmin(), (req, res) => {
     res.json(metrics.getNetworkMetrics());
 });
-router.get('/infra-metrics/operational', requireTenantAdmin(), (req, res) => {
+router.get('/infra-metrics/operational', requireOrgAdmin(), (req, res) => {
     res.json(metrics.getOperationalMetrics());
 });
 router.get('/infra-metrics/financial', requireRole('risk_committee'), (req, res) => {

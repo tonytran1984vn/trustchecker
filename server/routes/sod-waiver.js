@@ -38,7 +38,7 @@ router.get('/conflicts', (req, res) => {
 });
 
 /**
- * GET /api/sod/waivers — List active waivers for current tenant
+ * GET /api/sod/waivers — List active waivers for current org
  */
 router.get('/waivers', async (req, res) => {
     try {

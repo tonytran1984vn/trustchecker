@@ -60,7 +60,7 @@ async function seed() {
         { key: 'fraud_detected', label: 'Fraud Detected', sev: 'critical', enabled: true },
         { key: 'scan_anomaly', label: 'Scan Anomaly', sev: 'warning', enabled: true },
         { key: 'sla_violation', label: 'SLA Violation', sev: 'warning', enabled: true },
-        { key: 'new_tenant', label: 'New Tenant Registered', sev: 'info', enabled: true },
+        { key: 'new_org', label: 'New Org Registered', sev: 'info', enabled: true },
         { key: 'usage_threshold', label: 'Usage Threshold (>80%)', sev: 'warning', enabled: false },
         { key: 'certificate_expiry', label: 'Certificate Expiring', sev: 'critical', enabled: true },
         { key: 'system_health', label: 'System Health Alert', sev: 'critical', enabled: true },

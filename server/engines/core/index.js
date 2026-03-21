@@ -7,7 +7,7 @@ module.exports = {
     AnomalyEngine: require('./anomaly'),
     RiskGraphEngine: require('./risk-graph-engine'),
     NetworkIntelligence: require('./network-intelligence-engine'),
-    CrossTenantContagion: require('./cross-tenant-contagion-engine'),
+    CrossOrgContagion: require('./cross-org-contagion-engine'),
     ComplianceEngine: require('./compliance-engine'),
     EpcisEngine: require('./epcis-engine'),
     ScmAI: require('./scm-ai'),

@@ -1,5 +1,5 @@
 /**
- * Company Admin – My Integrations (Per-Tenant)
+ * Company Admin – My Integrations (Per-Org)
  * ═════════════════════════════════════════════
  * Webhooks, API Keys, SMTP, Carrier, ERP — scoped by org_id
  */

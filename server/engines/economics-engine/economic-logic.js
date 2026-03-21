@@ -32,12 +32,12 @@ const MECHANISM_DESIGN = {
             },
         },
         {
-            participant: 'Tenant (Enterprise)',
+            participant: 'Org (Enterprise)',
             honest_action: 'Submit accurate supply chain data, report issues promptly',
             cheat_action: 'Fabricate data, misrepresent products, game trust scores',
             honest_payoff: { trust_score_benefit: 'Higher score → better settlement terms → lower fees', reputation_value: 'Platinum tier → $500K unsecured limit' },
             cheat_payoff: { detection_probability_pct: 85, consequence: 'Trust score to 0, settlement freeze, public disclosure, legal action' },
-            mechanism: 'Trust Score + Economic Consequences: Data integrity directly linked to economic outcomes via tenant credit scoring',
+            mechanism: 'Trust Score + Economic Consequences: Data integrity directly linked to economic outcomes via org credit scoring',
             nash_equilibrium: 'Honest reporting dominant when (trust premium × contract lifetime) > fabrication benefit',
         },
         {
@@ -72,11 +72,11 @@ const GAME_THEORY = {
             stability: 'STABLE — slashing (100% of stake) far exceeds any collusion benefit. Nakamoto Coefficient ≥ 3 prevents majority attack.',
         },
         {
-            game: 'Platform-Tenant (Trust vs Exploitation)',
-            players: 'TrustChecker platform vs enterprise tenants',
+            game: 'Platform-Org (Trust vs Exploitation)',
+            players: 'TrustChecker platform vs enterprise orgs',
             strategy_space: ['Fair pricing + good service', 'Extract maximum rents', 'Lock-in exploitation'],
-            equilibrium: 'Fair equilibrium sustained by: constitutional pricing limits (max 20%/year increase), charter amendment process, tenant exit rights (14-day notice)',
-            stability: 'STABLE — constitutional locks prevent exploitation. Tenant switching cost ($300K) creates natural retention without requiring exploitation.',
+            equilibrium: 'Fair equilibrium sustained by: constitutional pricing limits (max 20%/year increase), charter amendment process, org exit rights (14-day notice)',
+            stability: 'STABLE — constitutional locks prevent exploitation. Org switching cost ($300K) creates natural retention without requiring exploitation.',
         },
         {
             game: 'Regulator-Platform (Compliance vs Evasion)',
@@ -135,7 +135,7 @@ const VALUE_FAIRNESS = {
     title: 'Value Distribution Fairness — Who captures what value',
 
     distribution: [
-        { stakeholder: 'Tenants (Enterprises)', value_received: 'Trust scores, verification, settlement, cost savings', value_paid: 'Subscription + transaction fees', fairness_check: 'Must receive > $2 value for every $1 paid (demonstrated via ROI calculator)' },
+        { stakeholder: 'Orgs (Enterprises)', value_received: 'Trust scores, verification, settlement, cost savings', value_paid: 'Subscription + transaction fees', fairness_check: 'Must receive > $2 value for every $1 paid (demonstrated via ROI calculator)' },
         { stakeholder: 'Validators', value_received: 'Staking yield (8%) + reputation + network access', value_paid: 'Stake ($10K-$500K) + operational costs + risk', fairness_check: 'Risk-adjusted return must exceed risk-free rate + operational costs' },
         { stakeholder: 'Platform (Shareholders)', value_received: 'Operating margin (target 20%) + equity appreciation', value_paid: 'Capital investment + operational risk', fairness_check: 'Revenue extraction capped by constitutional rules. No unlimited extraction.' },
         { stakeholder: 'Community/Public', value_received: 'Supply chain transparency + carbon market integrity', value_paid: 'Nothing directly', fairness_check: 'Quarterly transparency reports + public governance disclosure' },

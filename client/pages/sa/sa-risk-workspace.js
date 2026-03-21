@@ -46,7 +46,7 @@ export function renderPage() {
         icon: icon('alert', 24),
         tabs: [
             { id: 'monitoring', label: 'Monitoring', icon: icon('radio', 14), render: renderRiskFeed },
-            { id: 'cases', label: 'Cases', icon: icon('alert', 14), render: lazy(() => import('./suspicious-tenants.js')) },
+            { id: 'cases', label: 'Cases', icon: icon('alert', 14), render: lazy(() => import('./suspicious-orgs.js')) },
             { id: 'analytics', label: 'Analytics', icon: icon('barChart', 14), render: lazy(() => import('./risk-analytics.js')) },
             { id: 'risk-model', label: 'Risk Model', icon: icon('brain', 14), render: lazy(() => import('./ai-engine.js')) },
             { id: 'benchmark', label: 'Benchmark', icon: icon('globe', 14), render: lazy(() => import('./industry-benchmark.js')) },

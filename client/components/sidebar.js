@@ -12,11 +12,11 @@ import { icon } from '../core/icons.js';
 import '../components/account-settings.js';
 
 // ═══════════════════════════════════════════════════════════════
-// ROLE-BASED VISIBILITY CONFIG (Tenant Roles)
+// ROLE-BASED VISIBILITY CONFIG (Org Roles)
 // ═══════════════════════════════════════════════════════════════
 
 const ROLE_VISIBILITY = {
-  // Full tenant access — Company Admin / Org Owner sees all 6 domains
+  // Full org access — Company Admin / Org Owner sees all 6 domains
   org_owner: null,
   admin: null,
   company_admin: null,
@@ -1066,12 +1066,12 @@ function renderSuperAdminSidebar() {
 
 // ═══════════════════════════════════════════════════════════════
 // PLATFORM SECURITY SIDEBAR (L5 — Protects entire system)
-// 1. Authorization   2. SoD   3. Tenant Isolation
+// 1. Authorization   2. SoD   3. Org Isolation
 // 4. Audit           5. Dual Approval   6. Data Integrity
 // ═══════════════════════════════════════════════════════════════
 
 const PLATFORM_SECURITY_NAV = [
-  { id: 'control-tower', icon: icon('dashboard'), label: 'Tenant Isolation' },
+  { id: 'control-tower', icon: icon('dashboard'), label: 'Org Isolation' },
   { id: 'sa-governance', icon: icon('shield'), label: 'Authorization Engine' },
   { id: 'compliance-sod-matrix', icon: icon('users'), label: 'Segregation of Duties' },
   { id: 'compliance-audit', icon: icon('scroll'), label: 'Audit & Traceability' },
@@ -1228,7 +1228,7 @@ function renderCarbonSidebar() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TENANT SIDEBAR (Company Admin, ops, risk, etc.)
+// ORG SIDEBAR (Company Admin, ops, risk, etc.)
 // ═══════════════════════════════════════════════════════════════
 
 function isCompanyAdmin() {
@@ -1334,7 +1334,7 @@ function renderCompanyAdminSidebar() {
   `;
 }
 
-function renderTenantSidebar() {
+function renderOrgSidebar() {
   // Org Owner → dedicated governance sidebar
   if (isOrgOwner()) return renderOrgOwnerSidebar();
   // Company Admin / Admin → flat nav (matching SA style)
@@ -1424,7 +1424,7 @@ export function renderSidebar() {
   else if (isCompanySecurity()) html = renderCompanySecuritySidebar();
   else if (isIT()) html = renderITSidebar();
   else if (isCarbon()) html = renderCarbonSidebar();
-  else html = renderTenantSidebar();
+  else html = renderOrgSidebar();
 
   // Inject role switcher after sidebar-header (if multi-role)
   const switcher = renderRoleSwitcher();

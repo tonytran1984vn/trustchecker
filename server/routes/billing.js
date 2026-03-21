@@ -772,7 +772,7 @@ router.get('/revenue/report', requirePermission('admin:manage'), (req, res) => {
     res.json(txFeeEngine.generateRevenueReport(period));
 });
 
-// ─── GET /revenue/invoice — Tenant transaction invoice ──────────────
+// ─── GET /revenue/invoice — Org transaction invoice ──────────────
 router.get('/revenue/invoice', (req, res) => {
     const period = req.query.period || new Date().toISOString().slice(0, 7);
     const orgId = req.user?.org_id || req.user?.orgId || req.user?.id;

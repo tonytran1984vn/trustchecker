@@ -32,7 +32,7 @@ function renderContent() {
   const heatmap = data?.heatmap || [];
   const patterns = data?.fraudPatterns || [];
   const cats = data?.riskByCategory || [];
-  const tenants = data?.suspiciousTenants || [];
+  const orgs = data?.suspiciousOrgs || [];
 
   return `
     <div class="sa-page">
@@ -45,7 +45,7 @@ function renderContent() {
         ${m('High Risk Organizations', heatmap.filter(h => h.tier === 'High').length.toString(), 'Audit required', 'orange', 'target')}
       </div>
 
-      <!-- TENANT RISK HEATMAP -->
+      <!-- ORG RISK HEATMAP -->
       <div class="sa-card" style="margin-bottom:1.5rem">
         <h3>🌍 Organization Risk Heatmap</h3>
         <p style="font-size:0.72rem;color:var(--text-secondary);margin-bottom:0.75rem">So sánh rủi ro cross-organization dựa trên dữ liệu thực.</p>

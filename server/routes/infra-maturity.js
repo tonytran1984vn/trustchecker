@@ -248,7 +248,7 @@ router.post('/sovereignty/transfer-assessment', (req, res) => {
 });
 
 router.get('/sovereignty/compliance/:country', (req, res) => {
-    res.json(sovereignty.getTenantCompliance(req.user?.org_id || req.user?.orgId, req.params.country));
+    res.json(sovereignty.getOrgCompliance(req.user?.org_id || req.user?.orgId, req.params.country));
 });
 
 // ═══════════════════════════════════════════════════════════════════

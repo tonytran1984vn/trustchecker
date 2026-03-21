@@ -11,7 +11,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { authMiddleware, requireRole, requireTenantAdmin } = require('../auth');
+const { authMiddleware, requireRole, requireOrgAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
 
 router.use(authMiddleware);
@@ -25,19 +25,19 @@ const { withTransaction } = require('../middleware/transaction');
 // ECONOMIC LOGIC — /economic-logic [L3+ admin]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/economic-logic/framework', requireTenantAdmin(), (req, res) => {
+router.get('/economic-logic/framework', requireOrgAdmin(), (req, res) => {
     res.json(econ.getFullFramework());
 });
-router.get('/economic-logic/mechanism-design', requireTenantAdmin(), (req, res) => {
+router.get('/economic-logic/mechanism-design', requireOrgAdmin(), (req, res) => {
     res.json(econ.getMechanismDesign());
 });
-router.get('/economic-logic/game-theory', requireTenantAdmin(), (req, res) => {
+router.get('/economic-logic/game-theory', requireOrgAdmin(), (req, res) => {
     res.json(econ.getGameTheory());
 });
-router.get('/economic-logic/sustainability', requireTenantAdmin(), (req, res) => {
+router.get('/economic-logic/sustainability', requireOrgAdmin(), (req, res) => {
     res.json(econ.getSustainability());
 });
-router.get('/economic-logic/value-fairness', requireTenantAdmin(), (req, res) => {
+router.get('/economic-logic/value-fairness', requireOrgAdmin(), (req, res) => {
     res.json(econ.getValueFairness());
 });
 
@@ -77,26 +77,26 @@ router.post('/forensic/verify-chain', requireRole('super_admin'), (req, res) => 
 // JURISDICTION LOGIC — /jurisdiction-logic [L3+ admin]
 // ═══════════════════════════════════════════════════════════════════
 
-router.get('/jurisdiction-logic/framework', requireTenantAdmin(), (req, res) => {
+router.get('/jurisdiction-logic/framework', requireOrgAdmin(), (req, res) => {
     res.json(jurisLogic.getFullFramework());
 });
-router.get('/jurisdiction-logic/conflicts', requireTenantAdmin(), (req, res) => {
+router.get('/jurisdiction-logic/conflicts', requireOrgAdmin(), (req, res) => {
     res.json(jurisLogic.getConflictResolution());
 });
-router.get('/jurisdiction-logic/arbitrage-prevention', requireTenantAdmin(), (req, res) => {
+router.get('/jurisdiction-logic/arbitrage-prevention', requireOrgAdmin(), (req, res) => {
     res.json(jurisLogic.getArbitragePrevention());
 });
-router.get('/jurisdiction-logic/liability', requireTenantAdmin(), (req, res) => {
+router.get('/jurisdiction-logic/liability', requireOrgAdmin(), (req, res) => {
     res.json(jurisLogic.getLiabilityMap());
 });
-router.get('/jurisdiction-logic/governing-law', requireTenantAdmin(), (req, res) => {
+router.get('/jurisdiction-logic/governing-law', requireOrgAdmin(), (req, res) => {
     res.json(jurisLogic.getGoverningLaw());
 });
-router.get('/jurisdiction-logic/enforcement', requireTenantAdmin(), (req, res) => {
+router.get('/jurisdiction-logic/enforcement', requireOrgAdmin(), (req, res) => {
     res.json(jurisLogic.getCrossBorderEnforcement());
 });
 
-router.get('/jurisdiction-logic/conflict/:id', requireTenantAdmin(), (req, res) => {
+router.get('/jurisdiction-logic/conflict/:id', requireOrgAdmin(), (req, res) => {
     const conflict = jurisLogic.resolveConflict(req.params.id);
     if (conflict.error) return res.status(404).json(conflict);
     res.json(conflict);

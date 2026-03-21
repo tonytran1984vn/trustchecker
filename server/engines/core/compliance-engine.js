@@ -84,9 +84,9 @@ const JURISDICTIONS = {
 class ComplianceEngine {
 
     /**
-     * Auto-generate compliance report for a tenant against all applicable frameworks
+     * Auto-generate compliance report for a org against all applicable frameworks
      */
-    generateComplianceReport(tenantData) {
+    generateComplianceReport(orgData) {
         const {
             scope_1, scope_2, scope_3, total_emissions,
             products_count = 0, partners_count = 0,
@@ -94,7 +94,7 @@ class ComplianceEngine {
             has_blockchain = true, has_gri = true, has_sbt = false,
             certifications = [], board_oversight = false,
             org_id = 'default'
-        } = tenantData;
+        } = orgData;
 
         const jurisdiction = JURISDICTIONS[region] || JURISDICTIONS.GLOBAL;
         const applicableFrameworks = jurisdiction.frameworks.map(f => FRAMEWORKS[f]).filter(Boolean);

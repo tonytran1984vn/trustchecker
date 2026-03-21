@@ -39,7 +39,7 @@ function isValidColumnName(columnName) {
  * Build a safe SQL filter with validated identifiers
  * @param {string} tableName - Table name (will be validated)
  * @param {object} conditions - Key-value pairs for WHERE conditions
- * @param {string} orgId - Optional organization ID for tenant scoping
+ * @param {string} orgId - Optional organization ID for org scoping
  * @returns {{ sql: string, params: array }} - Safe SQL and params
  */
 function buildSafeQuery(tableName, conditions = {}, orgId = null) {

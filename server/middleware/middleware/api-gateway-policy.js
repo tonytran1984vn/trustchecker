@@ -14,7 +14,7 @@ const crypto = require('crypto');
 
 class QuotaManager {
     constructor() {
-        this._quotas = new Map(); // tenantId → { daily: { count, resetAt }, monthly: { count, resetAt } }
+        this._quotas = new Map(); // orgId → { daily: { count, resetAt }, monthly: { count, resetAt } }
         this._plans = new Map(); // plan → { dailyLimit, monthlyLimit }
 
         // Default plan quotas
@@ -24,18 +24,18 @@ class QuotaManager {
         this._plans.set('enterprise', { dailyLimit: 100000, monthlyLimit: 2000000 });
     }
 
-    check(tenantId, plan = 'free') {
+    check(orgId, plan = 'free') {
         const limits = this._plans.get(plan) || this._plans.get('free');
         const now = Date.now();
 
-        if (!this._quotas.has(tenantId)) {
-            this._quotas.set(tenantId, {
+        if (!this._quotas.has(orgId)) {
+            this._quotas.set(orgId, {
                 daily: { count: 0, resetAt: now + 86400000 },
                 monthly: { count: 0, resetAt: now + 30 * 86400000 },
             });
         }
 
-        const quota = this._quotas.get(tenantId);
+        const quota = this._quotas.get(orgId);
 
         // Reset if window expired
         if (now >= quota.daily.resetAt) {
@@ -76,8 +76,8 @@ class QuotaManager {
         };
     }
 
-    getUsage(tenantId) {
-        return this._quotas.get(tenantId) || null;
+    getUsage(orgId) {
+        return this._quotas.get(orgId) || null;
     }
 }
 
@@ -114,13 +114,13 @@ function sanitizeResponse(data) {
 
 class APIKeyManager {
     constructor() {
-        this._keys = new Map(); // key → { tenantId, plan, scopes, ipWhitelist, ipBlacklist, createdAt, lastUsed }
+        this._keys = new Map(); // key → { orgId, plan, scopes, ipWhitelist, ipBlacklist, createdAt, lastUsed }
     }
 
-    register(tenantId, options = {}) {
+    register(orgId, options = {}) {
         const key = `tc_${crypto.randomBytes(24).toString('hex')}`;
         this._keys.set(key, {
-            tenantId,
+            orgId,
             plan: options.plan || 'free',
             scopes: options.scopes || ['read'],
             ipWhitelist: new Set(options.ipWhitelist || []),
@@ -151,7 +151,7 @@ class APIKeyManager {
 
         return {
             valid: true,
-            tenantId: entry.tenantId,
+            orgId: entry.orgId,
             plan: entry.plan,
             scopes: entry.scopes,
         };
@@ -233,9 +233,9 @@ class APIGateway {
             const quotaExempt = ['/api/health', '/api/auth/', '/api/public/'];
             const isQuotaExempt = quotaExempt.some(p => req.path.startsWith(p));
             if (this.enforceQuota && !isQuotaExempt) {
-                const tenantId = req.tenantId || req.apiKeyData?.tenantId || 'anonymous';
+                const orgId = req.orgId || req.apiKeyData?.orgId || 'anonymous';
                 const plan = req.apiKeyData?.plan || req.user?.plan || 'free';
-                const quotaResult = this.quotaManager.check(tenantId, plan);
+                const quotaResult = this.quotaManager.check(orgId, plan);
 
                 // Add quota headers
                 if (quotaResult.daily) {

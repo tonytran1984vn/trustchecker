@@ -482,7 +482,7 @@ module.exports = {
     requireConstitutional,
     requirePlatformAdmin,
     requireOrgAdmin,
-    requireTenantAdmin: requireOrgAdmin, // backward-compatible alias
+    requireOrgAdmin: requireOrgAdmin, // backward-compatible alias
     SOD_CONFLICTS,
     // Governance hardening
     CA_FORBIDDEN_PERMISSIONS,

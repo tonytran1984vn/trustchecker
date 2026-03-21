@@ -1,6 +1,6 @@
 /**
  * Financial Workspace — SA Domain
- * Tabs: Revenue | Plans | Tenants
+ * Tabs: Revenue | Plans | Orgs
  *
  * PERF: Tab 1 (Revenue) loaded eagerly, tabs 2-3 lazy-loaded on click.
  */
@@ -20,7 +20,7 @@ export function renderPage() {
         tabs: [
             { id: 'revenue', label: 'Revenue', icon: icon('barChart', 14), render: renderRevenue },
             { id: 'plans', label: 'Plans', icon: icon('tag', 14), render: lazy(() => import('../pricing-admin.js')) },
-            { id: 'tenants', label: 'Organizations', icon: icon('building', 14), render: lazy(() => import('./tenants.js')) },
+            { id: 'orgs', label: 'Organizations', icon: icon('building', 14), render: lazy(() => import('./orgs.js')) },
         ],
     });
 }

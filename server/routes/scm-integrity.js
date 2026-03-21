@@ -629,7 +629,7 @@ const ROLE_MATRIX = {
 // v2.0 Zone Definitions — enhanced boundaries
 const CONTROL_ZONES = {
     A: {
-        name: 'Tenant Governance Zone',
+        name: 'Org Governance Zone',
         roles: ['risk_analyst', 'compliance_officer', 'company_admin'],
         permissions: [
             'risk_classify',
@@ -692,8 +692,8 @@ const ENFORCEMENT_LAYERS = [
 const ZERO_TRUST_RULES = [
     {
         id: 1,
-        rule: 'Super Admin Cannot See Tenant Data',
-        impl: 'Logical separation, encryption at rest, tenant key isolation',
+        rule: 'Super Admin Cannot See Org Data',
+        impl: 'Logical separation, encryption at rest, org key isolation',
     },
     { id: 2, rule: 'Risk Cannot Seal Directly', impl: 'Risk only triggers; Seal service verifies approval token' },
     { id: 3, rule: 'Compliance Cannot Modify Event', impl: 'Approval metadata sealed separately' },
@@ -790,7 +790,7 @@ router.get('/control-zones', authMiddleware, async (req, res) => {
             title: 'Control Zone Access Matrix (EAS v2.0)',
             user_role: userRole,
             zones: userZones,
-            design: 'Zero-trust between platform and tenant',
+            design: 'Zero-trust between platform and org',
             zero_trust_rules: ZERO_TRUST_RULES,
         });
     } catch (err) {

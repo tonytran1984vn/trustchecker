@@ -192,7 +192,7 @@ async function collectEvidence() {
         requireRole_manager_remaining: 0,
         requireRole_admin_remaining: 0,
         requirePermission_endpoints: 36,
-        requireTenantAdmin_endpoints: 39,
+        requireOrgAdmin_endpoints: 39,
         role_gated_new: 4,
         note: 'Full mapping in walkthrough.md'
     };

@@ -132,7 +132,7 @@ router.get('/export', requirePermission('compliance:manage'), async (req, res) =
             params.push(req.query.to);
         }
 
-        // v9.4.2: Scope by org_id for tenant isolation
+        // v9.4.2: Scope by org_id for org isolation
         const orgId = req.orgId;
         let orgFilter = '';
         if (orgId) {

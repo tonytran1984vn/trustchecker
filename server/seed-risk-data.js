@@ -1,12 +1,12 @@
 /**
- * Seed Multi-Tenant Risk Data
- * Creates diverse products, scans, fraud alerts, shipments per tenant
+ * Seed Multi-Org Risk Data
+ * Creates diverse products, scans, fraud alerts, shipments per org
  * Run: node server/seed-risk-data.js
  */
 const { v4: uuidv4 } = require('uuid');
 
-// ─── Tenant Risk Profiles ─────────────────────────────────────
-const TENANT_DATA = [
+// ─── Org Risk Profiles ─────────────────────────────────────
+const ORG_DATA = [
     {
         slug: 'pharmaguard', profile: 'HIGH_RISK',
         products: [
@@ -250,14 +250,14 @@ async function seed() {
     const db = require('./db');
     if (db.init) await db.init();
     await new Promise(r => setTimeout(r, 2500));
-    console.log('🔬 Seeding multi-tenant risk data...\n');
+    console.log('🔬 Seeding multi-org risk data...\n');
 
     let totalProducts = 0, totalScans = 0, totalFrauds = 0, totalShipments = 0;
 
-    for (const td of TENANT_DATA) {
-        // Find tenant
+    for (const td of ORG_DATA) {
+        // Find org
         const org = await db.prepare('SELECT id, name FROM organizations WHERE slug = ?').get(td.slug);
-        if (!org) { console.log(`  ⚠️  Tenant ${td.slug} not found — skip`); continue; }
+        if (!org) { console.log(`  ⚠️  Org ${td.slug} not found — skip`); continue; }
         console.log(`\n  🏢 ${org.name} (${td.profile})`);
 
         // Seed products
@@ -321,7 +321,7 @@ async function seed() {
            VALUES (?,?,?,?,?,?,?,?)`
                 ).run(
                     uuidv4(), prod.id, fc.type, fc.severity, fc.desc,
-                    JSON.stringify({ tenant: org.name, product: prod.name, profile: td.profile }),
+                    JSON.stringify({ org: org.name, product: prod.name, profile: td.profile }),
                     pick(['open', 'open', 'open', 'investigating', 'resolved']),
                     randomDate(60)
                 );

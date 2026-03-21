@@ -34,8 +34,8 @@ class RiskIntelligenceInfra {
             tiers: [
                 { tier: 'ERS', name: 'Entity Risk Score', scope: 'Single entity', inputs: 6, refresh: 'real-time' },
                 { tier: 'SRS', name: 'Supply Risk Score', scope: 'Supply chain path', inputs: 8, refresh: '15min' },
-                { tier: 'TRS', name: 'Tenant Risk Score', scope: 'Entire tenant', inputs: 12, refresh: '1hr' },
-                { tier: 'BRI', name: 'Benchmark Risk Index', scope: 'Cross-tenant', inputs: 15, refresh: '24hr' }
+                { tier: 'TRS', name: 'Org Risk Score', scope: 'Entire org', inputs: 12, refresh: '1hr' },
+                { tier: 'BRI', name: 'Benchmark Risk Index', scope: 'Cross-org', inputs: 15, refresh: '24hr' }
             ],
 
             assumptions: [
@@ -47,8 +47,8 @@ class RiskIntelligenceInfra {
             ],
 
             limitations: [
-                { id: 'LIM-01', description: 'Model trained on platform data only — no external data feeds', impact: 'medium', mitigation: 'Cross-tenant intelligence reduces bias' },
-                { id: 'LIM-02', description: 'New tenants have cold-start problem (insufficient history)', impact: 'high', mitigation: 'Bootstrap scoring with industry defaults' },
+                { id: 'LIM-01', description: 'Model trained on platform data only — no external data feeds', impact: 'medium', mitigation: 'Cross-org intelligence reduces bias' },
+                { id: 'LIM-02', description: 'New orgs have cold-start problem (insufficient history)', impact: 'high', mitigation: 'Bootstrap scoring with industry defaults' },
                 { id: 'LIM-03', description: 'Decay function assumes 46-day half-life universally', impact: 'medium', mitigation: 'Per-industry calibration planned' },
                 { id: 'LIM-04', description: 'No real-time external market data integration', impact: 'low', mitigation: 'Manual override with dual-approval' },
                 { id: 'LIM-05', description: 'Binary risk thresholds may miss gradual deterioration', impact: 'medium', mitigation: 'Trend analysis + drift detection monitors' }
@@ -199,7 +199,7 @@ class RiskIntelligenceInfra {
                     id: 'ST-01', name: 'Mass Supplier Default', type: 'black_swan', severity: 'critical',
                     description: '30% of suppliers simultaneously flagged as high-risk',
                     parameters: { default_rate: 0.30, duration_days: 7, cascade: true },
-                    expected_impact: 'Risk scores spike across 80% of tenants, case volume 10x, escalation queue overflow',
+                    expected_impact: 'Risk scores spike across 80% of orgs, case volume 10x, escalation queue overflow',
                     model_test: 'Does model correctly differentiate affected vs unaffected entities?'
                 },
                 {
@@ -211,8 +211,8 @@ class RiskIntelligenceInfra {
                 },
                 {
                     id: 'ST-03', name: 'Cold Start Overload', type: 'edge_case', severity: 'high',
-                    description: '100 new tenants onboard simultaneously with no historical data',
-                    parameters: { new_tenants: 100, history_days: 0, bootstrap_mode: true },
+                    description: '100 new orgs onboard simultaneously with no historical data',
+                    parameters: { new_orgs: 100, history_days: 0, bootstrap_mode: true },
                     expected_impact: 'Scoring defaults may under/overweight new entities',
                     model_test: 'Are bootstrap scores calibrated against known outcomes?'
                 },

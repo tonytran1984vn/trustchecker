@@ -74,7 +74,7 @@ function setupHealth(app, { config, db, redis, wss, waf, apiGateway, metrics, sl
 
     // ─── CQRS Query Endpoints ────────────────────────────────────────
     app.get('/api/query/dashboard', authMiddleware, async (req, res) => {
-        const result = await queryStore.getDashboardStats(req.tenantId);
+        const result = await queryStore.getDashboardStats(req.orgId);
         res.json(result);
     });
     app.get('/api/query/scan/:productId', authMiddleware, async (req, res) => {

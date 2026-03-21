@@ -3,7 +3,7 @@
  * Multi-layer fraud detection: rule-based + statistical anomaly detection
  */
 /**
- * ⚠️ TENANT ISOLATION: This engine relies on PostgreSQL RLS for data isolation.
+ * ⚠️ ORG ISOLATION: This engine relies on PostgreSQL RLS for data isolation.
  * The calling route must set db.setOrgContext(orgId) before invoking engine methods.
  * All SQL queries in this file are filtered at the database level by RLS policies.
  */

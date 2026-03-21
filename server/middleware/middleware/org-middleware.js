@@ -149,7 +149,7 @@ module.exports = {
     orgGuard,
     orgQuery,
     // Backward-compatible aliases
-    tenantGuard: orgGuard,
-    tenantQuery: orgQuery,
+    orgGuard: orgGuard,
+    orgQuery: orgQuery,
 };
 

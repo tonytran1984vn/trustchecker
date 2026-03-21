@@ -1,5 +1,5 @@
 /**
- * Super Admin – Tenant Detail (Premium Design + User CRUD)
+ * Super Admin – Org Detail (Premium Design + User CRUD)
  * ════════════════════════════════════════
  * Live data from /api/platform/orgs/:id
  * Two-tier user model: Platform ≠ Business
@@ -8,11 +8,11 @@ import { API } from '../../core/api.js';
 import { icon } from '../../core/icons.js';
 import { State } from '../../core/state.js';
 
-let tenant = null;
-let tenantUsers = [];
-let tenantRoles = [];
+let org = null;
+let orgUsers = [];
+let orgRoles = [];
 let loading = false;
-let currentTenantId = null;
+let currentOrgId = null;
 let activeTab = 'overview';
 let showAddUser = false;
 
@@ -49,43 +49,43 @@ const PLAN_GRADIENTS = {
 const PLAN_COLORS = { free: '#94a3b8', starter: '#0ea5e9', pro: '#8b5cf6', business: '#f59e0b', enterprise: '#f97316', core: '#0ea5e9' };
 const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1'];
 
-async function loadTenant(id) {
+async function loadOrg(id) {
   if (loading) return;
   loading = true;
   try {
     const data = await API.get(`/platform/orgs/${id}`);
-    tenant = data.org || data.tenant || data;
-    tenantUsers = data.users || [];
-    tenantRoles = data.roles || [];
+    org = data.org || data.org || data;
+    orgUsers = data.users || [];
+    orgRoles = data.roles || [];
   } catch (e) {
-    console.error('[SA] Failed to load tenant:', e);
-    tenant = null; tenantUsers = []; tenantRoles = [];
+    console.error('[SA] Failed to load org:', e);
+    org = null; orgUsers = []; orgRoles = [];
   }
   loading = false;
   window.render();
 }
 
 async function doSuspend() {
-  if (!tenant || !confirm(`Suspend ${tenant.name}? All users will lose access.`)) return;
+  if (!org || !confirm(`Suspend ${org.name}? All users will lose access.`)) return;
   try {
-    await API.post(`/platform/orgs/${tenant.id}/suspend`, { reason: 'Suspended by Platform Admin' });
+    await API.post(`/platform/orgs/${org.id}/suspend`, { reason: 'Suspended by Platform Admin' });
     window.showToast?.('Organization suspended', 'warning');
-    currentTenantId = null; loadTenant(tenant.id);
+    currentOrgId = null; loadOrg(org.id);
   } catch (e) { window.showToast?.('Failed: ' + e.message, 'error'); }
 }
 
 async function doActivate() {
-  if (!tenant) return;
+  if (!org) return;
   try {
-    await API.post(`/platform/orgs/${tenant.id}/activate`, {});
+    await API.post(`/platform/orgs/${org.id}/activate`, {});
     window.showToast?.('Organization re-activated', 'success');
-    currentTenantId = null; loadTenant(tenant.id);
+    currentOrgId = null; loadOrg(org.id);
   } catch (e) { window.showToast?.('Failed: ' + e.message, 'error'); }
 }
 
 async function addCompanyUser() {
   const f = document.getElementById('cu-form');
-  if (!f || !tenant) return;
+  if (!f || !org) return;
   const username = f.querySelector('#cu-username')?.value?.trim();
   const email = f.querySelector('#cu-email')?.value?.trim();
   const password = f.querySelector('#cu-password')?.value;
@@ -94,41 +94,41 @@ async function addCompanyUser() {
     return window.showToast?.('All fields are required', 'error');
   }
   try {
-    // Call platform endpoint to add user to this specific tenant
-    await API.post(`/platform/orgs/${tenant.id}/users`, { username, email, password, role, company: tenant.name });
-    window.showToast?.(`User "${username}" added to ${tenant.name}`, 'success');
+    // Call platform endpoint to add user to this specific org
+    await API.post(`/platform/orgs/${org.id}/users`, { username, email, password, role, company: org.name });
+    window.showToast?.(`User "${username}" added to ${org.name}`, 'success');
     showAddUser = false;
-    currentTenantId = null;
-    loadTenant(tenant.id);
+    currentOrgId = null;
+    loadOrg(org.id);
   } catch (e) {
     window.showToast?.(e.message || 'Failed to create user', 'error');
   }
 }
 
 export function renderPage() {
-  const id = State.pageParams?.tenantId;
-  if (id && id !== currentTenantId && !loading) { currentTenantId = id; tenant = null; loadTenant(id); }
+  const id = State.pageParams?.orgId;
+  if (id && id !== currentOrgId && !loading) { currentOrgId = id; org = null; loadOrg(id); }
 
-  if (loading && !tenant) {
+  if (loading && !org) {
     return `<div style="display:flex;align-items:center;justify-content:center;padding:80px"><div class="spinner"></div></div>`;
   }
-  if (!tenant) {
+  if (!org) {
     return `<div style="text-align:center;padding:80px">
       <div style="font-size:3rem;margin-bottom:12px">🔍</div>
       <h3 style="margin-bottom:8px;color:var(--text-muted)">Organization not found</h3>
       <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:16px">The organization may have been removed or the ID is invalid.</p>
-      <button class="btn btn-primary" onclick="navigate('sa-tenants')">← Back to Organizations</button>
+      <button class="btn btn-primary" onclick="navigate('sa-orgs')">← Back to Organizations</button>
     </div>`;
   }
 
-  const status = tenant.status || 'active';
-  const plan = (tenant.plan || 'free').toLowerCase();
+  const status = org.status || 'active';
+  const plan = (org.plan || 'free').toLowerCase();
   const pGrad = PLAN_GRADIENTS[plan] || PLAN_GRADIENTS.free;
   const pColor = PLAN_COLORS[plan] || '#94a3b8';
   const statusColor = status === 'active' ? '#10b981' : '#ef4444';
-  const created = tenant.created_at ? new Date(tenant.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-  const initials = (tenant.name || '??').substring(0, 2).toUpperCase();
-  const flags = Object.entries(tenant.feature_flags || {});
+  const created = org.created_at ? new Date(org.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const initials = (org.name || '??').substring(0, 2).toUpperCase();
+  const flags = Object.entries(org.feature_flags || {});
   const enabledFlags = flags.filter(([, v]) => v).length;
 
   return `
@@ -207,13 +207,13 @@ export function renderPage() {
     <div class="tdt">
       <!-- Hero Banner -->
       <div class="tdt-hero" style="background:${pGrad}">
-        <div class="tdt-hero-back" onclick="navigate('sa-tenants')">← Back to Organizations</div>
+        <div class="tdt-hero-back" onclick="navigate('sa-orgs')">← Back to Organizations</div>
         <div class="tdt-hero-main">
           <div class="tdt-hero-avatar">${initials}</div>
           <div class="tdt-hero-info">
-            <div class="tdt-hero-name">${esc(tenant.name)}</div>
+            <div class="tdt-hero-name">${esc(org.name)}</div>
             <div class="tdt-hero-meta">
-              <span class="tdt-hero-tag">${esc(tenant.slug || '')}</span>
+              <span class="tdt-hero-tag">${esc(org.slug || '')}</span>
               <span><span class="tdt-hero-dot" style="background:${status === 'active' ? '#4ade80' : '#fbbf24'}"></span> ${status}</span>
               <span>${plan.toUpperCase()} Plan</span>
               <span>Created ${created}</span>
@@ -229,7 +229,7 @@ export function renderPage() {
 
       <!-- Quick Stats -->
       <div class="tdt-stats">
-        <div class="tdt-stat"><div class="tdt-stat-val" style="color:#3b82f6">${tenantUsers.length}</div><div class="tdt-stat-label">Users</div></div>
+        <div class="tdt-stat"><div class="tdt-stat-val" style="color:#3b82f6">${orgUsers.length}</div><div class="tdt-stat-label">Users</div></div>
         <div class="tdt-stat"><div class="tdt-stat-val" style="color:#10b981">${enabledFlags}</div><div class="tdt-stat-label">Features Active</div></div>
         <div class="tdt-stat"><div class="tdt-stat-val" style="color:${pColor}">${plan}</div><div class="tdt-stat-label">Current Plan</div></div>
         <div class="tdt-stat"><div class="tdt-stat-val" style="color:${statusColor}">${status === 'active' ? '✓' : '⚠'}</div><div class="tdt-stat-label">Status</div></div>
@@ -238,7 +238,7 @@ export function renderPage() {
       <!-- Tabs -->
       <div class="tdt-tabs">
         ${['overview', 'users', 'usage', 'security', 'billing'].map(t =>
-        `<button class="tdt-tab ${activeTab === t ? 'active' : ''}" onclick="window._saTenantTab('${t}')">${t.charAt(0).toUpperCase() + t.slice(1)}</button>`
+        `<button class="tdt-tab ${activeTab === t ? 'active' : ''}" onclick="window._saOrgTab('${t}')">${t.charAt(0).toUpperCase() + t.slice(1)}</button>`
       ).join('')}
       </div>
 
@@ -261,24 +261,24 @@ function renderTab() {
 }
 
 function renderOverview() {
-  const plan = (tenant.plan || 'free').toLowerCase();
-  const created = tenant.created_at ? new Date(tenant.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-  const updated = tenant.updated_at ? new Date(tenant.updated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-  const flags = Object.entries(tenant.feature_flags || {});
+  const plan = (org.plan || 'free').toLowerCase();
+  const created = org.created_at ? new Date(org.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const updated = org.updated_at ? new Date(org.updated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const flags = Object.entries(org.feature_flags || {});
 
   return `
     <div class="tdt-grid">
       <div class="tdt-card">
         <div class="tdt-card-h">${icon('building', 14)} Organization</div>
         <div class="tdt-card-b">
-          <div class="tdt-kv"><span class="tdt-kv-l">Name</span><span class="tdt-kv-v">${esc(tenant.name)}</span></div>
-          <div class="tdt-kv"><span class="tdt-kv-l">Slug</span><span class="tdt-kv-v" style="font-family:'JetBrains Mono',monospace">${esc(tenant.slug || '')}</span></div>
+          <div class="tdt-kv"><span class="tdt-kv-l">Name</span><span class="tdt-kv-v">${esc(org.name)}</span></div>
+          <div class="tdt-kv"><span class="tdt-kv-l">Slug</span><span class="tdt-kv-v" style="font-family:'JetBrains Mono',monospace">${esc(org.slug || '')}</span></div>
           <div class="tdt-kv"><span class="tdt-kv-l">Plan</span><span class="tdt-kv-v">${plan}</span></div>
-          <div class="tdt-kv"><span class="tdt-kv-l">Status</span><span class="tdt-kv-v">${tenant.status || 'active'}</span></div>
+          <div class="tdt-kv"><span class="tdt-kv-l">Status</span><span class="tdt-kv-v">${org.status || 'active'}</span></div>
           <div class="tdt-kv"><span class="tdt-kv-l">Created</span><span class="tdt-kv-v">${created}</span></div>
           <div class="tdt-kv"><span class="tdt-kv-l">Updated</span><span class="tdt-kv-v">${updated}</span></div>
-          <div class="tdt-kv"><span class="tdt-kv-l">Users</span><span class="tdt-kv-v" style="font-family:'JetBrains Mono',monospace">${tenantUsers.length}</span></div>
-          <div class="tdt-kv"><span class="tdt-kv-l">ID</span><span class="tdt-kv-v" style="font-family:'JetBrains Mono',monospace;font-size:0.68rem;opacity:0.6">${tenant.id}</span></div>
+          <div class="tdt-kv"><span class="tdt-kv-l">Users</span><span class="tdt-kv-v" style="font-family:'JetBrains Mono',monospace">${orgUsers.length}</span></div>
+          <div class="tdt-kv"><span class="tdt-kv-l">ID</span><span class="tdt-kv-v" style="font-family:'JetBrains Mono',monospace;font-size:0.68rem;opacity:0.6">${org.id}</span></div>
         </div>
       </div>
       <div class="tdt-card">
@@ -302,15 +302,15 @@ function renderUsersTab() {
       <div class="tdt-card-h">
         ${icon('users', 14)} Company Users
         <span style="margin-left:auto;display:flex;align-items:center;gap:12px">
-          <span style="font-size:0.65rem;color:var(--text-muted)">${tenantUsers.length} total</span>
+          <span style="font-size:0.65rem;color:var(--text-muted)">${orgUsers.length} total</span>
           <button class="tdt-u-add" onclick="window._cuShowModal()">${icon('plus', 12)} Add User</button>
         </span>
       </div>
-      ${tenantUsers.length === 0
+      ${orgUsers.length === 0
       ? '<div style="text-align:center;padding:40px;color:var(--text-muted)"><div style="font-size:2rem;margin-bottom:8px">👥</div><p style="font-size:0.78rem">No users in this company yet.</p></div>'
       : `<table class="tdt-utable">
         <thead><tr><th>User</th><th>Email</th><th>Role</th><th>Tier</th><th>Type</th><th>Last Login</th></tr></thead>
-        <tbody>${tenantUsers.map((u, i) => {
+        <tbody>${orgUsers.map((u, i) => {
         const init = ((u.username || u.email || '??').substring(0, 2)).toUpperCase();
         const bg = AVATAR_COLORS[i % AVATAR_COLORS.length];
         const role = u.role || 'operator';
@@ -335,7 +335,7 @@ function renderAddUserModal() {
     <div class="cu-overlay" onclick="if(event.target===this)window._cuHideModal()">
       <div class="cu-modal">
         <h2>${icon('plus', 18)} Add Company User</h2>
-        <p style="font-size:0.72rem;color:var(--text-muted);margin-bottom:16px">Create a user for <strong>${esc(tenant.name)}</strong>. This user will only have access to this company's data.</p>
+        <p style="font-size:0.72rem;color:var(--text-muted);margin-bottom:16px">Create a user for <strong>${esc(org.name)}</strong>. This user will only have access to this company's data.</p>
         <form id="cu-form" onsubmit="event.preventDefault();window._cuCreate()">
           <div class="cu-field">
             <label class="cu-label">Username</label>
@@ -354,7 +354,7 @@ function renderAddUserModal() {
             <select class="cu-select" id="cu-role" required>
               <option value="">— Select role —</option>
               ${(() => {
-      const flags = tenant?.feature_flags || {};
+      const flags = org?.feature_flags || {};
       const availableRoles = COMPANY_ROLES.filter(r => !r.requires || flags[r.requires]);
       const blockedCount = COMPANY_ROLES.length - availableRoles.length;
       return tiers.map(t => {
@@ -377,7 +377,7 @@ function renderAddUserModal() {
 }
 
 function renderBilling() {
-  const plan = (tenant?.plan || 'free').toLowerCase();
+  const plan = (org?.plan || 'free').toLowerCase();
   const prices = { free: '$0', starter: '$29', pro: '$99', business: '$249', enterprise: '$499', core: '$49' };
   const pColor = PLAN_COLORS[plan] || '#94a3b8';
   return `
@@ -392,7 +392,7 @@ function renderBilling() {
       </div></div>
       <div class="tdt-card"><div class="tdt-card-b" style="text-align:center;padding:24px">
         <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Seats Used</div>
-        <div style="font-size:1.4rem;font-weight:900;font-family:'JetBrains Mono',monospace;color:#3b82f6">${tenantUsers.length}</div>
+        <div style="font-size:1.4rem;font-weight:900;font-family:'JetBrains Mono',monospace;color:#3b82f6">${orgUsers.length}</div>
       </div></div>
     </div>`;
 }
@@ -411,7 +411,7 @@ function timeSince(d) {
 
 function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
-window._saTenantTab = (t) => { activeTab = t; window.render(); };
+window._saOrgTab = (t) => { activeTab = t; window.render(); };
 window._saDetailSuspend = doSuspend;
 window._saDetailActivate = doActivate;
 window._cuShowModal = () => { showAddUser = true; window.render(); };

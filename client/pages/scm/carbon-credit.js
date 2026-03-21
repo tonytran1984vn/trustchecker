@@ -29,7 +29,7 @@ let activeTab = 'overview';
 // super_admin = ZERO business authority → Settings only (infra/config)
 // Platform roles (global_risk_committee, ivu_registry_admin) → Settings only
 const CIE_TAB_PERMISSIONS = {
-    // 4-Layer Institutional Governance (L1 Infra / L2 Federation / L3 Tenant / L4 Capital Market)
+    // 4-Layer Institutional Governance (L1 Infra / L2 Federation / L3 Org / L4 Capital Market)
     // disclosure_officer: sign-off disclosure, link CIP to annual report, certify CSRD/ESRS
     overview: ['carbon_officer', 'scm_analyst', 'internal_reviewer', 'ivu_validator', 'compliance_officer', 'risk_committee', 'export_officer', 'company_admin', 'executive', 'ops_manager', 'risk_officer', 'auditor', 'board_observer', 'data_steward', 'legal_counsel', 'esg_reporting_manager', 'financial_viewer', 'disclosure_officer'],
     ingestion: ['carbon_officer', 'scm_analyst', 'ops_manager', 'data_steward', 'supplier_contributor'],
@@ -1246,13 +1246,13 @@ function renderSettingsModule() {
 
         <div class="sa-card" style="margin-top:16px">
             <h3 style="margin:0 0 10px;color:#f1f5f9;font-size:0.88rem">${icon('users')} Role Architecture <span style="font-size:0.65rem;font-weight:400;color:#06b6d4">v2.0 ENTERPRISE SoD</span></h3>
-            <div style="font-size:0.68rem;color:#94a3b8;margin-bottom:12px">Dual-Layer: Platform (TrustChecker) + Company (Tenant). No end-to-end control. No single role can submit→approve→seal.</div>
+            <div style="font-size:0.68rem;color:#94a3b8;margin-bottom:12px">Dual-Layer: Platform (TrustChecker) + Company (Org). No end-to-end control. No single role can submit→approve→seal.</div>
 
             <div style="font-size:0.7rem;font-weight:700;color:#8b5cf6;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">🔧 Platform Layer (Neutral Infrastructure)</div>
             <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:12px">
                 ${[
-            { icon: '🔧', name: 'Platform Super Admin', can: 'Infra · Tenants · Security', cannot: 'Carbon data · CIP approval', color: '#64748b' },
-            { icon: '🌍', name: 'MGB', can: 'Methodology · Factor freeze', cannot: 'Sealed CIP · Tenant data', color: '#ec4899' },
+            { icon: '🔧', name: 'Platform Super Admin', can: 'Infra · Orgs · Security', cannot: 'Carbon data · CIP approval', color: '#64748b' },
+            { icon: '🌍', name: 'MGB', can: 'Methodology · Factor freeze', cannot: 'Sealed CIP · Org data', color: '#ec4899' },
             { icon: '⚡', name: 'Global Risk Committee', can: 'Risk weights · Thresholds', cannot: 'Individual CIP override', color: '#f59e0b' },
             { icon: '🏛️', name: 'IVU Registry Admin', can: 'Validator list · Qualification', cannot: 'Approve CIP · Validate', color: '#8b5cf6' },
             { icon: '⛓️', name: 'Blockchain Operator', can: 'Anchor hash · Nodes', cannot: 'Create/Approve CIP', color: '#06b6d4' },
@@ -1266,7 +1266,7 @@ function renderSettingsModule() {
                 `).join('')}
             </div>
 
-            <div style="font-size:0.7rem;font-weight:700;color:#10b981;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">👥 Company Layer (Tenant Business)</div>
+            <div style="font-size:0.7rem;font-weight:700;color:#10b981;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">👥 Company Layer (Org Business)</div>
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">
                 ${[
             { icon: '📊', name: 'Carbon Officer', can: 'Submit data · Initiate CIP', cannot: 'Approve · Seal · Methodology', color: '#3b82f6', tag: 'L1' },

@@ -14,18 +14,18 @@ async function loadMetrics() {
     loading = true;
     try {
         const data = await API.get('/platform/orgs');
-        const tenants = Array.isArray(data) ? data : (data.orgs || []);
-        const active = tenants.filter(t => (t.status || 'active') === 'active').length;
-        const suspended = tenants.filter(t => t.status === 'suspended').length;
-        const totalUsers = tenants.reduce((sum, t) => sum + (parseInt(t.user_count) || 0), 0);
+        const orgs = Array.isArray(data) ? data : (data.orgs || []);
+        const active = orgs.filter(t => (t.status || 'active') === 'active').length;
+        const suspended = orgs.filter(t => t.status === 'suspended').length;
+        const totalUsers = orgs.reduce((sum, t) => sum + (parseInt(t.user_count) || 0), 0);
         const planCounts = {};
-        tenants.forEach(t => { const p = (t.plan || 'free').toLowerCase(); planCounts[p] = (planCounts[p] || 0) + 1; });
-        metrics = { totalTenants: tenants.length, activeTenants: active, suspended, totalUsers, tenants, planCounts };
+        orgs.forEach(t => { const p = (t.plan || 'free').toLowerCase(); planCounts[p] = (planCounts[p] || 0) + 1; });
+        metrics = { totalOrgs: orgs.length, activeOrgs: active, suspended, totalUsers, orgs, planCounts };
         lastLoad = Date.now();
 
-        // Store tenants in global State for other SA pages
+        // Store orgs in global State for other SA pages
         const { State } = await import('../../core/state.js');
-        State.platformTenants = tenants;
+        State.platformOrgs = orgs;
 
         // Background prefetch billing + pricing for sa-financial (non-blocking)
         Promise.allSettled([
@@ -42,7 +42,7 @@ async function loadMetrics() {
         });
     } catch (e) {
         console.error('[SA] Failed to load metrics:', e);
-        metrics = { totalTenants: 0, activeTenants: 0, suspended: 0, totalUsers: 0, tenants: [], planCounts: {} };
+        metrics = { totalOrgs: 0, activeOrgs: 0, suspended: 0, totalUsers: 0, orgs: [], planCounts: {} };
     }
     loading = false;
     window.render();
@@ -132,7 +132,7 @@ export function renderPage() {
         }
         .ct2-card-body { padding:6px 0; }
 
-        /* ── Tenant Row ── */
+        /* ── Org Row ── */
         .ct2-row {
             display:grid; grid-template-columns:36px 1fr 80px 60px 28px;
             align-items:center; gap:12px; padding:10px 20px;
@@ -144,8 +144,8 @@ export function renderPage() {
             align-items:center; justify-content:center; font-size:0.72rem;
             font-weight:800; color:#fff; flex-shrink:0;
         }
-        .ct2-tenant-name { font-size:0.8rem; font-weight:600; }
-        .ct2-tenant-meta { font-size:0.65rem; color:var(--text-muted); margin-top:1px; }
+        .ct2-org-name { font-size:0.8rem; font-weight:600; }
+        .ct2-org-meta { font-size:0.65rem; color:var(--text-muted); margin-top:1px; }
         .ct2-plan-badge {
             font-size:0.6rem; font-weight:700; padding:3px 10px; border-radius:8px;
             text-transform:uppercase; letter-spacing:0.3px; text-align:center;
@@ -208,17 +208,17 @@ export function renderPage() {
         <!-- KPI Cards — Bold solid gradients with trend indicators -->
         <div class="ct2-kpi-row">
             <div class="ct2-kpi blue">
-                <div class="ct2-kpi-label">Total Tenants</div>
-                <div class="ct2-kpi-val">${m.totalTenants}</div>
+                <div class="ct2-kpi-label">Total Orgs</div>
+                <div class="ct2-kpi-val">${m.totalOrgs}</div>
                 <div class="ct2-kpi-footer">Organizations on platform
-                  <span style="margin-left:6px;font-size:0.62rem;font-weight:700;color:#86efac">↑ ${Math.max(1, Math.round(m.totalTenants * 0.08))} this week</span>
+                  <span style="margin-left:6px;font-size:0.62rem;font-weight:700;color:#86efac">↑ ${Math.max(1, Math.round(m.totalOrgs * 0.08))} this week</span>
                 </div>
             </div>
             <div class="ct2-kpi green">
                 <div class="ct2-kpi-label">Active</div>
-                <div class="ct2-kpi-val">${m.activeTenants}</div>
-                <div class="ct2-kpi-footer">${m.totalTenants ? Math.round(m.activeTenants / m.totalTenants * 100) : 0}% of total
-                  <span style="margin-left:6px;font-size:0.62rem;font-weight:700;color:#86efac">↑ ${m.totalTenants > 5 ? '2' : '1'}</span>
+                <div class="ct2-kpi-val">${m.activeOrgs}</div>
+                <div class="ct2-kpi-footer">${m.totalOrgs ? Math.round(m.activeOrgs / m.totalOrgs * 100) : 0}% of total
+                  <span style="margin-left:6px;font-size:0.62rem;font-weight:700;color:#86efac">↑ ${m.totalOrgs > 5 ? '2' : '1'}</span>
                 </div>
             </div>
             <div class="ct2-kpi amber">
@@ -231,19 +231,19 @@ export function renderPage() {
             <div class="ct2-kpi purple">
                 <div class="ct2-kpi-label">Total Users</div>
                 <div class="ct2-kpi-val">${m.totalUsers}</div>
-                <div class="ct2-kpi-footer">${m.totalTenants > 0 ? (m.totalUsers / m.totalTenants).toFixed(1) : 0} avg per tenant
+                <div class="ct2-kpi-footer">${m.totalOrgs > 0 ? (m.totalUsers / m.totalOrgs).toFixed(1) : 0} avg per org
                   <span style="margin-left:6px;font-size:0.62rem;font-weight:700;color:#86efac">↑ ${Math.max(2, Math.round(m.totalUsers * 0.05))} this week</span>
                 </div>
             </div>
         </div>
 
-        <!-- Main Content —— Tenant Table + Sidebar -->
+        <!-- Main Content —— Org Table + Sidebar -->
         <div class="ct2-grid">
-            <!-- Tenant List -->
+            <!-- Org List -->
             <div class="ct2-card">
                 <div class="ct2-card-head">
-                    <div class="ct2-card-title">${icon('building', 14)} Tenants</div>
-                    <span class="ct2-card-count">${(m.tenants || []).length} total</span>
+                    <div class="ct2-card-title">${icon('building', 14)} Orgs</div>
+                    <span class="ct2-card-count">${(m.orgs || []).length} total</span>
                 </div>
                 <div class="ct2-card-body">
                     <!-- Header row -->
@@ -254,18 +254,18 @@ export function renderPage() {
                         <span style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);text-align:center">Users</span>
                         <span style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);text-align:center">●</span>
                     </div>
-                    ${(m.tenants || []).map((t, i) => {
+                    ${(m.orgs || []).map((t, i) => {
         const plan = (t.plan || 'free').toLowerCase();
         const s = t.status || 'active';
         const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#e11d48'];
         const bg = colors[i % colors.length];
         const init = (t.name || '??').substring(0, 2).toUpperCase();
         return `
-                        <div class="ct2-row" style="cursor:pointer" onclick="navigate('sa-tenant-detail',{tenantId:'${t.id}'})">
+                        <div class="ct2-row" style="cursor:pointer" onclick="navigate('sa-org-detail',{orgId:'${t.id}'})">
                             <div class="ct2-avatar" style="background:${bg}">${init}</div>
                             <div>
-                                <div class="ct2-tenant-name">${esc(t.name || '')}</div>
-                                <div class="ct2-tenant-meta">${s}</div>
+                                <div class="ct2-org-name">${esc(t.name || '')}</div>
+                                <div class="ct2-org-meta">${s}</div>
                             </div>
                             <span class="ct2-plan-badge" style="background:${(planColors[plan] || '#94a3b8')}18;color:${planColors[plan] || '#94a3b8'}">${planLabels[plan] || plan}</span>
                             <div class="ct2-user-count">${parseInt(t.user_count) || 0}</div>
@@ -314,9 +314,9 @@ export function renderPage() {
                 <div class="ct2-card">
                     <div class="ct2-card-head"><div class="ct2-card-title">${icon('zap', 14)} Actions</div></div>
                     <div style="padding:12px 14px">
-                        <div class="ct2-action" onclick="navigate('sa-tenants')">
+                        <div class="ct2-action" onclick="navigate('sa-orgs')">
                             <div class="ct2-action-icon" style="background:rgba(59,130,246,0.1)">🏢</div>
-                            <div style="font-size:0.75rem;font-weight:600">View All Tenants</div>
+                            <div style="font-size:0.75rem;font-weight:600">View All Orgs</div>
                         </div>
                         <div class="ct2-action" onclick="navigate('sa-platform-users')">
                             <div class="ct2-action-icon" style="background:rgba(139,92,246,0.1)">👥</div>

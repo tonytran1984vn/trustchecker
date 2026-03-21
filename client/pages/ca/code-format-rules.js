@@ -209,7 +209,7 @@ function renderContent() {
           ${[
       ['Uniqueness Check', 'Every code must be globally unique', 'HARD BLOCK', 'Platform-wide'],
       ['Check Digit Validation', 'Check digit verified on every scan', 'HARD BLOCK', 'Every scan event'],
-      ['Prefix Reservation', 'Brand prefix reserved per tenant', 'HARD BLOCK', 'Platform-wide'],
+      ['Prefix Reservation', 'Brand prefix reserved per org', 'HARD BLOCK', 'Platform-wide'],
       ['Expiry Enforcement', 'Expired codes return "expired" on scan', 'SOFT (log)', 'Per code'],
       ['Re-scan Throttle', 'Codes exceeding limit trigger velocity alert', 'SOFT (flag)', 'Per code'],
     ].map(([rule, desc, enforcement, scope]) => `<tr>

@@ -1,5 +1,5 @@
 /**
- * Seed Multi-Tenant Risk Data — PostgreSQL Version
+ * Seed Multi-Org Risk Data — PostgreSQL Version
  * Run on VPS: DATABASE_URL="..." node server/seed-risk-pg.js
  */
 const { Client } = require('pg');
@@ -8,8 +8,8 @@ const uuid = () => crypto.randomUUID();
 
 const CONN = process.env.DATABASE_URL || 'postgresql://trustchecker:TrustChk%402026%21@localhost:5432/trustchecker';
 
-// ─── Tenant Risk Data ──────────────────────────────────────────
-const TENANTS = [
+// ─── Org Risk Data ──────────────────────────────────────────
+const ORGS = [
     {
         slug: 'pharmaguard', profile: 'HIGH_RISK',
         products: [
@@ -237,13 +237,13 @@ async function seed() {
 
     let tP = 0, tS = 0, tF = 0, tH = 0;
 
-    for (const td of TENANTS) {
+    for (const td of ORGS) {
         const orgRes = await client.query('SELECT id, name FROM organizations WHERE slug = $1', [td.slug]);
         if (!orgRes.rows.length) { console.log(`  ⚠️  ${td.slug} not found`); continue; }
         const org = orgRes.rows[0];
         console.log(`\n  🏢 ${org.name} (${td.profile})`);
 
-        // Find this tenant's admin user
+        // Find this org's admin user
         const userRes = await client.query('SELECT id FROM users WHERE org_id = $1 LIMIT 1', [org.id]);
         const userId = userRes.rows[0]?.id || null;
 
@@ -303,7 +303,7 @@ async function seed() {
                     `INSERT INTO fraud_alerts (id, product_id, alert_type, severity, description, details, status, created_at)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
                     [uuid(), prod.id, f.type, f.sev, f.desc,
-                    JSON.stringify({ tenant: org.name, product: prod.name, profile: td.profile }),
+                    JSON.stringify({ org: org.name, product: prod.name, profile: td.profile }),
                     pick(['open', 'open', 'open', 'investigating', 'resolved']), rndDate(60)]
                 );
                 fc++;

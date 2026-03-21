@@ -11,7 +11,7 @@ const crypto = require('crypto');
 const RESTRICTED_ACTIONS = {
     credit_edit: { severity: 'critical', requires: 'compliance_officer', daily_limit: 3, description: 'Edit credit quantity/status directly' },
     credit_delete: { severity: 'critical', requires: 'compliance_officer', daily_limit: 0, description: 'Delete a carbon credit (forbidden)' },
-    tenant_delete: { severity: 'critical', requires: 'ceo', daily_limit: 1, description: 'Delete/suspend tenant' },
+    org_delete: { severity: 'critical', requires: 'ceo', daily_limit: 1, description: 'Delete/suspend org' },
     rule_override: { severity: 'high', requires: 'compliance_officer', daily_limit: 5, description: 'Override compliance rule' },
     risk_override: { severity: 'high', requires: 'risk_lead', daily_limit: 5, description: 'Override risk engine decision' },
     baseline_change: { severity: 'high', requires: 'compliance_officer', daily_limit: 3, description: 'Change carbon baseline factor' },
@@ -25,7 +25,7 @@ const FORBIDDEN_ACTIONS = [
     { action: 'Delete audit logs', reason: 'Audit logs are append-only and immutable' },
     { action: 'Delete carbon credits', reason: 'Credits can only be retired, never deleted' },
     { action: 'Bypass risk engine scoring', reason: 'Risk is an independent constitutional function' },
-    { action: 'Read tenant encryption keys', reason: 'Keys are managed by IT custody module only' },
+    { action: 'Read org encryption keys', reason: 'Keys are managed by IT custody module only' },
     { action: 'Modify deployed model weights', reason: 'Model weights are frozen — new version required via governance' },
     { action: 'Edit blockchain anchors', reason: 'Blockchain records are immutable by design' }
 ];

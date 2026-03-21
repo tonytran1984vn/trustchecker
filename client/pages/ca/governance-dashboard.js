@@ -55,7 +55,7 @@ function _renderContent() {
       <div class="sa-metrics-row" style="margin-bottom:1.25rem">
         ${_metricCard('⏳', 'Pending Approvals', pending, pending > 0 ? 'orange' : 'green', pending > 0 ? 'Requires org_owner / security_officer action' : 'All clear')}
         ${_metricCard('⚠️', 'SoD Conflicts', sodCount, sodCount > 0 ? 'red' : 'green', sodCount > 0 ? 'Users with conflicting permissions' : 'No conflicts detected')}
-        ${_metricCard('👥', 'Total Users', totalUsers, 'blue', 'Active tenant users')}
+        ${_metricCard('👥', 'Total Users', totalUsers, 'blue', 'Active org users')}
         ${_metricCard('🛡️', 'Security Events', events.length, events.length > 0 ? 'purple' : 'green', 'Recent high-severity audit events')}
       </div>
 

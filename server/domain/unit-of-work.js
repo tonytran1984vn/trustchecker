@@ -17,14 +17,14 @@ class UnitOfWork {
      * @param {Object} db - Database instance (Prisma or sql.js adapter)
      * @param {Object} [options]
      * @param {Object} [options.eventBus] - Event bus for publishing after commit
-     * @param {string} [options.tenantId] - Current tenant context
+     * @param {string} [options.orgId] - Current org context
      * @param {string} [options.userId] - Current user context
      */
     constructor(db, options = {}) {
         this.id = `uow_${crypto.randomBytes(6).toString('hex')}`;
         this.db = db;
         this.eventBus = options.eventBus || null;
-        this.tenantId = options.tenantId || null;
+        this.orgId = options.orgId || null;
         this.userId = options.userId || null;
 
         this._operations = [];
@@ -97,7 +97,7 @@ class UnitOfWork {
             type: eventType,
             data: eventData,
             context: {
-                tenantId: this.tenantId,
+                orgId: this.orgId,
                 userId: this.userId,
                 uowId: this.id,
                 ...options.context,
@@ -154,7 +154,7 @@ class UnitOfWork {
                                     op.id || 'new',
                                     JSON.stringify(op.changes || op.data || {}),
                                     this.userId,
-                                    this.tenantId,
+                                    this.orgId,
                                     new Date().toISOString(),
                                 ],
                             });
@@ -186,7 +186,7 @@ class UnitOfWork {
                                 op.id || 'new',
                                 JSON.stringify(op.changes || op.data || {}),
                                 this.userId,
-                                this.tenantId,
+                                this.orgId,
                                 new Date().toISOString()
                             );
                         } catch (e) { /* best effort */ }
@@ -281,7 +281,7 @@ class UnitOfWork {
 function createUnitOfWork(db, req, eventBus) {
     return new UnitOfWork(db, {
         eventBus,
-        tenantId: req?.tenantId || null,
+        orgId: req?.orgId || null,
         userId: req?.user?.id || null,
     });
 }

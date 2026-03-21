@@ -989,7 +989,7 @@ function renderFinancial() {
 // ═══════════════════════════════════════════════════════════════
 function renderEmergency() {
   const actions = [
-    { id: 'TENANT_FREEZE', icon: '🔴', label: 'Tenant Freeze', desc: 'Stop all write operations. Tenant becomes read-only.', color: '#ef4444' },
+    { id: 'ORG_FREEZE', icon: '🔴', label: 'Org Freeze', desc: 'Stop all write operations. Org becomes read-only.', color: '#ef4444' },
     { id: 'FORCE_REAUTH', icon: '🔒', label: 'Force Re-Authentication', desc: 'Invalidate all sessions. Every user must log in again.', color: '#f59e0b' },
     { id: 'REVOKE_ALL_SESSIONS', icon: '⛔', label: 'Revoke All Sessions', desc: 'Immediately revoke every active session.', color: '#f97316' },
     { id: 'SUSPEND_ROLE', icon: '⏸️', label: 'Suspend High-Risk Role', desc: 'Demote all users with a specific role to viewer.', color: '#8b5cf6' },
@@ -1087,7 +1087,7 @@ function getRoleColor(role) {
 
 /** Action color by severity */
 function actionColor(action) {
-  if (['TENANT_FREEZE', 'FORCE_REAUTH', 'REVOKE_ALL_SESSIONS', 'ROLE_SUSPENDED', 'SESSION_HIJACK_DETECTED'].includes(action)) return '#ef4444';
+  if (['ORG_FREEZE', 'FORCE_REAUTH', 'REVOKE_ALL_SESSIONS', 'ROLE_SUSPENDED', 'SESSION_HIJACK_DETECTED'].includes(action)) return '#ef4444';
   if (['SELF_ELEVATION_BLOCKED', 'PERMISSION_CEILING_BLOCKED', 'HIGH_RISK_ROLE_REJECTED', 'LOGIN_FAILED'].includes(action)) return '#f59e0b';
   if (['HIGH_RISK_ROLE_PENDING', 'NEW_IP_LOGIN', 'ROLE_EXPIRED', 'SUSPICIOUS_ACCESS'].includes(action)) return '#f97316';
   if (['CA_APPOINTED', 'ROLE_APPOINTED', 'HIGH_RISK_ROLE_APPROVED', 'ROLES_ASSIGNED'].includes(action)) return '#3b82f6';

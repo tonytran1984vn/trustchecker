@@ -1,6 +1,6 @@
 /**
  * Carbon Integrity Governance Engine v3.0 — Institutional Grade
- * 4-Layer Architecture: L1 Infrastructure → L2 Federation → L3 Tenant → L4 Capital Market
+ * 4-Layer Architecture: L1 Infrastructure → L2 Federation → L3 Org → L4 Capital Market
  *
  * Designed for:
  *   - Regulatory defensibility (EU CSRD / ESRS / SEC climate)
@@ -17,7 +17,7 @@
  *   5. Admin ≠ Authority (IAM vs business decision)
  *   6. Oversight ≠ Override (observe, not rewrite)
  *   7. Audit ≠ Approve (monitor, not decide)
- *   8. Federation ≠ Tenant (L2 independence from L3)
+ *   8. Federation ≠ Org (L2 independence from L3)
  *   9. Disclosure ≠ Modification (sign-off ≠ edit)
  *
  * Authority Boundary Rule:
@@ -38,13 +38,13 @@ const L1_INFRASTRUCTURE = {
         icon: '🔧',
         description: 'Infrastructure management. Zero business authority.',
         can: [
-            'manage_infra', 'tenant_provisioning', 'security_policy',
+            'manage_infra', 'org_provisioning', 'security_policy',
             'system_config', 'view_system_logs', 'manage_api_keys',
         ],
         cannot: [
-            'edit_emission_data', 'approve_cip', 'run_tenant_replay',
+            'edit_emission_data', 'approve_cip', 'run_org_replay',
             'modify_factor_version', 'seal_passport', 'override_cip',
-            'read_tenant_cip_detail',
+            'read_org_cip_detail',
         ],
         sod_principle: 'Infrastructure only. Cannot touch carbon data.',
     },
@@ -60,7 +60,7 @@ const L1_INFRASTRUCTURE = {
             'view_security_logs', 'manage_mfa_policy',
         ],
         cannot: [
-            'edit_emission_data', 'approve_cip', 'access_tenant_data',
+            'edit_emission_data', 'approve_cip', 'access_org_data',
             'modify_methodology',
         ],
         sod_principle: 'Security perimeter. Cannot access business data.',
@@ -77,7 +77,7 @@ const L1_INFRASTRUCTURE = {
             'manage_gdpr_masking', 'manage_cross_border_rules',
         ],
         cannot: [
-            'edit_emission_data', 'approve_cip', 'access_tenant_calculations',
+            'edit_emission_data', 'approve_cip', 'access_org_calculations',
             'validate_cip',
         ],
         sod_principle: 'Data boundary governance. Cannot alter carbon claims.',
@@ -88,14 +88,14 @@ const L1_INFRASTRUCTURE = {
         layer: 'L1',
         name: 'Global Risk Committee',
         icon: '⚡',
-        description: 'Configures risk scoring weights and anomaly thresholds ONLY. Cannot override individual tenant CIP.',
+        description: 'Configures risk scoring weights and anomaly thresholds ONLY. Cannot override individual org CIP.',
         can: [
             'configure_risk_weights', 'set_anomaly_threshold',
             'review_global_risk_report', 'set_overclaim_alert_pct',
         ],
         cannot: [
             'override_individual_cip', 'modify_emission_data',
-            'approve_cip', 'access_tenant_replay',
+            'approve_cip', 'access_org_replay',
         ],
         sod_principle: 'Threshold policy only. Cannot override individual assessments.',
     },
@@ -129,7 +129,7 @@ const L1_INFRASTRUCTURE = {
             'freeze_deployment_window', 'view_release_notes',
         ],
         cannot: [
-            'access_tenant_data', 'modify_emission_data',
+            'access_org_data', 'modify_emission_data',
             'approve_cip', 'modify_methodology',
         ],
         sod_principle: 'Manages system changes. Cannot touch business data.',
@@ -155,8 +155,8 @@ const L1_INFRASTRUCTURE = {
 
 // ═══════════════════════════════════════════════════════════════════
 // II. L2 — FEDERATION & INDEPENDENT VALIDATION LAYER
-//     4 roles. Externalized authority. NOT tenant-controlled.
-//     Validation must be federated, not tenant-controlled.
+//     4 roles. Externalized authority. NOT org-controlled.
+//     Validation must be federated, not org-controlled.
 // ═══════════════════════════════════════════════════════════════════
 
 const L2_FEDERATION = {
@@ -165,7 +165,7 @@ const L2_FEDERATION = {
         layer: 'L2',
         name: 'Independent Validation Unit (IVU)',
         icon: '✅',
-        description: 'External validator. Issues validation status on CIPs. NOT a tenant employee. Federated.',
+        description: 'External validator. Issues validation status on CIPs. NOT a org employee. Federated.',
         can: [
             'validate_cip', 'issue_validation_status',
             'request_additional_evidence', 'view_methodology',
@@ -174,11 +174,11 @@ const L2_FEDERATION = {
         cannot: [
             'modify_emission_data', 'approve_compliance',
             'seal_passport', 'override_calculation',
-            'be_created_by_tenant', 'be_deleted_by_tenant',
+            'be_created_by_org', 'be_deleted_by_org',
         ],
         replay_level: 3,
         federated: true,
-        independence_rule: 'Validator does not belong to tenant IAM. Tenant cannot create or delete IVU.',
+        independence_rule: 'Validator does not belong to org IAM. Org cannot create or delete IVU.',
         sod_principle: 'Validates independently. Cannot modify data or approve compliance.',
     },
 
@@ -205,18 +205,18 @@ const L2_FEDERATION = {
         layer: 'L2',
         name: 'Carbon Methodology Governance Board (MGB)',
         icon: '🌍',
-        description: 'Federated. Proposes, votes, and freezes methodology + emission factors. NOT a tenant employee.',
+        description: 'Federated. Proposes, votes, and freezes methodology + emission factors. NOT a org employee.',
         can: [
             'propose_methodology_version', 'vote_methodology',
             'freeze_emission_factor', 'publish_change_log',
             'review_factor_citations', 'set_effective_date',
         ],
         cannot: [
-            'edit_sealed_cip', 'access_tenant_data',
+            'edit_sealed_cip', 'access_org_data',
             'modify_individual_passport', 'approve_cip',
         ],
         federated: true,
-        sod_principle: 'Governs methodology globally. Cannot intervene at tenant level.',
+        sod_principle: 'Governs methodology globally. Cannot intervene at org level.',
     },
 
     blockchain_operator: {
@@ -239,12 +239,12 @@ const L2_FEDERATION = {
 };
 
 // ═══════════════════════════════════════════════════════════════════
-// III. L3 — TENANT GOVERNANCE LAYER (Company-controlled)
+// III. L3 — ORG GOVERNANCE LAYER (Company-controlled)
 //      15 roles. Operational chain + Governance/Oversight chain.
 //      Full SoD enforced within this layer.
 // ═══════════════════════════════════════════════════════════════════
 
-const L3_TENANT = {
+const L3_ORG = {
     // ── A. Operational Chain ─────────────────────────────────────────
     carbon_officer: {
         id: 'carbon_officer',
@@ -371,7 +371,7 @@ const L3_TENANT = {
         chain: 'operational',
         name: 'Supplier Contributor',
         icon: '🏭',
-        description: 'Scoped external input. Submits own supplier emission declaration. Tenant-isolated.',
+        description: 'Scoped external input. Submits own supplier emission declaration. Org-isolated.',
         can: [
             'submit_supplier_emission', 'upload_supporting_docs',
         ],
@@ -710,7 +710,7 @@ const METHODOLOGY_CHANGE_FLOW = [
     { step: 2, action: 'Board Vote', actor: 'MGB Full Board (L2)', layer: 'L2', requires: '≥75% approval (no conflicts)' },
     { step: 3, action: 'Factor Freeze', actor: 'MGB + System (L2/L1)', layer: 'L2', requires: 'Hash lock on factor set' },
     { step: 4, action: 'Publish', actor: 'MGB (L2)', layer: 'L2', requires: 'Change bulletin with effective date' },
-    { step: 5, action: 'Tenant Adopt', actor: 'Company Admin (L3)', layer: 'L3', requires: 'Select version (cannot edit content)' },
+    { step: 5, action: 'Org Adopt', actor: 'Company Admin (L3)', layer: 'L3', requires: 'Select version (cannot edit content)' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -738,7 +738,7 @@ const ACCESS_PRINCIPLES = [
     { id: 'AP-06', name: 'L1 ≠ Business', description: 'Platform infrastructure cannot modify business data.' },
     { id: 'AP-07', name: 'Calculation ≠ Approval', description: 'Calculation is deterministic (L1). Approval is human (L3).' },
     { id: 'AP-08', name: 'Validation ≠ Seal', description: 'IVU validates (L2). System seals after all gates pass (L1).' },
-    { id: 'AP-09', name: 'Federated Independence', description: 'L2 actors are not tenant employees. Cannot be created/deleted by tenant.' },
+    { id: 'AP-09', name: 'Federated Independence', description: 'L2 actors are not org employees. Cannot be created/deleted by org.' },
     { id: 'AP-10', name: 'Disclosure ≠ Modification', description: 'Disclosure officer signs but cannot modify underlying data.' },
     { id: 'AP-11', name: 'Litigation Traceability', description: 'Audit trail: actor_id, timestamp, hash_before, hash_after, signature, role, ip/device. Court-admissible.' },
 ];
@@ -772,13 +772,13 @@ const LIABILITY_MATRIX = {
 
 // Backward-compatible aliases
 const PLATFORM_ROLES = L1_INFRASTRUCTURE;
-const COMPANY_ROLES = { ...L3_TENANT, ...L4_CAPITAL_MARKET };
+const COMPANY_ROLES = { ...L3_ORG, ...L4_CAPITAL_MARKET };
 
 function getAllRoles() {
     return {
         L1_infrastructure: L1_INFRASTRUCTURE,
         L2_federation: L2_FEDERATION,
-        L3_tenant: L3_TENANT,
+        L3_org: L3_ORG,
         L4_capital_market: L4_CAPITAL_MARKET,
         // backward compat
         platform: PLATFORM_ROLES,
@@ -789,7 +789,7 @@ function getAllRoles() {
 function getRoleById(roleId) {
     return L1_INFRASTRUCTURE[roleId]
         || L2_FEDERATION[roleId]
-        || L3_TENANT[roleId]
+        || L3_ORG[roleId]
         || L4_CAPITAL_MARKET[roleId]
         || null;
 }
@@ -886,7 +886,7 @@ module.exports = {
     // 4-Layer Containers
     L1_INFRASTRUCTURE,
     L2_FEDERATION,
-    L3_TENANT,
+    L3_ORG,
     L4_CAPITAL_MARKET,
     // Backward compat
     PLATFORM_ROLES,

@@ -45,8 +45,8 @@ const TEMPLATES = {
         ]),
     }),
     new_org: (data) => ({
-        text: `🏢 New Tenant: ${data.org_name || 'Unknown'}`,
-        blocks: alertBlocks('🏢 New Tenant Registered', '#3b82f6', [
+        text: `🏢 New Org: ${data.org_name || 'Unknown'}`,
+        blocks: alertBlocks('🏢 New Org Registered', '#3b82f6', [
             `*Organization:* ${data.org_name || 'Unknown'}`,
             `*Admin:* ${data.admin_email || 'Unknown'}`,
         ]),
@@ -74,9 +74,9 @@ const TEMPLATES = {
         ]),
     }),
     payment_failed: (data) => ({
-        text: `💳 Payment Failed: ${data.tenant_name || 'Unknown'}`,
+        text: `💳 Payment Failed: ${data.org_name || 'Unknown'}`,
         blocks: alertBlocks('💳 Payment Failed', '#ef4444', [
-            `*Tenant:* ${data.tenant_name || 'Unknown'}`,
+            `*Org:* ${data.org_name || 'Unknown'}`,
             `*Amount:* ${data.amount || 'N/A'}`,
             `*Reason:* ${data.reason || 'Processing error.'}`,
         ]),

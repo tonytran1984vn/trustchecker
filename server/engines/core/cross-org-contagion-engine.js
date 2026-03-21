@@ -1,6 +1,6 @@
 /**
- * Cross-Tenant Contagion Engine v2.0
- * Models how risk propagates across tenants in a multi-tenant platform
+ * Cross-Org Contagion Engine v2.0
+ * Models how risk propagates across orgs in a multi-org platform
  * v2.0 adds: DB-backed simulation, async propagation, contagion history, dashboard
  */
 
@@ -36,7 +36,7 @@ const TRUST_CONTAGION = {
 const SHARED_ROUTE_RISK = {
     title: 'Shared Supply Route Contagion',
     scenarios: [
-        { scenario: 'Single Route Failure', risk: 'If route used by 5+ tenants fails, all affected simultaneously', mitigation: 'Mandate route diversification >2 routes per tenant' },
+        { scenario: 'Single Route Failure', risk: 'If route used by 5+ orgs fails, all affected simultaneously', mitigation: 'Mandate route diversification >2 routes per org' },
         { scenario: 'Port Congestion', risk: 'Single port bottleneck affects 30%+ of platform volume', mitigation: 'Real-time port load monitoring + alternative routing activation' },
     ],
     concentration_alerts: {
@@ -46,10 +46,10 @@ const SHARED_ROUTE_RISK = {
 
 const CONTAGION_BREAKERS = {
     breakers: [
-        { id: 'CCB-01', trigger: 'Trust contagion >20% drop propagated to 5+ tenants', action: 'Source: KS-02 Freeze. Affected: enhanced monitoring + limit reduction.' },
-        { id: 'CCB-02', trigger: 'Shared route failure affects >20% of active tenants', action: 'Alternative routing activation. SLA clock paused for force majeure.' },
-        { id: 'CCB-03', trigger: 'Blockchain anchor backlog >10,000 pending', action: 'Throttle highest-volume tenant. Prioritize settlement anchors.' },
-        { id: 'CCB-04', trigger: 'Settlement netting >$1M cross-tenant counterparty chain', action: 'Netting suspended. Gross settlement mode activated.' },
+        { id: 'CCB-01', trigger: 'Trust contagion >20% drop propagated to 5+ orgs', action: 'Source: KS-02 Freeze. Affected: enhanced monitoring + limit reduction.' },
+        { id: 'CCB-02', trigger: 'Shared route failure affects >20% of active orgs', action: 'Alternative routing activation. SLA clock paused for force majeure.' },
+        { id: 'CCB-03', trigger: 'Blockchain anchor backlog >10,000 pending', action: 'Throttle highest-volume org. Prioritize settlement anchors.' },
+        { id: 'CCB-04', trigger: 'Settlement netting >$1M cross-org counterparty chain', action: 'Netting suspended. Gross settlement mode activated.' },
         { id: 'CCB-05', trigger: 'Carbon certificate from single registry >60% platform volume + dispute', action: 'Affected certificates frozen. Non-affected continues.' },
     ],
 };
@@ -58,7 +58,7 @@ const CONTAGION_BREAKERS = {
 // ENGINE
 // ═══════════════════════════════════════════════════════════════
 
-class CrossTenantContagionEngine {
+class CrossOrgContagionEngine {
 
     /**
      * Simulate contagion with provided connections (v1 — unchanged)
@@ -95,7 +95,7 @@ class CrossTenantContagionEngine {
             total_affected: totalAffected,
             high_severity_count: highSeverity,
             circuit_breaker_triggered: highSeverity > 0,
-            recommended_action: highSeverity > 0 ? 'KS-02 source tenant + limit reduction for affected' : 'Monitor only',
+            recommended_action: highSeverity > 0 ? 'KS-02 source org + limit reduction for affected' : 'Monitor only',
         };
     }
 
@@ -104,14 +104,14 @@ class CrossTenantContagionEngine {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Simulate contagion from a real tenant using DB relationships
+     * Simulate contagion from a real org using DB relationships
      */
-    async simulateFromDB(sourceTenantId, trustDrop = 40) {
-        // Get real tenant relationships from scm_partners
+    async simulateFromDB(sourceOrgId, trustDrop = 40) {
+        // Get real org relationships from scm_partners
         const relationships = await db.all(`
             SELECT DISTINCT
-                p.org_id as tenant_id,
-                o.name as tenant_name,
+                p.org_id as org_id,
+                o.name as org_name,
                 p.partner_type as relationship,
                 p.trust_score,
                 COUNT(*) OVER (PARTITION BY p.org_id) as connection_strength
@@ -122,10 +122,10 @@ class CrossTenantContagionEngine {
             )
             AND p.org_id != $1
             LIMIT 50
-        `, [sourceTenantId]);
+        `, [sourceOrgId]);
 
         if (relationships.length === 0) {
-            return { source: sourceTenantId, trust_drop: trustDrop, affected: [], message: 'No cross-tenant relationships found' };
+            return { source: sourceOrgId, trust_drop: trustDrop, affected: [], message: 'No cross-org relationships found' };
         }
 
         const model = TRUST_CONTAGION.propagation_model;
@@ -136,8 +136,8 @@ class CrossTenantContagionEngine {
             const severity = this._getSeverity(impact);
 
             return {
-                tenant_id: rel.tenant_id,
-                tenant_name: rel.tenant_name,
+                org_id: rel.org_id,
+                org_name: rel.org_name,
                 relationship: rel.relationship,
                 connection_strength: parseInt(rel.connection_strength),
                 trust_impact_pct: Math.round(impact * 10) / 10,
@@ -150,10 +150,10 @@ class CrossTenantContagionEngine {
         const eventId = uuidv4();
         for (const a of affected.filter(a => a.trust_impact_pct > 5)) {
             await db.run(`
-                INSERT INTO contagion_events (id, source_tenant, affected_tenant, trust_drop_pct, contagion_impact_pct, severity, action_taken, metadata)
+                INSERT INTO contagion_events (id, source_org, affected_org, trust_drop_pct, contagion_impact_pct, severity, action_taken, metadata)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             `, [
-                uuidv4(), sourceTenantId, a.tenant_id, trustDrop, a.trust_impact_pct,
+                uuidv4(), sourceOrgId, a.org_id, trustDrop, a.trust_impact_pct,
                 a.severity, a.action,
                 JSON.stringify({ simulation_id: eventId, relationship: a.relationship }),
             ]);
@@ -164,7 +164,7 @@ class CrossTenantContagionEngine {
 
         return {
             simulation_id: eventId,
-            source_tenant: sourceTenantId,
+            source_org: sourceOrgId,
             trust_drop_pct: trustDrop,
             affected: affected.sort((a, b) => b.trust_impact_pct - a.trust_impact_pct),
             total_affected: affected.filter(a => a.trust_impact_pct > 5).length,
@@ -179,31 +179,31 @@ class CrossTenantContagionEngine {
     // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Get contagion event history for a tenant (as source or affected)
+     * Get contagion event history for a org (as source or affected)
      */
-    async getContagionHistory(tenantId, options = {}) {
+    async getContagionHistory(orgId, options = {}) {
         const limit = options.limit || 50;
         const days = options.days || 90;
 
         const asSource = await db.all(`
             SELECT * FROM contagion_events
-            WHERE source_tenant = $1 AND created_at > NOW() - INTERVAL '${days} days'
+            WHERE source_org = $1 AND created_at > NOW() - INTERVAL '${days} days'
             ORDER BY created_at DESC LIMIT $2
-        `, [tenantId, limit]);
+        `, [orgId, limit]);
 
         const asAffected = await db.all(`
             SELECT * FROM contagion_events
-            WHERE affected_tenant = $1 AND created_at > NOW() - INTERVAL '${days} days'
+            WHERE affected_org = $1 AND created_at > NOW() - INTERVAL '${days} days'
             ORDER BY created_at DESC LIMIT $2
-        `, [tenantId, limit]);
+        `, [orgId, limit]);
 
         return {
-            tenant_id: tenantId,
+            org_id: orgId,
             period_days: days,
             as_source: {
                 count: asSource.length,
                 events: asSource.map(e => ({
-                    id: e.id, affected_tenant: e.affected_tenant,
+                    id: e.id, affected_org: e.affected_org,
                     trust_drop: parseFloat(e.trust_drop_pct), impact: parseFloat(e.contagion_impact_pct),
                     severity: e.severity, date: e.created_at,
                 })),
@@ -211,7 +211,7 @@ class CrossTenantContagionEngine {
             as_affected: {
                 count: asAffected.length,
                 events: asAffected.map(e => ({
-                    id: e.id, source_tenant: e.source_tenant,
+                    id: e.id, source_org: e.source_org,
                     trust_drop: parseFloat(e.trust_drop_pct), impact: parseFloat(e.contagion_impact_pct),
                     severity: e.severity, date: e.created_at,
                 })),
@@ -230,8 +230,8 @@ class CrossTenantContagionEngine {
         const stats = await db.get(`
             SELECT
                 COUNT(*) as total_events,
-                COUNT(DISTINCT source_tenant) as unique_sources,
-                COUNT(DISTINCT affected_tenant) as unique_affected,
+                COUNT(DISTINCT source_org) as unique_sources,
+                COUNT(DISTINCT affected_org) as unique_affected,
                 COUNT(CASE WHEN severity IN ('high', 'critical') THEN 1 END) as high_severity_events,
                 AVG(contagion_impact_pct) as avg_impact
             FROM contagion_events
@@ -239,12 +239,12 @@ class CrossTenantContagionEngine {
         `);
 
         const topSources = await db.all(`
-            SELECT source_tenant, COUNT(*) as event_count,
+            SELECT source_org, COUNT(*) as event_count,
                    AVG(contagion_impact_pct) as avg_impact,
                    MAX(severity) as max_severity
             FROM contagion_events
             WHERE created_at > NOW() - INTERVAL '30 days'
-            GROUP BY source_tenant
+            GROUP BY source_org
             ORDER BY event_count DESC
             LIMIT 10
         `);
@@ -259,18 +259,18 @@ class CrossTenantContagionEngine {
         return {
             period: '30 days',
             total_events: parseInt(stats?.total_events || 0),
-            unique_source_tenants: parseInt(stats?.unique_sources || 0),
-            unique_affected_tenants: parseInt(stats?.unique_affected || 0),
+            unique_source_orgs: parseInt(stats?.unique_sources || 0),
+            unique_affected_orgs: parseInt(stats?.unique_affected || 0),
             high_severity_events: parseInt(stats?.high_severity_events || 0),
             avg_impact_pct: Math.round(parseFloat(stats?.avg_impact || 0) * 10) / 10,
             risk_level: parseInt(stats?.high_severity_events || 0) > 10 ? 'critical'
                 : parseInt(stats?.high_severity_events || 0) > 3 ? 'elevated' : 'normal',
             top_sources: topSources.map(s => ({
-                tenant: s.source_tenant, events: parseInt(s.event_count),
+                org: s.source_org, events: parseInt(s.event_count),
                 avg_impact: Math.round(parseFloat(s.avg_impact) * 10) / 10,
             })),
             recent_critical: recentCritical.map(e => ({
-                id: e.id, source: e.source_tenant, affected: e.affected_tenant,
+                id: e.id, source: e.source_org, affected: e.affected_org,
                 impact: parseFloat(e.contagion_impact_pct), severity: e.severity, date: e.created_at,
             })),
             circuit_breakers: CONTAGION_BREAKERS.breakers,
@@ -288,7 +288,7 @@ class CrossTenantContagionEngine {
 
     getFullFramework() {
         return {
-            title: 'Cross-Tenant Contagion Modeling — Critical Infrastructure-Grade',
+            title: 'Cross-Org Contagion Modeling — Critical Infrastructure-Grade',
             version: '2.0',
             trust_contagion: TRUST_CONTAGION,
             shared_route_risk: SHARED_ROUTE_RISK,
@@ -310,4 +310,4 @@ class CrossTenantContagionEngine {
     }
 }
 
-module.exports = new CrossTenantContagionEngine();
+module.exports = new CrossOrgContagionEngine();

@@ -5,7 +5,7 @@ import { icon } from '../../core/icons.js';
 
 export function renderPage() {
     const permissions = [
-        'Create Tenant', 'Suspend Tenant', 'View Cross-Tenant',
+        'Create Org', 'Suspend Org', 'View Cross-Org',
         'Impersonate (time-bound)', 'Access Billing', 'Access Risk Engine',
         'View Audit Logs', 'Manage Platform Users', 'Configure Feature Flags'
     ];

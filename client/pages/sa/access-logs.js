@@ -1,5 +1,5 @@
 /**
- * Super Admin – Access Logs (Cross-Tenant & Impersonation)
+ * Super Admin – Access Logs (Cross-Org & Impersonation)
  * Pulls real data from /api/platform/audit
  */
 import { icon } from '../../core/icons.js';

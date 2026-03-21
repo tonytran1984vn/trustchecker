@@ -135,7 +135,7 @@ function renderPermissionMatrix() {
     groupedByLevel[lvl].push(group);
   }
 
-  const levelLabels = { tenant: '🏢 Organization Management', business: '📊 Business Modules' };
+  const levelLabels = { org: '🏢 Organization Management', business: '📊 Business Modules' };
 
   const sections = Object.entries(groupedByLevel).map(([level, groups]) => {
     const rows = groups.map(g => {
@@ -509,7 +509,7 @@ function formatResourceName(resource) {
     blockchain: '⛓️ Blockchain', nft: '🎨 NFT', wallet: '💰 Wallet',
     api_key: '🔑 API Key', webhook: '🪝 Webhook', notification: '🔔 Notification',
     billing: '💳 Billing', settings: '⚙️ Settings',
-    tenant: '🏢 Org Mgmt',
+    org: '🏢 Org Mgmt',
   };
   return map[resource] || resource.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }

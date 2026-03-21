@@ -189,7 +189,7 @@ class ScheduledTasks {
         };
 
         try {
-            // v9.4.2: Iterate per-org for tenant-isolated retention
+            // v9.4.2: Iterate per-org for org-isolated retention
             await this._perOrg('retentionSweep', async (orgId) => {
                 const policies = await this.db.all(
                     "SELECT * FROM data_retention_policies WHERE is_active = true AND org_id = $1",

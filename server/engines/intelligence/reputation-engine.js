@@ -116,11 +116,11 @@ class ReputationEngine {
     }
 
     /**
-     * Cross-tenant reputation index (Super Admin)
+     * Cross-org reputation index (Super Admin)
      */
-    buildPlatformIndex(tenants = []) {
-        const index = tenants.map(t => ({
-            org_id: t.org_id, tenant_name: t.tenant_name,
+    buildPlatformIndex(orgs = []) {
+        const index = orgs.map(t => ({
+            org_id: t.org_id, org_name: t.org_name,
             trust_score: t.trust_score || 0, transparency_index: t.transparency_index || 0,
             carbon_integrity: t.carbon_integrity || 0,
             composite: Math.round(((t.trust_score || 0) * 0.4 + (t.transparency_index || 0) * 0.3 + (t.carbon_integrity || 0) * 0.3)),
@@ -134,7 +134,7 @@ class ReputationEngine {
 
         return {
             title: 'Platform Trust & Reputation Index',
-            total_tenants: index.length,
+            total_orgs: index.length,
             avg_composite: index.length > 0 ? Math.round(index.reduce((s, t) => s + t.composite, 0) / index.length) : 0,
             index, generated_at: new Date().toISOString()
         };

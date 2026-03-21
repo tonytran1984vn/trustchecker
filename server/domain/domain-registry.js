@@ -86,7 +86,7 @@ const DOMAINS = {
         description: 'User management, organization, sessions, authentication, authorization',
         aggregateRoots: ['User', 'Organization'],
         entities: ['User', 'Organization', 'Session', 'RefreshToken', 'PasskeyCredential', 'KYCBusiness'],
-        valueObjects: ['Role', 'Plan', 'TenantContext', 'PasswordPolicy'],
+        valueObjects: ['Role', 'Plan', 'OrgContext', 'PasswordPolicy'],
         repositories: ['UserRepository', 'OrganizationRepository', 'SessionRepository'],
         domainEvents: [],
         invariants: [
@@ -94,7 +94,7 @@ const DOMAINS = {
             { id: 'ID-002', rule: 'Password minimum 12 chars with 4 character types', enforcement: 'domain_validation' },
             { id: 'ID-003', rule: 'Account lockout after 5 failed attempts in 15 minutes', enforcement: 'service_rule' },
             { id: 'ID-004', rule: 'Organization slug must be unique and URL-safe', enforcement: 'database_unique_constraint' },
-            { id: 'ID-005', rule: 'Enterprise tenant requires dedicated schema', enforcement: 'provisioning_rule' },
+            { id: 'ID-005', rule: 'Enterprise org requires dedicated schema', enforcement: 'provisioning_rule' },
             { id: 'ID-006', rule: 'Role hierarchy: admin > manager > operator > viewer (no skip)', enforcement: 'rbac_check' },
         ],
         ownedTables: ['users', 'organizations', 'sessions', 'refresh_tokens', 'passkey_credentials', 'kyc_businesses'],

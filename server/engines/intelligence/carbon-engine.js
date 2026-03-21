@@ -139,7 +139,7 @@ const REGULATORY_FRAMEWORKS = [
 const MATURITY_LEVELS = [
     { level: 1, name: 'Carbon Calculator', description: 'Per-product footprint calculation', requirements: ['scope_calculation'], target: 'Baseline' },
     { level: 2, name: 'ESG Governance Module', description: 'GRI reporting + offset + blockchain', requirements: ['gri_reporting', 'offset_recording', 'blockchain_anchor'], target: 'Enterprise Ready' },
-    { level: 3, name: 'Carbon Intelligence', description: 'Risk integration + cross-tenant benchmarks', requirements: ['risk_integration', 'cross_tenant_benchmark', 'partner_esg_scoring'], target: 'Regulated Industry' },
+    { level: 3, name: 'Carbon Intelligence', description: 'Risk integration + cross-org benchmarks', requirements: ['risk_integration', 'cross_org_benchmark', 'partner_esg_scoring'], target: 'Regulated Industry' },
     { level: 4, name: 'Industry Carbon Index', description: 'Moody\'s-style ESG rating platform', requirements: ['industry_index', 'real_time_monitoring', 'compliance_api'], target: 'Cross-border' },
     { level: 5, name: 'Carbon Trading Platform', description: 'Offset marketplace + verification network', requirements: ['offset_marketplace', 'verification_network', 'carbon_credit_trading'], target: 'Market Leader' }
 ];
@@ -632,15 +632,15 @@ class CarbonEngine {
             actions: [
                 'view_passport', 'view_scope_breakdown', 'view_transport_detail',
                 'view_esg_leaderboard', 'submit_offset', 'configure_factors',
-                'export_gri_report', 'cross_tenant_benchmark', 'view_esg_kpi'
+                'export_gri_report', 'cross_org_benchmark', 'view_esg_kpi'
             ],
             matrix: {
-                scm_ops: { view_passport: true, view_scope_breakdown: true, view_transport_detail: true, view_esg_leaderboard: false, submit_offset: false, configure_factors: false, export_gri_report: false, cross_tenant_benchmark: false, view_esg_kpi: false },
-                risk: { view_passport: true, view_scope_breakdown: true, view_transport_detail: true, view_esg_leaderboard: true, submit_offset: false, configure_factors: false, export_gri_report: false, cross_tenant_benchmark: false, view_esg_kpi: false },
-                compliance: { view_passport: true, view_scope_breakdown: true, view_transport_detail: 'read_only', view_esg_leaderboard: true, submit_offset: false, configure_factors: false, export_gri_report: true, cross_tenant_benchmark: false, view_esg_kpi: false },
-                company_admin: { view_passport: true, view_scope_breakdown: true, view_transport_detail: true, view_esg_leaderboard: true, submit_offset: true, configure_factors: true, export_gri_report: false, cross_tenant_benchmark: false, view_esg_kpi: false },
-                super_admin: { view_passport: true, view_scope_breakdown: true, view_transport_detail: true, view_esg_leaderboard: true, submit_offset: false, configure_factors: true, export_gri_report: true, cross_tenant_benchmark: true, view_esg_kpi: false },
-                ceo: { view_passport: 'aggregated', view_scope_breakdown: false, view_transport_detail: false, view_esg_leaderboard: 'top_5', submit_offset: false, configure_factors: false, export_gri_report: false, cross_tenant_benchmark: false, view_esg_kpi: true }
+                scm_ops: { view_passport: true, view_scope_breakdown: true, view_transport_detail: true, view_esg_leaderboard: false, submit_offset: false, configure_factors: false, export_gri_report: false, cross_org_benchmark: false, view_esg_kpi: false },
+                risk: { view_passport: true, view_scope_breakdown: true, view_transport_detail: true, view_esg_leaderboard: true, submit_offset: false, configure_factors: false, export_gri_report: false, cross_org_benchmark: false, view_esg_kpi: false },
+                compliance: { view_passport: true, view_scope_breakdown: true, view_transport_detail: 'read_only', view_esg_leaderboard: true, submit_offset: false, configure_factors: false, export_gri_report: true, cross_org_benchmark: false, view_esg_kpi: false },
+                company_admin: { view_passport: true, view_scope_breakdown: true, view_transport_detail: true, view_esg_leaderboard: true, submit_offset: true, configure_factors: true, export_gri_report: false, cross_org_benchmark: false, view_esg_kpi: false },
+                super_admin: { view_passport: true, view_scope_breakdown: true, view_transport_detail: true, view_esg_leaderboard: true, submit_offset: false, configure_factors: true, export_gri_report: true, cross_org_benchmark: true, view_esg_kpi: false },
+                ceo: { view_passport: 'aggregated', view_scope_breakdown: false, view_transport_detail: false, view_esg_leaderboard: 'top_5', submit_offset: false, configure_factors: false, export_gri_report: false, cross_org_benchmark: false, view_esg_kpi: true }
             },
             design_principle: 'CEO views KPI, CA operates, SA benchmarks, Compliance exports, Risk analyzes'
         };
@@ -1227,13 +1227,13 @@ ${r.supplier_assessment ? `<h2>🤝 Supplier Assessment</h2><p>Suppliers assesse
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // v4.0: CROSS-TENANT BENCHMARK
+    // v4.0: CROSS-ORG BENCHMARK
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
      * Anonymous org-to-org percentile comparison
      */
-    calculateCrossTenantBenchmark(orgScopeData, allOrgsSummaries = []) {
+    calculateCrossOrgBenchmark(orgScopeData, allOrgsSummaries = []) {
         const orgTotal = orgScopeData?.total_emissions_kgCO2e || orgScopeData?.total || 0;
         const orgProducts = orgScopeData?.products_assessed || 1;
         const orgIntensity = orgProducts > 0 ? orgTotal / orgProducts : orgTotal;
@@ -1259,7 +1259,7 @@ ${r.supplier_assessment ? `<h2>🤝 Supplier Assessment</h2><p>Suppliers assesse
         }));
 
         return {
-            title: 'Cross-Tenant Carbon Benchmark',
+            title: 'Cross-Org Carbon Benchmark',
             your_intensity: Math.round(orgIntensity * 100) / 100,
             your_total_kgCO2e: Math.round(orgTotal),
             percentile,

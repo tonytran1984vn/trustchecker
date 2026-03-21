@@ -9,7 +9,7 @@
  *   5. Supply chain verification / certification
  * 
  * Cross-border routing: determines what licenses are needed
- * when a tenant in country A does business with country B.
+ * when a org in country A does business with country B.
  */
 
 const { v4: uuidv4 } = require('uuid');

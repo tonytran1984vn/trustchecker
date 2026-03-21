@@ -207,7 +207,7 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
         features.push('gri_reporting', 'blockchain_anchor');
         if (partnerCount > 0) features.push('partner_esg_scoring');
         features.push('risk_integration');
-        if (orgs > 1) features.push('cross_tenant_benchmark');
+        if (orgs > 1) features.push('cross_org_benchmark');
         let mLevel = 0,
             mLabel = 'Not Assessed';
         if (features.length >= 7) {
@@ -1022,7 +1022,7 @@ router.get('/maturity', async (req, res) => {
         features.push('blockchain_anchor'); // Always available via integrity module
         if (partnerCount > 0) features.push('partner_esg_scoring');
         features.push('risk_integration'); // v2.0+
-        if (orgs > 1) features.push('cross_tenant_benchmark');
+        if (orgs > 1) features.push('cross_org_benchmark');
 
         // Calculate maturity level
         let level = 0,

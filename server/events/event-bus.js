@@ -7,7 +7,7 @@
  *   - At-least-once delivery via consumer groups + XACK
  *   - Schema validation before publish
  *   - Dead letter queue integration for failed processing
- *   - Per-tenant context propagation in event envelopes
+ *   - Per-org context propagation in event envelopes
  *   - v9.5.1: Structured logging, auto context from AsyncLocalStorage
  *
  * Usage:
@@ -65,7 +65,7 @@ function createEnvelope(type, data, context = {}) {
         context: {
             orgId: context.orgId || reqCtx.orgId || null,
             userId: context.userId || reqCtx.userId || null,
-            tenantPlan: context.tenantPlan || null,
+            orgPlan: context.orgPlan || null,
             traceId: context.traceId || reqCtx.requestId || null,
             source: context.source || 'api',
         },

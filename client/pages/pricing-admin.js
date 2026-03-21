@@ -207,7 +207,7 @@ export function renderPage() {
         <span style="font-size:2rem">📱</span>
         <div>
           <div style="font-size:0.85rem;font-weight:700">Public / Consumer Scan</div>
-          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">Miễn phí cho end-user — tăng nhận diện thương hiệu, drive data cho brands. Mỗi consumer scan = marketing channel + data asset cho tenant.</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">Miễn phí cho end-user — tăng nhận diện thương hiệu, drive data cho brands. Mỗi consumer scan = marketing channel + data asset cho org.</div>
         </div>
       </div>
     </div>`;

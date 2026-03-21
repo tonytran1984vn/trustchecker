@@ -48,7 +48,7 @@ router.get('/', async (req, res) => {
         let query = 'SELECT * FROM products WHERE 1=1';
         const params = [];
 
-        // Tenant scoping: non-super_admin only sees their org's products
+        // Org scoping: non-super_admin only sees their org's products
         if (req.user.role !== 'super_admin' && req.user.orgId) {
             query += ' AND org_id = ?';
             params.push(req.user.orgId);
@@ -699,7 +699,7 @@ router.delete('/codes/:codeId', authMiddleware, requirePermission('product:delet
             return res.status(404).json({ error: 'Code not found' });
         }
 
-        // Tenant check: admin can only delete their org's codes
+        // Org check: admin can only delete their org's codes
         if (req.user.role !== 'super_admin' && req.user.orgId && code.org_id && code.org_id !== req.user.orgId) {
             return res.status(403).json({ error: 'Not authorized to delete codes from another organization' });
         }
@@ -765,7 +765,7 @@ router.get('/codes/deletion-history', authMiddleware, requirePermission('product
         `;
         const params = [];
 
-        // Tenant scoping
+        // Org scoping
         if (req.user.role !== 'super_admin' && req.user.orgId) {
             query += ` AND al.actor_id IN (SELECT id FROM users WHERE org_id = ?)`;
             params.push(req.user.orgId);
@@ -789,7 +789,7 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
         const product = await db.get('SELECT * FROM products WHERE id = ?', [req.params.id]);
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
-        // Tenant scoping
+        // Org scoping
         if (req.user.role !== 'super_admin' && req.user.orgId && product.org_id && product.org_id !== req.user.orgId) {
             return res.status(403).json({ error: 'Not authorized to access this product' });
         }

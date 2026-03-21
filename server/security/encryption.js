@@ -2,12 +2,12 @@
  * TrustChecker v9.5 — Application-Level Encryption at Rest
  * ═══════════════════════════════════════════════════════════════════
  * AES-256-GCM field-level encryption for PII fields.
- * Per-tenant key derivation from master key.
+ * Per-org key derivation from master key.
  * 
  * Features:
  *   - AES-256-GCM authenticated encryption
- *   - HKDF key derivation (master key + tenant salt)
- *   - Per-tenant isolation — tenants can't read each other's data
+ *   - HKDF key derivation (master key + org salt)
+ *   - Per-org isolation — orgs can't read each other's data
  *   - Prisma middleware for automatic encrypt-on-write / decrypt-on-read
  *   - Key rotation support with re-encryption job
  *   - Master key loaded from secrets vault (not env vars)
@@ -41,14 +41,14 @@ const PII_FIELDS = {
 let _masterKey = null;
 let _stats = { encryptions: 0, decryptions: 0, errors: 0 };
 
-// ── Derived key cache (tenantId → Buffer) — avoids re-deriving on every call
+// ── Derived key cache (orgId → Buffer) — avoids re-deriving on every call
 const _keyCache = new Map();
 const KEY_CACHE_MAX = 500;
 
-function _getCachedKey(masterKey, tenantId) {
-    const cacheKey = `${masterKey.toString('hex').slice(0, 8)}:${tenantId || 'default'}`;
+function _getCachedKey(masterKey, orgId) {
+    const cacheKey = `${masterKey.toString('hex').slice(0, 8)}:${orgId || 'default'}`;
     if (_keyCache.has(cacheKey)) return _keyCache.get(cacheKey);
-    const derived = deriveKey(masterKey, tenantId);
+    const derived = deriveKey(masterKey, orgId);
     if (_keyCache.size >= KEY_CACHE_MAX) {
         // Evict oldest entry
         const first = _keyCache.keys().next().value;
@@ -63,14 +63,14 @@ function _getCachedKey(masterKey, tenantId) {
 // ═══════════════════════════════════════════════════════════════════
 
 /**
- * Derive a per-tenant key using HKDF.
+ * Derive a per-org key using HKDF.
  * @param {Buffer} masterKey — 32-byte master key
- * @param {string} tenantId — tenant identifier (used as salt)
+ * @param {string} orgId — org identifier (used as salt)
  * @returns {Buffer} 32-byte derived key
  */
-function deriveKey(masterKey, tenantId) {
-    const salt = crypto.createHash('sha256').update(tenantId || 'default').digest();
-    const info = Buffer.from(`trustchecker-pii-${tenantId || 'default'}`, 'utf8');
+function deriveKey(masterKey, orgId) {
+    const salt = crypto.createHash('sha256').update(orgId || 'default').digest();
+    const info = Buffer.from(`trustchecker-pii-${orgId || 'default'}`, 'utf8');
     return crypto.hkdfSync(HKDF_HASH, masterKey, salt, info, KEY_LENGTH);
 }
 
@@ -81,10 +81,10 @@ function deriveKey(masterKey, tenantId) {
 /**
  * Encrypt a plaintext string.
  * @param {string} plaintext — value to encrypt
- * @param {string} tenantId — tenant identifier
+ * @param {string} orgId — org identifier
  * @returns {string} encrypted string: "enc:v1:<iv>:<authTag>:<ciphertext>" (all base64)
  */
-function encrypt(plaintext, tenantId = 'default') {
+function encrypt(plaintext, orgId = 'default') {
     if (!_masterKey) {
         console.warn('[Encryption] Master key not loaded — storing plaintext');
         return plaintext;
@@ -96,7 +96,7 @@ function encrypt(plaintext, tenantId = 'default') {
     if (plaintext.startsWith(ENCRYPTED_PREFIX)) return plaintext;
 
     try {
-        const key = _getCachedKey(_masterKey, tenantId);
+        const key = _getCachedKey(_masterKey, orgId);
         const iv = crypto.randomBytes(IV_LENGTH);
         const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(key), iv, { authTagLength: AUTH_TAG_LENGTH });
 
@@ -111,7 +111,7 @@ function encrypt(plaintext, tenantId = 'default') {
         _stats.errors++;
         console.error('[Encryption] ⚠️ ENCRYPT FAILED — PII stored as plaintext:', {
             error: err.message,
-            tenantId,
+            orgId,
             errorCount: _stats.errors,
             totalEncryptions: _stats.encryptions,
         });
@@ -125,10 +125,10 @@ function encrypt(plaintext, tenantId = 'default') {
 /**
  * Decrypt an encrypted string.
  * @param {string} ciphertext — encrypted value (with enc:v1: prefix)
- * @param {string} tenantId — tenant identifier
+ * @param {string} orgId — org identifier
  * @returns {string} decrypted plaintext
  */
-function decrypt(ciphertext, tenantId = 'default') {
+function decrypt(ciphertext, orgId = 'default') {
     if (!_masterKey) return ciphertext;
     if (!ciphertext || typeof ciphertext !== 'string') return ciphertext;
 
@@ -146,7 +146,7 @@ function decrypt(ciphertext, tenantId = 'default') {
             throw new Error('Malformed ciphertext: empty component');
         }
 
-        const key = _getCachedKey(_masterKey, tenantId);
+        const key = _getCachedKey(_masterKey, orgId);
         const iv = Buffer.from(ivB64, 'base64');
         const authTag = Buffer.from(authTagB64, 'base64');
         const encrypted = Buffer.from(encryptedB64, 'base64');
@@ -191,8 +191,8 @@ async function encryptionMiddleware(params, next) {
         return next(params);
     }
 
-    // Get tenant ID from where clause or data
-    const tenantId = params.args?.data?.organizationId
+    // Get org ID from where clause or data
+    const orgId = params.args?.data?.organizationId
         || params.args?.where?.organizationId
         || 'default';
 
@@ -202,12 +202,12 @@ async function encryptionMiddleware(params, next) {
         if (data) {
             if (Array.isArray(data)) {
                 // createMany
-                data.forEach(item => encryptFields(item, fields, tenantId));
+                data.forEach(item => encryptFields(item, fields, orgId));
             } else {
-                encryptFields(data, fields, tenantId);
+                encryptFields(data, fields, orgId);
                 // Handle upsert
-                if (params.args.create) encryptFields(params.args.create, fields, tenantId);
-                if (params.args.update) encryptFields(params.args.update, fields, tenantId);
+                if (params.args.create) encryptFields(params.args.create, fields, orgId);
+                if (params.args.update) encryptFields(params.args.update, fields, orgId);
             }
         }
     }
@@ -218,28 +218,28 @@ async function encryptionMiddleware(params, next) {
     // ─── Decrypt on read (and after write — Prisma returns the record) ─
     if (['findUnique', 'findFirst', 'findMany', 'create', 'update', 'upsert'].includes(params.action)) {
         if (Array.isArray(result)) {
-            result.forEach(item => decryptFields(item, fields, tenantId));
+            result.forEach(item => decryptFields(item, fields, orgId));
         } else if (result) {
-            decryptFields(result, fields, tenantId);
+            decryptFields(result, fields, orgId);
         }
     }
     return result;
 }
 
-function encryptFields(obj, fields, tenantId) {
+function encryptFields(obj, fields, orgId) {
     if (!obj) return;
     for (const field of fields) {
         if (obj[field] && typeof obj[field] === 'string') {
-            obj[field] = encrypt(obj[field], tenantId);
+            obj[field] = encrypt(obj[field], orgId);
         }
     }
 }
 
-function decryptFields(obj, fields, tenantId) {
+function decryptFields(obj, fields, orgId) {
     if (!obj) return;
     for (const field of fields) {
         if (obj[field] && typeof obj[field] === 'string') {
-            obj[field] = decrypt(obj[field], tenantId);
+            obj[field] = decrypt(obj[field], orgId);
         }
     }
 }
@@ -262,8 +262,8 @@ async function rotateKey(prisma, oldKey, newKey) {
 
     // Use LOCAL key references — never mutate _masterKey during rotation.
     // This prevents race conditions if concurrent requests arrive during rotation.
-    const decryptWithOldKey = (value, tenantId) => {
-        const key = deriveKey(oldKey, tenantId);
+    const decryptWithOldKey = (value, orgId) => {
+        const key = deriveKey(oldKey, orgId);
         const payload = value.slice(ENCRYPTED_PREFIX.length);
         const parts = payload.split(':');
         if (parts.length !== 3) return value;
@@ -278,8 +278,8 @@ async function rotateKey(prisma, oldKey, newKey) {
         return decrypted;
     };
 
-    const encryptWithNewKey = (plaintext, tenantId) => {
-        const key = deriveKey(newKey, tenantId);
+    const encryptWithNewKey = (plaintext, orgId) => {
+        const key = deriveKey(newKey, orgId);
         const iv = crypto.randomBytes(IV_LENGTH);
         const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(key), iv, { authTagLength: AUTH_TAG_LENGTH });
         let enc = cipher.update(plaintext, 'utf8', 'base64');
@@ -294,13 +294,13 @@ async function rotateKey(prisma, oldKey, newKey) {
 
             for (const record of records) {
                 let changed = false;
-                const tenantId = record.organizationId || 'default';
+                const orgId = record.organizationId || 'default';
 
                 for (const field of fields) {
                     if (record[field] && record[field].startsWith(ENCRYPTED_PREFIX)) {
                         try {
-                            const plaintext = decryptWithOldKey(record[field], tenantId);
-                            record[field] = encryptWithNewKey(plaintext, tenantId);
+                            const plaintext = decryptWithOldKey(record[field], orgId);
+                            record[field] = encryptWithNewKey(plaintext, orgId);
                             changed = true;
                         } catch (err) {
                             console.error(`[Encryption] Field rotation error ${model}.${field}:`, err.message);

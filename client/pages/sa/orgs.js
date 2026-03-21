@@ -1,5 +1,5 @@
 /**
- * Super Admin – Tenant Management — Phoenix Clean Edition
+ * Super Admin – Org Management — Phoenix Clean Edition
  * ═══════════════════════════════════════════════════════
  * Light theme, white cards, subtle borders, pastel accents,
  * clean typography — inspired by Phoenix React Admin.
@@ -8,7 +8,7 @@ import { API } from '../../core/api.js';
 import { icon } from '../../core/icons.js';
 import { State } from '../../core/state.js';
 
-let tenants = [];
+let orgs = [];
 let loading = false;
 let loadStarted = false;
 let filter = 'all';
@@ -61,21 +61,21 @@ function debouncedCheck() {
 
 const PLAN_MRR = { free: 0, starter: 99, growth: 299, business: 749, enterprise: 5000 };
 
-async function loadTenants() {
+async function loadOrgs() {
   if (loading) return;
   loading = true;
   try {
     const data = await API.get('/platform/orgs');
-    tenants = Array.isArray(data) ? data : (data.orgs || []);
+    orgs = Array.isArray(data) ? data : (data.orgs || []);
   } catch (e) {
-    console.error('[SA] Failed to load tenants:', e);
-    tenants = [];
+    console.error('[SA] Failed to load orgs:', e);
+    orgs = [];
   }
   loading = false;
   window.render();
 }
 
-async function createTenant(form) {
+async function createOrg(form) {
   creating = true; createError = ''; window.render();
   try {
     await API.post('/platform/orgs', form);
@@ -90,27 +90,27 @@ async function createTenant(form) {
     };
     window.render();
     window.showToast?.('✅ Organization created successfully', 'success');
-    loadStarted = false; loadTenants();
+    loadStarted = false; loadOrgs();
   } catch (e) {
     createError = e.message || 'Failed to create organization';
     creating = false; window.render();
   }
 }
 
-async function suspendTenant(id) {
+async function suspendOrg(id) {
   if (!confirm('Suspend this organization? Their users will lose access.')) return;
   try {
     await API.post(`/platform/orgs/${id}/suspend`, { reason: 'Suspended by Super Admin' });
     window.showToast?.('Organization suspended', 'warning');
-    loadStarted = false; await loadTenants();
+    loadStarted = false; await loadOrgs();
   } catch (e) { window.showToast?.('Failed to suspend: ' + e.message, 'error'); }
 }
 
-async function activateTenant(id) {
+async function activateOrg(id) {
   try {
     await API.post(`/platform/orgs/${id}/activate`, {});
     window.showToast?.('Organization activated', 'success');
-    loadStarted = false; await loadTenants();
+    loadStarted = false; await loadOrgs();
   } catch (e) { window.showToast?.('Failed: ' + e.message, 'error'); }
 }
 
@@ -178,10 +178,10 @@ function featureFlags(flags) {
 
 // ─── RENDER ──────────────────────────────────────────────────
 export function renderPage() {
-  if (!loadStarted) { loadStarted = true; loadTenants(); }
-  if (State.page === 'sa-create-tenant' && !showCreateModal) showCreateModal = true;
+  if (!loadStarted) { loadStarted = true; loadOrgs(); }
+  if (State.page === 'sa-create-org' && !showCreateModal) showCreateModal = true;
 
-  const filtered = tenants.filter(t => {
+  const filtered = orgs.filter(t => {
     if (filter !== 'all' && (t.status || 'active') !== filter) return false;
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
@@ -197,19 +197,19 @@ export function renderPage() {
   const paginated = filtered.slice(startIdx, startIdx + ROWS_PER_PAGE);
 
   const counts = {
-    all: tenants.length,
-    active: tenants.filter(t => (t.status || 'active') === 'active').length,
-    suspended: tenants.filter(t => t.status === 'suspended').length,
-    archived: tenants.filter(t => t.status === 'archived').length,
+    all: orgs.length,
+    active: orgs.filter(t => (t.status || 'active') === 'active').length,
+    suspended: orgs.filter(t => t.status === 'suspended').length,
+    archived: orgs.filter(t => t.status === 'archived').length,
   };
-  const totalUsers = tenants.reduce((s, t) => s + (t.user_count || 0), 0);
-  const totalMRR = tenants.reduce((s, t) => {
+  const totalUsers = orgs.reduce((s, t) => s + (t.user_count || 0), 0);
+  const totalMRR = orgs.reduce((s, t) => {
     const p = (t.plan || 'free').toLowerCase();
     if (p === 'enterprise' && t.enterprise_config?.monthly_base) return s + t.enterprise_config.monthly_base;
     return s + (PLAN_MRR[p] || 0);
   }, 0);
-  const entCount = tenants.filter(t => t.plan === 'enterprise').length;
-  const growthCount = tenants.filter(t => t.plan === 'growth').length;
+  const entCount = orgs.filter(t => t.plan === 'enterprise').length;
+  const growthCount = orgs.filter(t => t.plan === 'growth').length;
 
   return `
     <div class="sa-page phx-page">
@@ -244,19 +244,19 @@ export function renderPage() {
           <div class="phx-search-pill">
             ${icon('search', 15)}
             <input type="text" placeholder="Search organizations..." value="${searchTerm}"
-              oninput="window._saTenantsSearch(this.value)">
+              oninput="window._saOrgsSearch(this.value)">
           </div>
         </div>
 
         <!-- Table -->
-        ${loading && tenants.length === 0 ?
+        ${loading && orgs.length === 0 ?
       `<div class="phx-loading">${icon('activity', 20)} Loading organizations...</div>` :
       filtered.length === 0 ?
         `<div class="phx-empty">
               <div class="phx-empty-art">${icon('building', 44)}</div>
               <h3>No organizations found</h3>
-              <p>${tenants.length === 0 ? 'Get started by adding your first organization.' : 'Try adjusting your filters.'}</p>
-              ${tenants.length === 0 ? `<button class="phx-btn-primary phx-btn-sm" onclick="window._saShowCreate()">${icon('plus', 14)} Add first organization</button>` : ''}
+              <p>${orgs.length === 0 ? 'Get started by adding your first organization.' : 'Try adjusting your filters.'}</p>
+              ${orgs.length === 0 ? `<button class="phx-btn-primary phx-btn-sm" onclick="window._saShowCreate()">${icon('plus', 14)} Add first organization</button>` : ''}
             </div>` :
         renderTable(paginated) + renderPagination(filtered.length)
     }
@@ -267,7 +267,7 @@ export function renderPage() {
 }
 
 function kpiCard(ic, val, title, desc, color, filterVal) {
-  const click = filterVal ? ` onclick="window._saTenantsFilter('${filterVal}')" style="cursor:pointer"` : '';
+  const click = filterVal ? ` onclick="window._saOrgsFilter('${filterVal}')" style="cursor:pointer"` : '';
   return `<div class="phx-kpi"${click}>
     <div class="phx-kpi-icon phx-kpi-${color}">${ic}</div>
     <div class="phx-kpi-body">
@@ -279,7 +279,7 @@ function kpiCard(ic, val, title, desc, color, filterVal) {
 }
 
 function tabBtn(val, label, count) {
-  return `<button class="phx-tab ${filter === val ? 'active' : ''}" onclick="window._saTenantsFilter('${val}')">
+  return `<button class="phx-tab ${filter === val ? 'active' : ''}" onclick="window._saOrgsFilter('${val}')">
     ${label} <span class="phx-tab-count">${count}</span>
   </button>`;
 }
@@ -313,7 +313,7 @@ function renderPagination(totalItems) {
   let pages = '';
   for (let i = 1; i <= totalPages; i++) {
     if (i === 1 || i === totalPages || Math.abs(i - currentPage) <= 1) {
-      pages += `<button class="phx-page-btn ${i === currentPage ? 'active' : ''}" onclick="window._saTenantsPage(${i})">${i}</button>`;
+      pages += `<button class="phx-page-btn ${i === currentPage ? 'active' : ''}" onclick="window._saOrgsPage(${i})">${i}</button>`;
     } else if (Math.abs(i - currentPage) === 2) {
       pages += `<span class="phx-page-dots">\u2026</span>`;
     }
@@ -321,9 +321,9 @@ function renderPagination(totalItems) {
   return `<div class="phx-pagination">
     <span class="phx-page-info">Showing ${startItem}\u2013${endItem} of ${totalItems}</span>
     <div class="phx-page-nav">
-      <button class="phx-page-btn" ${currentPage <= 1 ? 'disabled' : ''} onclick="window._saTenantsPage(${currentPage - 1})">\u2039 Prev</button>
+      <button class="phx-page-btn" ${currentPage <= 1 ? 'disabled' : ''} onclick="window._saOrgsPage(${currentPage - 1})">\u2039 Prev</button>
       ${pages}
-      <button class="phx-page-btn" ${currentPage >= totalPages ? 'disabled' : ''} onclick="window._saTenantsPage(${currentPage + 1})">Next \u203a</button>
+      <button class="phx-page-btn" ${currentPage >= totalPages ? 'disabled' : ''} onclick="window._saOrgsPage(${currentPage + 1})">Next \u203a</button>
     </div>
   </div>`;
 }
@@ -339,7 +339,7 @@ function tableRow(t) {
   const mrrVal = (plan === 'enterprise' && t.enterprise_config?.monthly_base) ? t.enterprise_config.monthly_base : (PLAN_MRR[plan] || 0);
   const mrrColor = mrrVal === 0 ? '#10b981' : plan === 'enterprise' ? '#ef4444' : plan === 'business' ? '#f59e0b' : '#10b981';
 
-  return `<tr class="phx-row" onclick="navigate('sa-tenant-detail',{tenantId:'${t.id}'})">
+  return `<tr class="phx-row" onclick="navigate('sa-org-detail',{orgId:'${t.id}'})">
       <td>
         <div class="phx-org-cell">
           <div class="phx-avatar phx-avatar-${planColors[plan] || 'blue'}">${initial}</div>
@@ -359,7 +359,7 @@ function tableRow(t) {
       <td class="phx-td-actions" onclick="event.stopPropagation()">
         ${status === 'active' ? `<button class="phx-btn-outline phx-btn-xs phx-btn-warn" onclick="window._saSuspend('${t.id}')" title="Suspend this organization">⚠ Suspend</button>` : ''}
         ${status === 'suspended' ? `<button class="phx-btn-solid-green phx-btn-xs" onclick="window._saActivate('${t.id}')" title="Reactivate this organization">✓ Reactivate</button>` : ''}
-        <button class="phx-btn-outline phx-btn-xs" onclick="navigate('sa-tenant-detail',{tenantId:'${t.id}'})" title="View details">👁</button>
+        <button class="phx-btn-outline phx-btn-xs" onclick="navigate('sa-org-detail',{orgId:'${t.id}'})" title="View details">👁</button>
       </td>
     </tr>`;
 }
@@ -702,9 +702,9 @@ function renderModal() {
 }
 
 // ─── Exports ─────────────────────────────────────────────────
-window._saTenantsFilter = (f) => { filter = f; currentPage = 1; window.render(); };
-window._saTenantsSearch = (q) => { searchTerm = q; currentPage = 1; window.render(); };
-window._saTenantsPage = (p) => { currentPage = p; window.render(); };
+window._saOrgsFilter = (f) => { filter = f; currentPage = 1; window.render(); };
+window._saOrgsSearch = (q) => { searchTerm = q; currentPage = 1; window.render(); };
+window._saOrgsPage = (p) => { currentPage = p; window.render(); };
 window._saShowCreate = () => { showCreateModal = true; createError = ''; createdCredentials = null; window.render(); };
 window._saCloseCreate = closeModal;
 window._saSlugify = slugify;
@@ -770,7 +770,7 @@ window._saDoCreate = (form) => {
       },
     };
   }
-  createTenant(payload);
+  createOrg(payload);
 };
 
 // Dynamic plan change — 5-tier CIE pricing
@@ -903,5 +903,5 @@ window._planChanged = (plan) => {
   if (dealFields) dealFields.style.display = plan === 'large_enterprise' ? 'grid' : 'none';
   if (apiFields) apiFields.style.display = ['buyer', 'bank'].includes(plan) ? 'block' : 'none';
 };
-window._saSuspend = (id) => suspendTenant(id);
-window._saActivate = (id) => activateTenant(id);
+window._saSuspend = (id) => suspendOrg(id);
+window._saActivate = (id) => activateOrg(id);

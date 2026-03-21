@@ -4,7 +4,7 @@
  * 
  * Has monetization. But doesn't connect:
  *   - Revenue risk exposure to Trust Graph health
- *   - Tenant creditworthiness to settlement limits
+ *   - Org creditworthiness to settlement limits
  *   - Infrastructure costs to actual usage/allocation
  *   - Blockchain fees (token economics) to cost model
  *   - Financial risk ↔ Trust Graph bidirectional feedback
@@ -27,7 +27,7 @@ const REVENUE_RISK = {
                 annual_churn_rate_pct: 8,
                 net_revenue_retention_pct: 115,
             },
-            trust_graph_link: 'High-trust tenants correlate with lower churn (r = 0.72)',
+            trust_graph_link: 'High-trust orgs correlate with lower churn (r = 0.72)',
             risk_actions: [
                 'If single client > 30% → diversification initiative + insurance for key-man risk',
                 'If churn > 12% → product review + customer success escalation',
@@ -82,11 +82,11 @@ const REVENUE_RISK = {
 };
 
 // ═══════════════════════════════════════════════════════════════════
-// 2. TENANT CREDIT SCORING
+// 2. ORG CREDIT SCORING
 // ═══════════════════════════════════════════════════════════════════
 
-const TENANT_CREDIT = {
-    title: 'Tenant Credit Scoring — Creditworthiness assessment for settlement limits',
+const ORG_CREDIT = {
+    title: 'Org Credit Scoring — Creditworthiness assessment for settlement limits',
 
     scoring_model: {
         factors: [
@@ -98,7 +98,7 @@ const TENANT_CREDIT = {
             { factor: 'Verification Engagement', weight_pct: 10, source: 'Usage analytics', description: 'Active verification frequency, API utilization, feature adoption' },
         ],
         total_weight: 100,
-        output: 'Tenant Credit Score: 0-100',
+        output: 'Org Credit Score: 0-100',
     },
 
     tiers: [
@@ -123,36 +123,36 @@ const COST_ALLOCATION = {
     categories: [
         {
             category: 'Compute & Cloud',
-            allocation_method: 'Usage-based per tenant + shared platform overhead',
-            tenant_allocation: '70% usage-proportional (API calls, storage, compute time)',
+            allocation_method: 'Usage-based per org + shared platform overhead',
+            org_allocation: '70% usage-proportional (API calls, storage, compute time)',
             platform_allocation: '30% shared (monitoring infrastructure, security, DR)',
-            scaling: 'Linear with tenant count + logarithmic with complexity',
+            scaling: 'Linear with org count + logarithmic with complexity',
         },
         {
             category: 'Validator Network',
             allocation_method: 'Transaction-proportional',
-            tenant_allocation: '100% proportional to verification volume',
+            org_allocation: '100% proportional to verification volume',
             platform_allocation: 'Base validator set maintained by platform',
             scaling: 'Step function: each additional validator = $X/month fixed + variable',
         },
         {
             category: 'Blockchain Anchoring',
             allocation_method: 'Transaction-based (gas cost + batch efficiency)',
-            tenant_allocation: 'Per-anchor cost allocated to originating tenant',
+            org_allocation: 'Per-anchor cost allocated to originating org',
             platform_allocation: 'Batch optimization savings shared (platform retains 20%)',
             scaling: 'Batch size ↑ → cost per anchor ↓ (logarithmic efficiency)',
         },
         {
             category: 'Compliance & Regulatory',
             allocation_method: 'Jurisdiction-based + fixed platform cost',
-            tenant_allocation: 'Jurisdiction-specific costs allocated to tenants in that jurisdiction',
-            platform_allocation: 'Base compliance infrastructure shared across all tenants',
+            org_allocation: 'Jurisdiction-specific costs allocated to orgs in that jurisdiction',
+            platform_allocation: 'Base compliance infrastructure shared across all orgs',
             scaling: 'Step function per new jurisdiction entry',
         },
         {
             category: 'Insurance',
             allocation_method: 'Risk-weighted allocation',
-            tenant_allocation: 'Higher-risk tenants (lower credit score) → higher insurance allocation',
+            org_allocation: 'Higher-risk orgs (lower credit score) → higher insurance allocation',
             platform_allocation: 'Base premium shared; excess premium risk-weighted',
             scaling: 'Non-linear: risk ↑ → insurance cost ↑↑ (convex)',
         },
@@ -162,7 +162,7 @@ const COST_ALLOCATION = {
         gross_margin_target_pct: 65,
         contribution_margin_target_pct: 45,
         operating_margin_target_pct: 20,
-        break_even_tenants: 50,
+        break_even_orgs: 50,
         unit_economics: 'LTV:CAC target > 5:1',
     },
 };
@@ -181,7 +181,7 @@ const TOKEN_ECONOMICS = {
             base_fee_usd: 0.10,
             gas_cost: 'Variable — current chain gas × complexity multiplier',
             batch_discount: 'Up to 60% for batches > 100 anchors',
-            who_pays: 'Originating tenant (included in transaction fee)',
+            who_pays: 'Originating org (included in transaction fee)',
         },
         validator_reward: {
             model: 'Pool share — proportional to work done',
@@ -218,14 +218,14 @@ const FINANCIAL_TRUST_FEEDBACK = {
     title: 'Bidirectional: Financial Risk ↔ Trust Graph',
 
     trust_to_financial: [
-        { signal: 'Trust score decline (entity)', financial_impact: 'Settlement limit reduced proportionally', mechanism: 'Tenant credit tier recalculation' },
+        { signal: 'Trust score decline (entity)', financial_impact: 'Settlement limit reduced proportionally', mechanism: 'Org credit tier recalculation' },
         { signal: 'Trust score < 40 (entity)', financial_impact: 'Counterparty removed from unsecured settlement', mechanism: 'Auto-restrict via credit tier "Restricted"' },
         { signal: 'Network average trust decline > 5%', financial_impact: 'Platform-wide counterparty concentration review', mechanism: 'Risk Committee notification' },
         { signal: 'Verification dispute rate > 2%', financial_impact: 'SLA credit provisioning increase', mechanism: 'Auto-adjust provision in deferred liabilities' },
     ],
 
     financial_to_trust: [
-        { signal: 'Payment default (tenant)', trust_impact: 'Trust score reduced by 10 points', mechanism: 'Payment history factor (20% weight)' },
+        { signal: 'Payment default (org)', trust_impact: 'Trust score reduced by 10 points', mechanism: 'Payment history factor (20% weight)' },
         { signal: 'Settlement failure (counterparty)', trust_impact: 'Trust score reduced by 15 points + flag', mechanism: 'Settlement track record factor (20% weight)' },
         { signal: 'Insurance claim filed against entity', trust_impact: 'Trust score reduced by 5 points (temporary)', mechanism: 'Risk signal integration' },
         { signal: 'Regulatory violation (entity)', trust_impact: 'Trust score reduced by 20 points + compliance review required', mechanism: 'External signal factor (10% weight)' },
@@ -245,7 +245,7 @@ const FINANCIAL_TRUST_FEEDBACK = {
 
 class EconomicRiskEngine {
 
-    scoreTenant(trust_score, payment_on_time_pct, settlement_success_pct, years_in_business, external_credit, engagement_score) {
+    scoreOrg(trust_score, payment_on_time_pct, settlement_success_pct, years_in_business, external_credit, engagement_score) {
         const ts = trust_score || 70;
         const pay = payment_on_time_pct || 90;
         const settle = settlement_success_pct || 95;
@@ -255,13 +255,13 @@ class EconomicRiskEngine {
 
         const score = (ts * 0.25) + (pay * 0.20) + (settle * 0.20) + (Math.min(years * 5, 100) * 0.15) + (ext * 0.10) + (engage * 0.10);
         const rounded = parseFloat(Math.min(score, 100).toFixed(1));
-        const tier = TENANT_CREDIT.tiers.find(t => rounded >= t.score_min) || TENANT_CREDIT.tiers[TENANT_CREDIT.tiers.length - 1];
+        const tier = ORG_CREDIT.tiers.find(t => rounded >= t.score_min) || ORG_CREDIT.tiers[ORG_CREDIT.tiers.length - 1];
 
-        return { tenant_credit_score: rounded, tier: tier.tier, settlement_limit_multiplier: tier.settlement_limit_multiplier, payment_terms_days: tier.payment_terms_days, unsecured_limit_usd: tier.unsecured_limit_usd };
+        return { org_credit_score: rounded, tier: tier.tier, settlement_limit_multiplier: tier.settlement_limit_multiplier, payment_terms_days: tier.payment_terms_days, unsecured_limit_usd: tier.unsecured_limit_usd };
     }
 
     getRevenueRisk() { return REVENUE_RISK; }
-    getTenantCredit() { return TENANT_CREDIT; }
+    getOrgCredit() { return ORG_CREDIT; }
     getCostAllocation() { return COST_ALLOCATION; }
     getTokenEconomics() { return TOKEN_ECONOMICS; }
     getFinancialTrustFeedback() { return FINANCIAL_TRUST_FEEDBACK; }
@@ -271,7 +271,7 @@ class EconomicRiskEngine {
             title: 'Economic & Capital Risk Integration — Critical Infrastructure-Grade',
             version: '1.0',
             revenue_risk: REVENUE_RISK,
-            tenant_credit: TENANT_CREDIT,
+            org_credit: ORG_CREDIT,
             cost_allocation: COST_ALLOCATION,
             token_economics: TOKEN_ECONOMICS,
             feedback_loop: FINANCIAL_TRUST_FEEDBACK,

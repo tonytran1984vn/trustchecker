@@ -28,7 +28,7 @@ const DEFAULT_HANDOFF_RULES = [
   { from: 'Risk', to: 'Compliance', trigger: 'Confirmed counterfeit OR legal implications OR regulatory requirement', data: 'Risk analysis, counterfeit probability, linked cases, evidence', sla: '8h Compliance pickup' },
   { from: 'Compliance', to: 'CEO', trigger: 'Brand impact estimated > $100K OR multiple regions affected OR regulatory action required', data: 'Executive summary, BRI impact, recommended action', sla: 'Same business day' },
   { from: 'Risk', to: 'IT', trigger: 'Bot detected OR API abuse OR IP cluster needs blocking', data: 'IP list, user agent patterns, request volume', sla: '2h IT action' },
-  { from: 'Any', to: 'Super Admin', trigger: 'Cross-tenant pattern detected OR platform integrity issue', data: 'Anonymized cluster data (no tenant PII)', sla: '24h SA review' },
+  { from: 'Any', to: 'Super Admin', trigger: 'Cross-org pattern detected OR platform integrity issue', data: 'Anonymized cluster data (no org PII)', sla: '24h SA review' },
 ];
 
 let PIPELINE = [...DEFAULT_PIPELINE];

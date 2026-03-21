@@ -13,8 +13,8 @@
  *   GET    /api/cie/regulatory/:country — Get regulatory mapping
  *   GET    /api/cie/gaps/:country       — Get compliance gaps
  *   GET    /api/cie/factors             — Get active emission factors
- *   GET    /api/cie/config              — Get tenant CIE config
- *   PUT    /api/cie/config              — Update tenant CIE config
+ *   GET    /api/cie/config              — Get org CIE config
+ *   PUT    /api/cie/config              — Update org CIE config
  *   GET    /api/cie/overview            — Dashboard summary
  */
 
@@ -34,7 +34,7 @@ function getDb() {
 
 router.use(authMiddleware);
 
-// Tables managed by Prisma migrations (schema.prisma: CiePassport, CieSnapshot, CieAnchor, CieTenantConfig)
+// Tables managed by Prisma migrations (schema.prisma: CiePassport, CieSnapshot, CieAnchor, CieOrgConfig)
 logger.info('✅ CIE v2.0 routes loaded (PostgreSQL via Prisma)');
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -278,19 +278,19 @@ router.get('/factors', (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MULTI-TENANT CONFIG
+// MULTI-ORG CONFIG
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// GET /api/cie/config — Get tenant CIE config
+// GET /api/cie/config — Get org CIE config
 router.get('/config', async (req, res) => {
     try {
         const d = getDb();
         const orgId = req.user?.org_id || req.user?.orgId;
-        let config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(orgId);
+        let config = await d.prepare('SELECT * FROM cie_org_config WHERE org_id = ?').get(orgId);
         if (!config) {
             // Create default config
-            await d.prepare(`INSERT INTO cie_tenant_config (org_id) VALUES (?)`).run(orgId);
-            config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(orgId);
+            await d.prepare(`INSERT INTO cie_org_config (org_id) VALUES (?)`).run(orgId);
+            config = await d.prepare('SELECT * FROM cie_org_config WHERE org_id = ?').get(orgId);
         }
         config.modules = JSON.parse(config.modules || '{}');
         config.risk_thresholds = JSON.parse(config.risk_thresholds || '{}');
@@ -301,7 +301,7 @@ router.get('/config', async (req, res) => {
     }
 });
 
-// PUT /api/cie/config — Update tenant CIE config
+// PUT /api/cie/config — Update org CIE config
 router.put('/config', requirePermission('org:settings_update'), async (req, res) => {
     try {
         const d = getDb();
@@ -309,36 +309,36 @@ router.put('/config', requirePermission('org:settings_update'), async (req, res)
         const { tier, batch_limit, modules, risk_thresholds, rme_countries, mgb_enabled, snapshot_enabled } = req.body;
 
         // Ensure config exists
-        const existing = await d.prepare('SELECT org_id FROM cie_tenant_config WHERE org_id = ?').get(orgId);
+        const existing = await d.prepare('SELECT org_id FROM cie_org_config WHERE org_id = ?').get(orgId);
         if (!existing) {
-            await d.prepare('INSERT INTO cie_tenant_config (org_id) VALUES (?)').run(orgId);
+            await d.prepare('INSERT INTO cie_org_config (org_id) VALUES (?)').run(orgId);
         }
 
         // Update fields individually
-        if (tier) await d.prepare('UPDATE cie_tenant_config SET tier = ? WHERE org_id = ?').run(tier, orgId);
+        if (tier) await d.prepare('UPDATE cie_org_config SET tier = ? WHERE org_id = ?').run(tier, orgId);
         if (batch_limit)
-            await d.prepare('UPDATE cie_tenant_config SET batch_limit = ? WHERE org_id = ?').run(batch_limit, orgId);
+            await d.prepare('UPDATE cie_org_config SET batch_limit = ? WHERE org_id = ?').run(batch_limit, orgId);
         if (modules)
             await d
-                .prepare('UPDATE cie_tenant_config SET modules = ?::jsonb WHERE org_id = ?')
+                .prepare('UPDATE cie_org_config SET modules = ?::jsonb WHERE org_id = ?')
                 .run(JSON.stringify(modules), orgId);
         if (risk_thresholds)
             await d
-                .prepare('UPDATE cie_tenant_config SET risk_thresholds = ?::jsonb WHERE org_id = ?')
+                .prepare('UPDATE cie_org_config SET risk_thresholds = ?::jsonb WHERE org_id = ?')
                 .run(JSON.stringify(risk_thresholds), orgId);
         if (rme_countries)
             await d
-                .prepare('UPDATE cie_tenant_config SET rme_countries = ?::jsonb WHERE org_id = ?')
+                .prepare('UPDATE cie_org_config SET rme_countries = ?::jsonb WHERE org_id = ?')
                 .run(JSON.stringify(rme_countries), orgId);
         if (mgb_enabled != null)
-            await d.prepare('UPDATE cie_tenant_config SET mgb_enabled = ? WHERE org_id = ?').run(!!mgb_enabled, orgId);
+            await d.prepare('UPDATE cie_org_config SET mgb_enabled = ? WHERE org_id = ?').run(!!mgb_enabled, orgId);
         if (snapshot_enabled != null)
             await d
-                .prepare('UPDATE cie_tenant_config SET snapshot_enabled = ? WHERE org_id = ?')
+                .prepare('UPDATE cie_org_config SET snapshot_enabled = ? WHERE org_id = ?')
                 .run(!!snapshot_enabled, orgId);
-        await d.prepare('UPDATE cie_tenant_config SET updated_at = NOW() WHERE org_id = ?').run(orgId);
+        await d.prepare('UPDATE cie_org_config SET updated_at = NOW() WHERE org_id = ?').run(orgId);
 
-        const config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(orgId);
+        const config = await d.prepare('SELECT * FROM cie_org_config WHERE org_id = ?').get(orgId);
         res.json({ message: 'Config updated', config });
     } catch (err) {
         logger.error('Config update error:', err);

@@ -35,19 +35,19 @@ class IdentityEngine {
      * Generate DID for any entity
      * Format: did:tc:{entity_type}:{org_id}:{unique_id}
      */
-    generateDID(entityType, entityId, tenantId = 'default') {
+    generateDID(entityType, entityId, orgId = 'default') {
         if (!ENTITY_TYPES.includes(entityType)) {
             return { error: `Invalid entity type. Valid: ${ENTITY_TYPES.join(', ')}` };
         }
         const keyPair = this._generateKeyPair();
-        const did = `${DID_METHOD}:${entityType}:${tenantId}:${entityId}`;
+        const did = `${DID_METHOD}:${entityType}:${orgId}:${entityId}`;
 
         return {
             did,
             did_document: {
                 '@context': ['https://www.w3.org/ns/did/v1', 'https://w3id.org/security/suites/ed25519-2020/v1'],
                 id: did,
-                controller: `${DID_METHOD}:company:${tenantId}:root`,
+                controller: `${DID_METHOD}:company:${orgId}:root`,
                 verificationMethod: [{
                     id: `${did}#key-1`,
                     type: 'Ed25519VerificationKey2020',
@@ -64,7 +64,7 @@ class IdentityEngine {
             metadata: {
                 entity_type: entityType,
                 entity_id: entityId,
-                org_id: tenantId,
+                org_id: orgId,
                 created: new Date().toISOString(),
                 method: DID_METHOD,
                 key_type: 'Ed25519',

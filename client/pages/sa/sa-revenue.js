@@ -20,7 +20,7 @@ const PLAN_LABELS = { free: 'Free Trial', starter: 'Starter', core: 'Core', grow
 const PLAN_ICONS = { free: '🆓', starter: '🚀', core: '💎', growth: '⚡', pro: '🔮', business: '🏢', enterprise: '👑' };
 
 export function renderPage() {
-    const tenants = State.platformTenants || [];
+    const orgs = State.platformOrgs || [];
     const invoices = State.billingData?.invoices || [];
     const available = State.billingData?.available || {};
 
@@ -31,15 +31,15 @@ export function renderPage() {
 
     // ── Compute metrics ──
     const planCounts = {};
-    tenants.forEach(t => {
+    orgs.forEach(t => {
         const p = (t.plan || 'free').toLowerCase();
         planCounts[p] = (planCounts[p] || 0) + 1;
     });
 
     const mrr = Object.entries(planCounts).reduce((sum, [plan, count]) => sum + (PLAN_PRICES[plan] || 0) * count, 0);
     const arr = mrr * 12;
-    const paidTenants = tenants.filter(t => (t.plan || 'free') !== 'free').length;
-    const arpu = paidTenants > 0 ? Math.round(mrr / paidTenants) : 0;
+    const paidOrgs = orgs.filter(t => (t.plan || 'free') !== 'free').length;
+    const arpu = paidOrgs > 0 ? Math.round(mrr / paidOrgs) : 0;
     const totalInvoiced = invoices.reduce((s, inv) => s + (parseFloat(inv.amount) || 0), 0);
     const paidInvoices = invoices.filter(i => i.status === 'paid').length;
 
@@ -159,7 +159,7 @@ export function renderPage() {
             <div class="rev-kpi-icon">💰</div>
             <div class="rev-kpi-label">Monthly Recurring Revenue</div>
             <div class="rev-kpi-value">$${mrr.toLocaleString()}</div>
-            <div class="rev-kpi-sub">from ${paidTenants} paid tenant${paidTenants !== 1 ? 's' : ''}</div>
+            <div class="rev-kpi-sub">from ${paidOrgs} paid org${paidOrgs !== 1 ? 's' : ''}</div>
         </div>
         <div class="rev-kpi arr">
             <div class="rev-kpi-icon">📈</div>
@@ -171,13 +171,13 @@ export function renderPage() {
             <div class="rev-kpi-icon">👤</div>
             <div class="rev-kpi-label">Avg Revenue / User</div>
             <div class="rev-kpi-value">$${arpu.toLocaleString()}</div>
-            <div class="rev-kpi-sub">per paid tenant</div>
+            <div class="rev-kpi-sub">per paid org</div>
         </div>
         <div class="rev-kpi subs">
             <div class="rev-kpi-icon">🏢</div>
             <div class="rev-kpi-label">Total Subscribers</div>
-            <div class="rev-kpi-value">${tenants.length}</div>
-            <div class="rev-kpi-sub">${paidTenants} paid · ${tenants.length - paidTenants} free</div>
+            <div class="rev-kpi-value">${orgs.length}</div>
+            <div class="rev-kpi-sub">${paidOrgs} paid · ${orgs.length - paidOrgs} free</div>
         </div>
     </div>
 
@@ -201,7 +201,7 @@ export function renderPage() {
                         </div>
                         <div class="rev-plan-info">
                             <div class="rev-plan-name">${p.label}</div>
-                            <div class="rev-plan-count">${p.count} tenant${p.count !== 1 ? 's' : ''} × $${(PLAN_PRICES[p.plan] || 0).toLocaleString()}/mo</div>
+                            <div class="rev-plan-count">${p.count} org${p.count !== 1 ? 's' : ''} × $${(PLAN_PRICES[p.plan] || 0).toLocaleString()}/mo</div>
                         </div>
                         <div class="rev-plan-amount">
                             <div class="rev-plan-revenue" style="color:${p.color}">$${p.revenue.toLocaleString()}</div>
@@ -244,14 +244,14 @@ export function renderPage() {
                                 transform="rotate(-90 21 21)"
                                 style="transition: stroke-dasharray 0.6s ease" />`;
     }).join('')}
-                        <text x="21" y="19.5" text-anchor="middle" fill="var(--text-primary)" style="font-size:5.5px;font-weight:800">${tenants.length}</text>
-                        <text x="21" y="24" text-anchor="middle" fill="var(--text-muted)" style="font-size:2.8px;font-weight:500">tenants</text>
+                        <text x="21" y="19.5" text-anchor="middle" fill="var(--text-primary)" style="font-size:5.5px;font-weight:800">${orgs.length}</text>
+                        <text x="21" y="24" text-anchor="middle" fill="var(--text-muted)" style="font-size:2.8px;font-weight:500">orgs</text>
                     </svg>
                 </div>
 
                 <!-- Legend -->
                 ${planEntries.map(([plan, count]) => {
-        const pct = tenants.length > 0 ? Math.round((count / tenants.length) * 100) : 0;
+        const pct = orgs.length > 0 ? Math.round((count / orgs.length) * 100) : 0;
         const color = PLAN_COLORS[plan] || '#64748b';
         const label = PLAN_LABELS[plan] || plan;
         return `
@@ -285,7 +285,7 @@ export function renderPage() {
                 </div>
                 <div style="text-align:center">
                     <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Active Subs</div>
-                    <div style="font-size:1.4rem;font-weight:800;color:var(--cyan);font-family:'JetBrains Mono',monospace">${paidTenants}</div>
+                    <div style="font-size:1.4rem;font-weight:800;color:var(--cyan);font-family:'JetBrains Mono',monospace">${paidOrgs}</div>
                 </div>
             </div>
         </div>

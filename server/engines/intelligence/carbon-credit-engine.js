@@ -75,7 +75,7 @@ const SOD_REQUIREMENTS = {
     credit_minting: { eyes: 4, roles: ['company_admin', 'compliance'] },
     credit_transfer: { eyes: 4, roles: ['company_admin', 'compliance'] },
     bulk_retire: { eyes: 6, roles: ['company_admin', 'compliance', 'ceo'] },
-    cross_tenant_transfer: { eyes: 6, roles: ['super_admin', 'compliance', 'company_admin'], aml_required: true }
+    cross_org_transfer: { eyes: 6, roles: ['super_admin', 'compliance', 'company_admin'], aml_required: true }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -84,7 +84,7 @@ const SOD_REQUIREMENTS = {
 
 const _idempotencyKeys = new Set();      // Idempotent event dedup
 const _reductionUIDs = new Set();        // Anti-double-count bloom filter
-const _fractionalBuffer = new Map();     // Tenant → accumulated fractional kgCO₂e
+const _fractionalBuffer = new Map();     // Org → accumulated fractional kgCO₂e
 
 class CarbonCreditMintingEngine {
 
@@ -149,7 +149,7 @@ class CarbonCreditMintingEngine {
     /**
      * Get baseline emission using 3 baseline types:
      * 1. Static (industry default)
-     * 2. Historical (tenant avg)
+     * 2. Historical (org avg)
      * 3. Regulatory (region-specific)
      */
     computeBaseline(event, historicalData = null) {
@@ -159,12 +159,12 @@ class CarbonCreditMintingEngine {
         const staticBL = BASELINE_DEFAULTS[route_type] || BASELINE_DEFAULTS.international;
         const staticEmission = staticBL.factor * distance_km * weight_tonnes;
 
-        // 2) Historical baseline (last 12 months avg for this tenant)
+        // 2) Historical baseline (last 12 months avg for this org)
         let historicalEmission = null;
         let historicalSource = null;
         if (historicalData?.avg_factor) {
             historicalEmission = historicalData.avg_factor * distance_km * weight_tonnes;
-            historicalSource = `Tenant historical avg (${historicalData.sample_count} shipments, ${historicalData.period})`;
+            historicalSource = `Org historical avg (${historicalData.sample_count} shipments, ${historicalData.period})`;
         }
 
         // 3) Regulatory baseline
@@ -555,9 +555,9 @@ class CarbonCreditMintingEngine {
         if (credit.status === STATUS.CANCELLED) return { error: 'Cannot transfer cancelled credit' };
         if (credit.status === STATUS.BLOCKED) return { error: 'Credit is blocked — under investigation' };
 
-        // SoD: check 4-eyes for standard, 6-eyes for cross-tenant
-        const isCrossTenant = credit.org_id && credit.org_id !== (transferredBy.org_id || credit.org_id);
-        const sodReq = isCrossTenant ? SOD_REQUIREMENTS.cross_tenant_transfer : SOD_REQUIREMENTS.credit_transfer;
+        // SoD: check 4-eyes for standard, 6-eyes for cross-org
+        const isCrossOrg = credit.org_id && credit.org_id !== (transferredBy.org_id || credit.org_id);
+        const sodReq = isCrossOrg ? SOD_REQUIREMENTS.cross_org_transfer : SOD_REQUIREMENTS.credit_transfer;
 
         const sodCheck = this._checkSoD(approvals, sodReq);
         if (!sodCheck.passed) {
@@ -581,7 +581,7 @@ class CarbonCreditMintingEngine {
                 ]
             },
             sod: sodCheck,
-            cross_tenant: isCrossTenant
+            cross_org: isCrossOrg
         };
     }
 
@@ -788,10 +788,10 @@ class CarbonCreditMintingEngine {
     }
 
     /**
-     * Cross-tenant Carbon Index (Super Admin)
+     * Cross-org Carbon Index (Super Admin)
      */
-    computeCarbonIndex(tenantData = []) {
-        const index = tenantData.map(t => {
+    computeCarbonIndex(orgData = []) {
+        const index = orgData.map(t => {
             const totalReduction = t.credits?.reduce((s, c) => s + (c.quantity_tCO2e || 0), 0) || 0;
             const avgConfidence = t.credits?.length > 0
                 ? t.credits.reduce((s, c) => s + (c.mrv?.confidence_score || 50), 0) / t.credits.length : 0;
@@ -800,7 +800,7 @@ class CarbonCreditMintingEngine {
 
             return {
                 org_id: t.org_id,
-                tenant_name: t.tenant_name,
+                org_name: t.org_name,
                 total_credits: t.credits?.length || 0,
                 total_reduction_tCO2e: Math.round(totalReduction * 1000) / 1000,
                 avg_mrv_confidence: Math.round(avgConfidence),
@@ -811,8 +811,8 @@ class CarbonCreditMintingEngine {
         }).sort((a, b) => b.carbon_score - a.carbon_score);
 
         return {
-            title: 'Cross-Tenant Carbon Reduction Index',
-            total_tenants: index.length,
+            title: 'Cross-Org Carbon Reduction Index',
+            total_orgs: index.length,
             total_platform_reduction_tCO2e: Math.round(index.reduce((s, t) => s + t.total_reduction_tCO2e, 0) * 1000) / 1000,
             index,
             generated_at: new Date().toISOString()

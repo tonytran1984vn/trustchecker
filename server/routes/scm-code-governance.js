@@ -470,7 +470,7 @@ router.get('/entropy-config', authMiddleware, async (req, res) => {
             allowed_charsets: 'alphanumeric_upper',
             check_digit_algorithm: 'HMAC-SHA256',
             require_prefix: true,
-            prefix_format: '{TENANT}-{YEAR}-',
+            prefix_format: '{ORG}-{YEAR}-',
         };
 
         const merged = { ...defaults };
@@ -542,7 +542,7 @@ router.post('/bulk-entropy-check', authMiddleware, async (req, res) => {
 // RATE-LIMITED GENERATION
 // ═══════════════════════════════════════════════════════════
 
-// ─── GET /api/scm/code-gov/generation-limits – Per-tenant generation limits ─
+// ─── GET /api/scm/code-gov/generation-limits – Per-org generation limits ─
 router.get('/generation-limits', authMiddleware, async (req, res) => {
     try {
         const limits = await db.all('SELECT * FROM generation_limits ORDER BY created_at DESC LIMIT 1000');
@@ -552,7 +552,7 @@ router.get('/generation-limits', authMiddleware, async (req, res) => {
     }
 });
 
-// ─── POST /api/scm/code-gov/generation-limits – Set tenant limit ────────────
+// ─── POST /api/scm/code-gov/generation-limits – Set org limit ────────────
 router.post('/generation-limits', authMiddleware, requirePermission('settings:update'), async (req, res) => {
     try {
         const { org_id, max_per_hour, max_per_day, max_per_month, max_batch_size } = req.body;
@@ -590,7 +590,7 @@ router.post('/generation-check', authMiddleware, async (req, res) => {
     try {
         const { org_id, requested_count } = req.body;
         const limit = await db.get('SELECT * FROM generation_limits WHERE org_id = ?', [org_id]);
-        if (!limit) return res.json({ allowed: true, message: 'No limit configured for this tenant' });
+        if (!limit) return res.json({ allowed: true, message: 'No limit configured for this org' });
 
         const count = parseInt(requested_count) || 1;
         const hourOk = limit.current_hour + count <= limit.max_per_hour;
@@ -624,14 +624,14 @@ router.post('/generation-check', authMiddleware, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// CENTRAL REGISTRY (Cross-Tenant Collision Prevention)
+// CENTRAL REGISTRY (Cross-Org Collision Prevention)
 // ═══════════════════════════════════════════════════════════
 
 // ─── GET /api/scm/code-gov/registry/stats – Registry statistics ─────────────
 router.get('/registry/stats', authMiddleware, async (req, res) => {
     try {
         const total = (await db.get('SELECT COUNT(*) as c FROM code_registry'))?.c || 0;
-        const byTenant = await db.all('SELECT org_id, COUNT(*) as count FROM code_registry GROUP BY org_id');
+        const byOrg = await db.all('SELECT org_id, COUNT(*) as count FROM code_registry GROUP BY org_id');
         const collisions =
             (await db.get('SELECT COUNT(*) as c FROM code_registry WHERE collision_detected = 1'))?.c || 0;
 
@@ -639,7 +639,7 @@ router.get('/registry/stats', authMiddleware, async (req, res) => {
             total_codes_registered: total,
             collisions_detected: collisions,
             collision_rate: total > 0 ? ((collisions / total) * 100).toFixed(4) + '%' : '0%',
-            by_org: byTenant,
+            by_org: byOrg,
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch registry stats' });
@@ -659,14 +659,14 @@ router.post('/registry/check', authMiddleware, async (req, res) => {
         const existing = await db.get('SELECT org_id, created_at FROM code_registry WHERE hmac_hash = ?', [hmacHash]);
 
         if (existing) {
-            const sameTenant = existing.org_id === org_id;
+            const sameOrg = existing.org_id === org_id;
             return res.json({
                 collision: true,
-                same_org: sameTenant,
-                existing_org: sameTenant ? org_id : '[REDACTED]',
+                same_org: sameOrg,
+                existing_org: sameOrg ? org_id : '[REDACTED]',
                 registered_at: existing.created_at,
-                action: sameTenant
-                    ? 'Duplicate within tenant — reject'
+                action: sameOrg
+                    ? 'Duplicate within org — reject'
                     : 'Cross-org collision — reject and alert Super Admin',
             });
         }
@@ -674,7 +674,7 @@ router.post('/registry/check', authMiddleware, async (req, res) => {
         res.json({
             collision: false,
             hmac_hash: hmacHash.substring(0, 16) + '...',
-            message: 'Code is unique across all tenants',
+            message: 'Code is unique across all orgs',
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to check collision' });

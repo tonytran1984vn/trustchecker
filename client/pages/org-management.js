@@ -1,6 +1,6 @@
 /**
  * TrustChecker – Organization Management Page (Super Admin)
- * CRUD for multi-tenant organizations.
+ * CRUD for multi-org organizations.
  */
 import { State, render } from '../core/state.js';
 import { API } from '../core/api.js';

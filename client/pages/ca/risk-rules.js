@@ -1,5 +1,5 @@
 /**
- * Company Admin – Risk Rules (Tenant Scope)
+ * Company Admin – Risk Rules (Org Scope)
  * ═══════════════════════════════════════════
  * Real data from /api/scm/risk-model/models + /api/scm/risk/alerts
  */

@@ -70,7 +70,7 @@ const RISK_REGISTRY = [
     { id: 'TR-03', domain: 'Technology', description: 'Data breach via API', impact_desc: 'Data loss, regulatory fine', impact: 5, likelihood: 2, control_effectiveness: 0.5, owner: 'CISO', control: 'Encryption + KMS + WAF', control_type: 'preventive', evidence: 'Encryption audit', layer: 'L6' },
     { id: 'TR-04', domain: 'Technology', description: 'Crypto key compromise', impact_desc: 'Evidence integrity loss', impact: 5, likelihood: 1, control_effectiveness: 0.5, owner: 'SA', control: 'HSM + anchor policy + key rotation', control_type: 'preventive', evidence: 'Key management logs', layer: 'L4' },
     { id: 'TR-05', domain: 'Technology', description: 'API abuse / DDoS', impact_desc: 'Service degradation', impact: 3, likelihood: 3, control_effectiveness: 0.5, owner: 'IT', control: 'Rate limiting + API gateway + WAF', control_type: 'preventive', evidence: 'API monitoring', layer: 'L6' },
-    { id: 'TR-06', domain: 'Technology', description: 'Cross-tenant data leakage', impact_desc: 'Trust failure, legal liability', impact: 5, likelihood: 1, control_effectiveness: 0.5, owner: 'SA', control: 'Tenant isolation + boundary enforcement', control_type: 'preventive', evidence: 'Isolation test results', layer: 'L6' },
+    { id: 'TR-06', domain: 'Technology', description: 'Cross-org data leakage', impact_desc: 'Trust failure, legal liability', impact: 5, likelihood: 1, control_effectiveness: 0.5, owner: 'SA', control: 'Org isolation + boundary enforcement', control_type: 'preventive', evidence: 'Isolation test results', layer: 'L6' },
 
     // 4. Model Risk
     { id: 'MR-01', domain: 'Model', description: 'Model drift — score distribution shift', impact_desc: 'Incorrect risk assessments', impact: 4, likelihood: 3, control_effectiveness: 0.5, owner: 'MRO', control: 'Drift detection (5 metrics + MSI)', control_type: 'detective', evidence: 'Drift report', layer: 'L3' },
@@ -107,7 +107,7 @@ const CONTROL_TESTS = {
         { id: 'CT-Q1', test: 'Access review sampling', domain: 'Technology', method: 'Sample 10% of RBAC assignments, verify SoD', pass_criteria: '0 SoD violations' },
         { id: 'CT-Q2', test: 'Model replay validation', domain: 'Model', method: 'Re-run 30-day production data, compare outputs', pass_criteria: '±2% score deviation tolerance' },
         { id: 'CT-Q3', test: 'Evidence export verification', domain: 'Legal', method: 'Export 5 sealed evidence packages, verify hash chain', pass_criteria: 'All hashes verified, TSA valid' },
-        { id: 'CT-Q4', test: 'Cross-tenant isolation test', domain: 'Technology', method: 'Attempt cross-tenant data access via API', pass_criteria: '0 cross-tenant leaks' },
+        { id: 'CT-Q4', test: 'Cross-org isolation test', domain: 'Technology', method: 'Attempt cross-org data access via API', pass_criteria: '0 cross-org leaks' },
         { id: 'CT-Q5', test: 'Carbon MRV reconciliation', domain: 'ESG', method: 'Reconcile MRV data against minting log', pass_criteria: '0 unaccounted credits' },
         { id: 'CT-Q6', test: 'Billing reconciliation', domain: 'Financial', method: 'Compare usage meters vs invoices', pass_criteria: '±0.1% variance tolerance' }
     ],

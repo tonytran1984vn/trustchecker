@@ -7,7 +7,7 @@ import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
 import { State, render as globalRender } from '../../core/state.js';
 
-// Tenant-level L3+ roles that can approve/reject KYC (NOT platform roles like super_admin)
+// Org-level L3+ roles that can approve/reject KYC (NOT platform roles like super_admin)
 const KYC_APPROVER_ROLES = ['org_owner', 'company_admin', 'executive', 'compliance_officer'];
 function canApproveKYC() { return KYC_APPROVER_ROLES.includes(State.user?.active_role || State.user?.role); }
 

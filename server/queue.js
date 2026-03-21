@@ -3,7 +3,7 @@
  * ═══════════════════════════════════════════════════════════
  * Background job processing with:
  *   - Priority queue (enterprise > pro > core > free)
- *   - Per-tenant throttling via WorkerManager
+ *   - Per-org throttling via WorkerManager
  *   - Retry with exponential backoff (3 attempts)
  *   - Dead letter queue integration
  *   - In-memory fallback when Redis unavailable
@@ -11,7 +11,7 @@
  * Usage:
  *   const { addJob, QUEUES } = require('./queue');
  *   await addJob(QUEUES.BLOCKCHAIN, 'create-seal', { eventId, dataHash }, {
- *       priority: 'enterprise', tenantId: 'org-123', maxRetries: 3
+ *       priority: 'enterprise', orgId: 'org-123', maxRetries: 3
  *   });
  */
 
@@ -80,7 +80,7 @@ class InMemoryQueue {
             createdAt: Date.now(),
             attempts: 0,
             maxRetries: opts.maxRetries ?? DEFAULT_MAX_RETRIES,
-            tenantId: opts.tenantId || data?.orgId || null,
+            orgId: opts.orgId || data?.orgId || null,
             status: 'pending',
         };
         this.stats.added++;
@@ -182,7 +182,7 @@ class RedisQueue {
             createdAt: Date.now(),
             attempts: 0,
             maxRetries: opts.maxRetries ?? DEFAULT_MAX_RETRIES,
-            tenantId: opts.tenantId || data?.orgId || null,
+            orgId: opts.orgId || data?.orgId || null,
             status: 'pending',
         };
 
@@ -273,7 +273,7 @@ console.log(`📋 Queue backend: ${USE_REDIS ? 'Redis (priority)' : 'In-Memory (
  * @param {string} queueName - One of QUEUES constants
  * @param {string} jobName - Descriptive job name
  * @param {object} data - Job payload
- * @param {object} opts - { priority, tenantId, maxRetries, delay }
+ * @param {object} opts - { priority, orgId, maxRetries, delay }
  */
 async function addJob(queueName, jobName, data, opts = {}) {
     return queue.addJob(queueName, jobName, data, opts);

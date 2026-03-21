@@ -99,7 +99,7 @@ router.get(
     async (req, res) => {
         try {
             const orgs = await db.all('SELECT * FROM organizations WHERE status = ?', ['active']).catch(() => []);
-            const tenants = [];
+            const orgs = [];
             for (const o of orgs) {
                 const scanCount = await db
                     .get(
@@ -125,7 +125,7 @@ router.get(
                         [o.id]
                     )
                     .catch(() => []);
-                tenants.push({
+                orgs.push({
                     id: o.id,
                     name: o.name,
                     slug: o.slug,
@@ -138,7 +138,7 @@ router.get(
                         typeof o.feature_flags === 'string' ? JSON.parse(o.feature_flags || '{}') : o.feature_flags,
                 });
             }
-            res.json(riskGraph.detectCrossTenantPatterns(tenants));
+            res.json(riskGraph.detectCrossOrgPatterns(orgs));
         } catch (err) {
             res.status(500).json({ error: 'Cross-org analysis failed' });
         }
@@ -202,7 +202,7 @@ router.get('/fraud-feed', async (req, res) => {
                 `
             SELECT fa.id, fa.alert_type, fa.severity, fa.description, fa.status, fa.created_at, fa.details,
                    p.name as product_name, p.sku, p.category,
-                   o.name as tenant_name, o.slug as tenant_slug
+                   o.name as org_name, o.slug as org_slug
             FROM fraud_alerts fa
             LEFT JOIN products p ON fa.product_id = p.id
             LEFT JOIN users u ON p.registered_by = u.id
@@ -221,13 +221,13 @@ router.get('/fraud-feed', async (req, res) => {
         const critical = alerts.filter(a => a.severity === 'critical').length;
         const high = alerts.filter(a => a.severity === 'high').length;
 
-        // Top risk tenants
-        const tenantMap = {};
+        // Top risk orgs
+        const orgMap = {};
         alerts.forEach(a => {
-            const t = a.tenant_name || 'Unknown';
-            tenantMap[t] = (tenantMap[t] || 0) + 1;
+            const t = a.org_name || 'Unknown';
+            orgMap[t] = (orgMap[t] || 0) + 1;
         });
-        const topTenants = Object.entries(tenantMap)
+        const topOrgs = Object.entries(orgMap)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5)
             .map(([name, count]) => ({ name, count, pct: Math.round((count / total) * 100) }));
@@ -258,10 +258,10 @@ router.get('/fraud-feed', async (req, res) => {
                 level: 'warning',
                 msg: `${Math.round((open / total) * 100)}% of alerts are Open — resource allocation for investigation needed`,
             });
-        if (topTenants[0]?.pct > 30)
+        if (topOrgs[0]?.pct > 30)
             insights.push({
                 level: 'warning',
-                msg: `${topTenants[0].name} accounts for ${topTenants[0].pct}% of total alerts — dedicated tenant audit recommended`,
+                msg: `${topOrgs[0].name} accounts for ${topOrgs[0].pct}% of total alerts — dedicated org audit recommended`,
             });
         const counterfeitCount = typeMap['counterfeit'] || 0;
         if (counterfeitCount >= 3)
@@ -295,7 +295,7 @@ router.get('/fraud-feed', async (req, res) => {
                 high,
                 medium: total - critical - high,
             },
-            topTenants,
+            topOrgs,
             topTypes,
             insights,
         });
@@ -313,12 +313,12 @@ router.get('/risk-analytics', cacheMiddleware(120), async (req, res) => {
 
         // ── Run ALL independent queries in parallel ──
         const [suspRows, regionRows, catRows, patternRows, benchRows] = await Promise.all([
-            // Suspicious Tenants (Cases tab) — scoped to org
+            // Suspicious Organizations (Cases tab) — scoped to org
             orgId
                 ? db
                       .all(
                           `
-                SELECT o.id, o.name, o.slug, o.plan, o.status as tenant_status,
+                SELECT o.id, o.name, o.slug, o.plan, o.status as org_status,
                        COUNT(fa.id) as fraud_count,
                        SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count,
                        SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count,
@@ -341,7 +341,7 @@ router.get('/risk-analytics', cacheMiddleware(120), async (req, res) => {
                 : db
                       .all(
                           `
-                SELECT o.id, o.name, o.slug, o.plan, o.status as tenant_status,
+                SELECT o.id, o.name, o.slug, o.plan, o.status as org_status,
                        COUNT(fa.id) as fraud_count,
                        SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count,
                        SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count,
@@ -437,7 +437,7 @@ router.get('/risk-analytics', cacheMiddleware(120), async (req, res) => {
                       )
                       .catch(() => []),
 
-            // Tenant Benchmark Heatmap — scoped to own org
+            // Org Benchmark Heatmap — scoped to own org
             orgId
                 ? db
                       .all(
@@ -478,11 +478,11 @@ router.get('/risk-analytics', cacheMiddleware(120), async (req, res) => {
                       .catch(() => []),
         ]);
 
-        // ── Process Suspicious Tenants ──
-        const suspiciousTenants = suspRows.map(t => ({
+        // ── Process Suspicious Organizations ──
+        const suspiciousOrgs = suspRows.map(t => ({
             ...t,
             org_id: t.id,
-            status: t.tenant_status || 'active',
+            status: t.org_status || 'active',
             risk_score: Math.min(
                 99,
                 Math.round(t.critical_count * 15 + t.open_count * 5 + t.fraud_count * 2 + (t.avg_fraud_score || 0) * 30)
@@ -543,7 +543,7 @@ router.get('/risk-analytics', cacheMiddleware(120), async (req, res) => {
             .sort((a, b) => b.fraudCount - a.fraudCount);
 
         res.json({
-            suspiciousTenants,
+            suspiciousOrgs,
             riskByRegion,
             riskByCategory: catRows,
             fraudPatterns: patternRows,
@@ -574,7 +574,7 @@ router.get('/bundle', cacheMiddleware(120), async (req, res) => {
                     `
                 SELECT fa.id, fa.alert_type, fa.severity, fa.description, fa.status, fa.created_at, fa.details,
                        p.name as product_name, p.sku, p.category,
-                       o.name as tenant_name, o.slug as tenant_slug
+                       o.name as org_name, o.slug as org_slug
                 FROM fraud_alerts fa
                 LEFT JOIN products p ON fa.product_id = p.id
                 LEFT JOIN users u ON p.registered_by = u.id
@@ -590,12 +590,12 @@ router.get('/bundle', cacheMiddleware(120), async (req, res) => {
             const investigating = alerts.filter(a => a.status === 'investigating').length;
             const critical = alerts.filter(a => a.severity === 'critical').length;
             const high = alerts.filter(a => a.severity === 'high').length;
-            const tenantMap = {};
+            const orgMap = {};
             alerts.forEach(a => {
-                const t = a.tenant_name || 'Unknown';
-                tenantMap[t] = (tenantMap[t] || 0) + 1;
+                const t = a.org_name || 'Unknown';
+                orgMap[t] = (orgMap[t] || 0) + 1;
             });
-            const topTenants = Object.entries(tenantMap)
+            const topOrgs = Object.entries(orgMap)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 5)
                 .map(([name, count]) => ({ name, count, pct: Math.round((count / total) * 100) }));
@@ -622,10 +622,10 @@ router.get('/bundle', cacheMiddleware(120), async (req, res) => {
                     level: 'warning',
                     msg: `${Math.round((open / total) * 100)}% of alerts are Open — resource allocation for investigation needed`,
                 });
-            if (topTenants[0]?.pct > 30)
+            if (topOrgs[0]?.pct > 30)
                 insights.push({
                     level: 'warning',
-                    msg: `${topTenants[0].name} accounts for ${topTenants[0].pct}% of total alerts — dedicated tenant audit recommended`,
+                    msg: `${topOrgs[0].name} accounts for ${topOrgs[0].pct}% of total alerts — dedicated org audit recommended`,
                 });
             const counterfeitCount = typeMap['counterfeit'] || 0;
             if (counterfeitCount >= 3)
@@ -646,7 +646,7 @@ router.get('/bundle', cacheMiddleware(120), async (req, res) => {
                     high,
                     medium: total - critical - high,
                 },
-                topTenants,
+                topOrgs,
                 topTypes,
                 insights,
             };
@@ -658,13 +658,13 @@ router.get('/bundle', cacheMiddleware(120), async (req, res) => {
                 orgId
                     ? db
                           .all(
-                              `SELECT o.id, o.name, o.slug, o.plan, o.status as tenant_status, COUNT(fa.id) as fraud_count, SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count, SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count, AVG(CASE WHEN se.fraud_score IS NOT NULL THEN se.fraud_score ELSE 0 END) as avg_fraud_score, COUNT(DISTINCT fa.alert_type) as pattern_types FROM organizations o LEFT JOIN users u2 ON u2.org_id = o.id LEFT JOIN products p ON p.registered_by = u2.id LEFT JOIN fraud_alerts fa ON fa.product_id = p.id LEFT JOIN scan_events se ON se.product_id = p.id AND se.result IN ('suspicious','failed') WHERE o.id = ? GROUP BY o.id, o.name, o.slug, o.plan, o.status HAVING COUNT(fa.id) > 0 ORDER BY fraud_count DESC LIMIT 20`,
+                              `SELECT o.id, o.name, o.slug, o.plan, o.status as org_status, COUNT(fa.id) as fraud_count, SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count, SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count, AVG(CASE WHEN se.fraud_score IS NOT NULL THEN se.fraud_score ELSE 0 END) as avg_fraud_score, COUNT(DISTINCT fa.alert_type) as pattern_types FROM organizations o LEFT JOIN users u2 ON u2.org_id = o.id LEFT JOIN products p ON p.registered_by = u2.id LEFT JOIN fraud_alerts fa ON fa.product_id = p.id LEFT JOIN scan_events se ON se.product_id = p.id AND se.result IN ('suspicious','failed') WHERE o.id = ? GROUP BY o.id, o.name, o.slug, o.plan, o.status HAVING COUNT(fa.id) > 0 ORDER BY fraud_count DESC LIMIT 20`,
                               [orgId]
                           )
                           .catch(() => [])
                     : db
                           .all(
-                              `SELECT o.id, o.name, o.slug, o.plan, o.status as tenant_status, COUNT(fa.id) as fraud_count, SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count, SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count, 0 as avg_fraud_score, COUNT(DISTINCT fa.alert_type) as pattern_types FROM organizations o LEFT JOIN fraud_alerts fa ON fa.org_id = o.id GROUP BY o.id, o.name, o.slug, o.plan, o.status HAVING COUNT(fa.id) > 0 ORDER BY fraud_count DESC LIMIT 20`
+                              `SELECT o.id, o.name, o.slug, o.plan, o.status as org_status, COUNT(fa.id) as fraud_count, SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count, SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count, 0 as avg_fraud_score, COUNT(DISTINCT fa.alert_type) as pattern_types FROM organizations o LEFT JOIN fraud_alerts fa ON fa.org_id = o.id GROUP BY o.id, o.name, o.slug, o.plan, o.status HAVING COUNT(fa.id) > 0 ORDER BY fraud_count DESC LIMIT 20`
                           )
                           .catch(() => []),
                 orgId
@@ -716,10 +716,10 @@ router.get('/bundle', cacheMiddleware(120), async (req, res) => {
                           )
                           .catch(() => []),
             ]);
-            const suspiciousTenants = suspRows.map(t => ({
+            const suspiciousOrgs = suspRows.map(t => ({
                 ...t,
                 org_id: t.id,
-                status: t.tenant_status || 'active',
+                status: t.org_status || 'active',
                 risk_score: Math.min(
                     99,
                     Math.round(
@@ -781,7 +781,7 @@ router.get('/bundle', cacheMiddleware(120), async (req, res) => {
                               : 'Low',
                 }))
                 .sort((a, b) => b.fraudCount - a.fraudCount);
-            return { suspiciousTenants, riskByRegion, riskByCategory: catRows, fraudPatterns: patternRows, heatmap };
+            return { suspiciousOrgs, riskByRegion, riskByCategory: catRows, fraudPatterns: patternRows, heatmap };
         })(),
     ]);
 

@@ -80,7 +80,7 @@ const CAB_PROCESS = {
     process: [
         { step: 1, name: 'Change Request (CR)', who: 'Any engineer/role', what: 'Submit CR with: description, classification, impact assessment, rollback plan, test results' },
         { step: 2, name: 'Classification Review', who: 'CTO', what: 'Classify change (A/B/C/D). Route to appropriate approval path.' },
-        { step: 3, name: 'Impact Assessment', who: 'Risk + Compliance', what: 'Assess: capital impact, regulatory impact, tenant impact, security impact' },
+        { step: 3, name: 'Impact Assessment', who: 'Risk + Compliance', what: 'Assess: capital impact, regulatory impact, org impact, security impact' },
         { step: 4, name: 'CAB Review', who: 'CAB', what: 'For Class B/C: review, discuss, approve/reject/defer. Record decision.' },
         { step: 5, name: 'Testing Gate', who: 'Engineering', what: 'All required testing completed per classification. Results documented.' },
         { step: 6, name: 'Deployment Window', who: 'Engineering + CTO', what: 'Deploy in designated window. Monitor for 4h post-deployment.' },

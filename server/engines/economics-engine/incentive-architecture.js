@@ -26,10 +26,10 @@ const PARTICIPANT_INCENTIVES = {
                 'Insurance premium reduction: lower claims = lower D&O/E&O premiums (direct $ benefit)',
             ],
             perverse_incentive_guard: 'Admin cannot profit from volume inflation — revenue audited quarterly, synthetic volume detection built into monitoring',
-            alignment_metric: 'Net Promoter Score of tenants + validator satisfaction index',
+            alignment_metric: 'Net Promoter Score of orgs + validator satisfaction index',
         },
         {
-            participant: 'SCM Data Provider (Tenant)',
+            participant: 'SCM Data Provider (Org)',
             why_they_provide_quality_data: [
                 'Trust Score premium: accurate data → higher trust score → better settlement terms (Platinum = $500K unsecured)',
                 'Fee discount: data quality score > 90% → 15% fee discount on all platform services',
@@ -57,7 +57,7 @@ const PARTICIPANT_INCENTIVES = {
                 'Accuracy reward: scores correlated with subsequent verified outcomes → accuracy bonus pool ($50K/quarter)',
                 'Reputation compound: accuracy history → higher weight in consensus → more influence → more reward',
                 'Model improvement bounty: validators finding scoring model flaws → bounty ($5K-$25K per improvement)',
-                'Independence premium: 10% elevated reward rate for validators with no tenant relationships',
+                'Independence premium: 10% elevated reward rate for validators with no org relationships',
             ],
             perverse_incentive_guard: 'SEP-3: IVU cannot set model weights. Cross-validation: 3+ independent validators per score. Canary scores: platform injects known-truth test cases.',
             punishment: 'Accuracy < 70% for 60 days → enhanced monitoring. < 60% → suspension + retraining required.',
@@ -94,7 +94,7 @@ const FEE_TOPOLOGY = {
 
     fee_flows: [
         {
-            source: 'Tenant SaaS Subscription',
+            source: 'Org SaaS Subscription',
             amount: '$2K-$50K/month based on verification volume',
             flows_to: [
                 { destination: 'Operating Entity', pct: 45, purpose: 'Platform operations + R&D' },
@@ -142,7 +142,7 @@ const FEE_TOPOLOGY = {
             amount: '$10K-$100K/year per data customer',
             flows_to: [
                 { destination: 'Operating Entity', pct: 50, purpose: 'Data operations' },
-                { destination: 'Data Contributing Tenants', pct: 25, purpose: 'Revenue share for data contributors' },
+                { destination: 'Data Contributing Orgs', pct: 25, purpose: 'Revenue share for data contributors' },
                 { destination: 'Innovation Fund', pct: 15, purpose: 'Data product R&D' },
                 { destination: 'Capital Reserve', pct: 10, purpose: 'Data liability reserve' },
             ],
@@ -166,14 +166,14 @@ const SWITCHING_MOAT = {
     moat_layers: [
         {
             moat: 'Data Network Effect',
-            description: 'More tenants → more supply chain data → better trust scores → more valuable for each tenant',
+            description: 'More orgs → more supply chain data → better trust scores → more valuable for each org',
             switching_cost: '$200K-$500K to rebuild equivalent data history elsewhere',
             defensibility: 'VERY HIGH — data cannot be replicated. Historical trust scores are platform-specific.',
-            quantification: 'Each new tenant adds ~$50K of network value to existing tenants (Metcalfe-adjusted)',
+            quantification: 'Each new org adds ~$50K of network value to existing orgs (Metcalfe-adjusted)',
         },
         {
             moat: 'Regulatory Compliance Lock-in',
-            description: 'Tenants build compliance workflows around platform. Changing platforms = re-validation with regulators.',
+            description: 'Orgs build compliance workflows around platform. Changing platforms = re-validation with regulators.',
             switching_cost: '$100K-$300K regulatory re-submission costs + 6-12 month delay',
             defensibility: 'HIGH — regulatory relationships are entity-specific. Cannot transfer.',
         },
@@ -197,7 +197,7 @@ const SWITCHING_MOAT = {
         },
     ],
 
-    total_estimated_switching_cost: '$350K-$900K per enterprise tenant',
+    total_estimated_switching_cost: '$350K-$900K per enterprise org',
     ltv_cac_target: '> 5:1 (estimated 8:1 at scale due to switching cost)',
 };
 
@@ -261,17 +261,17 @@ class IncentiveArchitectureEngine {
     getSwitchingMoat() { return SWITCHING_MOAT; }
     getCarbonMarket() { return CARBON_MARKET; }
 
-    calculateNetworkValue(tenant_count) {
-        const n = tenant_count || 50;
+    calculateNetworkValue(org_count) {
+        const n = org_count || 50;
         const metcalfe = n * (n - 1) / 2;
         const valuePerConnection = 50000; // $50K network value per connection pair
         const adjustedValue = metcalfe * valuePerConnection * 0.001; // Metcalfe discount
         return {
-            tenant_count: n,
+            org_count: n,
             theoretical_connections: metcalfe,
             estimated_network_value_usd: Math.round(adjustedValue),
-            per_tenant_value_usd: Math.round(adjustedValue / n),
-            switching_cost_per_tenant: '$350K-$900K',
+            per_org_value_usd: Math.round(adjustedValue / n),
+            switching_cost_per_org: '$350K-$900K',
             ltv_cac_ratio: '8:1 at scale',
         };
     }

@@ -1,5 +1,5 @@
 /**
- * Company Admin – Incident Management (Tenant Scope)
+ * Company Admin – Incident Management (Org Scope)
  * ════════════════════════════════════════════════════
  * Real data from /api/ops/incidents — with Create + Status Update
  */

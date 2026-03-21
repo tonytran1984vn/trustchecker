@@ -9,7 +9,7 @@
  * tamper detection, regulatory evidence packaging, dispute forensics.
  */
 /**
- * ⚠️ TENANT ISOLATION: This engine relies on PostgreSQL RLS for data isolation.
+ * ⚠️ ORG ISOLATION: This engine relies on PostgreSQL RLS for data isolation.
  * The calling route must set db.setOrgContext(orgId) before invoking engine methods.
  * All SQL queries in this file are filtered at the database level by RLS policies.
  */
@@ -89,7 +89,7 @@ const INVESTIGATION_PROTOCOL = {
         {
             phase: '1. Triage & Containment',
             duration: '< 4 hours',
-            actions: ['Assess severity and scope', 'Preserve evidence (snapshot DB, freeze affected logs)', 'Contain if active threat (KS-02 tenant freeze or KS-03 scoring freeze)', 'Assign investigation lead'],
+            actions: ['Assess severity and scope', 'Preserve evidence (snapshot DB, freeze affected logs)', 'Contain if active threat (KS-02 org freeze or KS-03 scoring freeze)', 'Assign investigation lead'],
             output: 'Triage report with severity classification and containment status',
         },
         {

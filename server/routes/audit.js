@@ -4,7 +4,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { authMiddleware, requireTenantAdmin } = require('../auth');
+const { authMiddleware, requireOrgAdmin } = require('../auth');
 const { verifyChain, appendAuditEntry } = require('../utils/audit-chain');
 const db = require('../db');
 
@@ -12,7 +12,7 @@ router.use(authMiddleware);
 
 // ─── GET /verify-chain — Verify audit log hash chain integrity ──────────────
 // Only org admins (or platform admins) can verify
-router.get('/verify-chain', requireTenantAdmin(), async (req, res) => {
+router.get('/verify-chain', requireOrgAdmin(), async (req, res) => {
     try {
         const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
         const result = await verifyChain(limit);
@@ -38,7 +38,7 @@ router.get('/verify-chain', requireTenantAdmin(), async (req, res) => {
 });
 
 // ─── GET /stats — Audit log statistics ──────────────────────────────────────
-router.get('/stats', requireTenantAdmin(), async (req, res) => {
+router.get('/stats', requireOrgAdmin(), async (req, res) => {
     try {
         const total = await db.get(
             'SELECT COUNT(*) as count FROM audit_log' + (req.orgId ? ' WHERE org_id = ?' : ''),

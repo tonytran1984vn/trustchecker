@@ -1,23 +1,70 @@
 /**
- * Super Admin – Cases (Suspicious Tenants) — Real PG data
+ * Super Admin – Cases (Suspicious Organizations) — Real PG data
  */
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
-import { render } from '../../core/state.js';
 
 let data = null, loading = false;
 
 async function load() {
   if (loading) return; loading = true;
-  try { data = await API.get('/risk-graph/risk-analytics'); } catch (e) { data = { suspiciousTenants: [] }; }
+  // Await workspace prefetch if it's in flight
+  if (window._saRiskReady) {
+    try { await window._saRiskReady; } catch { }
+  }
+  // Use prefetched data from workspace if available
+  const cache = window._saRiskCache;
+  if (cache?.riskAnalytics && cache._loadedAt) {
+    data = cache.riskAnalytics;
+    loading = false;
+    setTimeout(() => { const el = document.getElementById('suspicious-orgs-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
+    return;
+  }
+  try { data = await API.get('/risk-graph/risk-analytics'); } catch (e) { data = { suspiciousOrgs: [] }; }
   loading = false;
+  setTimeout(() => { const el = document.getElementById('suspicious-orgs-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
 
-export function renderPage() {
-  if (!data && !loading) { load().then(() => render()); }
+// ═══ Action handlers ═══
+window._saRiskAction = async (action, orgId, orgName) => {
+  if (action === 'suspend') {
+    const reason = prompt(`⚠️ Suspend "${orgName}"?\n\nEnter reason for suspension:`);
+    if (!reason) return; // cancelled
+    try {
+      await API.post(`/platform/orgs/${orgId}/suspend`, { reason });
+      alert(`✅ "${orgName}" has been suspended.\nReason: ${reason}`);
+      // Bust cache by forcing fresh reload
+      data = null; loading = false;
+      try { data = await API.get('/risk-graph/risk-analytics?_t=' + Date.now()); } catch (e) { data = { suspiciousOrgs: [] }; }
+      const el = document.getElementById('suspicious-orgs-root');
+      if (el) el.innerHTML = renderContent ? renderContent() : '';
+    } catch (e) {
+      alert(`❌ Failed to suspend: ${e.message || 'Unknown error'}`);
+    }
+  } else if (action === 'activate') {
+    if (!confirm(`Reactivate "${orgName}"?`)) return;
+    try {
+      await API.post(`/platform/orgs/${orgId}/activate`, {});
+      alert(`✅ "${orgName}" has been reactivated.`);
+      data = null; loading = false;
+      try { data = await API.get('/risk-graph/risk-analytics?_t=' + Date.now()); } catch (e) { data = { suspiciousOrgs: [] }; }
+      const el = document.getElementById('suspicious-orgs-root');
+      if (el) el.innerHTML = renderContent ? renderContent() : '';
+    } catch (e) {
+      alert(`❌ Failed to activate: ${e.message || 'Unknown error'}`);
+    }
+  } else if (action === 'review') {
+    window.navigate('sa-org-detail', { orgId });
+  } else if (action === 'monitor') {
+    window.navigate('sa-risk-feed');
+  }
+};
+
+function renderContent() {
+  if (!data && !loading) { load(); }
   if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading risk data...</div></div>`;
 
-  const tenants = data?.suspiciousTenants || [];
+  const orgs = data?.suspiciousOrgs || [];
 
   return `
     <div class="sa-page">
@@ -26,7 +73,7 @@ export function renderPage() {
         <span style="font-size:0.72rem;color:#94a3b8">Monitor organization risk scores and take action on suspicious activity in real-time</span>
       </div>
 
-      ${tenants.length === 0 ? '<div class="sa-card" style="text-align:center;padding:40px;color:#94a3b8">No suspicious organizations detected</div>' : ''}
+      ${orgs.length === 0 ? '<div class="sa-card" style="text-align:center;padding:40px;color:#94a3b8">No suspicious organizations detected</div>' : ''}
 
       <style>
         .st-wrap{overflow-x:auto;border-radius:12px}
@@ -79,32 +126,46 @@ export function renderPage() {
             <th style="text-align:center">Level</th>
           </tr></thead>
           <tbody>
-            ${tenants.map(t => {
+            ${orgs.map(t => {
     const s = t.risk_score;
     const tier = s >= 90 ? 'crit' : s >= 70 ? 'high' : s >= 40 ? 'med' : 'low';
     const tierLabel = tier === 'crit' || tier === 'high' ? 'High' : tier === 'med' ? 'Medium' : 'Low';
     const tierIcon = tier === 'crit' || tier === 'high' ? '🔥' : tier === 'med' ? '⚡' : '✅';
     const lvClass = tier === 'crit' || tier === 'high' ? 'st-lv-high' : tier === 'med' ? 'st-lv-med' : 'st-lv-low';
-    const action = (tier === 'crit' || tier === 'high')
-      ? '<button class="st-btn-solid st-btn-solid-red">Suspend</button>'
-      : tier === 'med'
-        ? '<button class="st-btn-ghost st-btn-ghost-amber">Review</button>'
-        : '<button class="st-btn-ghost st-btn-ghost-blue">Monitor</button>';
+    const tid = t.org_id || t.id || '';
+    const tName = (t.name || '').replace(/'/g, "\\'");
+    const isSuspended = t.status === 'suspended';
+    let action;
+    if (isSuspended) {
+      action = `<button class="st-btn-ghost st-btn-ghost-blue" onclick="event.stopPropagation();_saRiskAction('activate','${tid}','${tName}')" style="border-color:#10b981;color:#059669">Activate</button>`;
+    } else if (tier === 'crit' || tier === 'high') {
+      action = `<button class="st-btn-solid st-btn-solid-red" onclick="event.stopPropagation();_saRiskAction('suspend','${tid}','${tName}')">Suspend</button>`;
+    } else if (tier === 'med') {
+      action = `<button class="st-btn-ghost st-btn-ghost-amber" onclick="event.stopPropagation();_saRiskAction('review','${tid}','${tName}')">Review</button>`;
+    } else {
+      action = `<button class="st-btn-ghost st-btn-ghost-blue" onclick="event.stopPropagation();_saRiskAction('monitor','${tid}','${tName}')">Monitor</button>`;
+    }
     const tagClass = (tier === 'crit' || tier === 'high') ? 'st-tag-red' : tier === 'med' ? 'st-tag-amber' : 'st-tag-gray';
     var pats = t.top_patterns || [];
     var shown = pats.slice(0, 2).map(function (p) { return '<span class="st-tag ' + tagClass + '">' + p + '</span>'; }).join('');
     if (pats.length > 2) shown += '<span class="st-tag st-tag-more">+' + (pats.length - 2) + '</span>';
     if (!pats.length) shown = '<span class="st-tag st-tag-gray">' + t.pattern_types + ' types</span>';
-    var rowCls = s >= 90 ? ' class="st-row-alert"' : '';
-    return '<tr' + rowCls + '>'
-      + '<td style="text-align:left"><div class="st-org">' + t.name + '</div><div class="st-slug">' + t.slug + '</div></td>'
+    var rowCls = isSuspended ? ' class="st-row-alert" style="opacity:0.7"' : (s >= 90 ? ' class="st-row-alert"' : '');
+    const levelHtml = isSuspended
+      ? '<span class="st-level" style="background:#FEE2E2;color:#991B1B">🚫 Suspended</span>'
+      : '<span class="st-level ' + lvClass + '">' + tierIcon + ' ' + tierLabel + '</span>';
+    const nameHtml = isSuspended
+      ? '<div class="st-org" style="text-decoration:line-through;opacity:0.6">' + t.name + '</div>'
+      : '<div class="st-org">' + t.name + '</div>';
+    return '<tr' + rowCls + ' onclick="navigate(\'sa-org-detail\',{orgId:\'' + tid + '\'})">'
+      + '<td style="text-align:left">' + nameHtml + '<div class="st-slug">' + t.slug + '</div></td>'
       + '<td style="text-align:right"><span class="st-score st-score-' + tier + '">' + s + '</span></td>'
       + '<td style="text-align:right"><span class="st-num">' + t.fraud_count + '</span></td>'
       + '<td style="text-align:right"><span class="st-num st-num-amber">' + t.open_count + '</span></td>'
       + '<td style="text-align:right"><span class="st-num st-num-red">' + t.critical_count + '</span></td>'
       + '<td style="text-align:left">' + shown + '</td>'
       + '<td style="text-align:center">' + action + '</td>'
-      + '<td style="text-align:center"><span class="st-level ' + lvClass + '">' + tierIcon + ' ' + tierLabel + '</span></td>'
+      + '<td style="text-align:center">' + levelHtml + '</td>'
       + '</tr>';
   }).join('')}
           </tbody>
@@ -112,3 +173,8 @@ export function renderPage() {
       </div>
     </div>`;
 }
+
+export function renderPage() {
+  return `<div id="suspicious-orgs-root">${renderContent()}</div>`;
+}
+

@@ -516,9 +516,9 @@ function freezeEvidence(caseId) {
     let graphSnapshot = null;
     try {
         const trustGraph = require('../trust-graph-engine');
-        const tenantId = eventData?.org_id || null;
-        if (tenantId) {
-            graphSnapshot = trustGraph.createSnapshot(tenantId, `case_confirmed:${caseId}`);
+        const orgId = eventData?.org_id || null;
+        if (orgId) {
+            graphSnapshot = trustGraph.createSnapshot(orgId, `case_confirmed:${caseId}`);
         }
     } catch (gErr) {
         // Non-blocking — graph snapshot is optional
@@ -593,7 +593,7 @@ function anchorBlockchain(evidenceResult, triggerReason) {
 // Monthly dashboard for CEO / Board / Audit Committee
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function reportExposure(tenantId) {
+function reportExposure(orgId) {
     const period = '30 days';
 
     const metrics = {
@@ -847,7 +847,7 @@ function initSchema() {
             anchored_at TEXT
         );
 
-        CREATE INDEX IF NOT EXISTS idx_lrgf_events_tenant ON lrgf_events(org_id);
+        CREATE INDEX IF NOT EXISTS idx_lrgf_events_org ON lrgf_events(org_id);
         CREATE INDEX IF NOT EXISTS idx_lrgf_events_hash ON lrgf_events(event_hash);
         CREATE INDEX IF NOT EXISTS idx_lrgf_events_idempotency ON lrgf_events(idempotency_key);
         CREATE INDEX IF NOT EXISTS idx_lrgf_scores_event ON lrgf_risk_scores(event_id);

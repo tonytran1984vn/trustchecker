@@ -123,13 +123,13 @@ const LIABILITY_MAP = {
     title: 'Liability Map — Who Is Responsible for What',
 
     liabilities: [
-        { event: 'Settlement failure', primary_liable: 'Settlement GmbH', secondary: 'Capital Reserve Trust', insurance: 'PI/E&O policy ($10M)', tenant_recourse: 'SLA credit + dispute resolution' },
-        { event: 'Trust score inaccuracy', primary_liable: 'Technology Pte Ltd', secondary: 'N/A', insurance: 'PI policy ($10M)', tenant_recourse: 'Dispute forensics + score recalculation' },
-        { event: 'Data breach (EU)', primary_liable: 'Data Compliance Ltd', secondary: 'Technology Pte Ltd (processor)', insurance: 'Cyber policy ($5M)', tenant_recourse: 'GDPR Art. 82 compensation' },
-        { event: 'Validator misconduct', primary_liable: 'Validator (slashing)', secondary: 'Node Operations Ltd', insurance: 'Covered by slashing escrow', tenant_recourse: 'Alternative verification + SLA credit' },
-        { event: 'Regulatory fine (EU)', primary_liable: 'Settlement GmbH or Data Compliance Ltd', secondary: 'Ring-fenced — does not affect other entities', insurance: 'Regulatory defense cost coverage', tenant_recourse: 'N/A (regulatory matter)' },
-        { event: 'Platform downtime', primary_liable: 'Technology Pte Ltd', secondary: 'N/A', insurance: 'Business interruption ($25M)', tenant_recourse: 'SLA credit per agreement' },
-        { event: 'Carbon credit fraud', primary_liable: 'Settlement GmbH (if CCP novation applied)', secondary: 'Insurance + Reserve', insurance: 'Crime policy + fidelity bond', tenant_recourse: 'Reserve drawdown + dispute resolution' },
+        { event: 'Settlement failure', primary_liable: 'Settlement GmbH', secondary: 'Capital Reserve Trust', insurance: 'PI/E&O policy ($10M)', org_recourse: 'SLA credit + dispute resolution' },
+        { event: 'Trust score inaccuracy', primary_liable: 'Technology Pte Ltd', secondary: 'N/A', insurance: 'PI policy ($10M)', org_recourse: 'Dispute forensics + score recalculation' },
+        { event: 'Data breach (EU)', primary_liable: 'Data Compliance Ltd', secondary: 'Technology Pte Ltd (processor)', insurance: 'Cyber policy ($5M)', org_recourse: 'GDPR Art. 82 compensation' },
+        { event: 'Validator misconduct', primary_liable: 'Validator (slashing)', secondary: 'Node Operations Ltd', insurance: 'Covered by slashing escrow', org_recourse: 'Alternative verification + SLA credit' },
+        { event: 'Regulatory fine (EU)', primary_liable: 'Settlement GmbH or Data Compliance Ltd', secondary: 'Ring-fenced — does not affect other entities', insurance: 'Regulatory defense cost coverage', org_recourse: 'N/A (regulatory matter)' },
+        { event: 'Platform downtime', primary_liable: 'Technology Pte Ltd', secondary: 'N/A', insurance: 'Business interruption ($25M)', org_recourse: 'SLA credit per agreement' },
+        { event: 'Carbon credit fraud', primary_liable: 'Settlement GmbH (if CCP novation applied)', secondary: 'Insurance + Reserve', insurance: 'Crime policy + fidelity bond', org_recourse: 'Reserve drawdown + dispute resolution' },
     ],
 
     ring_fencing_principle: 'Liability of Entity A does NOT flow to Entity B. Holding company liable only for its own actions, not subsidiary obligations (corporate veil maintained by substance + governance).',

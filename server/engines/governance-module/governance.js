@@ -9,7 +9,7 @@ const GOVERNANCE_ROLES = {
     external_auditor: { name: 'External Auditor Node', authority: 'audit', voting_weight: 2, description: 'Independent verification of credits and compliance' },
     platform_admin: { name: 'Platform Administrator', authority: 'operations', voting_weight: 1, description: 'Day-to-day platform governance' },
     compliance_officer: { name: 'Compliance Officer', authority: 'regulatory', voting_weight: 1, description: 'Regulatory alignment enforcement' },
-    tenant_representative: { name: 'Tenant Representative', authority: 'stakeholder', voting_weight: 1, description: 'Tenant interest representation' }
+    org_representative: { name: 'Org Representative', authority: 'stakeholder', voting_weight: 1, description: 'Org interest representation' }
 };
 
 const PROPOSAL_TYPES = {

@@ -82,7 +82,7 @@ export function render() {
                 <div style="color:#475569;font-size:16px">▼</div>
                 <!-- Zone A -->
                 <div style="border:2px solid #10b981;border-radius:14px;padding:14px 20px;width:100%;max-width:520px;background:rgba(16,185,129,0.04);text-align:center">
-                    <div style="color:#10b981;font-weight:700;font-size:13px;margin-bottom:6px">ZONE A — Tenant Governance</div>
+                    <div style="color:#10b981;font-weight:700;font-size:13px;margin-bottom:6px">ZONE A — Org Governance</div>
                     <div style="color:#94a3b8;font-size:0.82rem">Case Freeze → Evidence Packaging → Approval Token</div>
                 </div>
                 <div style="color:#475569;font-size:0.78rem">Signed request (no raw DB access)</div>
@@ -118,7 +118,7 @@ export function render() {
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:0.78rem">
                         <div style="color:#94a3b8">• Anchor provider config</div>
                         <div style="color:#94a3b8">• Key rotation</div>
-                        <div style="color:#fca5a5"><span class="status-icon status-fail" aria-label="Fail">✗</span> No tenant evidence</div>
+                        <div style="color:#fca5a5"><span class="status-icon status-fail" aria-label="Fail">✗</span> No org evidence</div>
                         <div style="color:#fca5a5"><span class="status-icon status-fail" aria-label="Fail">✗</span> No seal creation</div>
                     </div>
                 </div>
@@ -355,7 +355,7 @@ export function render() {
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px">
                 ${[
             'Không tạo quyền lực tập trung',
-            'Không cho Super Admin xem tenant data',
+            'Không cho Super Admin xem org data',
             'Không cho Risk tự seal',
             'Không cho Compliance sửa event',
             'Không cho ai rewrite history'

@@ -1,7 +1,7 @@
 /**
  * TrustChecker — Infrastructure Custody Engine (IT Layer)
  * IT = Cryptographic Custodian & Integrity Protector
- * Key management, tenant isolation, encryption status, security posture
+ * Key management, org isolation, encryption status, security posture
  * IT does NOT participate in business logic
  */
 const crypto = require('crypto');
@@ -18,7 +18,7 @@ const ENCRYPTION_SPECS = {
 const IT_BOUNDARY = {
     can_do: [
         'Manage encryption keys (HSM/KMS)',
-        'Enforce tenant data isolation',
+        'Enforce org data isolation',
         'Monitor hash chain integrity',
         'Execute disaster recovery',
         'Lock system on security breach',
@@ -27,7 +27,7 @@ const IT_BOUNDARY = {
         'Audit access patterns'
     ],
     cannot_do: [
-        { action: 'Read tenant business data', reason: 'Business data requires role-based access' },
+        { action: 'Read org business data', reason: 'Business data requires role-based access' },
         { action: 'Modify carbon credits', reason: 'Credit modification is business logic — Risk + Compliance' },
         { action: 'Approve minting', reason: 'Minting approval is Risk Engine domain' },
         { action: 'Change compliance rules', reason: 'Policy authority belongs to Compliance' },
@@ -44,7 +44,7 @@ class InfrastructureCustodyEngine {
         const {
             tls_enabled = true, encryption_at_rest = true,
             key_rotation_days = 90, backup_frequency = 'daily',
-            multi_region = false, tenant_isolation = true,
+            multi_region = false, org_isolation = true,
             zero_trust = true, hsm_enabled = false,
             audit_immutable = true, hash_chain_verified = true,
             mfa_enforced = true, ip_whitelist = false
@@ -56,7 +56,7 @@ class InfrastructureCustodyEngine {
             { category: 'Key Mgmt', check: 'Key rotation ≤ 90 days', status: key_rotation_days <= 90, weight: 8, critical: true },
             { category: 'Key Mgmt', check: 'HSM/KMS enabled', status: hsm_enabled, weight: 6, critical: false },
             { category: 'Infrastructure', check: 'Multi-region deployment', status: multi_region, weight: 5, critical: false },
-            { category: 'Infrastructure', check: 'Tenant data isolation', status: tenant_isolation, weight: 10, critical: true },
+            { category: 'Infrastructure', check: 'Org data isolation', status: org_isolation, weight: 10, critical: true },
             { category: 'Infrastructure', check: 'Zero-trust network', status: zero_trust, weight: 8, critical: true },
             { category: 'Infrastructure', check: 'Backup ' + backup_frequency, status: backup_frequency === 'daily' || backup_frequency === 'hourly', weight: 7, critical: true },
             { category: 'Integrity', check: 'Immutable audit logs', status: audit_immutable, weight: 10, critical: true },
@@ -83,12 +83,12 @@ class InfrastructureCustodyEngine {
     }
 
     /**
-     * Tenant isolation status
+     * Org isolation status
      */
-    checkTenantIsolation(tenants = []) {
-        const results = tenants.map(t => ({
+    checkOrgIsolation(orgs = []) {
+        const results = orgs.map(t => ({
             org_id: t.org_id || t.id,
-            tenant_name: t.name || t.tenant_name,
+            org_name: t.name || t.org_name,
             data_encrypted: true,
             separate_key: true,
             network_isolated: true,
@@ -97,11 +97,11 @@ class InfrastructureCustodyEngine {
         }));
 
         return {
-            title: 'Tenant Isolation Status',
-            total_tenants: results.length,
+            title: 'Org Isolation Status',
+            total_orgs: results.length,
             all_isolated: results.every(r => r.compliance === 'isolated'),
-            isolation_model: 'Logical isolation with per-tenant encryption keys',
-            tenants: results,
+            isolation_model: 'Logical isolation with per-org encryption keys',
+            orgs: results,
             checked_at: new Date().toISOString()
         };
     }
@@ -144,7 +144,7 @@ class InfrastructureCustodyEngine {
             { key_id: 'tls-cert', type: 'RSA-4096', purpose: 'TLS certificate', rotated_at: new Date(now - 180 * 86400000).toISOString(), next_rotation: new Date(now + 185 * 86400000).toISOString(), status: 'active' },
             { key_id: 'hash-sign-key', type: 'Ed25519', purpose: 'Hash chain signing', rotated_at: new Date(now - 30 * 86400000).toISOString(), next_rotation: new Date(now + 60 * 86400000).toISOString(), status: 'active' },
             { key_id: 'did-issuer-key', type: 'Ed25519', purpose: 'DID & VC signing', rotated_at: new Date(now - 60 * 86400000).toISOString(), next_rotation: new Date(now + 30 * 86400000).toISOString(), status: 'active' },
-            { key_id: 'tenant-kek', type: 'AES-256', purpose: 'Tenant key encryption key', rotated_at: new Date(now - 20 * 86400000).toISOString(), next_rotation: new Date(now + 70 * 86400000).toISOString(), status: 'active' }
+            { key_id: 'org-kek', type: 'AES-256', purpose: 'Org key encryption key', rotated_at: new Date(now - 20 * 86400000).toISOString(), next_rotation: new Date(now + 70 * 86400000).toISOString(), status: 'active' }
         ];
 
         return {
@@ -196,7 +196,7 @@ class InfrastructureCustodyEngine {
 
         const collapsePoints = [
             { risk: 'Super Admin edits credits directly', status: 'blocked', enforced: true },
-            { risk: 'IT reads all tenant data', status: 'blocked', enforced: true },
+            { risk: 'IT reads all org data', status: 'blocked', enforced: true },
             { risk: 'Ops overrides Risk without audit', status: 'blocked', enforced: true },
             { risk: 'Compliance bypassed on rule update', status: 'blocked', enforced: true },
             { risk: 'Audit logs are mutable', status: 'blocked', enforced: true }

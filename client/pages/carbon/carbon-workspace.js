@@ -293,12 +293,12 @@ async function loadCompliance() {
 
 async function loadBenchmark() {
   try {
-    const [maturity, leaderboard, crossTenant] = await Promise.all([
+    const [maturity, leaderboard, crossOrg] = await Promise.all([
       API.get('/scm/carbon/maturity').catch(() => ({})),
       API.get('/scm/carbon/leaderboard').catch(() => ({})),
-      API.get('/scm/carbon/benchmark/cross-tenant').catch(() => ({})),
+      API.get('/scm/carbon/benchmark/cross-org').catch(() => ({})),
     ]);
-    _benchmarkData = { maturity, leaderboard, crossTenant };
+    _benchmarkData = { maturity, leaderboard, crossOrg };
     _benchmarkLoaded = true;
     renderContent();
   } catch (e) { _benchmarkData = {}; _benchmarkLoaded = true; renderContent(); }
@@ -1079,7 +1079,7 @@ function renderBenchmark() {
         </div>
 
     ${(() => {
-      const ct = _benchmarkData.crossTenant || {};
+      const ct = _benchmarkData.crossOrg || {};
       if (!ct.percentile && ct.percentile !== 0) return '';
       const pct = ct.percentile || 0;
       const pColor = pct >= 80 ? '#10b981' : pct >= 50 ? '#3b82f6' : pct >= 20 ? '#f59e0b' : '#ef4444';
@@ -1093,7 +1093,7 @@ function renderBenchmark() {
       return `
       <div class="card" style="border-left:4px solid ${pColor};margin-top:16px">
         <div class="card-header">
-          <div class="card-title">🏢 Cross-Tenant Carbon Benchmark</div>
+          <div class="card-title">🏢 Cross-Org Carbon Benchmark</div>
           <div style="font-size:0.72rem;font-weight:700;color:${pColor}">${esc(ct.performance_label || '')}</div>
         </div>
         <div class="card-body">

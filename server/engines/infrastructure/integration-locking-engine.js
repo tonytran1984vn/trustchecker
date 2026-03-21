@@ -186,7 +186,7 @@ const RISKLAB_BINDINGS = {
             source_engine: 'systemic-risk-lab-engine',
             trigger: 'Contagion impact reaches ≥3 hops from source entity',
             auto_actions: [
-                'Source entity: KS-02 Tenant Freeze — AUTO-TRIGGERED',
+                'Source entity: KS-02 Org Freeze — AUTO-TRIGGERED',
                 '1st-hop entities: enhanced monitoring + reduced limits',
                 '2nd-hop entities: notification + exposure review',
                 '3rd-hop entities: if cumulative impact >$100K → L2 Management escalation',
@@ -348,7 +348,7 @@ const CHARTER_AMENDMENT = {
             { role: 'Risk Committee Chair', type: 'Risk-related amendment', threshold: 'Direct proposal right' },
             { role: 'Compliance Officer', type: 'Compliance-related amendment', threshold: 'Direct proposal right' },
             { role: 'Validator Delegate (elected)', type: 'Validator rights amendment', threshold: 'Requires 10% validator community support' },
-            { role: 'Tenant Representative', type: 'Tenant rights amendment', threshold: 'Requires 5% tenant community support' },
+            { role: 'Org Representative', type: 'Org rights amendment', threshold: 'Requires 5% org community support' },
         ],
         who_cannot_propose: [
             { role: 'super_admin', reason: 'Admin is operational, not constitutional' },

@@ -33,7 +33,7 @@ async function loadFeed() {
   try {
     feedData = await API.get('/risk-graph/fraud-feed');
     loadedAt = now;
-  } catch (e) { feedData = { alerts: [], summary: {}, topTenants: [], topTypes: [], insights: [{ level: 'info', msg: 'Unable to load data — ' + e.message }] }; }
+  } catch (e) { feedData = { alerts: [], summary: {}, topOrgs: [], topTypes: [], insights: [{ level: 'info', msg: 'Unable to load data — ' + e.message }] }; }
   loading = false;
   setTimeout(() => { const el = document.getElementById('risk-feed-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
 }
@@ -69,7 +69,7 @@ function renderContent() {
         <div style="text-align:center;padding:60px;color:var(--text-muted)"><span class="phx-spinner-sm"></span> Loading live data...</div></div>`;
   }
 
-  const d = feedData || { alerts: [], summary: {}, topTenants: [], topTypes: [], insights: [] };
+  const d = feedData || { alerts: [], summary: {}, topOrgs: [], topTypes: [], insights: [] };
   const s = d.summary || {};
 
   return `
@@ -170,11 +170,11 @@ function renderContent() {
         </div>
       </div>
 
-      <!-- ═══ Top Risk Tenants + Type Breakdown ═══ -->
+      <!-- ═══ Top Risk Orgs + Type Breakdown ═══ -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
         <div class="rf-card" style="padding:14px 18px">
           <div style="font-size:0.75rem;font-weight:700;margin-bottom:8px;color:var(--text-muted)">🏢 TOP RISK ORGANIZATIONS</div>
-          ${(d.topTenants || []).map((t, i) => `
+          ${(d.topOrgs || []).map((t, i) => `
             <div class="rf-row">
               <span class="rf-rank" style="background:${['#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#64748b'][i]}">
                 ${i + 1}
@@ -238,7 +238,7 @@ function renderContent() {
                 <tr>
                   <td>${SEV_ICON[a.severity] || '⚪'}</td>
                   <td style="color:var(--text-muted);white-space:nowrap">${timeAgo(a.created_at)}</td>
-                  <td style="font-weight:600">${a.tenant_name || '—'}</td>
+                  <td style="font-weight:600">${a.org_name || '—'}</td>
                   <td><span class="rf-badge">${(a.alert_type || '').replace(/_/g, ' ')}</span></td>
                   <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(a.description || '').replace(/"/g, '&quot;')}">${a.description || '—'}</td>
                   <td style="color:var(--text-muted);font-size:0.72rem">${a.product_name || '—'} <span style="color:var(--text-muted);font-size:0.65rem">${a.sku ? '(' + a.sku + ')' : ''}</span></td>

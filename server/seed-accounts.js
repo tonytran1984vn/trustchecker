@@ -20,27 +20,27 @@ async function seed() {
         { email: 'admin@trustchecker.io', username: 'admin', role: 'super_admin', user_type: 'platform', company: 'TrustChecker' },
         { email: 'security@trustchecker.io', username: 'security', role: 'platform_security', user_type: 'platform', company: 'TrustChecker' },
         { email: 'datagov@trustchecker.io', username: 'datagov', role: 'data_gov_officer', user_type: 'platform', company: 'TrustChecker' },
-        // Tenant accounts
-        { email: 'admin@demo.trustchecker.io', username: 'demo_admin', role: 'company_admin', user_type: 'tenant', company: 'Demo Corp' },
-        { email: 'ceo@demo.trustchecker.io', username: 'demo_ceo', role: 'executive', user_type: 'tenant', company: 'Demo Corp' },
-        { email: 'ops@demo.trustchecker.io', username: 'demo_ops', role: 'ops_manager', user_type: 'tenant', company: 'Demo Corp' },
-        { email: 'risk@demo.trustchecker.io', username: 'demo_risk', role: 'risk_officer', user_type: 'tenant', company: 'Demo Corp' },
-        { email: 'compliance@demo.trustchecker.io', username: 'demo_compliance', role: 'compliance_officer', user_type: 'tenant', company: 'Demo Corp' },
-        { email: 'dev@demo.trustchecker.io', username: 'demo_dev', role: 'developer', user_type: 'tenant', company: 'Demo Corp' },
-        { email: 'ggc@demo.trustchecker.io', username: 'demo_ggc', role: 'ggc_member', user_type: 'tenant', company: 'Demo Corp' },
-        { email: 'riskcom@demo.trustchecker.io', username: 'demo_riskcom', role: 'risk_committee', user_type: 'tenant', company: 'Demo Corp' },
-        { email: 'ivu@demo.trustchecker.io', username: 'demo_ivu', role: 'ivu_validator', user_type: 'tenant', company: 'Demo Corp' },
-        { email: 'scm@demo.trustchecker.io', username: 'demo_scm', role: 'scm_analyst', user_type: 'tenant', company: 'Demo Corp' },
-        { email: 'blockchain@demo.trustchecker.io', username: 'demo_blockchain', role: 'blockchain_operator', user_type: 'tenant', company: 'Demo Corp' },
-        { email: 'carbon@demo.trustchecker.io', username: 'demo_carbon', role: 'carbon_officer', user_type: 'tenant', company: 'Demo Corp' },
-        { email: 'auditor@demo.trustchecker.io', username: 'demo_auditor', role: 'auditor', user_type: 'tenant', company: 'Demo Corp' },
+        // Org accounts
+        { email: 'admin@demo.trustchecker.io', username: 'demo_admin', role: 'company_admin', user_type: 'org', company: 'Demo Corp' },
+        { email: 'ceo@demo.trustchecker.io', username: 'demo_ceo', role: 'executive', user_type: 'org', company: 'Demo Corp' },
+        { email: 'ops@demo.trustchecker.io', username: 'demo_ops', role: 'ops_manager', user_type: 'org', company: 'Demo Corp' },
+        { email: 'risk@demo.trustchecker.io', username: 'demo_risk', role: 'risk_officer', user_type: 'org', company: 'Demo Corp' },
+        { email: 'compliance@demo.trustchecker.io', username: 'demo_compliance', role: 'compliance_officer', user_type: 'org', company: 'Demo Corp' },
+        { email: 'dev@demo.trustchecker.io', username: 'demo_dev', role: 'developer', user_type: 'org', company: 'Demo Corp' },
+        { email: 'ggc@demo.trustchecker.io', username: 'demo_ggc', role: 'ggc_member', user_type: 'org', company: 'Demo Corp' },
+        { email: 'riskcom@demo.trustchecker.io', username: 'demo_riskcom', role: 'risk_committee', user_type: 'org', company: 'Demo Corp' },
+        { email: 'ivu@demo.trustchecker.io', username: 'demo_ivu', role: 'ivu_validator', user_type: 'org', company: 'Demo Corp' },
+        { email: 'scm@demo.trustchecker.io', username: 'demo_scm', role: 'scm_analyst', user_type: 'org', company: 'Demo Corp' },
+        { email: 'blockchain@demo.trustchecker.io', username: 'demo_blockchain', role: 'blockchain_operator', user_type: 'org', company: 'Demo Corp' },
+        { email: 'carbon@demo.trustchecker.io', username: 'demo_carbon', role: 'carbon_officer', user_type: 'org', company: 'Demo Corp' },
+        { email: 'auditor@demo.trustchecker.io', username: 'demo_auditor', role: 'auditor', user_type: 'org', company: 'Demo Corp' },
     ];
 
     let created = 0, skipped = 0;
 
     for (const acc of accounts) {
         const id = uuidv4();
-        const tenantOrgId = acc.user_type === 'tenant' ? orgId : null;
+        const orgOrgId = acc.user_type === 'org' ? orgId : null;
         try {
             // Check if exists
             const existing = await db.prepare('SELECT id FROM users WHERE email = ?').get(acc.email);
@@ -58,7 +58,7 @@ async function seed() {
 
             await db.prepare(
                 `INSERT INTO users (id, username, email, password_hash, role, user_type, company, org_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-            ).run(id, acc.username, acc.email, hash, acc.role, acc.user_type, acc.company, tenantOrgId);
+            ).run(id, acc.username, acc.email, hash, acc.role, acc.user_type, acc.company, orgOrgId);
 
             // Assign RBAC role
             await db.prepare(

@@ -120,7 +120,7 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
             const r = await db.get('SELECT COUNT(*) as c FROM organizations');
             orgCount = r?.c || 0;
         } catch (_) {}
-        if (orgCount > 1) features.push('cross_tenant_benchmark');
+        if (orgCount > 1) features.push('cross_org_benchmark');
 
         let mLevel = 0,
             mLabel = 'Not Assessed';

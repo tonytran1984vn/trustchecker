@@ -128,7 +128,7 @@ router.post('/orgs', async (req, res) => {
 
         // Audit log
         await db.run(
-            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'TENANT_CREATED', 'organization', ?, ?)`,
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'ORG_CREATED', 'organization', ?, ?)`,
             [uuidv4(), req.user.id, orgId, JSON.stringify({ name, slug, plan, admin_username })]
         );
 
@@ -138,7 +138,7 @@ router.post('/orgs', async (req, res) => {
         res.status(201).json({
             org: { id: orgId, name, slug, plan, status: 'active' },
             admin: { id: adminId, username: admin_username, email: admin_email, role: 'admin' },
-            message: 'Tenant created with Company Admin',
+            message: 'Organization created with Company Admin',
         });
     } catch (err) {
         logger.error('[Platform] Create org error:', err);
@@ -609,7 +609,7 @@ router.get('/orgs', async (req, res) => {
 router.get('/orgs/:id', async (req, res) => {
     try {
         const org = await db.get('SELECT * FROM organizations WHERE id = ?', [req.params.id]);
-        if (!org) return res.status(404).json({ error: 'Tenant not found' });
+        if (!org) return res.status(404).json({ error: 'Organization not found' });
 
         const users = await db.all(
             'SELECT id, username, email, role, user_type, created_at, last_login FROM users WHERE org_id = ?',
@@ -629,7 +629,7 @@ router.get('/orgs/:id', async (req, res) => {
 router.post('/orgs/:id/users', async (req, res) => {
     try {
         const org = await db.get('SELECT id, name FROM organizations WHERE id = ?', [req.params.id]);
-        if (!org) return res.status(404).json({ error: 'Tenant not found' });
+        if (!org) return res.status(404).json({ error: 'Organization not found' });
 
         const { username, email, password, role, company } = req.body;
         if (!username || !email || !password || !role) {
@@ -648,7 +648,7 @@ router.post('/orgs/:id/users', async (req, res) => {
         );
 
         await db.run(
-            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'TENANT_USER_CREATED', 'user', ?, ?)`,
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'ORG_USER_CREATED', 'user', ?, ?)`,
             [
                 uuidv4(),
                 req.user.id,
@@ -678,7 +678,7 @@ router.put('/orgs/:id', async (req, res) => {
     try {
         const { plan, feature_flags, name } = req.body;
         const org = await db.get('SELECT id FROM organizations WHERE id = ?', [req.params.id]);
-        if (!org) return res.status(404).json({ error: 'Tenant not found' });
+        if (!org) return res.status(404).json({ error: 'Organization not found' });
 
         const updates = [];
         const params = [];
@@ -712,12 +712,12 @@ router.put('/orgs/:id', async (req, res) => {
 
         // Audit
         await db.run(
-            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'TENANT_UPDATED', 'organization', ?, ?)`,
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'ORG_UPDATED', 'organization', ?, ?)`,
             [uuidv4(), req.user.id, req.params.id, JSON.stringify(req.body)]
         );
 
         if (typeof db.save === 'function') await db.save();
-        res.json({ message: 'Tenant updated', id: req.params.id });
+        res.json({ message: 'Organization updated', id: req.params.id });
     } catch (err) {
         logger.error('[Platform] Update org error:', err);
         res.status(500).json({ error: 'Failed to update org' });
@@ -731,13 +731,13 @@ router.post('/orgs/:id/suspend', async (req, res) => {
         await db.run("UPDATE organizations SET status = 'suspended', updated_at = NOW() WHERE id = ?", [req.params.id]);
 
         await db.run(
-            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'TENANT_SUSPENDED', 'organization', ?, ?)`,
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'ORG_SUSPENDED', 'organization', ?, ?)`,
             [uuidv4(), req.user.id, req.params.id, JSON.stringify({ reason: reason || 'No reason provided' })]
         );
 
         if (typeof db.save === 'function') await db.save();
         clearCacheByPrefix('/api/risk-graph').catch(() => {});
-        res.json({ message: 'Tenant suspended', id: req.params.id });
+        res.json({ message: 'Organization suspended', id: req.params.id });
     } catch (err) {
         logger.error('[Platform] Suspend org error:', err);
         res.status(500).json({ error: 'Failed to suspend org' });
@@ -750,13 +750,13 @@ router.post('/orgs/:id/activate', async (req, res) => {
         await db.run("UPDATE organizations SET status = 'active', updated_at = NOW() WHERE id = ?", [req.params.id]);
 
         await db.run(
-            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'TENANT_ACTIVATED', 'organization', ?, ?)`,
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'ORG_ACTIVATED', 'organization', ?, ?)`,
             [uuidv4(), req.user.id, req.params.id, '{}']
         );
 
         if (typeof db.save === 'function') await db.save();
         clearCacheByPrefix('/api/risk-graph').catch(() => {});
-        res.json({ message: 'Tenant activated', id: req.params.id });
+        res.json({ message: 'Organization activated', id: req.params.id });
     } catch (err) {
         logger.error('[Platform] Activate org error:', err);
         res.status(500).json({ error: 'Failed to activate org' });

@@ -83,7 +83,7 @@ const RUNBOOKS = {
         name: 'Fraud Outbreak Response', severity: 'SEV1', requires_audit: true,
         steps: [
             { action: 'Risk Engine triggers platform-wide alert', role: 'risk', audit: true },
-            { action: 'Ops freezes affected tenants', role: 'ops', audit: true },
+            { action: 'Ops freezes affected orgs', role: 'ops', audit: true },
             { action: 'IT isolates network segments', role: 'it', audit: true },
             { action: 'Compliance notifies regulators if required', role: 'compliance', audit: true },
             { action: 'Admin Company coordinates response', role: 'admin_company', audit: true },
@@ -98,7 +98,7 @@ const OPS_FORBIDDEN = [
     { action: 'Change baseline factors', reason: 'Baselines require Compliance approval' },
     { action: 'Delete audit logs', reason: 'Audit logs are immutable' },
     { action: 'Override Risk Engine', reason: 'Risk decisions require Compliance escalation' },
-    { action: 'Access tenant encryption keys', reason: 'Key management is IT-only' },
+    { action: 'Access org encryption keys', reason: 'Key management is IT-only' },
     { action: 'Modify compliance rules', reason: 'Policy authority belongs to Compliance' }
 ];
 

@@ -171,19 +171,19 @@ async function getPermissionsForRole(roleId) {
 }
 
 /**
- * Plan Guardrail: Check if a permission is allowed by the tenant's plan.
+ * Plan Guardrail: Check if a permission is allowed by the org's plan.
  *
  * feature_flags JSON in organizations table defines what's available:
  *   { "trustgraph": true, "consortium": false, "digital_twin": true }
  *
- * If a permission's resource is gated by a feature flag, check tenant's flags.
+ * If a permission's resource is gated by a feature flag, check org's flags.
  */
 async function checkPlanGuardrail(orgId, permission) {
     if (!orgId) return true; // Platform-level has no guardrails
 
     const [resource] = permission.split(':');
 
-    // Load tenant
+    // Load org
     const org = await db.get('SELECT plan, feature_flags FROM organizations WHERE id = ?', [orgId]);
     if (!org) return false;
 
@@ -227,14 +227,14 @@ async function checkSoD(userId, newPermission) {
  *
  * All waiver usage is audit-logged.
  */
-async function checkSoDWithWaiver(userId, newPermission, tenantId) {
+async function checkSoDWithWaiver(userId, newPermission, orgId) {
     const base = await checkSoD(userId, newPermission);
     if (!base.conflict) return base;
 
-    // Check if tenant has a waiver for this specific pair
-    if (!tenantId) return base; // No waivers at platform level
+    // Check if org has a waiver for this specific pair
+    if (!orgId) return base; // No waivers at platform level
 
-    const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [tenantId]);
+    const org = await db.get('SELECT sod_waivers FROM organizations WHERE id = ?', [orgId]);
     if (!org || !org.sod_waivers) return base;
 
     let waiverConfig;
@@ -289,7 +289,7 @@ async function getBusinessPermissions() {
  * Express middleware factory: require specific permission(s).
  *
  *   router.get('/products', requirePermission('product:view'), handler)
- *   router.post('/users', requirePermission('tenant:user:create'), handler)
+ *   router.post('/users', requirePermission('org:user:create'), handler)
  */
 function requirePermission(...permissions) {
     return async (req, res, next) => {
@@ -388,9 +388,9 @@ function requireOrgAdmin() {
 
         // Check for org admin permissions
         const has = await hasAnyPermission(req.user.id, [
-            'tenant:user:create',
-            'tenant:role:create',
-            'tenant:settings:update'
+            'org:user:create',
+            'org:role:create',
+            'org:settings:update'
         ], req);
 
         if (!has && req.user.role !== 'admin' && req.user.role !== 'company_admin' && req.user.role !== 'org_owner' && req.user.role !== 'executive' && req.user.role !== 'security_officer') {
@@ -405,10 +405,10 @@ function requireOrgAdmin() {
      * If any SoD conflict exists, the assignment is BLOCKED.
      *
      * Usage:
-     *   const result = await safeAssignRole(userId, roleId, assignedBy, tenantId);
+     *   const result = await safeAssignRole(userId, roleId, assignedBy, orgId);
      *   if (!result.success) return res.status(409).json(result);
      */
-async function safeAssignRole(userId, roleId, assignedBy, tenantId) {
+async function safeAssignRole(userId, roleId, assignedBy, orgId) {
     // Get all permissions for the new role
     const newRolePerms = await getPermissionsForRole(roleId);
     if (newRolePerms.length === 0) {
@@ -417,8 +417,8 @@ async function safeAssignRole(userId, roleId, assignedBy, tenantId) {
 
     // Check each permission of the new role against existing user permissions
     for (const perm of newRolePerms) {
-        const sodCheck = tenantId
-            ? await checkSoDWithWaiver(userId, perm, tenantId)
+        const sodCheck = orgId
+            ? await checkSoDWithWaiver(userId, perm, orgId)
             : await checkSoD(userId, perm);
 
         if (sodCheck.conflict && !sodCheck.waived) {
@@ -457,7 +457,7 @@ module.exports = {
     requireConstitutional,
     requirePlatformAdmin,
     requireOrgAdmin,
-    requireTenantAdmin: requireOrgAdmin, // backward-compatible alias
+    requireOrgAdmin: requireOrgAdmin, // backward-compatible alias
     SOD_CONFLICTS,
     // Governance hardening
     CA_FORBIDDEN_PERMISSIONS,

@@ -110,7 +110,7 @@ const SCHEMAS = {
             service: 'string', // 'simulation' | 'detection' | 'analytics'
             priority: 'number',
             orgId: 'string',
-            tenantPlan: 'string',
+            orgPlan: 'string',
         }
     },
     'ai.job.completed': {

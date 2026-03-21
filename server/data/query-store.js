@@ -148,7 +148,7 @@ class QueryStore {
             const def = this.views.get(viewKey);
             // Invalidate all cached instances for this view
             // For org-scoped views, invalidate by orgId if available
-            const orgId = eventData.orgId || eventData.org_id || eventData.context?.tenantId;
+            const orgId = eventData.orgId || eventData.org_id || eventData.context?.orgId;
             if (orgId) {
                 const key = this._buildCacheKey(def.cacheKeyPattern, { orgId, ...eventData });
                 await this._deleteCache(key);

@@ -27,7 +27,7 @@ const ROLE_HIERARCHY = {
     global_risk_committee: 5, change_management_officer: 5, incident_response_lead: 5,
     // L4: Global Governance
     ggc_member: 4, risk_committee: 4, compliance_officer: 4, ivu_validator: 4,
-    // L3: Tenant Governance
+    // L3: Org Governance
     org_owner: 3, admin: 3, company_admin: 3, executive: 3, carbon_officer: 3, security_officer: 3,
     // L2: Operational
     ops_manager: 2, risk_officer: 2, scm_analyst: 2, disclosure_officer: 2,
@@ -232,13 +232,13 @@ async function cleanupExpiredRoles(userId) {
 }
 
 // Re-export RBAC middleware for convenience
-const { requirePermission, requireConstitutional, requirePlatformAdmin, requireOrgAdmin, requireTenantAdmin } = require('./rbac');
+const { requirePermission, requireConstitutional, requirePlatformAdmin, requireOrgAdmin, requireOrgAdmin } = require('./rbac');
 
 module.exports = {
     JWT_SECRET, JWT_EXPIRY, REFRESH_EXPIRY_DAYS, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES,
     ROLE_HIERARCHY,
     authMiddleware, requireRole,
-    requirePermission, requireConstitutional, requirePlatformAdmin, requireOrgAdmin, requireTenantAdmin,
+    requirePermission, requireConstitutional, requirePlatformAdmin, requireOrgAdmin, requireOrgAdmin,
     generateTokenPair, enrichUserWithOrg, createSession,
     // P3: Advanced Security
     checkIPAnomaly, cleanupExpiredRoles,

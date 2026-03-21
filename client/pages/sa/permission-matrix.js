@@ -81,7 +81,7 @@ const DOMAINS = {
     permissions: [
       'config.branding', 'config.email', 'config.notification',
       'billing.view', 'billing.manage', 'billing.invoice.download',
-      'tenant.settings', 'tenant.plan.change',
+      'org.settings', 'org.plan.change',
       'system.health.view', 'system.sla.config',
       'system.status.publish', 'system.escalation.config',
     ],

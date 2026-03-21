@@ -17,7 +17,7 @@ const crypto = require('crypto');
 // ═════════════════════════════════════════════════════════════════════
 const MODEL_CLASSIFICATION = {
     ERS: { name: 'Entity Risk Score', impact_class: 'Critical', tier: 4, financial_impact: true, auto_decision: true, lock_capable: true, scope: 'Single entity', inputs: 12, refresh: 'real-time', dual_validation: true },
-    BRI: { name: 'Benchmark Risk Index', impact_class: 'Critical', tier: 4, financial_impact: true, auto_decision: false, lock_capable: false, scope: 'Cross-tenant', inputs: 15, refresh: '24hr', dual_validation: true },
+    BRI: { name: 'Benchmark Risk Index', impact_class: 'Critical', tier: 4, financial_impact: true, auto_decision: false, lock_capable: false, scope: 'Cross-org', inputs: 15, refresh: '24hr', dual_validation: true },
     BRS: { name: 'Behavioral Risk Score', impact_class: 'High', tier: 3, financial_impact: true, auto_decision: true, lock_capable: false, scope: 'Behavioral pattern', inputs: 6, refresh: '15min', dual_validation: false },
     CRS: { name: 'Channel Risk Score', impact_class: 'High', tier: 3, financial_impact: false, auto_decision: true, lock_capable: false, scope: 'Supply chain path', inputs: 8, refresh: '15min', dual_validation: false },
     DUP: { name: 'Duplicate Classifier', impact_class: 'Medium', tier: 2, financial_impact: false, auto_decision: true, lock_capable: false, scope: 'Event dedup', inputs: 4, refresh: 'real-time', dual_validation: false },

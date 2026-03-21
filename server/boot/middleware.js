@@ -2,7 +2,7 @@ const { dataClassification } = require('../security/data-classification');
 /**
  * Boot: Middleware Setup
  * Applies security, observability, versioning, metering, and org middleware.
- * v9.4.2: Added global orgGuard for multi-tenant isolation on ALL /api/ routes.
+ * v9.4.2: Added global orgGuard for multi-org isolation on ALL /api/ routes.
  * v9.5.1: AsyncLocalStorage request context for per-request isolation.
  */
 
@@ -56,7 +56,7 @@ function setupMiddleware(app, redis) {
     app.use('/api/', apiGateway.middleware());
     app.use('/api/', orgMiddleware);
 
-    // ─── v9.4.2: Global orgGuard — Multi-Tenant Isolation ────────────────────
+    // ─── v9.4.2: Global orgGuard — Multi-Org Isolation ────────────────────
     // This runs AFTER route-level authMiddleware sets req.user.
     // It ensures ALL /api/ routes have orgGuard applied — even those that
     // don't explicitly call orgGuard() in their route file.

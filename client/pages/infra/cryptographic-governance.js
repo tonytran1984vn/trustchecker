@@ -10,7 +10,7 @@ const HSM = [
 
 const MULTISIG = [
     { action: 'Master Key Rotation', required: '3 of 5', roles: 'Super Admin + CTO + CISO', timeout: '24h' },
-    { action: 'Tenant Data Deletion (GDPR)', required: '2 of 3', roles: 'Compliance + Admin', timeout: '48h' },
+    { action: 'Org Data Deletion (GDPR)', required: '2 of 3', roles: 'Compliance + Admin', timeout: '48h' },
     { action: 'Emergency Key Revoke', required: '2 of 2', roles: 'Super Admin + CTO', timeout: '1h' },
 ];
 

@@ -41,7 +41,7 @@ if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 30000
                 const v = results.map(r => r.value);
                 cache.adminUsers = v[0];
                 cache.roles = v[1];
-                cache.tenantUsers = v[2];
+                cache.orgUsers = v[2];
                 cache.permissions = v[3];
                 cache.approvals = v[4];
                 cache.auditLogs = v[5];

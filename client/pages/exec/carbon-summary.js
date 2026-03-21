@@ -212,7 +212,7 @@ function buildRecommendations(d) {
   } else if (matLevel === 2) {
     recs.push({
       severity: 'medium', icon: '🎯', title: 'Maturity Level 2 — Advance to Carbon Intelligence',
-      desc: 'GRI and offsets active. Next: risk integration, cross-tenant benchmarks.',
+      desc: 'GRI and offsets active. Next: risk integration, cross-org benchmarks.',
       action: 'Enable ESG→Risk factor mapping and carbon benchmarking → Level 3.',
       cost: 'Strategic investment'
     });

@@ -77,7 +77,7 @@ function renderFeatureFlags() {
     return `
     <div style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
         <div>
-            <div style="font-size:0.78rem;color:var(--text-muted)">Manage platform-wide feature toggles. Changes apply to all tenants.</div>
+            <div style="font-size:0.78rem;color:var(--text-muted)">Manage platform-wide feature toggles. Changes apply to all orgs.</div>
         </div>
         <div style="font-size:0.72rem;color:var(--text-muted);background:var(--bg-secondary);padding:4px 12px;border-radius:20px">
             ${enabledCount} / ${_flagList.length} enabled
@@ -287,7 +287,7 @@ function renderSlackPanel(ist, ps) {
         { key: 'fraud_detected', label: '🚨 Fraud Detected', color: '#ef4444' },
         { key: 'scan_anomaly', label: '⚠️ Scan Anomaly', color: '#f59e0b' },
         { key: 'sla_violation', label: '⏰ SLA Violation', color: '#f97316' },
-        { key: 'new_tenant', label: '🏢 New Tenant', color: '#3b82f6' },
+        { key: 'new_org', label: '🏢 New Org', color: '#3b82f6' },
         { key: 'usage_threshold', label: '📊 Usage Alert', color: '#f59e0b' },
         { key: 'certificate_expiry', label: '🔒 Cert Expiry', color: '#ef4444' },
         { key: 'system_health', label: '🖥️ System Health', color: '#ef4444' },
@@ -555,7 +555,7 @@ window.toggleSlackAllEvents = function (idx, checked) {
     if (!wh) return;
     // checked = All Events → empty array (backend treats as "all")
     // unchecked = switch to individual selection → populate all 8 event keys
-    wh.events = checked ? [] : ['fraud_detected', 'scan_anomaly', 'sla_violation', 'new_tenant', 'usage_threshold', 'certificate_expiry', 'system_health', 'payment_failed'];
+    wh.events = checked ? [] : ['fraud_detected', 'scan_anomaly', 'sla_violation', 'new_org', 'usage_threshold', 'certificate_expiry', 'system_health', 'payment_failed'];
     window.render();
 };
 window.testChannel = async function (ch) {

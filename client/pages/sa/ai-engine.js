@@ -33,7 +33,7 @@ export function renderPage() {
             <div class="sa-detail-item"><span class="sa-detail-label">Auto-Lock Enabled</span><span class="sa-mfa-on">Yes</span></div>
             <div class="sa-detail-item"><span class="sa-detail-label">Lock After</span><span>5 consecutive alerts with score ≥ 85</span></div>
             <div class="sa-detail-item"><span class="sa-detail-label">Cooldown Period</span><span>24 hours</span></div>
-            <div class="sa-detail-item"><span class="sa-detail-label">Notify</span><span>Tenant Admin + Platform Risk Officer</span></div>
+            <div class="sa-detail-item"><span class="sa-detail-label">Notify</span><span>Org Admin + Platform Risk Officer</span></div>
           </div>
         </div>
         <div class="sa-card">

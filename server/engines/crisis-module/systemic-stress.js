@@ -32,7 +32,7 @@ const EXTREME_SCENARIOS = {
             id: 'ES-02', category: 'Market', name: 'Global Supply Chain Disruption',
             description: 'Major trade route disruption (war, pandemic) affecting 30%+ of tracked supply chains',
             probability: 'Medium (15%)', severity: 'High',
-            impact: { verification_volume_drop_pct: 40, tenant_churn_pct: 10, revenue_loss_pct: 25 },
+            impact: { verification_volume_drop_pct: 40, org_churn_pct: 10, revenue_loss_pct: 25 },
             affected_systems: ['scm-engine', 'trust-graph-engine', 'revenue-governance-engine'],
             cascading: ['Volume drop → revenue decline → incentive auto-stabilizer triggers', 'Trust data gaps → scoring accuracy degraded → potential KS-03'],
             expected_car_impact_pct: -4,
@@ -73,7 +73,7 @@ const EXTREME_SCENARIOS = {
             probability: 'Medium (10%)', severity: 'High',
             impact: { affected_scores_pct: 15, false_positive_increase: '5x', detection_time_hours: 4 },
             affected_systems: ['ivu-engine', 'trust-graph-engine', 'model-risk-tiering-engine'],
-            cascading: ['Model drift detected → KS-03 Scoring Freeze auto-trigger', 'If undetected >24h → trust erosion → tenant churn risk'],
+            cascading: ['Model drift detected → KS-03 Scoring Freeze auto-trigger', 'If undetected >24h → trust erosion → org churn risk'],
             mitigation: ['Continuous model monitoring (drift detection <2σ)', 'Input validation + anomaly detection on verification data', 'Canary scores (known-good entities monitored for drift)'],
         },
         {
@@ -104,8 +104,8 @@ const EXTREME_SCENARIOS = {
             survival_plan: 'Capital Reserve Trust (bankruptcy-remote) + insurance + orderly wind-down protocol',
         },
         {
-            id: 'ES-10', category: 'Combined', name: 'Slow Bleed: Gradual Tenant Churn',
-            description: 'Over 12 months: 30% tenant churn + 20% revenue decline + validator attrition',
+            id: 'ES-10', category: 'Combined', name: 'Slow Bleed: Gradual Org Churn',
+            description: 'Over 12 months: 30% org churn + 20% revenue decline + validator attrition',
             probability: 'Medium (10%)', severity: 'High',
             impact: { revenue_loss_pct: 30, validator_exit_pct: 25, network_effect_degradation: 'Significant' },
             affected_systems: ['revenue-governance-engine', 'incentive-economics-engine', 'decentralization-kpi-engine'],

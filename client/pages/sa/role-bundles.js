@@ -9,7 +9,7 @@ const BUNDLES = [
         target: 'SME (5–20 people)',
         description: '2 roles cover all needs. 1 person can manage business + basic security.',
         roles: [
-            { role: 'admin', label: 'Business Admin', desc: 'Full tenant control: users, products, orders, batches, basic risk view' },
+            { role: 'admin', label: 'Business Admin', desc: 'Full org control: users, products, orders, batches, basic risk view' },
             { role: 'developer', label: 'Technical Admin', desc: 'Security, SSO, API keys, integrations, monitoring' },
         ],
         color: '#22c55e',
@@ -50,7 +50,7 @@ const SOD_CONFLICTS = [
     { a: 'admin', b: 'risk_officer', level: 'High', reason: 'Creates users AND approves fraud cases' },
     { a: 'ops_manager', b: 'compliance_officer', level: 'Medium', reason: 'Manages batches AND audits batch operations' },
     { a: 'admin', b: 'compliance_officer', level: 'Medium', reason: 'Manages users AND audits access' },
-    { a: 'developer', b: 'super_admin', level: 'Critical', reason: 'Tenant IT AND platform control' },
+    { a: 'developer', b: 'super_admin', level: 'Critical', reason: 'Org IT AND platform control' },
 ];
 
 export function renderPage() {

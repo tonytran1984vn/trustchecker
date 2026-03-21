@@ -1,6 +1,6 @@
 /**
  * CIE Role Architecture Engine v2.1 — Enterprise Ready
- * Dual-Layer: Platform (TrustChecker) + Company (Tenant)
+ * Dual-Layer: Platform (TrustChecker) + Company (Org)
  * Enterprise SoD — No end-to-end control for any single role
  *
  * Principles:
@@ -25,11 +25,11 @@ const PLATFORM_ROLES = {
         icon: '🔧',
         description: 'Infrastructure management. Zero business authority.',
         can: [
-            'manage_infra', 'tenant_provisioning', 'security_policy',
+            'manage_infra', 'org_provisioning', 'security_policy',
             'system_config', 'view_system_logs', 'manage_api_keys',
         ],
         cannot: [
-            'edit_emission_data', 'approve_cip', 'run_tenant_replay',
+            'edit_emission_data', 'approve_cip', 'run_org_replay',
             'modify_factor_version', 'seal_passport', 'override_cip',
         ],
         sod_principle: 'Infrastructure only. Cannot touch carbon data.',
@@ -47,10 +47,10 @@ const PLATFORM_ROLES = {
             'review_factor_citations', 'set_effective_date',
         ],
         cannot: [
-            'edit_sealed_cip', 'access_tenant_data',
+            'edit_sealed_cip', 'access_org_data',
             'modify_individual_passport', 'approve_cip',
         ],
-        sod_principle: 'Governs methodology globally. Cannot intervene at tenant level.',
+        sod_principle: 'Governs methodology globally. Cannot intervene at org level.',
     },
 
     global_risk_committee: {
@@ -65,7 +65,7 @@ const PLATFORM_ROLES = {
         ],
         cannot: [
             'override_individual_cip', 'modify_emission_data',
-            'approve_cip', 'access_tenant_replay',
+            'approve_cip', 'access_org_replay',
         ],
         sod_principle: 'Sets risk policy. Cannot override individual assessments.',
     },
@@ -392,7 +392,7 @@ const METHODOLOGY_CHANGE_FLOW = [
     { step: 2, action: 'Board Vote', actor: 'MGB Full Board', requires: '≥75% approval (no conflicts)' },
     { step: 3, action: 'Factor Freeze', actor: 'MGB + System', requires: 'Hash lock on factor set' },
     { step: 4, action: 'Publish', actor: 'MGB', requires: 'Change bulletin with effective date' },
-    { step: 5, action: 'Tenant Adopt', actor: 'Company Admin', requires: 'Select version (cannot edit content)' },
+    { step: 5, action: 'Org Adopt', actor: 'Company Admin', requires: 'Select version (cannot edit content)' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════

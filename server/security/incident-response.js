@@ -8,7 +8,7 @@ class IncidentResponse {
         this.db = db;
         this.thresholds = {
             failed_logins: { count: 10, window: '15 minutes', severity: 'high' },
-            cross_tenant_attempt: { count: 1, window: '1 minute', severity: 'critical' },
+            cross_org_attempt: { count: 1, window: '1 minute', severity: 'critical' },
             data_export: { count: 5, window: '5 minutes', severity: 'medium' },
         };
     }

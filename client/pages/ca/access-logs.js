@@ -1,5 +1,5 @@
 /**
- * Company Admin – Access Logs (Tenant Scope)
+ * Company Admin – Access Logs (Org Scope)
  * ════════════════════════════════════════════
  * Real data from /api/audit-log
  */

@@ -45,7 +45,7 @@ router.get('/snapshot', async (req, res) => {
                     encryption_at_rest: 'AES-256-GCM field-level encryption',
                     encryption_in_transit: 'TLS 1.2+ via Nginx',
                     rls_policies: rls?.c || 0,
-                    tenant_isolation: 'PostgreSQL Row Level Security + application orgGuard',
+                    org_isolation: 'PostgreSQL Row Level Security + application orgGuard',
                     backup_policy: 'Daily pg_dump, 7-day retention',
                 },
                 audit_trail: {

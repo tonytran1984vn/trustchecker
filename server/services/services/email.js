@@ -113,8 +113,8 @@ const TEMPLATES = {
         ]),
     }),
     new_org: (data) => ({
-        subject: '🏢 New Tenant Registered — TrustChecker',
-        html: alertTemplate('New Tenant Registered', '#3b82f6', '🏢', [
+        subject: '🏢 New Org Registered — TrustChecker',
+        html: alertTemplate('New Org Registered', '#3b82f6', '🏢', [
             `<b>Organization:</b> ${data.org_name || 'Unknown'}`,
             `<b>Admin:</b> ${data.admin_email || 'Unknown'}`,
         ]),
@@ -146,7 +146,7 @@ const TEMPLATES = {
     payment_failed: (data) => ({
         subject: '💳 Payment Failed — TrustChecker Alert',
         html: alertTemplate('Payment Failed', '#ef4444', '💳', [
-            `<b>Tenant:</b> ${data.tenant_name || 'Unknown'}`,
+            `<b>Org:</b> ${data.org_name || 'Unknown'}`,
             `<b>Amount:</b> ${data.amount || 'N/A'}`,
             `<b>Reason:</b> ${data.reason || 'Payment processing error.'}`,
         ]),

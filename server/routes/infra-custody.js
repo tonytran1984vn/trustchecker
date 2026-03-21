@@ -20,10 +20,10 @@ router.get('/security', cacheMiddleware(120), async (req, res) => {
     }
 });
 
-// GET /isolation — Tenant isolation check
+// GET /isolation — Org isolation check
 router.get('/isolation', requirePermission('admin:manage'), async (req, res) => {
     try {
-        res.json(custodyEngine.checkTenantIsolation([]));
+        res.json(custodyEngine.checkOrgIsolation([]));
     } catch (err) {
         res.status(500).json({ error: 'Isolation check failed' });
     }

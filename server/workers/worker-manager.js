@@ -2,7 +2,7 @@
  * TrustChecker v9.2 — Worker Manager
  * ═══════════════════════════════════════════════════════════
  * Enterprise worker process management with:
- *   - Per-tenant rate limiting (token bucket)
+ *   - Per-org rate limiting (token bucket)
  *   - Priority queue (enterprise > pro > core > free)
  *   - Concurrent job limits per worker
  *   - Job timeout with forced termination
@@ -25,7 +25,7 @@ const PLAN_PRIORITY = {
     free: 10,
 };
 
-// ─── Token Bucket for Per-Tenant Throttling ─────────────────
+// ─── Token Bucket for Per-Org Throttling ─────────────────
 class TokenBucket {
     /**
      * @param {number} capacity - max tokens (burst)
@@ -60,8 +60,8 @@ class TokenBucket {
     }
 }
 
-// ─── Tenant Throttle Configuration ──────────────────────────
-const TENANT_LIMITS = {
+// ─── Org Throttle Configuration ──────────────────────────
+const ORG_LIMITS = {
     enterprise: { capacity: 100, refillRate: 20 },  // 100 burst, 20/sec sustained
     pro: { capacity: 50, refillRate: 10 },
     core: { capacity: 20, refillRate: 5 },
@@ -76,7 +76,7 @@ class WorkerManager extends EventEmitter {
         this.jobTimeout = opts.jobTimeoutMs || 60_000;
         this.running = false;
         this._activeJobs = 0;
-        this._tenantBuckets = new Map();
+        this._orgBuckets = new Map();
 
         // ─── Stats ───────────────────────────────────────
         this._stats = {
@@ -86,7 +86,7 @@ class WorkerManager extends EventEmitter {
             throttled: 0,
             timedOut: 0,
             byQueue: {},
-            byTenant: {},
+            byOrg: {},
         };
     }
 
@@ -101,20 +101,20 @@ class WorkerManager extends EventEmitter {
         this._stats.byQueue[queueName] = { processed: 0, succeeded: 0, failed: 0 };
     }
 
-    // ─── Per-Tenant Throttle ─────────────────────────────────
-    _getTenantBucket(orgId, plan) {
+    // ─── Per-Org Throttle ─────────────────────────────────
+    _getOrgBucket(orgId, plan) {
         const key = orgId || 'system';
-        if (!this._tenantBuckets.has(key)) {
-            const limits = TENANT_LIMITS[plan] || TENANT_LIMITS.free;
-            this._tenantBuckets.set(key, new TokenBucket(limits.capacity, limits.refillRate));
+        if (!this._orgBuckets.has(key)) {
+            const limits = ORG_LIMITS[plan] || ORG_LIMITS.free;
+            this._orgBuckets.set(key, new TokenBucket(limits.capacity, limits.refillRate));
         }
-        return this._tenantBuckets.get(key);
+        return this._orgBuckets.get(key);
     }
 
     canProcess(job) {
         const orgId = job.data?.orgId || job.data?.context?.orgId;
-        const plan = job.data?.tenantPlan || job.data?.context?.tenantPlan || 'free';
-        const bucket = this._getTenantBucket(orgId, plan);
+        const plan = job.data?.orgPlan || job.data?.context?.orgPlan || 'free';
+        const bucket = this._getOrgBucket(orgId, plan);
         return bucket.consume(1);
     }
 
@@ -124,8 +124,8 @@ class WorkerManager extends EventEmitter {
      */
     static sortByPriority(jobs) {
         return jobs.sort((a, b) => {
-            const pA = PLAN_PRIORITY[a.data?.tenantPlan || a.opts?.priority || 'free'] || 10;
-            const pB = PLAN_PRIORITY[b.data?.tenantPlan || b.opts?.priority || 'free'] || 10;
+            const pA = PLAN_PRIORITY[a.data?.orgPlan || a.opts?.priority || 'free'] || 10;
+            const pB = PLAN_PRIORITY[b.data?.orgPlan || b.opts?.priority || 'free'] || 10;
             if (pB !== pA) return pB - pA; // Higher priority first
             // Same priority → FIFO by creation time
             return (a.createdAt || 0) - (b.createdAt || 0);
@@ -140,7 +140,7 @@ class WorkerManager extends EventEmitter {
             return;
         }
 
-        // Check per-tenant throttle
+        // Check per-org throttle
         if (!this.canProcess(job)) {
             this._stats.throttled++;
             this.emit('throttled', { job, queue: queueName });
@@ -158,7 +158,7 @@ class WorkerManager extends EventEmitter {
         this._stats.byQueue[queueName] && this._stats.byQueue[queueName].processed++;
 
         const orgId = job.data?.orgId || 'system';
-        this._stats.byTenant[orgId] = (this._stats.byTenant[orgId] || 0) + 1;
+        this._stats.byOrg[orgId] = (this._stats.byOrg[orgId] || 0) + 1;
 
         const startTime = Date.now();
 
@@ -228,7 +228,7 @@ class WorkerManager extends EventEmitter {
             running: this.running,
             activeJobs: this._activeJobs,
             registeredQueues: Array.from(this.handlers.keys()),
-            tenantBuckets: this._getTenantBucketStatus(),
+            orgBuckets: this._getOrgBucketStatus(),
         };
     }
 
@@ -236,9 +236,9 @@ class WorkerManager extends EventEmitter {
         return { ...this._stats };
     }
 
-    _getTenantBucketStatus() {
+    _getOrgBucketStatus() {
         const status = {};
-        for (const [key, bucket] of this._tenantBuckets.entries()) {
+        for (const [key, bucket] of this._orgBuckets.entries()) {
             status[key] = bucket.getStatus();
         }
         return status;
@@ -249,5 +249,5 @@ module.exports = {
     WorkerManager,
     TokenBucket,
     PLAN_PRIORITY,
-    TENANT_LIMITS,
+    ORG_LIMITS,
 };

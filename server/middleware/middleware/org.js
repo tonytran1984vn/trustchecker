@@ -36,9 +36,9 @@ function orgMiddleware(req, res, next) {
         req.isSuperAdmin = req.user.role === 'super_admin';
     }
     // 2. From X-Org-ID header (service-to-service)
-    else if (req.headers['x-org-id'] || req.headers['x-tenant-id']) {
+    else if (req.headers['x-org-id'] || req.headers['x-org-id']) {
         // Validate format: UUID only (prevent injection)
-        const orgHeader = req.headers['x-org-id'] || req.headers['x-tenant-id'];
+        const orgHeader = req.headers['x-org-id'] || req.headers['x-org-id'];
         if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgHeader)) {
             req.orgId = orgHeader;
         }
@@ -150,8 +150,8 @@ module.exports = {
     applyOrgContext,
     injectOrgFilter,
     // Backward-compatible aliases
-    tenantMiddleware: orgMiddleware,
-    requireTenant: requireOrg,
-    applyTenantContext: applyOrgContext,
-    injectTenantFilter: injectOrgFilter,
+    orgMiddleware: orgMiddleware,
+    requireOrg: requireOrg,
+    applyOrgContext: applyOrgContext,
+    injectOrgFilter: injectOrgFilter,
 };

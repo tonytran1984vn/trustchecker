@@ -1,6 +1,6 @@
 /**
- * Seed tenant/organization data for the All Tenants page
- * Run: DATABASE_URL="..." node server/seed-tenants.js
+ * Seed org/organization data for the All Orgs page
+ * Run: DATABASE_URL="..." node server/seed-orgs.js
  */
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
@@ -9,12 +9,12 @@ async function seed() {
     const db = require('./db');
     if (db.init) await db.init();
     await new Promise(r => setTimeout(r, 2500));
-    console.log('🏢 Seeding tenant organizations...\n');
+    console.log('🏢 Seeding org organizations...\n');
 
     const adminUser = await db.prepare("SELECT id FROM users WHERE email = ?").get('admin@trustchecker.io');
     const adminId = adminUser?.id || 'system';
 
-    const tenants = [
+    const orgs = [
         { name: 'CryptoMall Ltd', slug: 'cryptomall', plan: 'enterprise', flags: { blockchain: true, nft: true, ai_analytics: true, trustgraph: true } },
         { name: 'QuickBuy Asia', slug: 'quickbuy-asia', plan: 'pro', flags: { blockchain: true, ai_analytics: true } },
         { name: 'FreshMart EU', slug: 'freshmart-eu', plan: 'enterprise', flags: { blockchain: true, consortium: true, digital_twin: true, ai_analytics: true } },
@@ -30,19 +30,19 @@ async function seed() {
     const hash = await bcrypt.hash('Company@2026!', 12);
     let created = 0;
 
-    for (const t of tenants) {
-        const tenantId = uuidv4();
+    for (const t of orgs) {
+        const orgId = uuidv4();
         try {
             await db.prepare(`INSERT INTO organizations (id, name, slug, plan, feature_flags, status, created_by) VALUES (?,?,?,?,?,?,?)`)
-                .run(tenantId, t.name, t.slug, t.plan, JSON.stringify(t.flags), 'active', adminId);
+                .run(orgId, t.name, t.slug, t.plan, JSON.stringify(t.flags), 'active', adminId);
 
-            // Create a company admin user for this tenant
+            // Create a company admin user for this org
             const userId = uuidv4();
             const username = t.slug.replace(/-/g, '_') + '_admin';
             const email = `admin@${t.slug.replace(/-/g, '')}.com`;
             try {
                 await db.prepare(`INSERT INTO users (id, username, email, password_hash, role, user_type, company, org_id) VALUES (?,?,?,?,?,?,?,?)`)
-                    .run(userId, username, email, hash, 'admin', 'tenant', t.name, tenantId);
+                    .run(userId, username, email, hash, 'admin', 'org', t.name, orgId);
             } catch (e) { /* user might already exist */ }
 
             created++;
@@ -56,7 +56,7 @@ async function seed() {
         }
     }
 
-    console.log(`\n🎯 Done: ${created} tenants created`);
+    console.log(`\n🎯 Done: ${created} orgs created`);
     console.log('🔐 Company admin password: Company@2026!');
     process.exit(0);
 }

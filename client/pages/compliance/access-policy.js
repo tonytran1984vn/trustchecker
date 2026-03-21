@@ -12,7 +12,7 @@ export function renderPage() {
     { name: 'JWT Session Management', type: 'Authentication', description: 'Short-lived access tokens + secure refresh tokens. Sessions expire after inactivity.', status: 'active', enforced: true },
     { name: 'Multi-Factor Authentication', type: 'Authentication', description: 'TOTP + WebAuthn/Passkey support for elevated account security', status: 'active', enforced: false },
     { name: 'Permission-Based API Access', type: 'Authorization', description: 'Fine-grained permissions: compliance:manage, products:write, risk:view, etc.', status: 'active', enforced: true },
-    { name: 'Organization Data Isolation', type: 'Data Access', description: 'org_id filtering on all queries ensures cross-tenant data isolation', status: 'active', enforced: true },
+    { name: 'Organization Data Isolation', type: 'Data Access', description: 'org_id filtering on all queries ensures cross-org data isolation', status: 'active', enforced: true },
     { name: 'Rate Limiting', type: 'Protection', description: 'Per-route rate limits to prevent abuse. API: 100/15min, Auth: 5/15min', status: 'active', enforced: true },
     { name: 'IP-Based Session Tracking', type: 'Monitoring', description: 'New IP login detection with audit logging', status: 'active', enforced: true },
   ];
