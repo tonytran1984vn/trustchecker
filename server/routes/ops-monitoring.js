@@ -11,6 +11,7 @@ const { orgGuard } = require('../middleware/org-middleware');
 const opsEngine = require('../engines/platform-ops-engine').opsMonitoring;
 const { v4: uuidv4 } = require('uuid');
 const { withTransaction } = require('../middleware/transaction');
+const logger = require('../lib/logger');
 router.use(authMiddleware);
 router.use(orgGuard());
 
@@ -51,7 +52,7 @@ router.post('/incidents', requirePermission('risk:view'), async (req, res) => {
                     result.hash
                 );
         } catch (dbErr) {
-            console.warn('[ops] DB persist failed:', dbErr.message);
+            logger.warn('[ops] DB persist failed:', dbErr.message);
         }
         res.status(201).json(result);
     } catch (err) {
@@ -86,7 +87,7 @@ router.get('/incidents', async (req, res) => {
             return res.json({ title: 'Ops Incidents', total: incidents.length, incidents });
         } catch (dbErr) {
             // DB table might not exist — fall back to in-memory engine
-            console.warn('[ops] DB query failed, using in-memory:', dbErr.message);
+            logger.warn('[ops] DB query failed, using in-memory:', dbErr.message);
             const incidents = opsEngine.getAllIncidents(limit);
             return res.json({ title: 'Ops Incidents', total: incidents.length, incidents });
         }
@@ -145,7 +146,7 @@ router.put('/incidents/:id', requirePermission('risk:view'), async (req, res) =>
         await db.run(sql, params);
         res.json({ ok: true, id: req.params.id, status: status || 'unchanged' });
     } catch (err) {
-        console.error('[ops] Update incident error:', err.message);
+        logger.error('[ops] Update incident error:', err.message);
         res.status(500).json({ error: 'Update failed' });
     }
 });
@@ -163,7 +164,7 @@ router.delete('/incidents/:id', requirePermission('risk:view'), async (req, res)
         await db.run(sql, params);
         res.json({ ok: true, deleted: req.params.id });
     } catch (err) {
-        console.error('[ops] Delete incident error:', err.message);
+        logger.error('[ops] Delete incident error:', err.message);
         res.status(500).json({ error: 'Delete failed' });
     }
 });

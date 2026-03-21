@@ -505,7 +505,7 @@ router.put('/settings', async (req, res) => {
 
         res.json({ message: 'System settings updated', settings: sanitized });
     } catch (e) {
-        console.error('Settings error:', e);
+        logger.error('Settings error:', e);
         res.status(500).json({ error: 'Failed to update settings' });
     }
 });
@@ -580,12 +580,13 @@ function getDBSize() {
         const fs = require('fs');
         const path = require('path');
         const { safeParse } = require('../utils/safe-json');
+const logger = require('../lib/logger');
         const dbPath = path.join(__dirname, '..', 'data', 'trustchecker.db');
         if (fs.existsSync(dbPath)) {
             return Math.round((fs.statSync(dbPath).size / 1024 / 1024) * 100) / 100;
         }
     } catch (e) {
-        console.warn('[admin] getDBSize failed:', e.message);
+        logger.warn('[admin] getDBSize failed:', e.message);
     }
     return 0;
 }

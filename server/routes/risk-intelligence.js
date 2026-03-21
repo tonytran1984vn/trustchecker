@@ -25,6 +25,7 @@ const crypto = require('crypto');
 let authMw;
 try {
     authMw = require('../auth').authMiddleware;
+const logger = require('../lib/logger');
 } catch (e) {
     authMw = (req, res, next) => next();
 }
@@ -53,7 +54,7 @@ async function riskIntelAuth(req, res, next) {
                 return next();
             }
         } catch (e) {
-            console.error('[risk-intel-auth]', e.message);
+            logger.error('[risk-intel-auth]', e.message);
         }
         return res.status(401).json({ error: 'Invalid API key' });
     }
@@ -111,7 +112,7 @@ router.post('/trust/share', async (req, res) => {
 
         res.json({ success: true, ...result });
     } catch (err) {
-        console.error('Trust share error:', err.message);
+        logger.error('Trust share error:', err.message);
         res.status(500).json({ error: 'Failed to share trust data' });
     }
 });
@@ -197,7 +198,7 @@ router.post('/org/credibility', async (req, res) => {
 
         res.json(result);
     } catch (err) {
-        console.error('Org credibility error:', err.message);
+        logger.error('Org credibility error:', err.message);
         res.status(500).json({ error: 'Failed to update org credibility' });
     }
 });
@@ -481,7 +482,7 @@ router.post('/keys/create', async (req, res) => {
             warning: 'Save this key — it cannot be retrieved again',
         });
     } catch (err) {
-        console.error('Key create error:', err.message);
+        logger.error('Key create error:', err.message);
         res.status(500).json({ error: 'Failed to create API key' });
     }
 });

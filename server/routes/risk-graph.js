@@ -9,7 +9,10 @@ const { authMiddleware, requirePermission } = require('../auth');
 const riskGraph = require('../engines/core/risk-graph-engine');
 const { cacheMiddleware } = require('../cache');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // GET /behavior — Behavioral risk analysis
 router.get('/behavior', cacheMiddleware(120), async (req, res) => {
@@ -40,7 +43,7 @@ router.get('/behavior', cacheMiddleware(120), async (req, res) => {
             : await db.all('SELECT * FROM scan_events ORDER BY created_at DESC LIMIT 500').catch(() => []);
         res.json(riskGraph.analyzeBehavior({ shipments, credits, partners, scans, routes: [] }));
     } catch (err) {
-        console.error('Behavioral analysis error:', err.message, err.stack);
+        logger.error('Behavioral analysis error:', err.message, err.stack);
         res.status(500).json({ error: 'Behavioral analysis failed' });
     }
 });
@@ -186,7 +189,7 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
             total_credits: credits.length,
         });
     } catch (err) {
-        console.error('Dashboard error:', err.message, err.stack);
+        logger.error('Dashboard error:', err.message, err.stack);
         res.status(500).json({ error: 'Dashboard failed' });
     }
 });
@@ -549,7 +552,7 @@ router.get('/risk-analytics', cacheMiddleware(120), async (req, res) => {
             heatmap,
         });
     } catch (err) {
-        console.error('risk-analytics err:', err);
+        logger.error('risk-analytics err:', err);
         res.status(500).json({ error: 'Risk analytics failed' });
     }
 });

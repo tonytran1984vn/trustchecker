@@ -599,7 +599,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             response_time_ms: responseTime,
         });
     } catch (err) {
-        console.error('QR Validation error:', err);
+        logger.error('QR Validation error:', err);
         res.status(500).json({ error: 'Validation failed', response_time_ms: Date.now() - startTime });
     }
 });
@@ -686,7 +686,7 @@ router.post('/generate', async (req, res) => {
             product: { id: product.id, name: product.name, sku: product.sku },
         });
     } catch (err) {
-        console.error('QR Generate error:', err);
+        logger.error('QR Generate error:', err);
         res.status(500).json({ error: 'Failed to generate codes' });
     }
 });
@@ -760,7 +760,7 @@ router.post('/claim', async (req, res) => {
             message: '✅ Đăng ký sở hữu thành công! Bạn là chủ sở hữu hợp pháp của sản phẩm này.',
         });
     } catch (err) {
-        console.error('Ownership claim error:', err);
+        logger.error('Ownership claim error:', err);
         res.status(500).json({ error: 'Claim failed' });
     }
 });
@@ -837,7 +837,7 @@ router.get('/scan-history', async (req, res) => {
         const scans = await db.prepare(query).all(...params);
         res.json({ scans });
     } catch (err) {
-        console.error('Scan history error:', err);
+        logger.error('Scan history error:', err);
         res.status(500).json({ error: 'Failed to fetch scan history' });
     }
 });
@@ -859,7 +859,7 @@ router.get('/fraud-alerts', async (req, res) => {
 
         res.json({ alerts });
     } catch (err) {
-        console.error('Fraud alerts error:', err);
+        logger.error('Fraud alerts error:', err);
         res.status(500).json({ error: 'Failed to fetch fraud alerts' });
     }
 });
@@ -871,7 +871,7 @@ router.get('/blockchain', async (req, res) => {
         const recent = await blockchainEngine.getRecent(20);
         res.json({ stats, recent_seals: recent });
     } catch (err) {
-        console.error('Blockchain error:', err);
+        logger.error('Blockchain error:', err);
         res.status(500).json({ error: 'Failed to fetch blockchain data' });
     }
 });
@@ -882,7 +882,7 @@ router.get('/blockchain/verify', async (req, res) => {
         const verification = await blockchainEngine.verifyChain();
         res.json(verification);
     } catch (err) {
-        console.error('Blockchain verify error:', err);
+        logger.error('Blockchain verify error:', err);
         res.status(500).json({ error: 'Verification failed' });
     }
 });
@@ -996,7 +996,7 @@ router.get('/dashboard-stats', async (req, res) => {
             cie_anchored_proofs: cieAnchoredProofs,
         });
     } catch (err) {
-        console.error('Dashboard stats error:', err);
+        logger.error('Dashboard stats error:', err);
         res.status(500).json({ error: 'Failed to fetch dashboard stats' });
     }
 });
@@ -1007,7 +1007,7 @@ router.get('/events', async (req, res) => {
         const events = eventBus.getRecentEvents(50);
         res.json({ events });
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -1047,7 +1047,7 @@ router.get('/camera-config', async (req, res) => {
             ],
         });
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -1116,7 +1116,7 @@ router.post('/mobile-scan', bulkScanDetector, replayDetector, validate(schemas.q
                     } catch (_) {}
                 }
             } catch (logErr) {
-                console.error('TC21-LOG:', logErr.message);
+                logger.error('TC21-LOG:', logErr.message);
             }
 
             return res.json({
@@ -1220,6 +1220,7 @@ router.post('/mobile-scan', bulkScanDetector, replayDetector, validate(schemas.q
 // No auth required. Rate limited per IP. Returns limited data + signup CTA.
 const rateLimit = require('express-rate-limit');
 const { withTransaction } = require('../middleware/transaction');
+const logger = require('../lib/logger');
 const publicCheckLimiter = rateLimit({
     windowMs: 60_000,
     max: 10,

@@ -12,6 +12,7 @@ const { orgGuard } = require('../middleware/org-middleware');
 const { requireScope, scopeFilter } = require('../auth/scope-engine');
 const engineClient = require('../engines/infrastructure/engine-client');
 const { eventBus } = require('../events');
+const logger = require('../lib/logger');
 
 const router = express.Router();
 
@@ -100,7 +101,7 @@ router.post('/', requirePermission('partner:create'), async (req, res) => {
         eventBus.emitEvent('PartnerOnboarded', { id, name, type: type || 'distributor' });
         res.status(201).json({ id, name, api_key: apiKey, kyc_status: 'pending' });
     } catch (err) {
-        console.error('Onboard partner error:', err);
+        logger.error('Onboard partner error:', err);
         res.status(500).json({ error: 'Failed to onboard partner' });
     }
 });
@@ -159,7 +160,7 @@ router.get('/:id', requireScope('supplier', 'id'), async (req, res) => {
             events,
         });
     } catch (err) {
-        console.error('Partner detail error:', err);
+        logger.error('Partner detail error:', err);
         res.status(500).json({ error: 'Failed to fetch partner' });
     }
 });

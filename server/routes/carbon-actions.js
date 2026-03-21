@@ -15,8 +15,11 @@ const { authMiddleware } = require('../auth');
 const { cacheMiddleware } = require('../cache');
 const crypto = require('crypto');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── Init table (PostgreSQL-compatible) ────────────────────────────────────────
 (async () => {
@@ -46,7 +49,7 @@ router.use(authMiddleware);
             await db.prisma.$executeRawUnsafe(sql).catch(() => {});
         }
     } catch (e) {
-        console.error('[carbon-actions] Table init:', e.message);
+        logger.error('[carbon-actions] Table init:', e.message);
     }
 })();
 
@@ -92,7 +95,7 @@ router.get('/', cacheMiddleware(10), async (req, res) => {
 
         res.json({ actions, stats });
     } catch (err) {
-        console.error('[carbon-actions] List error:', err);
+        logger.error('[carbon-actions] List error:', err);
         res.status(500).json({ error: 'Failed to list actions' });
     }
 });
@@ -112,7 +115,7 @@ router.get('/my', async (req, res) => {
             .catch(() => []);
         res.json({ actions, total: actions.length });
     } catch (err) {
-        console.error('[carbon-actions] My actions error:', err);
+        logger.error('[carbon-actions] My actions error:', err);
         res.status(500).json({ error: 'Failed to get my actions' });
     }
 });
@@ -210,7 +213,7 @@ router.get('/suggestions', cacheMiddleware(120), async (req, res) => {
 
         res.json({ suggestions: filtered, total: filtered.length });
     } catch (err) {
-        console.error('[carbon-actions] Suggestions error:', err);
+        logger.error('[carbon-actions] Suggestions error:', err);
         res.json({ suggestions: [], total: 0 });
     }
 });
@@ -263,7 +266,7 @@ router.post('/', async (req, res) => {
 
         res.status(201).json({ action, message: 'Action created' });
     } catch (err) {
-        console.error('[carbon-actions] Create error:', err);
+        logger.error('[carbon-actions] Create error:', err);
         res.status(500).json({ error: 'Failed to create action' });
     }
 });
@@ -316,7 +319,7 @@ router.patch('/:id', async (req, res) => {
 
         res.json({ action, message: 'Action updated' });
     } catch (err) {
-        console.error('[carbon-actions] Update error:', err);
+        logger.error('[carbon-actions] Update error:', err);
         res.status(500).json({ error: 'Failed to update action' });
     }
 });
@@ -335,7 +338,7 @@ router.delete('/:id', async (req, res) => {
         await db.run(`DELETE FROM carbon_actions WHERE id = ?`, [id]);
         res.json({ message: 'Action deleted' });
     } catch (err) {
-        console.error('[carbon-actions] Delete error:', err);
+        logger.error('[carbon-actions] Delete error:', err);
         res.status(500).json({ error: 'Failed to delete action' });
     }
 });

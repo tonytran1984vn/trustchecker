@@ -39,6 +39,7 @@ function validateProductQuality(body) {
 
 // ─── Auth: all product routes require authentication ─────────────────────────
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /api/products ───────────────────────────────────────────────────────
 router.get('/', async (req, res) => {
@@ -79,7 +80,7 @@ router.get('/', async (req, res) => {
 
         res.json({ products, total: total.count });
     } catch (err) {
-        console.error('Get products error:', err);
+        logger.error('Get products error:', err);
         res.status(500).json({ error: 'Failed to fetch products' });
     }
 });
@@ -114,7 +115,7 @@ router.get('/generation-history', authMiddleware, async (req, res) => {
 
         res.json({ history });
     } catch (err) {
-        console.error('Generation history error:', err.message, '\nSQL details:', err.meta || '');
+        logger.error('Generation history error:', err.message, '\nSQL details:', err.meta || '');
         res.status(500).json({ error: 'Failed to fetch generation history', detail: err.message });
     }
 });
@@ -141,7 +142,7 @@ router.get('/:id', async (req, res) => {
 
         res.json({ product, qr_codes: qrCodes, recent_scans: recentScans, trust_history: trustHistory });
     } catch (err) {
-        console.error('Get product error:', err);
+        logger.error('Get product error:', err);
         res.status(500).json({ error: 'Failed to fetch product' });
     }
 });
@@ -467,13 +468,13 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
                 ]
             );
         } catch (auditErr) {
-            console.error('[Audit]', auditErr.message);
+            logger.error('[Audit]', auditErr.message);
         }
         // ATK-02-SEAL: Seal product creation into blockchain
         try {
             await blockchainEngine.seal('ProductCreated', productId, { sku, name, manufacturer, origin_country });
         } catch (e) {
-            console.error('[ATK-02-SEAL]', e.message);
+            logger.error('[ATK-02-SEAL]', e.message);
         }
         eventBus.emitEvent(EVENT_TYPES.PRODUCT_REGISTERED, {
             product_id: productId,
@@ -494,7 +495,7 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
             qr_code: { id: qrCodeId, qr_data: qrData, qr_image_base64: qrImageBase64 },
         });
     } catch (err) {
-        console.error('Create product error:', err);
+        logger.error('Create product error:', err);
         res.status(500).json({ error: 'Failed to create product' });
     }
 });
@@ -525,7 +526,7 @@ router.put('/:id', authMiddleware, requirePermission('product:update'), async (r
 
         res.json({ message: 'Product updated', id: req.params.id });
     } catch (err) {
-        console.error('Update product error:', err);
+        logger.error('Update product error:', err);
         res.status(500).json({ error: 'Failed to update product' });
     }
 });
@@ -633,7 +634,7 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
                 'Print these codes and attach to products. Customers can verify at /check or scan the QR code.',
         });
     } catch (err) {
-        console.error('Generate code error:', err);
+        logger.error('Generate code error:', err);
         res.status(500).json({ error: 'Failed to generate codes' });
     }
 });
@@ -681,7 +682,7 @@ router.get('/:id/codes', authMiddleware, async (req, res) => {
             codes,
         });
     } catch (err) {
-        console.error('Get product codes error:', err);
+        logger.error('Get product codes error:', err);
         res.status(500).json({ error: 'Failed to fetch product codes' });
     }
 });
@@ -747,7 +748,7 @@ router.delete('/codes/:codeId', authMiddleware, requirePermission('product:delet
             deleted_by: req.user.username,
         });
     } catch (err) {
-        console.error('Delete code error:', err);
+        logger.error('Delete code error:', err);
         res.status(500).json({ error: 'Failed to delete code' });
     }
 });
@@ -776,7 +777,7 @@ router.get('/codes/deletion-history', authMiddleware, requirePermission('product
         const history = await db.prepare(query).all(...params);
         res.json({ deletion_history: history, total: history.length });
     } catch (err) {
-        console.error('Deletion history error:', err);
+        logger.error('Deletion history error:', err);
         res.status(500).json({ error: 'Failed to fetch deletion history' });
     }
 });
@@ -848,6 +849,8 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
             const PDFDocument = require('pdfkit');
             const { withTransaction } = require('../middleware/transaction');
             const { checkAbuse } = require('../middleware/abuse-detection');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
             const doc = new PDFDocument({ size: 'A4', margin: 40 });
             const buffers = [];
 
@@ -961,7 +964,7 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
 
         return res.status(400).json({ error: 'Invalid format. Use: csv or pdf' });
     } catch (err) {
-        console.error('Export codes error:', err);
+        logger.error('Export codes error:', err);
         res.status(500).json({ error: 'Failed to export QR codes' });
     }
 });

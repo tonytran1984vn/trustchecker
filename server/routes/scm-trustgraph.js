@@ -8,11 +8,14 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/infrastructure/engine-client');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 const router = express.Router();
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /api/scm/graph/nodes – All supply chain nodes ───────────────────────
 router.get('/nodes', async (req, res) => {
@@ -139,7 +142,7 @@ router.get('/analysis', async (req, res) => {
             total_edges: edges.length,
         });
     } catch (err) {
-        console.error('Graph analysis error:', err);
+        logger.error('Graph analysis error:', err);
         res.status(500).json({ error: 'Analysis failed' });
     }
 });

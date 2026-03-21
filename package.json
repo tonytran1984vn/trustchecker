@@ -1,7 +1,7 @@
 {
   "name": "trustchecker",
   "version": "9.4.1",
-  "description": "Enterprise Digital Trust Infrastructure – Real-time QR Validation & Fraud Detection",
+  "description": "Enterprise Digital Trust Infrastructure \u2013 Real-time QR Validation & Fraud Detection",
   "main": "server/index.js",
   "scripts": {
     "dev": "node server/index.js",
@@ -17,7 +17,8 @@
     "migrate:sqlite-to-pg": "node scripts/migrate-to-postgres.js",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f"
+    "docker:logs": "docker compose logs -f",
+    "prepare": "husky"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^6.19.2",
@@ -50,7 +51,9 @@
     "eslint": "^10.1.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.4.0",
+    "husky": "^9.1.7",
     "jest": "^30.3.0",
+    "lint-staged": "^16.4.0",
     "prettier": "^3.8.1",
     "prisma": "^6.19.2",
     "supertest": "^7.2.2"
@@ -68,5 +71,11 @@
     ],
     "testTimeout": 30000,
     "globalSetup": "./tests/globalSetup.js"
+  },
+  "lint-staged": {
+    "server/**/*.js": [
+      "prettier --write",
+      "eslint --fix"
+    ]
   }
 }

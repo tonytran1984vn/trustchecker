@@ -9,8 +9,10 @@ const express = require('express');
 const router = express.Router();
 const { authMiddleware } = require('../auth');
 const engine = require('../engines/core/network-intelligence-engine');
+const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 router.get('/supplier/:name', async function (req, res) {
     try {

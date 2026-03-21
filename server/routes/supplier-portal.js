@@ -11,6 +11,7 @@ var express = require('express');
 var router = express.Router();
 var db = require('../db');
 var { authMiddleware } = require('../auth');
+var { orgGuard } = require('../middleware/org-middleware');
 
 // Public: view published supplier profile
 router.get('/:slug', async function (req, res) {

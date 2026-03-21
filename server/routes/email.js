@@ -9,6 +9,7 @@ const { parsePagination } = require('../middleware/pagination');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const emailTemplates = require('../engines/infrastructure/emailTemplates');
 const { withTransaction } = require('../middleware/transaction');
+const logger = require('../lib/logger');
 
 router.use(authMiddleware);
 
@@ -17,7 +18,7 @@ router.get('/templates', async (req, res) => {
     try {
         res.json({ templates: emailTemplates.listTemplates() });
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -36,7 +37,7 @@ router.get('/templates/:name/preview', requirePermission('notification:manage'),
 
         res.json({ template: req.params.name, html, preview: true });
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -91,7 +92,7 @@ router.post('/send', requirePermission('notification:manage'), async (req, res) 
                 return res.status(400).json({ error: 'Unknown template' });
         }
     } catch (e) {
-        console.error('Email template error:', e.message);
+        logger.error('Email template error:', e.message);
         return res.status(400).json({ error: 'Template rendering failed' });
     }
 
@@ -117,7 +118,7 @@ router.get('/config', requirePermission('notification:manage'), async (req, res)
             note: 'Set up SMTP credentials in Admin → Integrations → Email/SMTP to enable real email delivery',
         });
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

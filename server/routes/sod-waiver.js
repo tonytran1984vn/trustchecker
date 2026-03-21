@@ -18,6 +18,8 @@ const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
 const { SOD_CONFLICTS } = require('../auth/rbac');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 // All routes require auth + role management permission
 router.use(authMiddleware, requirePermission('role:create'));
@@ -68,7 +70,7 @@ router.get('/waivers', async (req, res) => {
 
         res.json({ waivers, total: waivers.length });
     } catch (err) {
-        console.error('[sod-waiver] List error:', err);
+        logger.error('[sod-waiver] List error:', err);
         res.status(500).json({ error: 'Failed to load waivers' });
     }
 });
@@ -140,7 +142,7 @@ router.post('/waivers', async (req, res) => {
 
         res.json({ success: true, waiver: newWaiver, total: config.waivers.length });
     } catch (err) {
-        console.error('[sod-waiver] Create error:', err);
+        logger.error('[sod-waiver] Create error:', err);
         res.status(500).json({ error: 'Failed to create waiver' });
     }
 });
@@ -188,7 +190,7 @@ router.delete('/waivers', async (req, res) => {
 
         res.json({ success: true, remaining: config.waivers.length });
     } catch (err) {
-        console.error('[sod-waiver] Delete error:', err);
+        logger.error('[sod-waiver] Delete error:', err);
         res.status(500).json({ error: 'Failed to delete waiver' });
     }
 });

@@ -8,11 +8,14 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission, requirePlatformAdmin } = require('../auth');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 const router = express.Router();
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
+router.use(orgGuard());
 
 /**
  * Classification logic:
@@ -104,7 +107,7 @@ router.get('/duplicates', authMiddleware, async (req, res) => {
             })),
         });
     } catch (err) {
-        console.error('List duplicates error:', err);
+        logger.error('List duplicates error:', err);
         res.json({ classifications: [] });
     }
 });
@@ -177,7 +180,7 @@ router.get('/duplicates/stats', authMiddleware, async (req, res) => {
             total_scans: totalScans,
         });
     } catch (err) {
-        console.error('Duplicate stats error:', err);
+        logger.error('Duplicate stats error:', err);
         res.json({ total: 0, breakdown: {} });
     }
 });
@@ -223,7 +226,7 @@ router.post('/duplicates/classify', authMiddleware, async (req, res) => {
 
         res.status(201).json({ id, ...result, time_gap_seconds: timeGap });
     } catch (err) {
-        console.error('Classify duplicate error:', err);
+        logger.error('Classify duplicate error:', err);
         res.status(500).json({ error: 'Failed to classify duplicate' });
     }
 });
@@ -247,7 +250,7 @@ router.patch('/duplicates/:id', authMiddleware, requirePermission('product:updat
 
         res.json({ id: req.params.id, classification, status: 'reclassified' });
     } catch (err) {
-        console.error('Reclassify error:', err);
+        logger.error('Reclassify error:', err);
         res.status(500).json({ error: 'Failed to reclassify' });
     }
 });
@@ -293,7 +296,7 @@ router.get('/benchmark', authMiddleware, requirePlatformAdmin(), async (req, res
             model: model || { version: 'N/A', fp_rate: 'N/A', tp_rate: 'N/A' },
         });
     } catch (err) {
-        console.error('Benchmark error:', err);
+        logger.error('Benchmark error:', err);
         res.status(500).json({ error: 'Failed to generate benchmark' });
     }
 });

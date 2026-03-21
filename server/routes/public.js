@@ -54,7 +54,7 @@ router.get('/stats', async (req, res) => {
             last_updated: new Date().toISOString(),
         });
     } catch (err) {
-        console.error('Public stats error:', err);
+        logger.error('Public stats error:', err);
         res.status(500).json({ error: 'Failed to fetch statistics' });
     }
 });
@@ -75,7 +75,7 @@ router.get('/scan-trends', async (req, res) => {
      LIMIT 1000`);
         res.json(trends);
     } catch (err) {
-        console.error('Scan trends error:', err);
+        logger.error('Scan trends error:', err);
         res.status(500).json({ error: 'Failed to fetch scan trends' });
     }
 });
@@ -100,7 +100,7 @@ router.get('/trust-distribution', async (req, res) => {
      LIMIT 1000`);
         res.json(dist);
     } catch (err) {
-        console.error('Trust distribution error:', err);
+        logger.error('Trust distribution error:', err);
         res.status(500).json({ error: 'Failed to fetch trust distribution' });
     }
 });
@@ -116,7 +116,7 @@ router.get('/scan-results', async (req, res) => {
      LIMIT 1000`);
         res.json(results);
     } catch (err) {
-        console.error('Product check error:', err);
+        logger.error('Product check error:', err);
         res.status(500).json({ error: 'Failed to check product' });
     }
 });
@@ -132,7 +132,7 @@ router.get('/alert-severity', async (req, res) => {
     `);
         res.json(severity);
     } catch (err) {
-        console.error('Public verify error:', err);
+        logger.error('Public verify error:', err);
         res.status(500).json({ error: 'Failed to verify product' });
     }
 });
@@ -201,7 +201,7 @@ router.get('/api/v1/stats', corsHeaders, async (req, res) => {
             documentation: '/api/docs',
         });
     } catch (err) {
-        console.error('Public API verify error:', err);
+        logger.error('Public API verify error:', err);
         res.status(500).json({ api_version: 'v1', status: 'error', error: 'Verification failed' });
     }
 });
@@ -258,7 +258,7 @@ router.get('/api/v1/products/:id/trust', corsHeaders, async (req, res) => {
             timestamp: new Date().toISOString(),
         });
     } catch (err) {
-        console.error('Public API batch verify error:', err);
+        logger.error('Public API batch verify error:', err);
         res.status(500).json({ api_version: 'v1', status: 'error', error: 'Batch verification failed' });
     }
 });
@@ -332,7 +332,7 @@ router.get('/embed/widget', async (req, res) => {
         res.setHeader('Content-Security-Policy', "frame-ancestors 'self' *");
         res.send(html);
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -347,7 +347,7 @@ router.get('/embed/snippet', corsHeaders, async (req, res) => {
             documentation: '/api/docs',
         });
     } catch (e) {
-        console.error(e);
+        logger.error(e);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -375,7 +375,7 @@ router.get('/recently-verified', corsHeaders, async (req, res) => {
             timestamp: new Date().toISOString(),
         });
     } catch (err) {
-        console.error('Product lookup error:', err);
+        logger.error('Product lookup error:', err);
         res.status(500).json({ error: 'Failed to look up product' });
     }
 });
@@ -415,7 +415,7 @@ router.get('/search', corsHeaders, async (req, res) => {
             timestamp: new Date().toISOString(),
         });
     } catch (err) {
-        console.error('Manufacturer products error:', err);
+        logger.error('Manufacturer products error:', err);
         res.status(500).json({ error: 'Failed to fetch manufacturer products' });
     }
 });
@@ -457,7 +457,7 @@ router.get('/health', corsHeaders, async (req, res) => {
             last_check: new Date().toISOString(),
         });
     } catch (err) {
-        console.error('Recent scans error:', err);
+        logger.error('Recent scans error:', err);
         res.status(500).json({ error: 'Failed to fetch recent scans' });
     }
 });
@@ -511,6 +511,7 @@ router.post('/check', async (req, res) => {
         // Create scan event for this check
         const scanId = require('uuid').v4();
         const { withTransaction } = require('../middleware/transaction');
+const logger = require('../lib/logger');
         await db.run(
             `
             INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, ip_address, user_agent, result, scanned_at)
@@ -574,7 +575,7 @@ router.post('/check', async (req, res) => {
             response_time_ms: Date.now() - startTime,
         });
     } catch (err) {
-        console.error('Public check error:', err);
+        logger.error('Public check error:', err);
         res.status(500).json({ error: 'Lỗi hệ thống, vui lòng thử lại' });
     }
 });

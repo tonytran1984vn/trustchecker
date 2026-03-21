@@ -47,7 +47,7 @@ router.post('/webhook', async (req, res) => {
         } else if (process.env.NODE_ENV === 'production') {
             return res.status(500).json({ error: 'Webhook secret not configured' });
         } else {
-            console.warn('⚠️  WEBHOOK_SECRET not set — accepting unsigned webhook in dev mode');
+            logger.warn('⚠️  WEBHOOK_SECRET not set — accepting unsigned webhook in dev mode');
         }
 
         const { event_type, data } = req.body;
@@ -69,7 +69,7 @@ router.post('/webhook', async (req, res) => {
 
         res.json({ received: true, event_id: id, action });
     } catch (e) {
-        console.error('Webhook error:', e);
+        logger.error('Webhook error:', e);
         res.status(500).json({ error: 'Webhook processing failed' });
     }
 });
@@ -84,6 +84,7 @@ router.get('/pricing', async (req, res) => {
 });
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 const PLANS = pricing.PLANS;
 
@@ -692,7 +693,7 @@ router.put('/pricing', requireSuperAdmin(), async (req, res) => {
         const updated = await pricing.getPublicPricing();
         res.json({ message: 'Plan pricing updated', plans: updated.plans });
     } catch (e) {
-        console.error('[billing] Pricing update error:', e);
+        logger.error('[billing] Pricing update error:', e);
         safeError(res, 'Failed to update pricing', e);
     }
 });
@@ -721,7 +722,7 @@ router.put('/usage-pricing', requireSuperAdmin(), async (req, res) => {
         const updated = await pricing.getPublicPricing();
         res.json({ message: 'Usage pricing updated', usage_pricing: updated.usage_pricing });
     } catch (e) {
-        console.error('[billing] Usage pricing update error:', e);
+        logger.error('[billing] Usage pricing update error:', e);
         safeError(res, 'Failed to update usage pricing', e);
     }
 });
@@ -744,7 +745,7 @@ router.post('/pricing/reset', requireSuperAdmin(), async (req, res) => {
 
         res.json({ message: 'Pricing reset to defaults', plans: result.plans });
     } catch (e) {
-        console.error('[billing] Pricing reset error:', e);
+        logger.error('[billing] Pricing reset error:', e);
         safeError(res, 'Failed to reset pricing', e);
     }
 });
@@ -753,6 +754,8 @@ router.post('/pricing/reset', requireSuperAdmin(), async (req, res) => {
 // TRANSACTION FEE INFRASTRUCTURE (per-transaction pricing)
 // ═══════════════════════════════════════════════════════════════════
 const txFeeEngine = require('../engines/economics-engine').transactionFee;
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 // ─── GET /transaction-fees — Fee schedule ────────────────────────────
 router.get('/transaction-fees', (req, res) => {

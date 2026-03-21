@@ -15,11 +15,14 @@ const crypto = require('crypto');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 const router = express.Router();
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ═══════════════════════════════════════════════════════════
 // RISK CLASSIFICATION MATRIX — Who decides what is material?
@@ -168,7 +171,7 @@ router.post('/seal', authMiddleware, async (req, res) => {
             },
         });
     } catch (err) {
-        console.error('Create seal error:', err);
+        logger.error('Create seal error:', err);
         res.status(500).json({ error: 'Failed to create seal' });
     }
 });

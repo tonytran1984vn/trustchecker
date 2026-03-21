@@ -11,8 +11,11 @@ const router = require('express').Router();
 const db = require('../db');
 const { authMiddleware } = require('../auth');
 const { cacheMiddleware } = require('../cache');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /credit-score — Green Credit Score & Factors ────────────────
 router.get('/credit-score', cacheMiddleware(120), async (req, res) => {
@@ -74,7 +77,7 @@ router.get('/credit-score', cacheMiddleware(120), async (req, res) => {
             },
         });
     } catch (err) {
-        console.error('[green-finance] credit-score error:', err.message);
+        logger.error('[green-finance] credit-score error:', err.message);
         res.json({
             green_score: 0,
             green_grade: 'D',
@@ -122,7 +125,7 @@ router.get('/collateral', cacheMiddleware(120), async (req, res) => {
             max_borrowing_usd: max_borrowing,
         });
     } catch (err) {
-        console.error('[green-finance] collateral error:', err.message);
+        logger.error('[green-finance] collateral error:', err.message);
         res.json({
             title: 'Carbon Credit Collateral',
             total_tCO2e: 0,
@@ -174,7 +177,7 @@ router.get('/dashboard', cacheMiddleware(120), async (req, res) => {
             avg_green_score: 62,
         });
     } catch (err) {
-        console.error('[green-finance] dashboard error:', err.message);
+        logger.error('[green-finance] dashboard error:', err.message);
         res.json({
             total_credits: 0,
             total_tCO2e: 0,

@@ -8,11 +8,14 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { safeParse } = require('../utils/safe-json');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 const router = express.Router();
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /api/scm/routes – List all supply routes ────────────────────────────
 router.get('/routes', authMiddleware, async (req, res) => {
@@ -39,7 +42,7 @@ router.get('/routes', authMiddleware, async (req, res) => {
             }))
         );
     } catch (err) {
-        console.error('List supply routes error:', err);
+        logger.error('List supply routes error:', err);
         res.status(500).json({ error: 'Failed to fetch supply routes' });
     }
 });
@@ -69,7 +72,7 @@ router.post('/routes', authMiddleware, requireRole('admin', 'company_admin'), as
 
         res.status(201).json({ id, name, status: 'created' });
     } catch (err) {
-        console.error('Create supply route error:', err);
+        logger.error('Create supply route error:', err);
         res.status(500).json({ error: 'Failed to create supply route' });
     }
 });
@@ -96,7 +99,7 @@ router.get('/routes/:id', authMiddleware, async (req, res) => {
             breaches: breaches.map(b => ({ ...b, details: JSON.parse(b.details || '{}') })),
         });
     } catch (err) {
-        console.error('Get route error:', err);
+        logger.error('Get route error:', err);
         res.status(500).json({ error: 'Failed to fetch route' });
     }
 });
@@ -121,7 +124,7 @@ router.put('/routes/:id', authMiddleware, requirePermission('supply_chain:create
         );
         res.json({ id: req.params.id, status: 'updated' });
     } catch (err) {
-        console.error('Update route error:', err);
+        logger.error('Update route error:', err);
         res.status(500).json({ error: 'Failed to update route' });
     }
 });
@@ -140,7 +143,7 @@ router.get('/channel-rules', authMiddleware, async (req, res) => {
         }
         res.json(rules);
     } catch (err) {
-        console.error('List channel rules error:', err);
+        logger.error('List channel rules error:', err);
         res.status(500).json({ error: 'Failed to fetch channel rules' });
     }
 });
@@ -159,7 +162,7 @@ router.post('/channel-rules', authMiddleware, requirePermission('supply_chain:cr
         );
         res.status(201).json({ id, name, status: 'created' });
     } catch (err) {
-        console.error('Create channel rule error:', err);
+        logger.error('Create channel rule error:', err);
         res.status(500).json({ error: 'Failed to create channel rule' });
     }
 });
@@ -196,7 +199,7 @@ router.get('/route-breaches', authMiddleware, async (req, res) => {
         const breaches = await db.prepare(query).all(...params);
         res.json(breaches.map(b => ({ ...b, details: safeParse(b.details, {}) })));
     } catch (err) {
-        console.error('List breaches error:', err);
+        logger.error('List breaches error:', err);
         res.status(500).json({ error: 'Failed to fetch breaches' });
     }
 });
@@ -234,7 +237,7 @@ router.post('/route-breaches', authMiddleware, async (req, res) => {
         }
         res.status(201).json({ id, status: 'recorded' });
     } catch (err) {
-        console.error('Record breach error:', err);
+        logger.error('Record breach error:', err);
         res.status(500).json({ error: 'Failed to record breach' });
     }
 });
@@ -317,7 +320,7 @@ router.post('/routes/:id/simulate', authMiddleware, async (req, res) => {
                     : `${triggeredRules.length} rule(s) would trigger — review route or update rules`,
         });
     } catch (err) {
-        console.error('Route simulation error:', err);
+        logger.error('Route simulation error:', err);
         res.status(500).json({ error: 'Failed to simulate' });
     }
 });
@@ -390,7 +393,7 @@ router.get('/routes/:id/replay', authMiddleware, async (req, res) => {
             timeline,
         });
     } catch (err) {
-        console.error('Route replay error:', err);
+        logger.error('Route replay error:', err);
         res.status(500).json({ error: 'Failed to replay route' });
     }
 });
@@ -459,7 +462,7 @@ router.get('/integrity-index', authMiddleware, async (req, res) => {
             index,
         });
     } catch (err) {
-        console.error('Integrity index error:', err);
+        logger.error('Integrity index error:', err);
         res.status(500).json({ error: 'Failed to calculate integrity index' });
     }
 });

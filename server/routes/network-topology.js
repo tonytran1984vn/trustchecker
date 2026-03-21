@@ -13,6 +13,7 @@ const network = require('../engines/intelligence/network-topology-engine');
 const { v4: uuidv4 } = require('uuid');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ═══════════════════════════════════════════════════════════════════
 // Constitutional enforcement + audit logging (shared with infra-maturity)
@@ -29,7 +30,7 @@ function logConstitutionalAction(req, action, result) {
         reason: result.reason || null,
         charter: result.charter || null,
     };
-    console.log(`[CONSTITUTIONAL-AUDIT] ${JSON.stringify(entry)}`);
+    logger.info(`[CONSTITUTIONAL-AUDIT] ${JSON.stringify(entry)}`);
     try {
         const db = require('../db');
         db.prepare(
@@ -56,6 +57,8 @@ function requireConstitutionalWithAudit(action) {
         if (!req.user) return res.status(401).json({ error: 'Authentication required' });
         const constitutionalRBAC = require('../engines/governance-module').constitutionalRbac;
         const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
         const result = constitutionalRBAC.enforce(req.user.role, action);
         logConstitutionalAction(req, action, result);
         if (!result.allowed) {

@@ -9,8 +9,11 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET / — List user notifications ────────────────────────
 router.get('/', async (req, res) => {
@@ -37,7 +40,7 @@ router.get('/', async (req, res) => {
         try {
             rows = await db.all(sql, params);
         } catch (e) {
-            console.error('[Notifications] query error:', e.message);
+            logger.error('[Notifications] query error:', e.message);
         }
 
         const notifications = (rows || []).map(r => {

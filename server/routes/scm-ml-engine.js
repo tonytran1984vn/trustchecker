@@ -9,11 +9,14 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { safeParse } = require('../utils/safe-json');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 const router = express.Router();
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ═══════════════════════════════════════════════════════════
 // FEATURE STORE
@@ -31,7 +34,7 @@ router.get('/features', authMiddleware, async (req, res) => {
             }))
         );
     } catch (err) {
-        console.error('List features error:', err);
+        logger.error('List features error:', err);
         res.status(500).json({ error: 'Failed to fetch features' });
     }
 });
@@ -58,7 +61,7 @@ router.post('/features', authMiddleware, requirePermission('risk_model:manage'),
         );
         res.status(201).json({ id, name, status: 'active' });
     } catch (err) {
-        console.error('Create feature error:', err);
+        logger.error('Create feature error:', err);
         res.status(500).json({ error: 'Failed to create feature' });
     }
 });
@@ -96,7 +99,7 @@ router.get('/performance', authMiddleware, async (req, res) => {
             thresholds: JSON.parse(latest.thresholds || '[]'),
         });
     } catch (err) {
-        console.error('Get performance error:', err);
+        logger.error('Get performance error:', err);
         res.status(500).json({ error: 'Failed to fetch performance' });
     }
 });
@@ -173,7 +176,7 @@ router.post('/performance', authMiddleware, requirePermission('risk_model:manage
 
         res.status(201).json({ id, model_version, auc_roc, status: 'recorded' });
     } catch (err) {
-        console.error('Record performance error:', err);
+        logger.error('Record performance error:', err);
         res.status(500).json({ error: 'Failed to record performance' });
     }
 });
@@ -249,7 +252,7 @@ router.post('/training', authMiddleware, requirePermission('risk_model:manage'),
 
         res.status(201).json({ id, run_id: runId, status: 'running', message: 'Training pipeline triggered' });
     } catch (err) {
-        console.error('Trigger training error:', err);
+        logger.error('Trigger training error:', err);
         res.status(500).json({ error: 'Failed to trigger training' });
     }
 });

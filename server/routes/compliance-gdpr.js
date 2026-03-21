@@ -17,6 +17,7 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /policies — List data retention policies ───────────
 router.get('/policies', requirePermission('compliance:manage'), async (req, res) => {
@@ -329,7 +330,7 @@ router.get('/gdpr/export', async (req, res) => {
                     orgId
                 );
         } catch (e) {
-            console.warn('[gdpr] audit log insert failed:', e.message);
+            logger.warn('[gdpr] audit log insert failed:', e.message);
         }
 
         res.json(exportData);
@@ -353,6 +354,8 @@ router.delete('/gdpr/delete', async (req, res) => {
         if (!user) return res.status(404).json({ error: 'User not found' });
 
         const bcrypt = require('bcryptjs');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
         const passwordValid = await bcrypt.compare(password, user.password_hash);
         if (!passwordValid) {
             return res.status(401).json({ error: 'Invalid password' });
@@ -562,7 +565,7 @@ router.get('/stats', async (req, res) => {
                     )
                 )?.c || 0;
         } catch (e) {
-            console.warn('[compliance] GDPR stats query skipped:', e.message);
+            logger.warn('[compliance] GDPR stats query skipped:', e.message);
         }
 
         res.json({

@@ -8,11 +8,14 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/infrastructure/engine-client');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 const router = express.Router();
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /api/scm/inventory – Stock levels ───────────────────────────────────
 router.get('/', async (req, res) => {
@@ -84,7 +87,7 @@ router.post('/adjust', authMiddleware, requirePermission('inventory:create'), as
 
         res.json({ message: 'Stock adjusted', inventory: inv });
     } catch (err) {
-        console.error('Inventory adjust error:', err);
+        logger.error('Inventory adjust error:', err);
         res.status(500).json({ error: 'Failed to adjust stock' });
     }
 });
@@ -163,7 +166,7 @@ router.get('/forecast', async (req, res) => {
         const forecast = await engineClient.scmForecastInventory(history);
         res.json(forecast);
     } catch (err) {
-        console.error('Forecast error:', err);
+        logger.error('Forecast error:', err);
         res.status(500).json({ error: 'Failed to generate forecast' });
     }
 });

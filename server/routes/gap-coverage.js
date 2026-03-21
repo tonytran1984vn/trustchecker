@@ -16,11 +16,13 @@ const { authMiddleware, requireRole, requireTenantAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 const dataOwn = new Proxy({}, { get: (_, fn) => () => ({ status: 'archived', message: fn + ' has been archived' }) }); // ARCHIVED: was data-ownership-engine
 const metrics = require('../engines/platform-ops-engine').infrastructureMetrics;
 const upgrade = require('../engines/governance-module').upgradeGovernance;
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
 
 // ═══════════════════════════════════════════════════════════════════
 // DATA OWNERSHIP — /data-ownership [L3+ admin]

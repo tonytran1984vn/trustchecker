@@ -15,6 +15,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 // All routes require auth + audit_log:view permission
 router.use(authMiddleware, requirePermission('audit_log:view'));
@@ -85,7 +87,7 @@ router.get('/', async (req, res) => {
             pagination: { page, limit, total, pages: Math.ceil(total / limit) },
         });
     } catch (err) {
-        console.error('[audit-log] List error:', err);
+        logger.error('[audit-log] List error:', err);
         res.status(500).json({ error: 'Failed to load audit log' });
     }
 });
@@ -110,7 +112,7 @@ router.get('/stats', async (req, res) => {
             by_action: byAction || [],
         });
     } catch (err) {
-        console.error('[audit-log] Stats error:', err);
+        logger.error('[audit-log] Stats error:', err);
         res.status(500).json({ error: 'Failed to load audit stats' });
     }
 });
@@ -164,7 +166,7 @@ router.get('/export', requirePermission('compliance:manage'), async (req, res) =
         );
         res.send(header + csv);
     } catch (err) {
-        console.error('[audit-log] Export error:', err);
+        logger.error('[audit-log] Export error:', err);
         res.status(500).json({ error: 'Failed to export audit log' });
     }
 });

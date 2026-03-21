@@ -8,11 +8,14 @@ const crypto = require('crypto');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 const router = express.Router();
 
 // All routes require authentication
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ═══════════════════════════════════════════════════════════
 // AUTO-CREATE FORMAT_RULES TABLES
@@ -47,12 +50,13 @@ router.use(authMiddleware);
         created_at TIMESTAMP DEFAULT NOW()
     )`);
     } catch (e) {
-        console.error('format_rules table init:', e.message);
+        logger.error('format_rules table init:', e.message);
     }
 })();
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ═══════════════════════════════════════════════════════════
 // FORMAT RULES — CRUD + TEST + TEMPLATES + AUDIT + STATS
@@ -80,7 +84,7 @@ router.get('/format-rules', async (req, res) => {
         );
         res.json({ rules, total: rules.length });
     } catch (err) {
-        console.error('List format rules error:', err);
+        logger.error('List format rules error:', err);
         res.status(500).json({ error: 'Failed to fetch format rules' });
     }
 });
@@ -135,7 +139,7 @@ router.post('/format-rules', async (req, res) => {
         const rule = await db.get('SELECT * FROM format_rules WHERE id = ?', [id]);
         res.status(201).json(rule);
     } catch (err) {
-        console.error('Create format rule error:', err);
+        logger.error('Create format rule error:', err);
         res.status(500).json({ error: 'Failed to create format rule' });
     }
 });
@@ -193,7 +197,7 @@ router.put('/format-rules/:id', async (req, res) => {
         const updated = await db.get('SELECT * FROM format_rules WHERE id = ?', [req.params.id]);
         res.json(updated);
     } catch (err) {
-        console.error('Update format rule error:', err);
+        logger.error('Update format rule error:', err);
         res.status(500).json({ error: 'Failed to update format rule' });
     }
 });
@@ -299,7 +303,7 @@ router.post('/format-rules/test', async (req, res) => {
         const overallPassed = results.every(r => r.passed);
         res.json({ code, results, overall: overallPassed ? 'pass' : 'fail' });
     } catch (err) {
-        console.error('Test format rule error:', err);
+        logger.error('Test format rule error:', err);
         res.status(500).json({ error: 'Failed to test code' });
     }
 });
@@ -727,7 +731,7 @@ router.post('/registry/register', authMiddleware, async (req, res) => {
             collision_rate: codes.length > 0 ? ((collisions / codes.length) * 100).toFixed(2) + '%' : '0%',
         });
     } catch (err) {
-        console.error('Register codes error:', err);
+        logger.error('Register codes error:', err);
         res.status(500).json({ error: 'Failed to register codes' });
     }
 });

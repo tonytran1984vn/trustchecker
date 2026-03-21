@@ -16,6 +16,7 @@ const { authMiddleware, requireRole, requireConstitutional, requireTenantAdmin }
 const { asyncHandler: h } = require('../middleware/asyncHandler');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 const revGov = require('../engines/economics-engine').revenueGovernance;
 const jurisdiction = require('../engines/regulatory-engine').jurisdictionalRisk;
@@ -232,6 +233,7 @@ router.post('/econrisk/score-org', requireRole('risk_committee'), (req, res) => 
 
 const contagion = require('../engines/core/cross-tenant-contagion-engine');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
 
 router.get('/contagion/framework', requireRole('risk_committee'), (req, res) => {
     res.json(contagion.getFullFramework());

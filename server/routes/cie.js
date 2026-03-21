@@ -32,9 +32,10 @@ function getDb() {
 }
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // Tables managed by Prisma migrations (schema.prisma: CiePassport, CieSnapshot, CieAnchor, CieTenantConfig)
-console.log('✅ CIE v2.0 routes loaded (PostgreSQL via Prisma)');
+logger.info('✅ CIE v2.0 routes loaded (PostgreSQL via Prisma)');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PASSPORT ENDPOINTS
@@ -129,7 +130,7 @@ router.post('/passport', requirePermission('esg:manage'), async (req, res) => {
             snapshot: snapshot ? { capsule_hash: snapshot.capsule_hash, storage: 'WORM' } : null,
         });
     } catch (err) {
-        console.error('CIE passport error:', err);
+        logger.error('CIE passport error:', err);
         res.status(500).json({ error: 'Passport creation failed' });
     }
 });
@@ -212,7 +213,7 @@ router.post('/anchor', requirePermission('esg:manage'), async (req, res) => {
 
         res.status(201).json({ id, ...anchor, status: 'confirmed' });
     } catch (err) {
-        console.error('Anchor error:', err);
+        logger.error('Anchor error:', err);
         res.status(500).json({ error: 'Anchoring failed' });
     }
 });
@@ -340,7 +341,7 @@ router.put('/config', requirePermission('org:settings_update'), async (req, res)
         const config = await d.prepare('SELECT * FROM cie_tenant_config WHERE org_id = ?').get(orgId);
         res.json({ message: 'Config updated', config });
     } catch (err) {
-        console.error('Config update error:', err);
+        logger.error('Config update error:', err);
         res.status(500).json({ error: 'Config update failed' });
     }
 });
@@ -392,6 +393,8 @@ router.get('/overview', async (req, res) => {
 
 const cieRoles = require('../engines/infrastructure/cie-role-engine');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 // GET /api/cie/roles — All roles (platform + company)
 router.get('/roles', (req, res) => {

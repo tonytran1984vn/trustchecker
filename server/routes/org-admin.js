@@ -51,7 +51,7 @@ router.get('/roles', async (req, res) => {
 
         res.json({ roles });
     } catch (err) {
-        console.error('[TenantAdmin] List roles error:', err);
+        logger.error('[TenantAdmin] List roles error:', err);
         res.status(500).json({ error: 'Failed to list roles' });
     }
 });
@@ -135,7 +135,7 @@ router.post('/roles', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.status(201).json({ id: roleId, name, display_name, permissions_mapped: mapped, message: 'Role created' });
     } catch (err) {
-        console.error('[TenantAdmin] Create role error:', err);
+        logger.error('[TenantAdmin] Create role error:', err);
         res.status(500).json({ error: 'Failed to create role' });
     }
 });
@@ -221,7 +221,7 @@ router.put('/roles/:id', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Role updated', id: req.params.id });
     } catch (err) {
-        console.error('[TenantAdmin] Update role error:', err);
+        logger.error('[TenantAdmin] Update role error:', err);
         res.status(500).json({ error: 'Failed to update role' });
     }
 });
@@ -252,7 +252,7 @@ router.delete('/roles/:id', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Role deleted', id: req.params.id });
     } catch (err) {
-        console.error('[TenantAdmin] Delete role error:', err);
+        logger.error('[TenantAdmin] Delete role error:', err);
         res.status(500).json({ error: 'Failed to delete role' });
     }
 });
@@ -283,7 +283,7 @@ router.get('/permissions', async (req, res) => {
 
         res.json({ permissions, matrix: Object.values(matrix) });
     } catch (err) {
-        console.error('[TenantAdmin] List permissions error:', err);
+        logger.error('[TenantAdmin] List permissions error:', err);
         res.status(500).json({ error: 'Failed to list permissions' });
     }
 });
@@ -317,7 +317,7 @@ router.get('/users', async (req, res) => {
 
         res.json({ users });
     } catch (err) {
-        console.error('[TenantAdmin] List users error:', err);
+        logger.error('[TenantAdmin] List users error:', err);
         res.status(500).json({ error: 'Failed to list users' });
     }
 });
@@ -354,7 +354,7 @@ router.post('/users', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.status(201).json({ id: userId, username, email, role, message: 'User created' });
     } catch (err) {
-        console.error('[TenantAdmin] Create user error:', err);
+        logger.error('[TenantAdmin] Create user error:', err);
         res.status(500).json({ error: 'Failed to create user' });
     }
 });
@@ -508,7 +508,7 @@ router.put('/users/:id/roles', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Roles assigned', user_id: req.params.id, roles: role_ids });
     } catch (err) {
-        console.error('[TenantAdmin] Assign roles error:', err);
+        logger.error('[TenantAdmin] Assign roles error:', err);
         res.status(500).json({ error: 'Failed to assign roles' });
     }
 });
@@ -540,7 +540,7 @@ router.delete('/users/:id', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'User removed from org', user_id: req.params.id });
     } catch (err) {
-        console.error('[TenantAdmin] Delete user error:', err);
+        logger.error('[TenantAdmin] Delete user error:', err);
         res.status(500).json({ error: 'Failed to remove user' });
     }
 });
@@ -563,7 +563,7 @@ router.get('/audit', async (req, res) => {
         );
         res.json({ logs });
     } catch (err) {
-        console.error('[TenantAdmin] Audit error:', err);
+        logger.error('[TenantAdmin] Audit error:', err);
         res.status(500).json({ error: 'Failed to load audit logs' });
     }
 });
@@ -654,7 +654,7 @@ router.post('/approvals/:id/approve', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Role approved and assigned', approval_id: req.params.id, role: approval.role_name });
     } catch (err) {
-        console.error('[TenantAdmin] Approve error:', err);
+        logger.error('[TenantAdmin] Approve error:', err);
         res.status(500).json({ error: 'Failed to approve' });
     }
 });
@@ -701,7 +701,7 @@ router.post('/approvals/:id/reject', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Role assignment rejected', approval_id: req.params.id });
     } catch (err) {
-        console.error('[TenantAdmin] Reject error:', err);
+        logger.error('[TenantAdmin] Reject error:', err);
         res.status(500).json({ error: 'Failed to reject' });
     }
 });
@@ -781,7 +781,7 @@ router.get('/governance/dashboard', async (req, res) => {
             role_distribution: roleDistribution,
         });
     } catch (err) {
-        console.error('[TenantAdmin] Governance dashboard error:', err);
+        logger.error('[TenantAdmin] Governance dashboard error:', err);
         res.status(500).json({ error: 'Failed to load governance data' });
     }
 });
@@ -1036,7 +1036,7 @@ router.get('/governance/kpi-overview', async (req, res) => {
             })),
         });
     } catch (err) {
-        console.error('[Governance] CRCE error:', err);
+        logger.error('[Governance] CRCE error:', err);
         res.status(500).json({ error: 'Failed to compute CRCE' });
     }
 });
@@ -1114,7 +1114,7 @@ router.get('/governance/reports-data', async (req, res) => {
             })),
         });
     } catch (err) {
-        console.error('[Governance] Reports data error:', err);
+        logger.error('[Governance] Reports data error:', err);
         res.status(500).json({ error: 'Failed to load report data' });
     }
 });
@@ -1133,7 +1133,7 @@ router.get('/governance/notifications', async (req, res) => {
         };
         res.json(notif);
     } catch (err) {
-        console.error('[Governance] Notifications GET error:', err);
+        logger.error('[Governance] Notifications GET error:', err);
         res.status(500).json({ error: 'Failed to load notification settings' });
     }
 });
@@ -1156,7 +1156,7 @@ router.post('/governance/notifications', async (req, res) => {
         await db.run(`UPDATE organizations SET settings = $1 WHERE id = $2`, [JSON.stringify(settings), tid]);
         res.json({ success: true, notifications: settings.notifications });
     } catch (err) {
-        console.error('[Governance] Notifications POST error:', err);
+        logger.error('[Governance] Notifications POST error:', err);
         res.status(500).json({ error: 'Failed to save notification settings' });
     }
 });
@@ -1233,7 +1233,7 @@ router.get('/governance/audit-summary', async (req, res) => {
             })),
         });
     } catch (err) {
-        console.error('[Governance] Audit summary error:', err);
+        logger.error('[Governance] Audit summary error:', err);
         res.status(500).json({ error: 'Failed to load audit summary' });
     }
 });
@@ -1334,7 +1334,7 @@ router.post('/appoint-admin', async (req, res) => {
                 : `${email} promoted to Company Admin.`,
         });
     } catch (err) {
-        console.error('[TenantAdmin] Appoint admin error:', err);
+        logger.error('[TenantAdmin] Appoint admin error:', err);
         res.status(500).json({ error: 'Failed to appoint Company Admin' });
     }
 });
@@ -1473,7 +1473,7 @@ router.get('/owner/dashboard', requireOrgOwner(), async (req, res) => {
             recent_critical_5: recentCritical,
         });
     } catch (err) {
-        console.error('[OwnerAPI] Dashboard error:', err);
+        logger.error('[OwnerAPI] Dashboard error:', err);
         res.status(500).json({ error: 'Failed to load governance dashboard' });
     }
 });
@@ -1525,7 +1525,7 @@ router.get('/owner/access-oversight', requireOrgOwner(), async (req, res) => {
             inactive_privileged: inactivePrivileged,
         });
     } catch (err) {
-        console.error('[OwnerAPI] Access oversight error:', err);
+        logger.error('[OwnerAPI] Access oversight error:', err);
         res.status(500).json({ error: 'Failed to load access oversight' });
     }
 });
@@ -1551,7 +1551,7 @@ router.get('/owner/critical-actions', requireOrgOwner(), async (req, res) => {
 
         res.json({ actions: criticalActions, total: criticalActions.length });
     } catch (err) {
-        console.error('[OwnerAPI] Critical actions error:', err);
+        logger.error('[OwnerAPI] Critical actions error:', err);
         res.status(500).json({ error: 'Failed to load critical actions' });
     }
 });
@@ -1632,7 +1632,7 @@ router.post('/owner/emergency', requireOrgOwner(), async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ success: true, action, ...result });
     } catch (err) {
-        console.error('[OwnerAPI] Emergency action error:', err);
+        logger.error('[OwnerAPI] Emergency action error:', err);
         res.status(500).json({ error: 'Emergency action failed' });
     }
 });
@@ -1698,7 +1698,7 @@ router.post('/owner/appoint', requireOrgOwner(), async (req, res) => {
             message: created ? `${targetRole} account created for ${email}` : `${email} promoted to ${targetRole}`,
         });
     } catch (err) {
-        console.error('[OwnerAPI] Appoint error:', err);
+        logger.error('[OwnerAPI] Appoint error:', err);
         res.status(500).json({ error: 'Failed to appoint' });
     }
 });
@@ -1784,7 +1784,7 @@ router.get('/owner/privilege-governance', requireOrgOwner(), async (req, res) =>
             sod_conflicts: sodConflicts,
         });
     } catch (err) {
-        console.error('[OwnerAPI] Privilege governance error:', err);
+        logger.error('[OwnerAPI] Privilege governance error:', err);
         res.status(500).json({ error: 'Failed to load privilege governance data' });
     }
 });
@@ -1841,7 +1841,7 @@ router.get('/owner/risk-monitoring', requireOrgOwner(), async (req, res) => {
             total_signals: riskSignals.length + anomalies.length,
         });
     } catch (err) {
-        console.error('[OwnerAPI] Risk monitoring error:', err);
+        logger.error('[OwnerAPI] Risk monitoring error:', err);
         res.status(500).json({ error: 'Failed to load risk monitoring data' });
     }
 });
@@ -1903,7 +1903,7 @@ router.get('/owner/governance-log', requireOrgOwner(), async (req, res) => {
             total_entries: governanceActions.length,
         });
     } catch (err) {
-        console.error('[OwnerAPI] Governance log error:', err);
+        logger.error('[OwnerAPI] Governance log error:', err);
         res.status(500).json({ error: 'Failed to load governance log' });
     }
 });
@@ -1991,7 +1991,7 @@ router.get('/owner/financial', requireOrgOwner(), async (req, res) => {
             org_name: orgInfo?.name || '',
         });
     } catch (err) {
-        console.error('[OwnerAPI] Financial error:', err);
+        logger.error('[OwnerAPI] Financial error:', err);
         res.status(500).json({ error: 'Failed to load financial data' });
     }
 });
@@ -2144,7 +2144,7 @@ router.get('/owner/compliance', requireOrgOwner(), async (req, res) => {
             org_plan: orgSettings?.plan || 'free',
         });
     } catch (err) {
-        console.error('[OwnerAPI] Compliance error:', err);
+        logger.error('[OwnerAPI] Compliance error:', err);
         res.status(500).json({ error: 'Failed to load compliance data' });
     }
 });
@@ -2409,7 +2409,7 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             ...(perBU ? { per_bu: perBU, group_aggregated: groupAggregated } : {}),
         });
     } catch (err) {
-        console.error('[CCS] Exposure error:', err);
+        logger.error('[CCS] Exposure error:', err);
         res.status(500).json({ error: 'Failed to load capital exposure data' });
     }
 });
@@ -2538,7 +2538,7 @@ router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
 
         res.json(result);
     } catch (err) {
-        console.error('[CCS] Trends error:', err);
+        logger.error('[CCS] Trends error:', err);
         res.status(500).json({ error: 'Failed to load trend data' });
     }
 });
@@ -2660,7 +2660,7 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
 
         res.json(result);
     } catch (err) {
-        console.error('[CCS] Geo detail error:', err);
+        logger.error('[CCS] Geo detail error:', err);
         res.status(500).json({ error: 'Failed to load geo detail' });
     }
 });
@@ -2767,7 +2767,7 @@ router.get('/owner/ccs/alerts', requireExecutiveAccess(), async (req, res) => {
 
         res.json({ alerts, total: alerts.length });
     } catch (err) {
-        console.error('[CCS] Alerts error:', err);
+        logger.error('[CCS] Alerts error:', err);
         res.status(500).json({ error: 'Failed to load alerts' });
     }
 });
@@ -2962,7 +2962,7 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
 
         res.json(result);
     } catch (err) {
-        console.error('[CCS] ROI error:', err);
+        logger.error('[CCS] ROI error:', err);
         res.status(500).json({ error: 'Failed to calculate ROI' });
     }
 });
@@ -2983,7 +2983,7 @@ router.get('/owner/ccs/bu-config', requireExecutiveAccess(), async (req, res) =>
             available_categories: categories.map(c => c.category),
         });
     } catch (err) {
-        console.error('[CCS] BU config read error:', err);
+        logger.error('[CCS] BU config read error:', err);
         res.status(500).json({ error: 'Failed to load BU configuration' });
     }
 });
@@ -3026,7 +3026,7 @@ router.patch('/owner/ccs/bu-config', requireExecutiveAccess(), async (req, res) 
 
         res.json({ success: true, bu_config: settings.bu_config });
     } catch (err) {
-        console.error('[CCS] BU config save error:', err);
+        logger.error('[CCS] BU config save error:', err);
         res.status(500).json({ error: 'Failed to save BU configuration' });
     }
 });
@@ -3148,7 +3148,7 @@ router.get('/owner/ccs/decisions', requireExecutiveAccess(), async (req, res) =>
             },
         });
     } catch (err) {
-        console.error('[CCS] Decisions error:', err);
+        logger.error('[CCS] Decisions error:', err);
         res.status(500).json({ error: 'Failed to load decision data' });
     }
 });
@@ -3296,7 +3296,7 @@ router.get('/owner/ccs/valuation', requireExecutiveAccess(), async (req, res) =>
             org_plan: orgInfo?.plan || 'free',
         });
     } catch (err) {
-        console.error('[CCS] Valuation error:', err);
+        logger.error('[CCS] Valuation error:', err);
         res.status(500).json({ error: 'Failed to load valuation data' });
     }
 });
@@ -3363,7 +3363,7 @@ router.patch('/owner/org-financials', requireExecutiveAccess(), async (req, res)
 
         res.json({ success: true, financials: settings.financials });
     } catch (err) {
-        console.error('[CCS] Financials update error:', err);
+        logger.error('[CCS] Financials update error:', err);
         res.status(500).json({ error: 'Failed to update financial configuration' });
     }
 });
@@ -3495,7 +3495,7 @@ router.get('/owner/ccs/market', requireExecutiveAccess(), async (req, res) => {
             },
         });
     } catch (err) {
-        console.error('[CCS] Market error:', err);
+        logger.error('[CCS] Market error:', err);
         res.status(500).json({ error: 'Failed to load market data' });
     }
 });
@@ -3688,7 +3688,7 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
             },
         });
     } catch (err) {
-        console.error('[CCS] Performance error:', err);
+        logger.error('[CCS] Performance error:', err);
         res.status(500).json({ error: 'Failed to load performance data' });
     }
 });
@@ -3824,7 +3824,7 @@ router.get('/owner/ccs/risk-intel', requireExecutiveAccess(), async (req, res) =
             recent_anomalies: recentAnomalies,
         });
     } catch (err) {
-        console.error('[CCS] Risk-intel error:', err);
+        logger.error('[CCS] Risk-intel error:', err);
         res.status(500).json({ error: 'Failed to load risk intelligence' });
     }
 });
@@ -3959,7 +3959,7 @@ router.get('/owner/ccs/reports', requireExecutiveAccess(), async (req, res) => {
             recent_activity: recentAudit || [],
         });
     } catch (err) {
-        console.error('[CCS] Reports error:', err);
+        logger.error('[CCS] Reports error:', err);
         res.status(500).json({ error: 'Failed to load reports' });
     }
 });
@@ -4079,7 +4079,7 @@ router.get('/owner/ccs/trust-report', requireExecutiveAccess(), async (req, res)
                       : 'Action required: significant gaps in seal coverage and unresolved tamper alerts.',
         });
     } catch (err) {
-        console.error('[CCS] Trust-report error:', err);
+        logger.error('[CCS] Trust-report error:', err);
         res.status(500).json({ error: 'Failed to load trust report' });
     }
 });
@@ -4244,7 +4244,7 @@ router.get('/owner/ccs/scm-summary', requireExecutiveAccess(), async (req, res) 
             })),
         });
     } catch (err) {
-        console.error('[CCS] SCM Summary error:', err);
+        logger.error('[CCS] SCM Summary error:', err);
         res.status(500).json({ error: 'Failed to load SCM summary' });
     }
 });
@@ -4403,7 +4403,7 @@ router.get('/owner/ccs/carbon-summary', requireExecutiveAccess(), async (req, re
             offsets_recorded: Number(offsets?.c || 0),
         });
     } catch (err) {
-        console.error('[CCS] Carbon Summary error:', err);
+        logger.error('[CCS] Carbon Summary error:', err);
         res.status(500).json({ error: 'Failed to load carbon summary' });
     }
 });
@@ -4415,6 +4415,7 @@ router.get('/owner/ccs/allocation-baseline', requireExecutiveAccess(), async (re
         const tid = req.orgId;
         const carbonEngine = require('../engines/intelligence/carbon-engine');
         const engineClient = require('../engines/infrastructure/engine-client');
+const logger = require('../lib/logger');
 
         const [finConfig, products, shipments, events, partners, violations, offsets, scmStats, breaches, scanStats] =
             await Promise.all([
@@ -4563,7 +4564,7 @@ router.get('/owner/ccs/allocation-baseline', requireExecutiveAccess(), async (re
             ],
         });
     } catch (err) {
-        console.error('[CCS] Allocation baseline error:', err);
+        logger.error('[CCS] Allocation baseline error:', err);
         res.status(500).json({ error: 'Failed to load allocation baseline' });
     }
 });
@@ -4681,7 +4682,7 @@ router.post('/owner/ccs/allocation-simulate', requireExecutiveAccess(), async (r
             roi: { percentage: roi, payback_months: paybackMonths, total_benefits: Math.round(totalBenefits) },
         });
     } catch (err) {
-        console.error('[CCS] Allocation simulate error:', err);
+        logger.error('[CCS] Allocation simulate error:', err);
         res.status(500).json({ error: 'Simulation failed' });
     }
 });

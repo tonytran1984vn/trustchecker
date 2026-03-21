@@ -10,6 +10,7 @@ const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { safeParse } = require('../utils/safe-json');
 const { orgGuard } = require('../middleware/org-middleware');
 const { withTransaction } = require('../middleware/transaction');
+const logger = require('../lib/logger');
 
 const router = express.Router();
 
@@ -44,7 +45,7 @@ router.get('/cases', authMiddleware, async (req, res) => {
             }))
         );
     } catch (err) {
-        console.error('List forensic cases error:', err);
+        logger.error('List forensic cases error:', err);
         res.status(500).json({ error: 'Failed to fetch forensic cases' });
     }
 });
@@ -130,7 +131,7 @@ router.post('/cases', authMiddleware, async (req, res) => {
 
         res.status(201).json({ id, case_number: caseNumber, status: 'open', scan_chain_length: scanChain.length });
     } catch (err) {
-        console.error('Create forensic case error:', err);
+        logger.error('Create forensic case error:', err);
         res.status(500).json({ error: 'Failed to create forensic case' });
     }
 });
@@ -155,7 +156,7 @@ router.get('/cases/:id', authMiddleware, async (req, res) => {
             factor_breakdown: JSON.parse(fc.factor_breakdown || '[]'),
         });
     } catch (err) {
-        console.error('Get forensic case error:', err);
+        logger.error('Get forensic case error:', err);
         res.status(500).json({ error: 'Failed to fetch forensic case' });
     }
 });
@@ -190,7 +191,7 @@ router.post('/cases/:id/freeze', authMiddleware, requirePermission('fraud_case:a
 
         res.json({ id: req.params.id, status: 'frozen', frozen_at: new Date().toISOString() });
     } catch (err) {
-        console.error('Freeze case error:', err);
+        logger.error('Freeze case error:', err);
         res.status(500).json({ error: 'Failed to freeze case' });
     }
 });
@@ -257,7 +258,7 @@ router.get('/cases/:id/evidence', authMiddleware, async (req, res) => {
 
         res.json(evidence);
     } catch (err) {
-        console.error('Build evidence error:', err);
+        logger.error('Build evidence error:', err);
         res.status(500).json({ error: 'Failed to build evidence package' });
     }
 });
@@ -306,7 +307,7 @@ router.patch('/cases/:id', authMiddleware, requirePermission('fraud_case:approve
 
         res.json({ id: req.params.id, verdict, status });
     } catch (err) {
-        console.error('Update forensic case error:', err);
+        logger.error('Update forensic case error:', err);
         res.status(500).json({ error: 'Failed to update case' });
     }
 });

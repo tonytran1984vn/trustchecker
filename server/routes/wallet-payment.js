@@ -11,8 +11,10 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const blockchainEngine = require('../engines/infrastructure/blockchain');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ===========================================================
 // SSI (Self-Sovereign Identity) — Simulated

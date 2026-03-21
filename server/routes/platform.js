@@ -52,7 +52,7 @@ router.get('/orgs/check-availability', async (req, res) => {
 
         res.json(result);
     } catch (err) {
-        console.error('[Platform] Check availability error:', err);
+        logger.error('[Platform] Check availability error:', err);
         res.status(500).json({ error: 'Failed to check availability' });
     }
 });
@@ -140,7 +140,7 @@ router.post('/orgs', async (req, res) => {
             message: 'Tenant created with Company Admin',
         });
     } catch (err) {
-        console.error('[Platform] Create org error:', err);
+        logger.error('[Platform] Create org error:', err);
         res.status(500).json({ error: 'Failed to create org' });
     }
 });
@@ -162,7 +162,7 @@ router.get('/feature-flags', async (req, res) => {
         });
         res.json({ flags, flagList: rows });
     } catch (err) {
-        console.error('[Platform] Feature flags read error:', err);
+        logger.error('[Platform] Feature flags read error:', err);
         res.status(500).json({ error: 'Failed to read feature flags' });
     }
 });
@@ -195,7 +195,7 @@ router.put('/feature-flags', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: `Flag "${key}" ${value ? 'enabled' : 'disabled'}`, key, value });
     } catch (err) {
-        console.error('[Platform] Feature flag toggle error:', err);
+        logger.error('[Platform] Feature flag toggle error:', err);
         res.status(500).json({ error: 'Failed to toggle feature flag' });
     }
 });
@@ -217,7 +217,7 @@ router.get('/notifications', async (req, res) => {
         );
         res.json({ channels, events });
     } catch (err) {
-        console.error('[Platform] Notifications read error:', err);
+        logger.error('[Platform] Notifications read error:', err);
         res.status(500).json({ error: 'Failed to read notification preferences' });
     }
 });
@@ -244,7 +244,7 @@ router.put('/notifications/:id', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: `${pref.key} ${enabled ? 'enabled' : 'disabled'}`, id: req.params.id, enabled });
     } catch (err) {
-        console.error('[Platform] Notification toggle error:', err);
+        logger.error('[Platform] Notification toggle error:', err);
         res.status(500).json({ error: 'Failed to toggle notification preference' });
     }
 });
@@ -263,7 +263,7 @@ router.get('/email-settings', async (req, res) => {
         if (masked.smtp_pass) masked.smtp_pass = '••••••••';
         res.json({ config: masked });
     } catch (err) {
-        console.error('[Platform] Email settings read error:', err);
+        logger.error('[Platform] Email settings read error:', err);
         res.status(500).json({ error: 'Failed to read email settings' });
     }
 });
@@ -347,7 +347,7 @@ router.put('/email-settings', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Email settings updated' });
     } catch (err) {
-        console.error('[Platform] Email settings update error:', err);
+        logger.error('[Platform] Email settings update error:', err);
         res.status(500).json({ error: 'Failed to update email settings' });
     }
 });
@@ -362,7 +362,7 @@ router.post('/email-settings/test', async (req, res) => {
             res.status(400).json({ error: result.reason || 'Failed to send test email' });
         }
     } catch (err) {
-        console.error('[Platform] Test email error:', err);
+        logger.error('[Platform] Test email error:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -372,6 +372,7 @@ router.post('/email-settings/test', async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 const slackService = require('../services/slack');
 const { withTransaction } = require('../middleware/transaction');
+const logger = require('../lib/logger');
 
 // GET /channel-settings/:channel
 router.get('/channel-settings/:channel', async (req, res) => {
@@ -380,7 +381,7 @@ router.get('/channel-settings/:channel', async (req, res) => {
         if (!row) return res.json({ config: { enabled: false, config: {} } });
         res.json({ config: { ...row, config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config } });
     } catch (err) {
-        console.error('[Platform] Channel settings read error:', err);
+        logger.error('[Platform] Channel settings read error:', err);
         res.status(500).json({ error: 'Failed to read channel settings' });
     }
 });
@@ -413,7 +414,7 @@ router.put('/channel-settings/:channel', async (req, res) => {
 
         res.json({ message: `${req.params.channel} settings updated` });
     } catch (err) {
-        console.error('[Platform] Channel settings update error:', err);
+        logger.error('[Platform] Channel settings update error:', err);
         res.status(500).json({ error: 'Failed to update channel settings' });
     }
 });
@@ -433,7 +434,7 @@ router.post('/channel-settings/:channel/test', async (req, res) => {
             res.status(400).json({ error: result.reason || 'Failed' });
         }
     } catch (err) {
-        console.error('[Platform] Channel test error:', err);
+        logger.error('[Platform] Channel test error:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -464,7 +465,7 @@ router.get('/users', async (req, res) => {
         );
         res.json({ users });
     } catch (err) {
-        console.error('[Platform] List users error:', err);
+        logger.error('[Platform] List users error:', err);
         res.status(500).json({ error: 'Failed to list platform users' });
     }
 });
@@ -501,7 +502,7 @@ router.post('/users', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.status(201).json({ id, username, email, role, user_type: 'platform', message: 'Platform user created' });
     } catch (err) {
-        console.error('[Platform] Create user error:', err);
+        logger.error('[Platform] Create user error:', err);
         res.status(500).json({ error: 'Failed to create platform user' });
     }
 });
@@ -556,7 +557,7 @@ router.put('/users/:id', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'User updated', id: req.params.id, changes });
     } catch (err) {
-        console.error('[Platform] Update user error:', err);
+        logger.error('[Platform] Update user error:', err);
         res.status(500).json({ error: 'Failed to update platform user' });
     }
 });
@@ -583,7 +584,7 @@ router.delete('/users/:id', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Platform user deleted', id: req.params.id });
     } catch (err) {
-        console.error('[Platform] Delete user error:', err);
+        logger.error('[Platform] Delete user error:', err);
         res.status(500).json({ error: 'Failed to delete platform user' });
     }
 });
@@ -599,7 +600,7 @@ router.get('/orgs', async (req, res) => {
      LIMIT 1000`);
         res.json({ orgs });
     } catch (err) {
-        console.error('[Platform] List orgs error:', err);
+        logger.error('[Platform] List orgs error:', err);
         res.status(500).json({ error: 'Failed to list orgs' });
     }
 });
@@ -619,7 +620,7 @@ router.get('/orgs/:id', async (req, res) => {
 
         res.json({ org, users, roles });
     } catch (err) {
-        console.error('[Platform] Get org error:', err);
+        logger.error('[Platform] Get org error:', err);
         res.status(500).json({ error: 'Failed to get org' });
     }
 });
@@ -667,7 +668,7 @@ router.post('/orgs/:id/users', async (req, res) => {
             message: 'Company user created',
         });
     } catch (err) {
-        console.error('[Platform] Create org user error:', err);
+        logger.error('[Platform] Create org user error:', err);
         res.status(500).json({ error: 'Failed to create company user' });
     }
 });
@@ -718,7 +719,7 @@ router.put('/orgs/:id', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: 'Tenant updated', id: req.params.id });
     } catch (err) {
-        console.error('[Platform] Update org error:', err);
+        logger.error('[Platform] Update org error:', err);
         res.status(500).json({ error: 'Failed to update org' });
     }
 });
@@ -738,7 +739,7 @@ router.post('/orgs/:id/suspend', async (req, res) => {
         clearCacheByPrefix('/api/risk-graph').catch(() => {});
         res.json({ message: 'Tenant suspended', id: req.params.id });
     } catch (err) {
-        console.error('[Platform] Suspend org error:', err);
+        logger.error('[Platform] Suspend org error:', err);
         res.status(500).json({ error: 'Failed to suspend org' });
     }
 });
@@ -757,7 +758,7 @@ router.post('/orgs/:id/activate', async (req, res) => {
         clearCacheByPrefix('/api/risk-graph').catch(() => {});
         res.json({ message: 'Tenant activated', id: req.params.id });
     } catch (err) {
-        console.error('[Platform] Activate org error:', err);
+        logger.error('[Platform] Activate org error:', err);
         res.status(500).json({ error: 'Failed to activate org' });
     }
 });
@@ -796,7 +797,7 @@ router.post('/orgs/:id/admin-reset', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: `Password reset for ${admin.username}`, user_id: admin.id });
     } catch (err) {
-        console.error('[Platform] Admin reset error:', err);
+        logger.error('[Platform] Admin reset error:', err);
         res.status(500).json({ error: 'Failed to reset admin password' });
     }
 });
@@ -815,7 +816,7 @@ router.get('/audit', async (req, res) => {
         );
         res.json({ logs });
     } catch (err) {
-        console.error('[Platform] Audit error:', err);
+        logger.error('[Platform] Audit error:', err);
         res.status(500).json({ error: 'Failed to load audit logs' });
     }
 });
@@ -847,7 +848,7 @@ router.get('/sa-config/:key', async (req, res) => {
         }
         res.json({ key, data: null, source: 'none' });
     } catch (err) {
-        console.error(`[Platform] SA config read error (${key}):`, err.message);
+        logger.error(`[Platform] SA config read error (${key}):`, err.message);
         res.json({ key, data: null, source: 'error' });
     }
 });
@@ -886,7 +887,7 @@ router.put('/sa-config/:key', async (req, res) => {
         if (typeof db.save === 'function') await db.save();
         res.json({ message: `Config "${key}" saved`, key });
     } catch (err) {
-        console.error(`[Platform] SA config write error (${key}):`, err.message);
+        logger.error(`[Platform] SA config write error (${key}):`, err.message);
         res.status(500).json({ error: 'Failed to save config' });
     }
 });

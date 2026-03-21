@@ -21,6 +21,7 @@ const { authMiddleware, requirePermission } = require('../auth');
 const { orgGuard } = require('../middleware/org-middleware');
 const { snapshotVersion, recordMutation, appendAuditEntry } = require('../utils/audit-chain');
 const { withTransaction } = require('../middleware/transaction');
+const logger = require('../lib/logger');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -63,7 +64,7 @@ router.post('/proposals', async (req, res) => {
             message: 'Correction proposal submitted for review',
         });
     } catch (err) {
-        console.error('Proposal submit error:', err);
+        logger.error('Proposal submit error:', err);
         res.status(500).json({ error: 'Failed to submit proposal' });
     }
 });
@@ -104,7 +105,7 @@ router.get('/proposals', async (req, res) => {
         const pending = proposals.filter(p => p.status === 'pending').length;
         res.json({ proposals, total: proposals.length, pending });
     } catch (err) {
-        console.error('Proposals list error:', err);
+        logger.error('Proposals list error:', err);
         res.status(500).json({ error: 'Failed to fetch proposals' });
     }
 });
@@ -213,7 +214,7 @@ router.post('/proposals/:id/approve', requirePermission('governance:approve_upda
             version: 'new version created',
         });
     } catch (err) {
-        console.error('Proposal approve error:', err);
+        logger.error('Proposal approve error:', err);
         res.status(500).json({ error: 'Failed to approve proposal' });
     }
 });

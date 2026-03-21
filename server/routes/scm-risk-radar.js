@@ -16,8 +16,11 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/infrastructure/engine-client');
 const { cacheMiddleware } = require('../cache');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /api/scm/risk/radar — Full 8-vector risk assessment ─────────────────
 // Cache 60s — queries 8 full tables
@@ -67,7 +70,7 @@ router.get('/radar', cacheMiddleware(60), async (req, res) => {
 
         res.json(radar);
     } catch (err) {
-        console.error('Risk radar error:', err);
+        logger.error('Risk radar error:', err);
         res.status(500).json({ error: 'Risk radar computation failed' });
     }
 });
@@ -101,7 +104,7 @@ router.get('/heatmap', cacheMiddleware(120), async (req, res) => {
             generated_at: new Date().toISOString(),
         });
     } catch (err) {
-        console.error('Heatmap error:', err);
+        logger.error('Heatmap error:', err);
         res.status(500).json({ error: 'Heatmap generation failed' });
     }
 });
@@ -169,7 +172,7 @@ router.get('/alerts', async (req, res) => {
             alerts: allAlerts.slice(0, cappedLimit),
         });
     } catch (err) {
-        console.error('Risk alerts error:', err);
+        logger.error('Risk alerts error:', err);
         res.status(500).json({ error: 'Risk alerts failed' });
     }
 });
@@ -225,7 +228,7 @@ router.get('/trends', async (req, res) => {
             },
         });
     } catch (err) {
-        console.error('Risk trends error:', err);
+        logger.error('Risk trends error:', err);
         res.status(500).json({ error: 'Risk trends failed' });
     }
 });

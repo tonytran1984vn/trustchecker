@@ -8,7 +8,9 @@ const db = require('../db');
 const { authMiddleware, requirePermission } = require('../auth');
 const compliance = require('../engines/core/compliance-engine');
 const { cacheMiddleware } = require('../cache');
+const { orgGuard } = require('../middleware/org-middleware');
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // GET /report — Auto-generate compliance report
 router.get('/report', cacheMiddleware(120), async (req, res) => {

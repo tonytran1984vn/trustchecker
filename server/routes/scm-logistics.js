@@ -10,11 +10,14 @@ const blockchainEngine = require('../engines/infrastructure/blockchain');
 const engineClient = require('../engines/infrastructure/engine-client');
 const { eventBus } = require('../events');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 const router = express.Router();
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── POST /api/scm/shipments – Create shipment ──────────────────────────────
 router.post('/shipments', authMiddleware, requirePermission('logistics:create'), async (req, res) => {
@@ -56,7 +59,7 @@ router.post('/shipments', authMiddleware, requirePermission('logistics:create'),
         eventBus.emitEvent('ShipmentCreated', { id, batch_id, carrier });
         res.status(201).json({ id, tracking_number: tracking_number || `TRK-${Date.now()}`, blockchain_seal: seal });
     } catch (err) {
-        console.error('Create shipment error:', err);
+        logger.error('Create shipment error:', err);
         res.status(500).json({ error: 'Failed to create shipment' });
     }
 });
@@ -146,7 +149,7 @@ router.put('/shipments/:id/update', authMiddleware, requireRole('operator'), asy
 
         res.json({ message: 'Shipment updated', status: newStatus });
     } catch (err) {
-        console.error('Update shipment error:', err);
+        logger.error('Update shipment error:', err);
         res.status(500).json({ error: 'Failed to update shipment' });
     }
 });

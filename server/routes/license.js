@@ -46,6 +46,7 @@ async function loadKeys() {
     const keyDir = path.join(__dirname, '..', '..', 'certs');
     const fsp = require('fs').promises;
     const { withTransaction } = require('../middleware/transaction');
+const logger = require('../lib/logger');
 
     try {
         const pubKeyPath = process.env.LICENSE_PUBLIC_KEY_PATH || path.join(keyDir, 'license-public.pem');
@@ -65,14 +66,14 @@ async function loadKeys() {
 
     // Auto-generate keypair for development/testing
     if (!PUBLIC_KEY && process.env.NODE_ENV !== 'production') {
-        console.log('🔑 [license] Generating ephemeral Ed25519 keypair for development...');
+        logger.info('🔑 [license] Generating ephemeral Ed25519 keypair for development...');
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
         PUBLIC_KEY = publicKey;
         PRIVATE_KEY = privateKey;
     }
 }
 
-loadKeys().catch(err => console.error('[license] Key loading failed:', err.message));
+loadKeys().catch(err => logger.error('[license] Key loading failed:', err.message));
 
 // ─── Hardware Fingerprint ────────────────────────────────────────────────────
 function getHardwareFingerprint() {
@@ -106,7 +107,7 @@ function validateLicense(licenseKey) {
                 return { valid: false, error: 'Unsigned license rejected in production mode' };
             }
             // Dev mode: allow unsigned for testing with deprecation warning
-            console.warn('⚠️  [license] Unsigned license accepted — development mode only');
+            logger.warn('⚠️  [license] Unsigned license accepted — development mode only');
             return validatePayload(envelope);
         }
 
@@ -223,7 +224,7 @@ router.post('/activate', authMiddleware, requirePlatformAdmin(), async (req, res
         }
 
         const status = result.in_grace_period ? 'active (grace period)' : 'active';
-        console.log(`✅ License activated: ${result.license.org} — ${result.license.plan} — ${status}`);
+        logger.info(`✅ License activated: ${result.license.org} — ${result.license.plan} — ${status}`);
 
         res.json({
             status,
@@ -233,7 +234,7 @@ router.post('/activate', authMiddleware, requirePlatformAdmin(), async (req, res
             hardware_fingerprint: getHardwareFingerprint(),
         });
     } catch (err) {
-        console.error('[license] Activation error:', err.message);
+        logger.error('[license] Activation error:', err.message);
         res.status(500).json({ error: 'License activation failed' });
     }
 });
@@ -278,10 +279,10 @@ router.post('/deactivate', authMiddleware, requirePlatformAdmin(), async (req, r
         const orgName = currentLicense.license?.org || 'unknown';
         currentLicense = null;
 
-        console.log(`🔓 License deactivated: ${orgName}`);
+        logger.info(`🔓 License deactivated: ${orgName}`);
         res.json({ message: 'License deactivated — reverted to community mode' });
     } catch (err) {
-        console.error('[license] Deactivation error:', err.message);
+        logger.error('[license] Deactivation error:', err.message);
         res.status(500).json({ error: 'License deactivation failed' });
     }
 });
@@ -342,7 +343,7 @@ router.post('/generate', authMiddleware, requirePlatformAdmin(), async (req, res
 
         const licenseKey = Buffer.from(JSON.stringify(envelope)).toString('base64');
 
-        console.log(`🔐 License generated: ${org} — ${plan} — ${expires_days} days`);
+        logger.info(`🔐 License generated: ${org} — ${plan} — ${expires_days} days`);
 
         res.json({
             license_key: licenseKey,
@@ -351,7 +352,7 @@ router.post('/generate', authMiddleware, requirePlatformAdmin(), async (req, res
             note: 'Provide this license_key to the customer for activation',
         });
     } catch (err) {
-        console.error('[license] Generation error:', err.message);
+        logger.error('[license] Generation error:', err.message);
         res.status(500).json({ error: 'License generation failed' });
     }
 });

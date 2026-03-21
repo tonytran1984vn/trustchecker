@@ -8,11 +8,14 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { eventBus } = require('../events');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 const router = express.Router();
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
+router.use(orgGuard());
 
 const PLATFORMS = ['Shopee', 'Lazada', 'Amazon', 'eBay', 'Alibaba'];
 
@@ -86,7 +89,7 @@ router.post('/scan', authMiddleware, requirePermission('leak_monitor:create'), a
             scanned_at: new Date().toISOString(),
         });
     } catch (err) {
-        console.error('Leak scan error:', err);
+        logger.error('Leak scan error:', err);
         res.status(500).json({ error: 'Scan failed' });
     }
 });
@@ -303,7 +306,7 @@ router.put('/alerts/:id/resolve', authMiddleware, requirePermission('fraud_case:
 
         res.json({ alert_id: req.params.id, status: 'resolved', resolution: resolution || 'resolved' });
     } catch (err) {
-        console.error('Leak scan error:', err);
+        logger.error('Leak scan error:', err);
         res.status(500).json({ error: 'Failed to scan for leaks' });
     }
 });
@@ -350,7 +353,7 @@ router.post('/alerts/:id/takedown', authMiddleware, requirePermission('fraud_cas
 
         res.json(notice);
     } catch (err) {
-        console.error('Distribution analysis error:', err);
+        logger.error('Distribution analysis error:', err);
         res.status(500).json({ error: 'Failed to analyze distribution' });
     }
 });
@@ -397,7 +400,7 @@ router.get('/trends', async (req, res) => {
             period_weeks: Number(weeks),
         });
     } catch (err) {
-        console.error('Leak dashboard error:', err);
+        logger.error('Leak dashboard error:', err);
         res.status(500).json({ error: 'Failed to load leak dashboard' });
     }
 });

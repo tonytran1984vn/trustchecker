@@ -16,8 +16,11 @@ const ccme = require('../engines/intelligence/carbon-credit-engine');
 const { cacheMiddleware } = require('../cache');
 const { v4: uuidv4 } = require('uuid');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── Ensure tables ──────────────────────────────────────────────────────────
 const init = async () => {
@@ -220,8 +223,8 @@ router.post('/pipeline', requirePermission('esg:manage'), async (req, res) => {
 
         res.status(result.pipeline === 'minted' ? 201 : 200).json(result);
     } catch (err) {
-        console.error('Pipeline error:', err);
-        console.error('[pipeline] Detail:', err.message);
+        logger.error('Pipeline error:', err);
+        logger.error('[pipeline] Detail:', err.message);
         res.status(500).json({ error: 'Pipeline execution failed' });
     }
 });
@@ -261,7 +264,7 @@ router.post('/simulate', async (req, res) => {
             credit_potential_tCO2e: counterfactual.reduction.tCO2e,
         });
     } catch (err) {
-        console.error('Simulate error:', err);
+        logger.error('Simulate error:', err);
         res.status(500).json({ error: 'Simulation failed' });
     }
 });

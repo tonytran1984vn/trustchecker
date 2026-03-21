@@ -9,7 +9,9 @@ const { authMiddleware, requirePermission } = require('../auth');
 const governance = require('../engines/governance-module').governance;
 const { v4: uuidv4 } = require('uuid');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
 router.use(authMiddleware);
+router.use(orgGuard());
 
 const init = async () => {
     try {

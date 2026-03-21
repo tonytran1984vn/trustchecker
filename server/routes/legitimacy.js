@@ -15,11 +15,13 @@ const { authMiddleware, requireRole, requireTenantAdmin } = require('../auth');
 const { asyncHandler: h } = require('../middleware/asyncHandler');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 const econ = require('../engines/economics-engine').economicLogic;
 const forensic = require('../engines/legal-entity-module').forensicLogic;
 const jurisLogic = require('../engines/regulatory-engine').jurisdictionLogic;
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
 
 // ═══════════════════════════════════════════════════════════════════
 // ECONOMIC LOGIC — /economic-logic [L3+ admin]

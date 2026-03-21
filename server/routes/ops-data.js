@@ -322,6 +322,7 @@ router.put('/data/incidents/:id', validate({ body: schemas.updateIncident }), as
                     "INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id, timestamp) VALUES (?, ?, 'SEVERITY_DOWNGRADED', 'incident', ?, ?, ?, NOW())",
                     [
                         require('uuid').v4(),
+const logger = require('../lib/logger');
                         req.user.id,
                         req.params.id,
                         JSON.stringify({
@@ -346,7 +347,7 @@ router.put('/data/incidents/:id', validate({ body: schemas.updateIncident }), as
                     if (trustEngine) {
                         trustEngine
                             .calculateScore(incident.product_id)
-                            .catch(e => console.error('[TrustRecalc] Error:', e.message));
+                            .catch(e => logger.error('[TrustRecalc] Error:', e.message));
                     }
                 }
             } catch (e) {
@@ -388,7 +389,7 @@ router.get('/activity-log', async (req, res) => {
         const rows = await db.prepare(sql).all(...params);
         res.json({ activities: rows || [] });
     } catch (e) {
-        console.error('[activity-log]', e.message);
+        logger.error('[activity-log]', e.message);
         // Fallback: return all recent activities
         try {
             const rows = await db.all('SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT 50');
@@ -446,7 +447,7 @@ router.get('/supplier-scoring', async (req, res) => {
         }));
         res.json({ suppliers: result });
     } catch (e) {
-        console.error('[supplier-scoring]', e);
+        logger.error('[supplier-scoring]', e);
         res.json({ suppliers: [] });
     }
 });
@@ -505,7 +506,7 @@ router.post(
 
             res.json({ success: true, id, message: `${name} submitted for KYC review` });
         } catch (e) {
-            console.error('[supplier/onboard]', e);
+            logger.error('[supplier/onboard]', e);
             res.status(500).json({ error: e.message });
         }
     }
@@ -537,7 +538,7 @@ router.post('/suppliers/:id/locations', requirePermission('supplier:onboard'), a
 
         res.json({ success: true, locId, message: `${country} location added to ${supplier.name}` });
     } catch (e) {
-        console.error('[supplier/location]', e);
+        logger.error('[supplier/location]', e);
         res.status(500).json({ error: e.message });
     }
 });

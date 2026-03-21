@@ -26,6 +26,7 @@ router.use((req, res, next) => {
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── POST /api/scm/events – Record EPCIS event ──────────────────────────────
 // BS-DEFENSE: Idempotency + Replay detection on SCM events
@@ -59,7 +60,7 @@ router.post(
                 // Super admin and owner always pass
                 if (!['super_admin', 'admin', 'owner'].includes(userRole) && !allowedRoles.includes(userRole)) {
                     // Log the RBAC denial but DON'T block — this is advisory for existing flow compatibility
-                    console.warn(
+                    logger.warn(
                         '[INV-4-RBAC] User ' +
                             req.user.username +
                             ' (role: ' +
@@ -208,7 +209,7 @@ router.post(
                     }
                 );
             } catch (lrgfErr) {
-                console.error('[L-RGF] Governance flow error (non-blocking):', lrgfErr.message);
+                logger.error('[L-RGF] Governance flow error (non-blocking):', lrgfErr.message);
             }
 
             // FIX-9-AUDIT: Log to immutable audit trail
@@ -228,12 +229,12 @@ router.post(
                     ]
                 );
             } catch (auditErr) {
-                console.error('[Audit]', auditErr.message);
+                logger.error('[Audit]', auditErr.message);
             }
 
             res.status(201).json({ id, event_type, blockchain_seal: seal, governance });
         } catch (err) {
-            console.error('SCM event error:', err);
+            logger.error('SCM event error:', err);
             res.status(500).json({ error: 'Failed to record event' });
         }
     }
@@ -363,7 +364,7 @@ router.post('/batches', authMiddleware, requireRole('operator', 'admin', 'compan
 
         res.status(201).json({ id, batch_number, blockchain_seal: seal });
     } catch (err) {
-        console.error('Create batch error:', err);
+        logger.error('Create batch error:', err);
         res.status(500).json({ error: 'Failed to create batch' });
     }
 });
@@ -555,7 +556,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
             recent_events: recentEvents,
         });
     } catch (err) {
-        console.error('SCM dashboard error:', err);
+        logger.error('SCM dashboard error:', err);
         res.status(500).json({ error: 'Failed to load dashboard' });
     }
 });
@@ -638,7 +639,7 @@ router.post('/batches/:id/recall', authMiddleware, requirePermission('batch:mana
             severity: severity || 'high',
         });
     } catch (err) {
-        console.error('Batch recall error:', err);
+        logger.error('Batch recall error:', err);
         res.status(500).json({ error: 'Recall failed' });
     }
 });
@@ -675,6 +676,8 @@ router.get('/verify-signature/:eventId', async (req, res) => {
         const event = await db.get('SELECT * FROM product_events WHERE id = $1', [req.params.eventId]);
         if (!event) return res.status(404).json({ error: 'Event not found' });
         const { verifySignature } = require('../middleware/scm-state-machine');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
         const result = verifySignature(
             {
                 productId: event.product_id,

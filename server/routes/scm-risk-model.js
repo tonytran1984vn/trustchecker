@@ -13,6 +13,7 @@ const router = express.Router();
 
 // GOV-1: All routes require authentication
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /api/scm/models – List all model versions ──────────────────────────
 router.get('/models', authMiddleware, async (req, res) => {
@@ -27,7 +28,7 @@ router.get('/models', authMiddleware, async (req, res) => {
             })),
         });
     } catch (err) {
-        console.error('List models error:', err);
+        logger.error('List models error:', err);
         res.status(500).json({ error: 'Failed to fetch models' });
     }
 });
@@ -44,7 +45,7 @@ router.get('/models/production', authMiddleware, async (req, res) => {
             weights: typeof model.weights === 'string' ? JSON.parse(model.weights || '{}') : model.weights || {},
         });
     } catch (err) {
-        console.error('Get production model error:', err);
+        logger.error('Get production model error:', err);
         res.status(500).json({ error: 'Failed to fetch production model' });
     }
 });
@@ -84,7 +85,7 @@ router.post('/models', authMiddleware, async (req, res) => {
 
         res.status(201).json({ id, version, status: 'draft' });
     } catch (err) {
-        console.error('Create model error:', err);
+        logger.error('Create model error:', err);
         res.status(500).json({ error: 'Failed to create model' });
     }
 });
@@ -102,7 +103,7 @@ router.post('/models/:id/sandbox', authMiddleware, requirePermission('risk_model
         );
         res.json({ id: req.params.id, status: 'sandbox' });
     } catch (err) {
-        console.error('Sandbox model error:', err);
+        logger.error('Sandbox model error:', err);
         res.status(500).json({ error: 'Failed to move to sandbox' });
     }
 });
@@ -159,7 +160,7 @@ router.post('/models/:id/deploy', authMiddleware, requireRole('risk_officer'), a
 
         res.json({ id: req.params.id, status: 'production', deployed: true });
     } catch (err) {
-        console.error('Deploy model error:', err);
+        logger.error('Deploy model error:', err);
         res.status(500).json({ error: 'Failed to deploy model' });
     }
 });
@@ -208,7 +209,7 @@ router.post('/models/:id/rollback', authMiddleware, requireRole('risk_officer'),
 
         res.json({ id: req.params.id, status: 'production', rollback: true, reason });
     } catch (err) {
-        console.error('Rollback model error:', err);
+        logger.error('Rollback model error:', err);
         res.status(500).json({ error: 'Failed to rollback' });
     }
 });
@@ -250,7 +251,7 @@ router.get('/models/compare', authMiddleware, async (req, res) => {
             comparison,
         });
     } catch (err) {
-        console.error('Compare models error:', err);
+        logger.error('Compare models error:', err);
         res.status(500).json({ error: 'Failed to compare models' });
     }
 });
@@ -324,7 +325,7 @@ router.get('/models/drift', authMiddleware, async (req, res) => {
             ],
         });
     } catch (err) {
-        console.error('Model drift error:', err);
+        logger.error('Model drift error:', err);
         res.status(500).json({ error: 'Failed to calculate drift' });
     }
 });
@@ -344,7 +345,7 @@ router.get('/model-changes', authMiddleware, async (req, res) => {
         const changes = await db.prepare(query).all(...params);
         res.json({ changes });
     } catch (err) {
-        console.error('List model changes error:', err);
+        logger.error('List model changes error:', err);
         res.status(500).json({ error: 'Failed to fetch model changes' });
     }
 });
@@ -381,7 +382,7 @@ router.post('/model-changes', authMiddleware, async (req, res) => {
 
         res.status(201).json({ id, factor, status: 'pending' });
     } catch (err) {
-        console.error('Propose change error:', err);
+        logger.error('Propose change error:', err);
         res.status(500).json({ error: 'Failed to propose change' });
     }
 });
@@ -411,7 +412,7 @@ router.patch('/model-changes/:id', authMiddleware, requirePermission('risk_model
 
         res.json({ id: req.params.id, status });
     } catch (err) {
-        console.error('Review change error:', err);
+        logger.error('Review change error:', err);
         res.status(500).json({ error: 'Failed to review change' });
     }
 });
@@ -448,7 +449,7 @@ router.get('/rules-config', authMiddleware, async (req, res) => {
         }
         res.json({ rules, config: rules, grouped });
     } catch (err) {
-        console.error('Get rules config error:', err);
+        logger.error('Get rules config error:', err);
         res.status(500).json({ error: 'Failed to fetch rules config' });
     }
 });
@@ -466,7 +467,7 @@ router.put('/rules-config/:id', authMiddleware, async (req, res) => {
 
         res.json({ id: req.params.id, rule_value, status: 'updated' });
     } catch (err) {
-        console.error('Update rule config error:', err);
+        logger.error('Update rule config error:', err);
         res.status(500).json({ error: 'Failed to update rule' });
     }
 });
@@ -503,6 +504,8 @@ router.put('/models/:id/status', authMiddleware, async (req, res) => {
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES ($1, $2, $3, $4, $5, $6)`,
             [
                 require('uuid').v4(),
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
                 req.user?.id,
                 'MODEL_STATUS_CHANGED',
                 'risk_model',
@@ -513,7 +516,7 @@ router.put('/models/:id/status', authMiddleware, async (req, res) => {
 
         res.json({ id: req.params.id, old_status: model.status, status, message: 'Status updated' });
     } catch (err) {
-        console.error('Update model status error:', err);
+        logger.error('Update model status error:', err);
         res.status(500).json({ error: 'Failed to update status' });
     }
 });

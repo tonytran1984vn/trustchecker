@@ -10,8 +10,11 @@ const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const epcisEngine = require('../engines/core/epcis-engine');
 const { cacheMiddleware } = require('../cache');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /api/scm/epcis/events — Query EPCIS events ─────────────────────────
 router.get('/events', async (req, res) => {
@@ -97,7 +100,7 @@ router.get('/events', async (req, res) => {
             },
         });
     } catch (err) {
-        console.error('EPCIS query error:', err);
+        logger.error('EPCIS query error:', err);
         res.status(500).json({ error: 'EPCIS query failed' });
     }
 });
@@ -143,7 +146,7 @@ router.get('/events/:id', async (req, res) => {
             epcisBody: { eventList: [epcisEvent] },
         });
     } catch (err) {
-        console.error('EPCIS event error:', err);
+        logger.error('EPCIS event error:', err);
         res.status(500).json({ error: 'Failed to fetch EPCIS event' });
     }
 });
@@ -178,7 +181,7 @@ router.post('/capture', requirePermission('epcis:create'), async (req, res) => {
             message: `Successfully captured ${results.length} EPCIS events`,
         });
     } catch (err) {
-        console.error('EPCIS capture error:', err);
+        logger.error('EPCIS capture error:', err);
         res.status(500).json({ error: 'EPCIS capture failed' });
     }
 });
@@ -203,7 +206,7 @@ router.get('/document', cacheMiddleware(90), async (req, res) => {
 
         res.json(epcisDocument);
     } catch (err) {
-        console.error('EPCIS document error:', err);
+        logger.error('EPCIS document error:', err);
         res.status(500).json({ error: 'EPCIS document generation failed' });
     }
 });
@@ -280,7 +283,7 @@ router.get('/stats', cacheMiddleware(60), async (req, res) => {
             },
         });
     } catch (err) {
-        console.error('EPCIS stats error:', err);
+        logger.error('EPCIS stats error:', err);
         res.status(500).json({ error: 'EPCIS stats failed' });
     }
 });

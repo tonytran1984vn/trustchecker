@@ -9,8 +9,11 @@ const db = require('../db');
 const { authMiddleware, requireRole } = require('../auth');
 const carbonEngine = require('../engines/intelligence/carbon-engine');
 const { cacheMiddleware } = require('../cache');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /dashboard — Carbon Officer Overview KPIs ──────────────────────────
 router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
@@ -279,7 +282,7 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
             avg_intensity_kgCO2e_per_unit: scopeData?.avg_intensity_kgCO2e_per_unit || 0,
         });
     } catch (err) {
-        console.error('[carbon-officer] Dashboard error:', err);
+        logger.error('[carbon-officer] Dashboard error:', err);
         res.status(500).json({ error: 'Carbon dashboard failed' });
     }
 });

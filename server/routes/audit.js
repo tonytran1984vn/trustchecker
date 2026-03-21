@@ -7,8 +7,10 @@ const router = express.Router();
 const { authMiddleware, requireTenantAdmin } = require('../auth');
 const { verifyChain, appendAuditEntry } = require('../utils/audit-chain');
 const db = require('../db');
+const { orgGuard } = require('../middleware/org-middleware');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /verify-chain — Verify audit log hash chain integrity ──────────────
 // Only org admins (or platform admins) can verify

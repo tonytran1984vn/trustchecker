@@ -15,9 +15,12 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const { authMiddleware, requirePermission } = require('../auth');
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 // All routes require authentication
 router.use(authMiddleware);
+router.use(orgGuard());
 router.use(requirePermission('settings:update'));
 
 // Encryption for API keys at rest — MUST set ENCRYPTION_KEY in production
@@ -29,7 +32,7 @@ const ENCRYPTION_KEY_SOURCE =
           })()
         : 'trustchecker-settings-key-DEV-ONLY');
 if (!process.env.ENCRYPTION_KEY) {
-    console.warn('⚠️  ENCRYPTION_KEY not set — using dev fallback. Set ENCRYPTION_KEY env var for production!');
+    logger.warn('⚠️  ENCRYPTION_KEY not set — using dev fallback. Set ENCRYPTION_KEY env var for production!');
 }
 const CIPHER_KEY = crypto.createHash('sha256').update(ENCRYPTION_KEY_SOURCE).digest();
 const IV_LENGTH = 16;

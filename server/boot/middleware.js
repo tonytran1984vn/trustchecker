@@ -26,6 +26,11 @@ function setupMiddleware(app, redis) {
     app.use(waf.middleware());
     app.use(securityHeaders);
     app.use(sanitizeRequest);
+
+    // v9.5: Global request sanitizer — prototype pollution, SQL injection, XSS
+    const { requestSanitizer } = require('../middleware/request-sanitizer');
+    app.use(requestSanitizer());
+
     app.use(requestLogger);
 
     // Observability (tracing + metrics + SLO)

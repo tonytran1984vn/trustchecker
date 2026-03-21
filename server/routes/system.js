@@ -205,7 +205,7 @@ router.post('/backup', async (req, res) => {
                 backup[t.name] = rows;
                 totalRows += rows.length;
             } catch (e) {
-                console.warn(`[system] Backup skip table '${_safeId(t.name)}':`, e.message);
+                logger.warn(`[system] Backup skip table '${_safeId(t.name)}':`, e.message);
             }
         }
 
@@ -260,7 +260,7 @@ router.post('/restore', async (req, res) => {
         for (const [table, rows] of Object.entries(data)) {
             if (!Array.isArray(rows) || rows.length === 0) continue;
             if (!ALLOWED_TABLES.has(table)) {
-                console.warn(`Restore: skipping disallowed table '${table}'`);
+                logger.warn(`Restore: skipping disallowed table '${table}'`);
                 continue;
             }
             try {
@@ -279,7 +279,7 @@ router.post('/restore', async (req, res) => {
                 }
                 restored += rows.length;
             } catch (e) {
-                console.error(`Restore error for table '${table}':`, e.message);
+                logger.error(`Restore error for table '${table}':`, e.message);
             }
         }
 
@@ -309,7 +309,7 @@ router.delete('/purge', async (req, res) => {
                 await db.run(`DELETE FROM ${_safeId(t.name)}`);
                 results[t.name] = before;
             } catch (e) {
-                console.warn(`[system] Purge skip table '${_safeId(t.name)}':`, e.message);
+                logger.warn(`[system] Purge skip table '${_safeId(t.name)}':`, e.message);
             }
         }
 
@@ -324,6 +324,7 @@ router.get('/logs', async (req, res) => {
     try {
         const { requestLogger } = require('../middleware/security');
         const { withTransaction } = require('../middleware/transaction');
+const logger = require('../lib/logger');
         const { limit = 50 } = req.query;
         res.json({
             entries: requestLogger.getEntries(Number(limit)),

@@ -13,9 +13,11 @@ const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const requireSuperAdmin = require('../middleware/requireSuperAdmin');
 const crypto = require('crypto');
+const { orgGuard } = require('../middleware/org-middleware');
 
 // All KYC routes require auth
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /stats ─────────────────────────────────────────────
 router.get('/stats', async (req, res) => {

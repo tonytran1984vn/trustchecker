@@ -69,7 +69,7 @@ router.get('/all', requireSuperAdmin(), async (req, res) => {
 
         res.json({ organizations: enriched, total: total?.count || 0 });
     } catch (err) {
-        console.error('[org] List all error:', err.message);
+        logger.error('[org] List all error:', err.message);
         res.status(500).json({ error: 'Failed to list organizations' });
     }
 });
@@ -120,6 +120,7 @@ router.post('/', requireSuperAdmin(), async (req, res) => {
 
         if (!ownerUser) {
             const bcrypt = require('bcryptjs');
+const logger = require('../lib/logger');
             const ownerId = uuidv4();
             const displayName = owner_name || owner_email.split('@')[0];
             const passwordHash = await bcrypt.hash(tempPassword, 12);
@@ -254,7 +255,7 @@ router.post('/', requireSuperAdmin(), async (req, res) => {
             message: `Organization created with ${ROLE_TEMPLATES[template]?.length || 0} roles from '${template}' template`,
         });
     } catch (err) {
-        console.error('[org] Create error:', err.message);
+        logger.error('[org] Create error:', err.message);
         res.status(500).json({ error: 'Failed to create organization' });
     }
 });
@@ -289,7 +290,7 @@ router.put('/:id/plan', requireSuperAdmin(), async (req, res) => {
 
         res.json({ message: 'Plan updated', org_id: req.params.id, plan });
     } catch (err) {
-        console.error('[org] Plan update error:', err.message);
+        logger.error('[org] Plan update error:', err.message);
         res.status(500).json({ error: 'Failed to update plan' });
     }
 });
@@ -324,7 +325,7 @@ router.delete('/:id', requireSuperAdmin(), async (req, res) => {
 
         res.json({ message: 'Organization deactivated', org_id: req.params.id });
     } catch (err) {
-        console.error('[org] Deactivate error:', err.message);
+        logger.error('[org] Deactivate error:', err.message);
         res.status(500).json({ error: 'Failed to deactivate organization' });
     }
 });
@@ -353,7 +354,7 @@ router.get('/', async (req, res) => {
             settings: typeof org.settings === 'string' ? JSON.parse(org.settings) : org.settings,
         });
     } catch (err) {
-        console.error('[org] Get error:', err.message);
+        logger.error('[org] Get error:', err.message);
         res.status(500).json({ error: 'Failed to fetch organization' });
     }
 });
@@ -386,7 +387,7 @@ router.put('/', requirePermission('org:settings_update'), async (req, res) => {
         await db.run(`UPDATE organizations SET ${updates.join(', ')} WHERE id = ?`, params);
         res.json({ message: 'Organization updated successfully' });
     } catch (err) {
-        console.error('[org] Update error:', err.message);
+        logger.error('[org] Update error:', err.message);
         res.status(500).json({ error: 'Failed to update organization' });
     }
 });
@@ -405,7 +406,7 @@ router.get('/members', async (req, res) => {
 
         res.json({ members, total: members.length });
     } catch (err) {
-        console.error('[org] Members error:', err.message);
+        logger.error('[org] Members error:', err.message);
         res.status(500).json({ error: 'Failed to fetch members' });
     }
 });
@@ -444,7 +445,7 @@ router.post('/invite', requirePermission('org:user_create'), async (req, res) =>
 
         res.status(201).json({ message: 'Invitation sent', invite_token: token, email });
     } catch (err) {
-        console.error('[org] Invite error:', err.message);
+        logger.error('[org] Invite error:', err.message);
         res.status(500).json({ error: 'Failed to send invitation' });
     }
 });
@@ -466,7 +467,7 @@ router.delete('/members/:id', requirePermission('org:user_delete'), async (req, 
         await db.run(`UPDATE memberships SET status = 'removed' WHERE user_id = ? AND org_id = ?`, [targetId, orgId]);
         res.json({ message: 'Member removed from organization' });
     } catch (err) {
-        console.error('[org] Remove member error:', err.message);
+        logger.error('[org] Remove member error:', err.message);
         res.status(500).json({ error: 'Failed to remove member' });
     }
 });
@@ -498,11 +499,11 @@ router.post('/provision', requirePermission('org:settings_update'), async (req, 
                 schema_name: schemaName,
             });
         } catch (schemaErr) {
-            console.error('[org] Schema provisioning error:', schemaErr.message);
+            logger.error('[org] Schema provisioning error:', schemaErr.message);
             res.status(500).json({ error: 'Failed to provision schema — ensure PostgreSQL is configured' });
         }
     } catch (err) {
-        console.error('[org] Provision error:', err.message);
+        logger.error('[org] Provision error:', err.message);
         res.status(500).json({ error: 'Failed to provision Enterprise schema' });
     }
 });

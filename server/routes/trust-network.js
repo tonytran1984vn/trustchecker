@@ -176,7 +176,7 @@ router.post('/join/:token', async function (req, res) {
             user_id: userId,
         });
     } catch (err) {
-        console.error('Join network error:', err);
+        logger.error('Join network error:', err);
         if (err.message && err.message.includes('unique')) {
             return res.status(409).json({ error: 'An account with this email already exists' });
         }
@@ -227,6 +227,7 @@ router.post('/invite', async function (req, res) {
         // Send email (use template engine)
         try {
             const emailTemplates = require('../engines/infrastructure/emailTemplates');
+const logger = require('../lib/logger');
             const html = emailTemplates.supplierInvite(req.user.username, inviterOrg, company_name, joinUrl, message);
             // In production, use real email service
             eventBus.emit('email:send', {
@@ -235,7 +236,7 @@ router.post('/invite', async function (req, res) {
                 html,
             });
         } catch (emailErr) {
-            console.warn('Email send skipped:', emailErr.message);
+            logger.warn('Email send skipped:', emailErr.message);
         }
 
         // Audit log
@@ -256,7 +257,7 @@ router.post('/invite', async function (req, res) {
             },
         });
     } catch (err) {
-        console.error('Invite error:', err);
+        logger.error('Invite error:', err);
         res.status(500).json({ error: 'Failed to send invitation' });
     }
 });
@@ -365,7 +366,7 @@ router.get('/graph', async function (req, res) {
             },
         });
     } catch (err) {
-        console.error('Graph error:', err);
+        logger.error('Graph error:', err);
         res.status(500).json({ error: 'Failed to load network graph' });
     }
 });

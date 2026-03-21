@@ -11,6 +11,7 @@ const router = express.Router();
 const { authMiddleware, requirePermission, requireConstitutional } = require('../auth');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ═══════════════════════════════════════════════════════════════════
 // IMMUTABLE DENY LOGGER
@@ -29,7 +30,7 @@ function logConstitutionalAction(req, action, result) {
         article: result.article || null,
         separation: result.separation?.id || null,
     };
-    console.log(`[CONSTITUTIONAL-AUDIT] ${JSON.stringify(entry)}`);
+    logger.info(`[CONSTITUTIONAL-AUDIT] ${JSON.stringify(entry)}`);
     // TODO: Write to immutable audit table when available
     try {
         const db = require('../db');
@@ -54,7 +55,7 @@ function logConstitutionalAction(req, action, result) {
             entry.timestamp
         );
     } catch (e) {
-        console.error('[CONSTITUTIONAL-AUDIT] DB write fallback:', e.message);
+        logger.error('[CONSTITUTIONAL-AUDIT] DB write fallback:', e.message);
     }
 }
 
@@ -279,6 +280,8 @@ router.get('/regulatory/sanctions/:country', (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
 const sla = new Proxy({}, { get: (_, fn) => () => ({ status: 'archived', message: fn + ' has been archived' }) }); // ARCHIVED: was enterprise-sla-engine
 const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
 
 router.get('/sla/tiers', (req, res) => {
     res.json({ tiers: sla.getSLATiers(), metrics: sla.getSLOMetrics() });

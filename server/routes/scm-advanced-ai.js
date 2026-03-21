@@ -15,6 +15,7 @@ const engineClient = require('../engines/infrastructure/engine-client');
 const { cacheMiddleware } = require('../cache');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── GET /api/scm/ai/forecast-demand — Holt-Winters demand forecast ─────────
 // Cache 60s — forecast doesn't change rapidly
@@ -69,7 +70,7 @@ router.get('/forecast-demand', cacheMiddleware(60), async (req, res) => {
             ...forecast,
         });
     } catch (err) {
-        console.error('Forecast error:', err);
+        logger.error('Forecast error:', err);
         res.status(500).json({ error: 'Forecast failed' });
     }
 });
@@ -108,9 +109,11 @@ router.post('/monte-carlo', async (req, res) => {
         try {
             result = await engineClient.monteCarloRun(params, simCount);
         } catch (workerErr) {
-            console.warn('Python engine failed, falling back to JS:', workerErr.message);
+            logger.warn('Python engine failed, falling back to JS:', workerErr.message);
             const advancedAI = require('../engines/intelligence/advanced-scm-ai');
             const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
             result = advancedAI.monteCarloRisk(params, simCount);
         }
 
@@ -120,7 +123,7 @@ router.post('/monte-carlo', async (req, res) => {
             ...result,
         });
     } catch (err) {
-        console.error('Monte Carlo error:', err);
+        logger.error('Monte Carlo error:', err);
         res.status(500).json({ error: 'Monte Carlo simulation failed' });
     }
 });
@@ -150,7 +153,7 @@ router.get('/delay-root-cause', cacheMiddleware(120), async (req, res) => {
             ...analysis,
         });
     } catch (err) {
-        console.error('Delay analysis error:', err);
+        logger.error('Delay analysis error:', err);
         res.status(500).json({ error: 'Delay analysis failed' });
     }
 });
@@ -192,7 +195,7 @@ router.get('/demand-sensing', async (req, res) => {
             ...sensing,
         });
     } catch (err) {
-        console.error('Demand sensing error:', err);
+        logger.error('Demand sensing error:', err);
         res.status(500).json({ error: 'Demand sensing failed' });
     }
 });
@@ -224,7 +227,7 @@ router.post('/what-if', async (req, res) => {
             ...result,
         });
     } catch (err) {
-        console.error('What-if error:', err);
+        logger.error('What-if error:', err);
         res.status(500).json({ error: 'What-if simulation failed' });
     }
 });

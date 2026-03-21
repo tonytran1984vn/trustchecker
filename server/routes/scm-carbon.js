@@ -16,6 +16,7 @@ const factorService = require('../engines/carbon-support').factorService;
 const { cacheMiddleware } = require('../cache');
 
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // ─── Helper: org-scoped data fetchers with optional date range ────────────
 // Data cache (60s TTL) — prevents duplicate DB calls when 9 endpoints fire simultaneously
@@ -446,7 +447,7 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
             benchmark,
         });
     } catch (err) {
-        console.error('Carbon bundle error:', err);
+        logger.error('Carbon bundle error:', err);
         res.status(500).json({ error: 'Carbon data bundle failed' });
     }
 });
@@ -474,7 +475,7 @@ router.get('/footprint/:productId', async (req, res) => {
 
         res.json(passport);
     } catch (err) {
-        console.error('Carbon footprint error:', err);
+        logger.error('Carbon footprint error:', err);
         res.status(500).json({ error: 'Carbon footprint calculation failed' });
     }
 });
@@ -651,7 +652,7 @@ router.get('/scope', cacheMiddleware(120), async (req, res) => {
                 'Industry benchmarks derived from aggregated public datasets (DEFRA, IEA, FAO, SEMI, RJC, NHS Carbon). Intended for comparative performance screening, not regulatory reporting substitution.',
         });
     } catch (err) {
-        console.error('Carbon scope error:', err);
+        logger.error('Carbon scope error:', err);
         res.status(500).json({ error: 'Carbon scope analysis failed' });
     }
 });
@@ -682,7 +683,7 @@ router.get('/leaderboard', cacheMiddleware(120), async (req, res) => {
             })),
         });
     } catch (err) {
-        console.error('ESG leaderboard error:', err);
+        logger.error('ESG leaderboard error:', err);
         res.status(500).json({ error: 'ESG leaderboard failed' });
     }
 });
@@ -756,7 +757,7 @@ router.get('/report', cacheMiddleware(180), async (req, res) => {
 
         res.json(report);
     } catch (err) {
-        console.error('GRI report error:', err);
+        logger.error('GRI report error:', err);
         res.status(500).json({ error: 'GRI report generation failed' });
     }
 });
@@ -801,7 +802,7 @@ router.post('/offset', requirePermission('esg:manage'), async (req, res) => {
             message: 'Carbon offset recorded and blockchain-anchored',
         });
     } catch (err) {
-        console.error('Carbon offset error:', err);
+        logger.error('Carbon offset error:', err);
         res.status(500).json({ error: 'Carbon offset recording failed' });
     }
 });
@@ -896,7 +897,7 @@ router.get('/risk-factors', cacheMiddleware(120), async (req, res) => {
 
         res.json({ risk_factors, total_products: products.length, total_carbon_kgCO2e: +totalCarbon.toFixed(2) });
     } catch (err) {
-        console.error('Carbon risk factors error:', err);
+        logger.error('Carbon risk factors error:', err);
         res.status(500).json({ error: 'Carbon risk factor analysis failed' });
     }
 });
@@ -986,7 +987,7 @@ router.get('/regulatory', cacheMiddleware(120), async (req, res) => {
             frameworks,
         });
     } catch (err) {
-        console.error('Regulatory alignment error:', err);
+        logger.error('Regulatory alignment error:', err);
         res.status(500).json({ error: 'Regulatory alignment assessment failed' });
     }
 });
@@ -1086,7 +1087,7 @@ router.get('/maturity', async (req, res) => {
             eas_version: '3.0',
         });
     } catch (err) {
-        console.error('Carbon maturity error:', err);
+        logger.error('Carbon maturity error:', err);
         res.status(500).json({ error: 'Carbon maturity assessment failed' });
     }
 });
@@ -1097,7 +1098,7 @@ router.get('/governance-flow', (req, res) => {
         const flow = carbonEngine.getGovernanceFlow();
         res.json(flow);
     } catch (err) {
-        console.error('Governance flow error:', err);
+        logger.error('Governance flow error:', err);
         res.status(500).json({ error: 'Governance flow retrieval failed' });
     }
 });
@@ -1112,7 +1113,7 @@ router.get('/role-matrix', cacheMiddleware(300), (req, res) => {
             eas_version: '3.0',
         });
     } catch (err) {
-        console.error('Role matrix error:', err);
+        logger.error('Role matrix error:', err);
         res.status(500).json({ error: 'Role matrix retrieval failed' });
     }
 });
@@ -1182,7 +1183,7 @@ router.get('/benchmark', cacheMiddleware(180), async (req, res) => {
                   : '⚠️ Below industry average — improvement needed',
         });
     } catch (err) {
-        console.error('Carbon benchmark error:', err);
+        logger.error('Carbon benchmark error:', err);
         res.status(500).json({ error: 'Carbon benchmark analysis failed' });
     }
 });
@@ -1205,7 +1206,7 @@ router.get('/scope3-materiality', cacheMiddleware(180), async (req, res) => {
         const result = carbonEngine.assessScope3Materiality(products, shipments, events, partners);
         res.json(result);
     } catch (err) {
-        console.error('Scope 3 materiality error:', err);
+        logger.error('Scope 3 materiality error:', err);
         res.status(500).json({ error: 'Scope 3 materiality screening failed' });
     }
 });
@@ -1267,7 +1268,7 @@ router.get('/net-position', cacheMiddleware(60), async (req, res) => {
             offsets: offsetDetails,
         });
     } catch (err) {
-        console.error('Net position error:', err);
+        logger.error('Net position error:', err);
         res.status(500).json({ error: 'Net position calculation failed' });
     }
 });
@@ -1338,7 +1339,7 @@ router.post('/offset/retire', requirePermission('esg:manage'), async (req, res) 
             retired_at: new Date().toISOString(),
         });
     } catch (err) {
-        console.error('Offset retire error:', err);
+        logger.error('Offset retire error:', err);
         res.status(500).json({ error: 'Credit retirement failed' });
     }
 });
@@ -1362,7 +1363,7 @@ router.get('/factors', cacheMiddleware(300), async (req, res) => {
             methodology: 'DEFRA/GHG Protocol 2025',
         });
     } catch (err) {
-        console.error('Factors list error:', err);
+        logger.error('Factors list error:', err);
         res.status(500).json({ error: 'Failed to load emission factors' });
     }
 });
@@ -1375,6 +1376,8 @@ router.put('/factors/:id', requirePermission('esg:manage'), async (req, res) => 
         // Audit log
         const { v4: uuidv4 } = require('uuid');
         const { withTransaction } = require('../middleware/transaction');
+const { orgGuard } = require('../middleware/org-middleware');
+const logger = require('../lib/logger');
         await db.run(
             `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, timestamp)
             VALUES (?, ?, 'emission_factor_updated', 'emission_factor', ?, ?, NOW())
@@ -1397,7 +1400,7 @@ router.put('/factors/:id', requirePermission('esg:manage'), async (req, res) => 
             ...result,
         });
     } catch (err) {
-        console.error('Factor update error:', err);
+        logger.error('Factor update error:', err);
         res.status(err.message === 'Factor not found' ? 404 : 500).json({
             error: err.message || 'Factor update failed',
         });
@@ -1419,7 +1422,7 @@ router.get('/factors/history', async (req, res) => {
             history,
         });
     } catch (err) {
-        console.error('Factor history error:', err);
+        logger.error('Factor history error:', err);
         res.status(500).json({ error: 'Factor history query failed' });
     }
 });
@@ -1484,7 +1487,7 @@ router.get('/scope3-deep', cacheMiddleware(180), async (req, res) => {
             categories,
         });
     } catch (err) {
-        console.error('Scope3 deep error:', err);
+        logger.error('Scope3 deep error:', err);
         res.status(500).json({ error: 'Scope3 deep dive failed' });
     }
 });
@@ -1521,7 +1524,7 @@ router.get('/marketplace', cacheMiddleware(120), async (req, res) => {
             listings,
         });
     } catch (err) {
-        console.error('Marketplace error:', err);
+        logger.error('Marketplace error:', err);
         res.json({ title: 'Carbon Credit Marketplace', total_listings: 0, total_available_tCO2e: 0, listings: [] });
     }
 });
@@ -1566,7 +1569,7 @@ router.get('/report/csrd', cacheMiddleware(180), async (req, res) => {
         };
         res.json({ disclosures, cbam_annex, total_emissions_tCO2e: totalT });
     } catch (err) {
-        console.error('CSRD report error:', err);
+        logger.error('CSRD report error:', err);
         res.status(500).json({ error: 'CSRD report failed' });
     }
 });
@@ -1658,7 +1661,7 @@ router.get('/benchmark/cross-org', cacheMiddleware(300), async (req, res) => {
                     : '⚠️ Consider increasing carbon offset coverage',
         });
     } catch (err) {
-        console.error('Cross-org benchmark error:', err);
+        logger.error('Cross-org benchmark error:', err);
         res.json({ percentile: 0, rank: 0, total_orgs: 0, your_intensity: 0, leaderboard: [] });
     }
 });
