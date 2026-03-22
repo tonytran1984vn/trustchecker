@@ -15,9 +15,15 @@ export function renderPage() {
       </div>
       <div class="sa-card"><h3>Rule Configuration (${rules.length})</h3>
         ${rules.length === 0 ? '<p style="color:var(--text-secondary)">No rules</p>' :
-      `<table class="sa-table"><thead><tr><th>Rule</th><th>Severity</th><th>Active</th></tr></thead>
-          <tbody>${rules.map(r => `<tr><td style="font-weight:600">${r.name || r.rule_id || '—'}</td>
-            <td><span class="sa-status-pill sa-pill-${r.severity === 'high' ? 'red' : r.severity === 'medium' ? 'orange' : 'blue'}">${r.severity || '—'}</span></td>
-            <td>${r.is_active !== false ? '✅' : '❌'}</td></tr>`).join('')}</tbody></table>`}
+      `<table class="sa-table"><thead><tr><th>Rule</th><th>Category</th><th>Active</th></tr></thead>
+          <tbody>${rules.map(r => {
+            const ruleName = r.name || r.rule_key || r.rule_id || '—';
+            const cat = r.severity || r.category || 'general';
+            const catColor = cat === 'high' || cat === 'blocking' ? 'red' : cat === 'medium' || cat === 'scoring' ? 'orange' : 'blue';
+            const active = r.is_active !== undefined ? r.is_active !== false : r.rule_value !== undefined;
+            return `<tr><td style="font-weight:600">${ruleName}</td>
+            <td><span class="sa-status-pill sa-pill-${catColor}">${cat}</span></td>
+            <td>${active ? '✅' : '❌'}</td></tr>`;
+          }).join('')}</tbody></table>`}
       </div></div></div>`;
 }
