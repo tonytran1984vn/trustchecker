@@ -5308,7 +5308,7 @@ html {
   }
 }
 
-/* ── Detail Grid (for tenant-detail) ───────────────────────── */
+/* ── Detail Grid (for org-detail) ───────────────────────── */
 .sa-detail-grid {
   display: grid;
   gap: 0.5rem;
@@ -5345,7 +5345,7 @@ html {
   }
 }
 
-/* ── Tabs (tenant-detail) ──────────────────────────────────── */
+/* ── Tabs (org-detail) ──────────────────────────────────── */
 .sa-tabs {
   display: flex;
   gap: 0;
@@ -6018,14 +6018,14 @@ html {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   TENANT MANAGEMENT — Phoenix Clean Light Theme
+   ORG MANAGEMENT — Phoenix Clean Light Theme
    Design: Light bg · White cards · Subtle borders · Pastel accents
    Typography: Nunito Sans
    ════════════════════════════════════════════════════════════════ */
 
 
 /* ════════════════════════════════════════════════════════════════
-   TENANT MANAGEMENT — Phoenix Clean Light Theme
+   ORG MANAGEMENT — Phoenix Clean Light Theme
    Uses .sa-page.phx-page compound selector for higher specificity
    ════════════════════════════════════════════════════════════════ */
 

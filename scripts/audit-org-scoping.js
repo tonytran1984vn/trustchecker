@@ -8,16 +8,16 @@ const db = require('../server/db');
         for (const t of tables) {
             const cols = await db.prepare(`SELECT column_name FROM information_schema.columns WHERE table_name='${t.table_name}' ORDER BY ordinal_position`).all();
             const hasOrgId = cols.some(c => c.column_name === 'org_id');
-            const hasTenantId = cols.some(c => c.column_name === 'tenant_id');
+            const hasOrgLegacyId = cols.some(c => c.column_name === 'tenant_id');
             const hasCreatedBy = cols.some(c => c.column_name === 'created_by');
-            if (!hasOrgId && !hasTenantId) {
+            if (!hasOrgId && !hasOrgLegacyId) {
                 console.log('❌ NO org_id:', t.table_name, '|', cols.map(c => c.column_name).join(', '));
             } else {
-                console.log('✅', t.table_name, hasOrgId ? '(org_id)' : '', hasTenantId ? '(tenant_id)' : '');
+                console.log('✅', t.table_name, hasOrgId ? '(org_id)' : '', hasOrgLegacyId ? '(tenant_id)' : '');
             }
         }
 
-        // Check tenant-middleware
+        // Check org-guard
         console.log('\n=== TONY IS KING ORG ===');
         const org = await db.prepare("SELECT * FROM organizations WHERE name ILIKE '%tony%king%'").get();
         console.log('Org:', JSON.stringify(org));

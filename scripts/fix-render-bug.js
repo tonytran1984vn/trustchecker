@@ -16,7 +16,7 @@ const files = [
     'client/pages/sa/risk-feed.js',
     'client/pages/sa/risk-analytics.js',
     'client/pages/sa/industry-benchmark.js',
-    'client/pages/sa/suspicious-tenants.js',
+    'client/pages/sa/suspicious-orgs.js',
     'client/pages/ca/access-logs.js',
     'client/pages/ca/code-audit-log.js',
     'client/pages/ca/risk-rules.js',

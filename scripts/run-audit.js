@@ -13,7 +13,7 @@ var SCANNERS = [
     { name: "Route Security", script: "audit-routes.js", icon: "🛡️" },
     { name: "SQL Safety", script: "audit-sql.js", icon: "💾" },
     { name: "Migration Risk", script: "audit-migrations.js", icon: "🔄" },
-    { name: "Tenant Isolation", script: "audit-tenant.js", icon: "🏢" }
+    { name: "Org Isolation", script: "audit-org.js", icon: "🏢" }
 ];
 
 var isCI = process.argv.includes("--ci");

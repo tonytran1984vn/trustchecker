@@ -27,7 +27,7 @@ bytenode.compileFile(src, dst).then(() => {
     console.log(`   The .jsc file is V8 bytecode — not readable by humans.`);
     console.log(`\n📌 Next steps:`);
     console.log(`   1. Deploy only erqf-engine.jsc to VPS (not .js)`);
-    console.log(`   2. Update require in tenant-admin.js to load .jsc`);
+    console.log(`   2. Update require in org-admin.js to load .jsc`);
 }).catch(err => {
     console.error('❌ Compilation failed:', err.message);
     process.exit(1);

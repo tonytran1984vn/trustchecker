@@ -34,8 +34,8 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL || 'postgresq
 
         // 3. Get tony org
         const orgRes = await client.query("SELECT id, name FROM organizations WHERE slug = 'tony-is-king' OR name ILIKE '%tony%' LIMIT 1");
-        const tenantId = orgRes.rows[0]?.id || null;
-        console.log('✓ Tenant:', orgRes.rows[0]?.name, '→', tenantId);
+        const orgId = orgRes.rows[0]?.id || null;
+        console.log('✓ Org:', orgRes.rows[0]?.name, '→', orgId);
 
         // 4. Seed rules
         const { v4: uuidv4 } = require('uuid');
@@ -53,7 +53,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL || 'postgresq
             await client.query(
                 `INSERT INTO format_rules (id, name, prefix, pattern, separator, code_length, charset, check_digit_algo, description, example, tenant_id, status, usage_count, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, NOW() - INTERVAL '${r.d} days', NOW())`,
-                [id, r.name, r.prefix, r.pattern, r.sep, r.len, r.cs, r.algo, r.desc, r.ex, tenantId, r.st, r.uc]
+                [id, r.name, r.prefix, r.pattern, r.sep, r.len, r.cs, r.algo, r.desc, r.ex, orgId, r.st, r.uc]
             );
             await client.query(
                 `INSERT INTO format_rules_audit (id, rule_id, action, changes, actor_id, actor_name, created_at)

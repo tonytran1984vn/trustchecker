@@ -46,22 +46,22 @@ async function seed() {
   // ═══ 2. USERS (18 roles) ═══
   console.log('👤 Users...');
   const users = [
-    { email: 'admin@tonyisking.com', user: 'tik_admin', role: 'company_admin', type: 'tenant', rbac: 'company_admin' },
-    { email: 'security@tonyisking.com', user: 'tik_security', role: 'security_officer', type: 'tenant', rbac: 'security_officer' },
-    { email: 'ceo@tonyisking.com', user: 'tik_ceo', role: 'executive', type: 'tenant', rbac: 'executive' },
-    { email: 'ops@tonyisking.com', user: 'tik_ops', role: 'ops_manager', type: 'tenant', rbac: 'ops_manager' },
-    { email: 'risk@tonyisking.com', user: 'tik_risk', role: 'risk_officer', type: 'tenant', rbac: 'risk_officer' },
-    { email: 'compliance@tonyisking.com', user: 'tik_compliance', role: 'compliance_officer', type: 'tenant', rbac: 'compliance_officer' },
-    { email: 'dev@tonyisking.com', user: 'tik_dev', role: 'developer', type: 'tenant', rbac: 'developer' },
-    { email: 'ggc@tonyisking.com', user: 'tik_ggc', role: 'ggc_member', type: 'tenant', rbac: 'ggc_member' },
-    { email: 'riskcom@tonyisking.com', user: 'tik_riskcom', role: 'risk_committee', type: 'tenant', rbac: 'risk_committee' },
-    { email: 'ivu@tonyisking.com', user: 'tik_ivu', role: 'ivu_validator', type: 'tenant', rbac: 'ivu_validator' },
-    { email: 'scm@tonyisking.com', user: 'tik_scm', role: 'scm_analyst', type: 'tenant', rbac: 'scm_analyst' },
-    { email: 'blockchain@tonyisking.com', user: 'tik_blockchain', role: 'blockchain_operator', type: 'tenant', rbac: 'blockchain_operator' },
-    { email: 'carbon@tonyisking.com', user: 'tik_carbon', role: 'carbon_officer', type: 'tenant', rbac: 'carbon_officer' },
-    { email: 'operator@tonyisking.com', user: 'tik_operator', role: 'operator', type: 'tenant', rbac: 'operator' },
-    { email: 'auditor@tonyisking.com', user: 'tik_auditor', role: 'auditor', type: 'tenant', rbac: 'auditor' },
-    { email: 'viewer@tonyisking.com', user: 'tik_viewer', role: 'viewer', type: 'tenant', rbac: 'viewer' },
+    { email: 'admin@tonyisking.com', user: 'tik_admin', role: 'company_admin', type: 'org', rbac: 'company_admin' },
+    { email: 'security@tonyisking.com', user: 'tik_security', role: 'security_officer', type: 'org', rbac: 'security_officer' },
+    { email: 'ceo@tonyisking.com', user: 'tik_ceo', role: 'executive', type: 'org', rbac: 'executive' },
+    { email: 'ops@tonyisking.com', user: 'tik_ops', role: 'ops_manager', type: 'org', rbac: 'ops_manager' },
+    { email: 'risk@tonyisking.com', user: 'tik_risk', role: 'risk_officer', type: 'org', rbac: 'risk_officer' },
+    { email: 'compliance@tonyisking.com', user: 'tik_compliance', role: 'compliance_officer', type: 'org', rbac: 'compliance_officer' },
+    { email: 'dev@tonyisking.com', user: 'tik_dev', role: 'developer', type: 'org', rbac: 'developer' },
+    { email: 'ggc@tonyisking.com', user: 'tik_ggc', role: 'ggc_member', type: 'org', rbac: 'ggc_member' },
+    { email: 'riskcom@tonyisking.com', user: 'tik_riskcom', role: 'risk_committee', type: 'org', rbac: 'risk_committee' },
+    { email: 'ivu@tonyisking.com', user: 'tik_ivu', role: 'ivu_validator', type: 'org', rbac: 'ivu_validator' },
+    { email: 'scm@tonyisking.com', user: 'tik_scm', role: 'scm_analyst', type: 'org', rbac: 'scm_analyst' },
+    { email: 'blockchain@tonyisking.com', user: 'tik_blockchain', role: 'blockchain_operator', type: 'org', rbac: 'blockchain_operator' },
+    { email: 'carbon@tonyisking.com', user: 'tik_carbon', role: 'carbon_officer', type: 'org', rbac: 'carbon_officer' },
+    { email: 'operator@tonyisking.com', user: 'tik_operator', role: 'operator', type: 'org', rbac: 'operator' },
+    { email: 'auditor@tonyisking.com', user: 'tik_auditor', role: 'auditor', type: 'org', rbac: 'auditor' },
+    { email: 'viewer@tonyisking.com', user: 'tik_viewer', role: 'viewer', type: 'org', rbac: 'viewer' },
   ];
   const userIds = {};
   for (const u of users) {

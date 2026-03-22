@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * TrustChecker DevSecOps — Tenant Isolation Scanner v2.0 (Tuned)
+ * TrustChecker DevSecOps — Org Isolation Scanner v2.0 (Tuned)
  *
  * Precision rules:
  * - Only flags broadcast/emit without org scope in websocket contexts
@@ -88,7 +88,7 @@ function scanFile(filepath) {
                 header();
                 addFinding("high", relPath, "TIMER_NO_ORG_CONTEXT",
                     "Background task with DB access but no org context",
-                    lineNum, "Pass org_id to ensure tenant isolation in async operations");
+                    lineNum, "Pass org_id to ensure org isolation in async operations");
             }
         }
     });
@@ -109,7 +109,7 @@ if (jsonMode) {
     console.log(JSON.stringify({ stats: stats, findings: findings }, null, 2));
 } else {
     console.log("\n" + "\u2550".repeat(50));
-    console.log("TENANT ISOLATION AUDIT v2.0 (Tuned)");
+    console.log("ORG ISOLATION AUDIT v2.0 (Tuned)");
     console.log("\u2550".repeat(50));
     console.log("Files scanned:   " + stats.files_scanned);
     console.log("Total findings:  " + stats.total);
