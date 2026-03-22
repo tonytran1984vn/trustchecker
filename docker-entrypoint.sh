@@ -31,13 +31,14 @@ echo "✅ PostgreSQL ready"
 
 # ─── Wait for Redis ────────────────────────────────────────────
 if [ -n "$REDIS_URL" ]; then
-  echo "⏳ Waiting for Redis..."
+  # Extract host:port from REDIS_URL (redis://host:port)
+  REDIS_HOST=$(echo "$REDIS_URL" | sed -n 's|redis://\([^:]*\).*|\1|p')
+  REDIS_PORT=$(echo "$REDIS_URL" | sed -n 's|redis://[^:]*:\([0-9]*\).*|\1|p')
+  REDIS_HOST=${REDIS_HOST:-redis}
+  REDIS_PORT=${REDIS_PORT:-6379}
+  echo "⏳ Waiting for Redis ($REDIS_HOST:$REDIS_PORT)..."
   RETRY=0
-  until node -e "
-    const { createClient } = require('redis');
-    const c = createClient({ url: process.env.REDIS_URL });
-    c.connect().then(() => { c.quit(); process.exit(0); }).catch(() => process.exit(1));
-  " 2>/dev/null; do
+  until echo PING | nc -w 1 "$REDIS_HOST" "$REDIS_PORT" 2>/dev/null | grep -q PONG; do
     RETRY=$((RETRY + 1))
     if [ $RETRY -ge $MAX_RETRIES ]; then
       echo "⚠️  Redis not ready — continuing without Redis"
