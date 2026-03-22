@@ -14,6 +14,7 @@ const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { authMiddleware } = require('../auth/core');
+const { orgGuard } = require('../middleware/org-middleware');
 const {
     requireOrgAdmin,
     checkPlanGuardrail,
@@ -25,6 +26,7 @@ const {
 
 // All routes require auth + org context + org admin
 router.use(authMiddleware);
+router.use(orgGuard());
 router.use(requireOrgAdmin());
 
 // ═══════════════════════════════════════════════════════════════════════════════
