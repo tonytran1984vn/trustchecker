@@ -440,14 +440,28 @@ router.get('/rules-config', authMiddleware, async (req, res) => {
                 .all();
         }
 
+        // Normalize rules: parse rule_value JSON and map to expected fields
+        const normalized = rules.map(r => {
+            let rv = {};
+            try {
+                rv = typeof r.rule_value === 'string' ? JSON.parse(r.rule_value) : r.rule_value || {};
+            } catch (_) {}
+            return {
+                ...r,
+                name: r.name || r.rule_key || r.rule_id || r.id,
+                severity: r.severity || rv.severity || r.category || 'general',
+                is_active: r.is_active !== undefined ? r.is_active : rv.is_active !== undefined ? rv.is_active : true,
+            };
+        });
+
         // Group by category or severity
         const grouped = {};
-        for (const r of rules) {
+        for (const r of normalized) {
             const cat = r.category || r.severity || 'general';
             if (!grouped[cat]) grouped[cat] = [];
             grouped[cat].push(r);
         }
-        res.json({ rules, config: rules, grouped });
+        res.json({ rules: normalized, config: normalized, grouped });
     } catch (err) {
         logger.error('Get rules config error:', err);
         res.status(500).json({ error: 'Failed to fetch rules config' });
