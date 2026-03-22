@@ -183,11 +183,13 @@ router.post('/join/:token', async function (req, res) {
         res.status(500).json({ error: 'Failed to create account' });
     }
 });
+const { orgGuard } = require('../middleware/org-middleware');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AUTHENTICATED ENDPOINTS
 // ═══════════════════════════════════════════════════════════════════════════════
 router.use(authMiddleware);
+router.use(orgGuard());
 
 // POST /invite — Send supplier network invitation
 router.post('/invite', async function (req, res) {
