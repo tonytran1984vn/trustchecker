@@ -6,7 +6,7 @@ import { icon } from '../../core/icons.js';
 
 export function renderPage() {
   // Try workspace cache (prefetched from /api/ops/incidents?status=closed)
-  const cache = window._opsIncCache || {};
+  const cache = window._opsIncCache || window._opsMonCache || {};
   const raw = cache.closedCases?.incidents || [];
 
   const sevMap = { SEV1: 'critical', SEV2: 'high', SEV3: 'medium', SEV4: 'low' };
