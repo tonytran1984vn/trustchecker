@@ -67,18 +67,20 @@ router.get('/incidents', async (req, res) => {
         // Try DB first
         try {
             const params = [];
-            let sql = 'SELECT * FROM ops_incidents_v2';
+            let sql = `SELECT i.*, u.username as assigned_username, u.email as assigned_email
+                       FROM ops_incidents_v2 i
+                       LEFT JOIN users u ON i.assigned_to = u.id`;
             const conditions = [];
             if (orgId) {
-                conditions.push('org_id = ?');
+                conditions.push('i.org_id = ?');
                 params.push(orgId);
             }
             if (req.query.status) {
-                conditions.push('status = ?');
+                conditions.push('i.status = ?');
                 params.push(req.query.status);
             }
             if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-            sql += ' ORDER BY created_at DESC LIMIT ?';
+            sql += ' ORDER BY i.created_at DESC LIMIT ?';
             params.push(limit);
 
             const incidents = await db.all(sql, params);
@@ -256,14 +258,16 @@ router.get('/bundle', async (req, res) => {
         (async () => {
             try {
                 const params = [];
-                let sql = 'SELECT * FROM ops_incidents_v2';
+                let sql = `SELECT i.*, u.username as assigned_username, u.email as assigned_email
+                           FROM ops_incidents_v2 i
+                           LEFT JOIN users u ON i.assigned_to = u.id`;
                 const conditions = [];
                 if (orgId) {
-                    conditions.push('org_id = ?');
+                    conditions.push('i.org_id = ?');
                     params.push(orgId);
                 }
                 if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-                sql += ' ORDER BY created_at DESC LIMIT ?';
+                sql += ' ORDER BY i.created_at DESC LIMIT ?';
                 params.push(limit);
                 const incidents = await db.all(sql, params);
                 return { title: 'Ops Incidents', total: incidents.length, incidents };
@@ -276,7 +280,9 @@ router.get('/bundle', async (req, res) => {
         // Module 3: Feature Flags
         (async () => {
             try {
-                const rows = await db.all('SELECT key, label, description, icon, color, enabled FROM platform_feature_flags ORDER BY key');
+                const rows = await db.all(
+                    'SELECT key, label, description, icon, color, enabled FROM platform_feature_flags ORDER BY key'
+                );
                 const flagList = rows.map(r => ({
                     key: r.key,
                     label: r.label || r.key.replace(/_/g, ' '),

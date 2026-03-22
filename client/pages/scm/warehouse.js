@@ -81,7 +81,7 @@ export function renderPage() {
                     </div>
                   </td>
                   <td style="padding:14px 12px;border-bottom:1px solid var(--border-color,rgba(0,0,0,0.04))">
-                    <span style="font-size:0.78rem;color:var(--text-primary);font-weight:500">${w.temp || '—'}</span>
+                    <span style="font-size:0.78rem;color:var(--text-primary);font-weight:500">${w.temperature ? w.temperature + '°C' : (w.temp || '—')}</span>
                   </td>
                   <td style="padding:14px 12px;border-bottom:1px solid var(--border-color,rgba(0,0,0,0.04))">
                     <span style="display:inline-flex;align-items:center;gap:5px;font-size:0.72rem;padding:4px 10px;border-radius:20px;font-weight:500;
