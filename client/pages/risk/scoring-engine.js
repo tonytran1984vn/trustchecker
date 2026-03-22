@@ -15,14 +15,16 @@ export function renderPage() {
       </div>
       <div class="sa-card"><h3>Rule Configuration (${rules.length})</h3>
         ${rules.length === 0 ? '<p style="color:var(--text-secondary)">No rules</p>' :
-      `<table class="sa-table"><thead><tr><th>Rule</th><th>Category</th><th>Active</th></tr></thead>
+      `<table class="sa-table"><thead><tr><th>Rule</th><th>Severity</th><th>Active</th></tr></thead>
           <tbody>${rules.map(r => {
             const ruleName = r.name || r.rule_key || r.rule_id || '—';
-            const cat = r.severity || r.category || 'general';
-            const catColor = cat === 'high' || cat === 'blocking' ? 'red' : cat === 'medium' || cat === 'scoring' ? 'orange' : 'blue';
-            const active = r.is_active !== undefined ? r.is_active !== false : r.rule_value !== undefined;
+            let rv = {};
+            try { rv = typeof r.rule_value === 'string' ? JSON.parse(r.rule_value) : (r.rule_value || {}); } catch(_){}
+            const sev = r.severity || rv.severity || r.category || 'general';
+            const sevColor = sev === 'high' || sev === 'critical' ? 'red' : sev === 'medium' ? 'orange' : 'blue';
+            const active = r.is_active !== undefined ? r.is_active !== false : rv.is_active !== undefined ? rv.is_active !== false : true;
             return `<tr><td style="font-weight:600">${ruleName}</td>
-            <td><span class="sa-status-pill sa-pill-${catColor}">${cat}</span></td>
+            <td><span class="sa-status-pill sa-pill-${sevColor}">${sev}</span></td>
             <td>${active ? '✅' : '❌'}</td></tr>`;
           }).join('')}</tbody></table>`}
       </div></div></div>`;
