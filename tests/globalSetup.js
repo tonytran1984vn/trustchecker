@@ -1,31 +1,11 @@
-const http = require("http");
-const fs = require("fs");
-const path = require("path");
-
-module.exports = async function() {
-    var base = process.env.TEST_URL || "http://localhost:4000";
-    return new Promise(function(resolve) {
-        var data = JSON.stringify({ email: "owner@tonyisking.com", password: "123qaz12" });
-        var url = new URL(base + "/api/auth/login");
-        var req = http.request({
-            hostname: url.hostname, port: url.port, path: url.pathname,
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Content-Length": data.length }
-        }, function(res) {
-            var body = "";
-            res.on("data", function(c) { body += c; });
-            res.on("end", function() {
-                try {
-                    var parsed = JSON.parse(body);
-                    fs.writeFileSync("/tmp/test-token.txt", parsed.token || "");
-                } catch(e) {
-                    fs.writeFileSync("/tmp/test-token.txt", "");
-                }
-                resolve();
-            });
-        });
-        req.on("error", function() { fs.writeFileSync("/tmp/test-token.txt", ""); resolve(); });
-        req.write(data);
-        req.end();
-    });
+/**
+ * Jest Global Setup
+ * Sets required env vars before any test suite runs.
+ */
+module.exports = async function () {
+    process.env.JWT_SECRET = 'test-jwt-secret-must-be-at-least-32-characters-long-for-tests';
+    process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
+    process.env.NODE_ENV = 'test';
+    process.env.PORT = '0'; // random port
+    process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test_trustchecker';
 };

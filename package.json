@@ -68,7 +68,15 @@
       "!server/node_modules/**"
     ],
     "testTimeout": 30000,
-    "globalSetup": "./tests/globalSetup.js"
+    "globalSetup": "./tests/globalSetup.js",
+    "transformIgnorePatterns": [
+      "node_modules/(?!(@noble|uuid|otplib|@otplib|@scure)/)"
+    ],
+    "transform": {
+      "node_modules/(@noble|uuid|otplib|@otplib|@scure)/.+\\.js$": "babel-jest",
+      "^.+\\.jsx?$": "babel-jest",
+      "^.+\\.tsx?$": "babel-jest"
+    }
   },
   "lint-staged": {
     "server/**/*.js": [

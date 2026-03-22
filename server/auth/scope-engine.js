@@ -19,9 +19,13 @@ const db = require('../db');
 
 // Roles that bypass scope restrictions (org-wide access)
 const SCOPE_BYPASS_ROLES = new Set([
-    'super_admin', 'platform_admin',
-    'company_admin', 'org_owner', 'org_admin',
-    'compliance_officer', 'risk_officer',
+    'super_admin',
+    'platform_admin',
+    'company_admin',
+    'org_owner',
+    'org_admin',
+    'compliance_officer',
+    'risk_officer',
 ]);
 
 // Cache: membershipId → scopes (TTL 60s)
@@ -39,12 +43,14 @@ async function getUserScopes(membershipId) {
     const cached = _scopeCache.get(membershipId);
     if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
 
-    const rows = await db.all(
-        `SELECT scope_type, scope_id, access_level 
+    const rows = await db
+        .all(
+            `SELECT scope_type, scope_id, access_level 
          FROM membership_scopes 
          WHERE membership_id = ?`,
-        [membershipId]
-    ).catch(() => []);
+            [membershipId]
+        )
+        .catch(() => []);
 
     _scopeCache.set(membershipId, { data: rows, ts: Date.now() });
     return rows;
@@ -68,15 +74,13 @@ async function hasResourceAccess(req, resourceType, resourceId) {
     if (_shouldBypassScope(req)) return true;
 
     // Load scopes
-    const scopes = req.scopes || await getUserScopes(req.membership?.id);
+    const scopes = req.scopes || (await getUserScopes(req.membership?.id));
 
     // No scopes assigned → backward compatible (org-wide access)
     if (!scopes || scopes.length === 0) return true;
 
     // Direct scope match
-    const directMatch = scopes.some(
-        s => s.scope_type === resourceType && s.scope_id === resourceId
-    );
+    const directMatch = scopes.some(s => s.scope_type === resourceType && s.scope_id === resourceId);
     if (directMatch) return true;
 
     // Supply chain scope: check if resource belongs to a scoped chain
@@ -84,10 +88,12 @@ async function hasResourceAccess(req, resourceType, resourceId) {
     if (chainScopes.length > 0 && resourceType === 'supplier') {
         const chainIds = chainScopes.map(s => s.scope_id);
         const placeholders = chainIds.map(() => '?').join(',');
-        const partner = await db.get(
-            `SELECT id FROM partners WHERE id = ? AND supply_chain_id IN (${placeholders})`,
-            [resourceId, ...chainIds]
-        ).catch(() => null);
+        const partner = await db
+            .get(`SELECT id FROM partners WHERE id = ? AND supply_chain_id IN (${placeholders})`, [
+                resourceId,
+                ...chainIds,
+            ])
+            .catch(() => null);
         if (partner) return true;
     }
 
@@ -106,15 +112,13 @@ async function scopedResourceIds(req, scopeType) {
     if (req.user?.user_type === 'platform') return null;
     if (_shouldBypassScope(req)) return null;
 
-    const scopes = req.scopes || await getUserScopes(req.membership?.id);
+    const scopes = req.scopes || (await getUserScopes(req.membership?.id));
 
     // No scopes → org-wide access
     if (!scopes || scopes.length === 0) return null;
 
     // Direct scope IDs for the type
-    const directIds = scopes
-        .filter(s => s.scope_type === scopeType)
-        .map(s => s.scope_id);
+    const directIds = scopes.filter(s => s.scope_type === scopeType).map(s => s.scope_id);
 
     // If scoped by supply_chain, expand to include related suppliers
     if (scopeType === 'supplier') {
@@ -122,10 +126,9 @@ async function scopedResourceIds(req, scopeType) {
         if (chainScopes.length > 0) {
             const chainIds = chainScopes.map(s => s.scope_id);
             const placeholders = chainIds.map(() => '?').join(',');
-            const partners = await db.all(
-                `SELECT id FROM partners WHERE supply_chain_id IN (${placeholders})`,
-                chainIds
-            ).catch(() => []);
+            const partners = await db
+                .all(`SELECT id FROM partners WHERE supply_chain_id IN (${placeholders})`, chainIds)
+                .catch(() => []);
             partners.forEach(p => {
                 if (!directIds.includes(p.id)) directIds.push(p.id);
             });
@@ -143,12 +146,10 @@ async function getAccessLevel(req, resourceType, resourceId) {
     if (req.user?.user_type === 'platform') return 'full';
     if (_shouldBypassScope(req)) return 'full';
 
-    const scopes = req.scopes || await getUserScopes(req.membership?.id);
+    const scopes = req.scopes || (await getUserScopes(req.membership?.id));
     if (!scopes || scopes.length === 0) return 'full'; // No scopes = org-wide
 
-    const match = scopes.find(
-        s => s.scope_type === resourceType && s.scope_id === resourceId
-    );
+    const match = scopes.find(s => s.scope_type === resourceType && s.scope_id === resourceId);
     return match ? match.access_level : null;
 }
 
@@ -228,10 +229,10 @@ function _shouldBypassScope(req) {
     // Check via RBAC role names
     const userRoles = req.user?.roles || [];
     if (Array.isArray(userRoles)) {
-        return userRoles.some(r => SCOPE_BYPASS_ROLES.has(r));
+        if (userRoles.some(r => SCOPE_BYPASS_ROLES.has(r))) return true;
     }
     if (typeof userRoles === 'string') {
-        return SCOPE_BYPASS_ROLES.has(userRoles);
+        if (SCOPE_BYPASS_ROLES.has(userRoles)) return true;
     }
 
     // Check user_type

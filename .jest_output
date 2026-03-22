@@ -1,0 +1,1198 @@
+(node:24330) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+FAIL tests/unit/middleware/expanded-middleware.test.js
+  ● password-policy validatePassword › rejects common passwords
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: false
+    Received: true
+
+      45 |     test('rejects common passwords', () => {
+      46 |         const r = validatePassword('Password123!!');
+    > 47 |         expect(r.valid).toBe(false);
+         |                         ^
+      48 |     });
+      49 |
+      50 |     test('accepts 16 char complex password', () => {
+
+      at Object.<anonymous> (tests/unit/middleware/expanded-middleware.test.js:47:25)
+
+  ● password-policy validatePassword › rejects null password
+
+    TypeError: Cannot read properties of null (reading 'toLowerCase')
+
+      20 |     if (!/[0-9]/.test(password)) errors.push('Must contain at least one digit');
+      21 |     if (!/[!@#$%^&*()_+\-=\[\]{};:'",.<>?/|`~]/.test(password)) errors.push('Must contain at least one special character');
+    > 22 |     if (COMMON_PASSWORDS.has(password.toLowerCase())) errors.push('Password is too common');
+         |                                       ^
+      23 |     return { valid: errors.length === 0, errors };
+      24 | }
+      25 |
+
+      at validatePassword (server/security/password-policy.js:22:39)
+      at Object.<anonymous> (tests/unit/middleware/expanded-middleware.test.js:61:19)
+
+  ● password-policy validatePassword › rejects undefined password
+
+    TypeError: Cannot read properties of undefined (reading 'toLowerCase')
+
+      20 |     if (!/[0-9]/.test(password)) errors.push('Must contain at least one digit');
+      21 |     if (!/[!@#$%^&*()_+\-=\[\]{};:'",.<>?/|`~]/.test(password)) errors.push('Must contain at least one special character');
+    > 22 |     if (COMMON_PASSWORDS.has(password.toLowerCase())) errors.push('Password is too common');
+         |                                       ^
+      23 |     return { valid: errors.length === 0, errors };
+      24 | }
+      25 |
+
+      at validatePassword (server/security/password-policy.js:22:39)
+      at Object.<anonymous> (tests/unit/middleware/expanded-middleware.test.js:66:19)
+
+(node:24336) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:24335) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/utils/safe-error-and-audit.test.js
+PASS tests/unit/engines/risk-graph.test.js
+(node:24331) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/middleware/requireSuperAdmin.test.js
+(node:24334) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/middleware/require-super-admin.test.js
+(node:24333) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/auth/core.test.js
+(node:24332) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/auth/core-extended.test.js
+PASS tests/unit/engines/network-topology.test.js
+PASS tests/unit/engines/registry.test.js
+PASS tests/unit/auth/policy-engine.test.js
+PASS tests/unit/engines/treasury-liquidity.test.js
+PASS tests/unit/engines/crisis-engine.test.js
+  ● Console
+
+    console.log
+      [CRISIS] KILL_SWITCH_ACTIVATED: {"id":"721f9458-d13d-479d-9315-216f28bfcf80","type":"module","target":"billing","reason":"suspicious activity","activated_by":"admin1","activated_by_role":"super_admin","activated_at":"2026-03-22T08:2
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] DUAL_KEY_FIRST: {"type":"org","target":"org1","activatedBy":"admin1","role":"super_admin","reason":"breach"}
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] DUAL_KEY_FIRST: {"type":"org","target":"org1","activatedBy":"admin1","role":"super_admin","reason":"breach"}
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] DUAL_KEY_FIRST: {"type":"org","target":"org1","activatedBy":"admin1","role":"super_admin","reason":"breach"}
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] DUAL_KEY_APPROVED: {"id":"org:org1","type":"org","target":"org1","reason":"breach","first_approver":{"user":"admin1","role":"super_admin","time":"2026-03-22T08:23:47.795Z"},"status":"approved","expires_at":"2026-03-22T0
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] KILL_SWITCH_ACTIVATED: {"id":"61bc28d3-8cdc-470b-ad1a-9ea72d9e43d6","type":"org","target":"org1","reason":"confirmed","activated_by":"admin2","activated_by_role":"platform_security","activated_at":"2026-03-22T08:23:47.796Z"
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] DUAL_KEY_FIRST: {"type":"global","target":"ALL_SYSTEMS","activatedBy":"admin1","role":"super_admin","reason":"catastrophe"}
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] DUAL_KEY_FIRST: {"type":"global","target":"ALL_SYSTEMS","activatedBy":"admin1","role":"super_admin","reason":"catastrophe"}
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] DUAL_KEY_APPROVED: {"id":"global:ALL_SYSTEMS","type":"global","target":"ALL_SYSTEMS","reason":"catastrophe","first_approver":{"user":"admin1","role":"super_admin","time":"2026-03-22T08:23:47.799Z"},"status":"approved","
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] KILL_SWITCH_ACTIVATED: {"id":"c43e5fc3-2629-4564-8afc-562a69b8d385","type":"global","target":"ALL_SYSTEMS","reason":"confirmed","activated_by":"admin2","activated_by_role":"super_admin","activated_at":"2026-03-22T08:23:47.8
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] KILL_SWITCH_ACTIVATED: {"id":"5d4aeca4-c4ad-414d-9449-274a378939da","type":"module","target":"billing","reason":"test","activated_by":"admin1","activated_by_role":"super_admin","activated_at":"2026-03-22T08:23:47.823Z","sta
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] KILL_SWITCH_DEACTIVATED: {"id":"5d4aeca4-c4ad-414d-9449-274a378939da","type":"module","target":"billing","reason":"test","activated_by":"admin1","activated_by_role":"super_admin","activated_at":"2026-03-22T08:23:47.823Z","sta
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] KILL_SWITCH_ACTIVATED: {"id":"a82aa5c3-1f76-453d-b03b-2ecf972ab318","type":"module","target":"billing","reason":"test","activated_by":"admin1","activated_by_role":"super_admin","activated_at":"2026-03-22T08:23:47.827Z","sta
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] ESCALATION: {"id":"52c76c30-69cc-470b-99c6-079e43f2f0b8","from":"MONITOR","to":"YELLOW","trigger":"anomaly_detected","escalated_by":"admin1","role":"super_admin","timestamp":"2026-03-22T08:23:47.828Z"}
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] DRILL_STARTED: {"id":"1abaf037-0156-4cb5-a20a-a6d4a87063ff","playbook_key":"data_breach","playbook":{"name":"Data Breach Response","severity":"RED","steps":[{"seq":1,"action":"Activate kill-switch for affected org",
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] DRILL_STARTED: {"id":"ddf2cedb-f321-44a2-9f8b-f945e5f457ac","playbook_key":"data_breach","playbook":{"name":"Data Breach Response","severity":"RED","steps":[{"seq":1,"action":"Activate kill-switch for affected org",
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] KILL_SWITCH_ACTIVATED: {"id":"78e23483-8d10-41f6-aaee-273a47caf9e9","type":"module","target":"billing","reason":"drill test","activated_by":"admin1","activated_by_role":"super_admin","activated_at":"2026-03-22T08:23:47.839Z
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] DRILL_ENDED: {"ended_by":"admin1"}
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] KILL_SWITCH_ACTIVATED: {"id":"afa2e83f-e191-46ac-a2c9-d80212b4b2e8","type":"module","target":"billing","reason":"test","activated_by":"admin1","activated_by_role":"super_admin","activated_at":"2026-03-22T08:23:47.903Z","sta
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] DRILL_STARTED: {"id":"b98d7e3c-7923-4f65-bcfa-4d21cbfd4c41","playbook_key":"data_breach","playbook":{"name":"Data Breach Response","severity":"RED","steps":[{"seq":1,"action":"Activate kill-switch for affected org",
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] KILL_SWITCH_ACTIVATED: {"id":"9ad29aba-4df2-4d09-aefe-cff0a0f03009","type":"module","target":"billing","reason":"drill","activated_by":"admin1","activated_by_role":"super_admin","activated_at":"2026-03-22T08:23:47.905Z","st
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+    console.log
+      [CRISIS] KILL_SWITCH_ACTIVATED: {"id":"bfe9b7de-cf0a-4a06-81c6-013815828c34","type":"module","target":"billing","reason":"test","activated_by":"admin1","activated_by_role":"super_admin","activated_at":"2026-03-22T08:23:47.908Z","sta
+
+      at CrisisEngine._log (server/engines/crisis-module/crisis.js:387:17)
+
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+PASS tests/unit/engines/transaction-fee.test.js
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+PASS tests/unit/engines/fraud-engine.test.js
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+PASS tests/unit/middleware/scm-state-machine.test.js
+PASS tests/unit/lib/schemas.test.js
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+(node:24350) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/engines/cie-role-engine.test.js
+(node:24348) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/engines/advanced-scm-ai.test.js
+(node:24354) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/engines/cie-engine.test.js
+(node:24349) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/lib/expanded-schemas.test.js
+PASS tests/unit/engines/integration-locking.test.js
+(node:24351) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/engines/regulatory-map.test.js
+PASS tests/unit/middleware/feature-gate.test.js
+PASS tests/unit/services/event-processor.test.js
+PASS tests/unit/middleware/circuit-breaker.test.js
+  ● Console
+
+    console.warn
+      🔴 [circuit-breaker] test-service: OPEN (tripped after 3 failures)
+
+      141 |         this._halfOpenOk = 0;
+      142 |         this._halfOpenActive = 0;
+    > 143 |         console.warn(`🔴 [circuit-breaker] ${this.name}: OPEN (tripped after ${this._failures.length} failures)`);
+          |                 ^
+      144 |         this.emit('open', { name: this.name, failures: this._failures.length });
+      145 |     }
+      146 |
+
+      at CircuitBreaker._trip (server/middleware/circuit-breaker.js:143:17)
+      at CircuitBreaker._onFailure (server/middleware/circuit-breaker.js:133:18)
+      at CircuitBreaker.exec (server/middleware/circuit-breaker.js:95:18)
+      at Object.<anonymous> (tests/unit/middleware/circuit-breaker.test.js:60:17)
+
+    console.warn
+      🔴 [circuit-breaker] test-service: OPEN (tripped after 3 failures)
+
+      141 |         this._halfOpenOk = 0;
+      142 |         this._halfOpenActive = 0;
+    > 143 |         console.warn(`🔴 [circuit-breaker] ${this.name}: OPEN (tripped after ${this._failures.length} failures)`);
+          |                 ^
+      144 |         this.emit('open', { name: this.name, failures: this._failures.length });
+      145 |     }
+      146 |
+
+      at CircuitBreaker._trip (server/middleware/circuit-breaker.js:143:17)
+      at CircuitBreaker._onFailure (server/middleware/circuit-breaker.js:133:18)
+      at CircuitBreaker.exec (server/middleware/circuit-breaker.js:95:18)
+      at Object.<anonymous> (tests/unit/middleware/circuit-breaker.test.js:69:17)
+
+    console.warn
+      🔴 [circuit-breaker] test-service: OPEN (tripped after 3 failures)
+
+      141 |         this._halfOpenOk = 0;
+      142 |         this._halfOpenActive = 0;
+    > 143 |         console.warn(`🔴 [circuit-breaker] ${this.name}: OPEN (tripped after ${this._failures.length} failures)`);
+          |                 ^
+      144 |         this.emit('open', { name: this.name, failures: this._failures.length });
+      145 |     }
+      146 |
+
+      at CircuitBreaker._trip (server/middleware/circuit-breaker.js:143:17)
+      at CircuitBreaker._onFailure (server/middleware/circuit-breaker.js:133:18)
+      at CircuitBreaker.exec (server/middleware/circuit-breaker.js:95:18)
+      at Object.<anonymous> (tests/unit/middleware/circuit-breaker.test.js:101:17)
+
+PASS tests/unit/middleware/pagination.test.js
+(node:24353) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/engines/scoring-boundaries.test.js
+(node:24356) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/middleware/gdpr.test.js
+PASS tests/unit/utils/sql-validator.test.js
+PASS tests/unit/engines/governance-engine.test.js
+PASS tests/unit/middleware/validate.test.js
+PASS tests/unit/middleware/abuse-detection.test.js
+  ● Console
+
+    console.warn
+      [ABUSE-WARN] Org org-exceed: 17/20 certs_per_hour in 1h
+
+      55 |         // Warning at 80% — log but allow
+      56 |         if (count > threshold * 0.8) {
+    > 57 |             console.warn(`[ABUSE-WARN] Org ${orgId}: ${count}/${threshold} ${type} in 1h`);
+         |                     ^
+      58 |         }
+      59 |
+      60 |         next();
+
+      at server/middleware/abuse-detection.js:57:21
+      at Object.<anonymous> (tests/unit/middleware/abuse-detection.test.js:58:17)
+
+    console.warn
+      [ABUSE-WARN] Org org-exceed: 18/20 certs_per_hour in 1h
+
+      55 |         // Warning at 80% — log but allow
+      56 |         if (count > threshold * 0.8) {
+    > 57 |             console.warn(`[ABUSE-WARN] Org ${orgId}: ${count}/${threshold} ${type} in 1h`);
+         |                     ^
+      58 |         }
+      59 |
+      60 |         next();
+
+      at server/middleware/abuse-detection.js:57:21
+      at Object.<anonymous> (tests/unit/middleware/abuse-detection.test.js:58:17)
+
+    console.warn
+      [ABUSE-WARN] Org org-exceed: 19/20 certs_per_hour in 1h
+
+      55 |         // Warning at 80% — log but allow
+      56 |         if (count > threshold * 0.8) {
+    > 57 |             console.warn(`[ABUSE-WARN] Org ${orgId}: ${count}/${threshold} ${type} in 1h`);
+         |                     ^
+      58 |         }
+      59 |
+      60 |         next();
+
+      at server/middleware/abuse-detection.js:57:21
+      at Object.<anonymous> (tests/unit/middleware/abuse-detection.test.js:58:17)
+
+    console.warn
+      [ABUSE-WARN] Org org-exceed: 20/20 certs_per_hour in 1h
+
+      55 |         // Warning at 80% — log but allow
+      56 |         if (count > threshold * 0.8) {
+    > 57 |             console.warn(`[ABUSE-WARN] Org ${orgId}: ${count}/${threshold} ${type} in 1h`);
+         |                     ^
+      58 |         }
+      59 |
+      60 |         next();
+
+      at server/middleware/abuse-detection.js:57:21
+      at Object.<anonymous> (tests/unit/middleware/abuse-detection.test.js:58:17)
+
+    console.warn
+      [ABUSE] Org org-exceed: 21 certs_per_hour in 1h (threshold: 20)
+
+      44 |
+      45 |         if (count > threshold) {
+    > 46 |             console.warn(`[ABUSE] Org ${orgId}: ${count} ${type} in 1h (threshold: ${threshold})`);
+         |                     ^
+      47 |             return res.status(429).json({
+      48 |                 error: `Rate limit exceeded: ${type}`,
+      49 |                 limit: threshold,
+
+      at server/middleware/abuse-detection.js:46:21
+      at Object.<anonymous> (tests/unit/middleware/abuse-detection.test.js:58:17)
+
+    console.warn
+      [ABUSE] Org org-exceed: 22 certs_per_hour in 1h (threshold: 20)
+
+      44 |
+      45 |         if (count > threshold) {
+    > 46 |             console.warn(`[ABUSE] Org ${orgId}: ${count} ${type} in 1h (threshold: ${threshold})`);
+         |                     ^
+      47 |             return res.status(429).json({
+      48 |                 error: `Rate limit exceeded: ${type}`,
+      49 |                 limit: threshold,
+
+      at server/middleware/abuse-detection.js:46:21
+      at Object.<anonymous> (tests/unit/middleware/abuse-detection.test.js:61:13)
+
+PASS tests/unit/security/field-encryption.test.js
+PASS tests/unit/middleware/audit-log.test.js
+{"@timestamp":"2026-03-22T08:23:51.622Z","level":"warn","message":"[DB] DDL statement skipped (use Prisma migrations)","service":"trustchecker","env":"test","pid":24354,"sql":"\n            CREATE TABLE IF NOT EXISTS api_keys (\n                id UUID PRIMA"}
+{"@timestamp":"2026-03-22T08:23:51.624Z","level":"warn","message":"[DB] DDL statement skipped (use Prisma migrations)","service":"trustchecker","env":"test","pid":24354,"sql":"CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash) WHERE revoked"}
+PASS tests/unit/middleware/api-key-auth.test.js
+PASS tests/unit/auth/rbac.test.js
+PASS tests/unit/engines/unit-economics.test.js
+PASS tests/unit/engines/risk-model-governance.test.js
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+PASS tests/unit/services/slack.test.js
+PASS tests/unit/auth/scope-engine.test.js
+PASS tests/unit/engines/trust-engine.test.js
+PASS tests/unit/lib/db-metrics.test.js
+PASS tests/unit/security/password-policy.test.js
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+PASS tests/unit/middleware/trace.test.js
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+PASS tests/unit/engines/webhook-engine.test.js
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+PASS tests/unit/middleware/rbac-middleware.test.js
+  ● Console
+
+    console.warn
+      [RBAC] Falling back to role check: db down
+
+      37 |         } catch (e) {
+      38 |             // Fallback to old role-based check
+    > 39 |             console.warn('[RBAC] Falling back to role check:', e.message);
+         |                     ^
+      40 |             next();
+      41 |         }
+      42 |     };
+
+      at server/middleware/rbac-middleware.js:39:21
+      at Object.<anonymous> (tests/unit/middleware/rbac-middleware.test.js:61:13)
+
+PASS tests/unit/middleware/waf.test.js
+PASS tests/unit/security/data-classification.test.js
+PASS tests/unit/services/rbac-service.test.js
+PASS tests/unit/utils/AppError.test.js
+PASS tests/unit/middleware/stream-export.test.js
+PASS tests/unit/engines/score-validation.test.js
+PASS tests/unit/engines/fee-distribution.test.js
+PASS tests/unit/engines/external-oversight.test.js
+PASS tests/unit/middleware/rateLimiter.test.js
+PASS tests/unit/engines/carbon-credit-engine.test.js
+PASS tests/unit/engines/ercm.test.js
+(node:24366) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/domain/domain-registry.test.js
+PASS tests/unit/middleware/transaction.test.js
+(node:24369) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/engines/mrmf.test.js
+PASS tests/unit/engines/sa-constraints.test.js
+PASS tests/unit/security/secrets-vault.test.js
+  ● Console
+
+    console.log
+      [SecretsVault] Using provider: env
+
+      at new SecretsVault (server/security/secrets-vault.js:282:17)
+
+PASS tests/unit/middleware/org-middleware.test.js
+(node:24367) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/services/anomaly-engine.test.js
+PASS tests/unit/middleware/rate-limiter.test.js
+(node:24368) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/middleware/blind-spot-defense.test.js
+  ● Console
+
+    console.warn
+      [BS-3] Bulk scan detected from 10.0.0.5: 11 scans in 0s
+
+      129 |                 rate_per_min: Math.round((tracker.count * 60000) / elapsed),
+      130 |             };
+    > 131 |             console.warn(
+          |                     ^
+      132 |                 '[BS-3] Bulk scan detected from ' +
+      133 |                     ip +
+      134 |                     ': ' +
+
+      at bulkScanDetector (server/middleware/blind-spot-defense.js:131:21)
+      at Object.<anonymous> (tests/unit/middleware/blind-spot-defense.test.js:66:17)
+
+    console.warn
+      [BS-3] Bulk scan detected from 10.0.0.5: 12 scans in 0s
+
+      129 |                 rate_per_min: Math.round((tracker.count * 60000) / elapsed),
+      130 |             };
+    > 131 |             console.warn(
+          |                     ^
+      132 |                 '[BS-3] Bulk scan detected from ' +
+      133 |                     ip +
+      134 |                     ': ' +
+
+      at bulkScanDetector (server/middleware/blind-spot-defense.js:131:21)
+      at Object.<anonymous> (tests/unit/middleware/blind-spot-defense.test.js:69:13)
+
+    console.error
+      [BS-4] Transaction failed: DB fail
+
+      158 |         } catch (e) {
+      159 |             // If error occurs, state should be rolled back by transaction
+    > 160 |             console.error('[BS-4] Transaction failed:', e.message);
+          |                     ^
+      161 |             if (!res.headersSent) {
+      162 |                 res.status(500).json({
+      163 |                     error: 'Operation failed — state preserved',
+
+      at server/middleware/blind-spot-defense.js:160:21
+      at Object.<anonymous> (tests/unit/middleware/blind-spot-defense.test.js:118:13)
+
+PASS tests/unit/utils/sql-safety.test.js
+PASS tests/unit/middleware/api-gateway-policy.test.js
+(node:24365) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/engines/reserve.test.js
+(node:24362) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/engines/jurisdictional-risk.test.js
+PASS tests/unit/engines/network-intelligence.test.js
+PASS tests/unit/lib/logger.test.js
+PASS tests/unit/engines/revenue-governance.test.js
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+PASS tests/unit/engines/institutional-engine.test.js
+PASS tests/unit/engines/constitutional-rbac.test.js
+PASS tests/unit/engines/kill-switch.test.js
+PASS tests/unit/lib/response.test.js
+PASS tests/unit/engines/carbon-engine.test.js
+PASS tests/unit/engines/reputation-engine.test.js
+PASS tests/unit/services/risk-scoring-engine.test.js
+PASS tests/unit/engines/epcis-engine.test.js
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+PASS tests/unit/engines/financial-reporting.test.js
+PASS tests/unit/engines/email-templates.test.js
+PASS tests/unit/engines/identity-engine.test.js
+PASS tests/unit/engines/blockchain.test.js
+PASS tests/unit/engines/cross-org-contagion.test.js
+PASS tests/unit/utils/audit-chain.test.js
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+PASS tests/unit/engines/jurisdiction-logic.test.js
+PASS tests/unit/middleware/cache-invalidate.test.js
+  ● Console
+
+    console.log
+      📦 Cache backend: In-Memory
+
+      at Object.<anonymous> (server/cache.js:202:9)
+
+PASS tests/unit/middleware/request-sanitizer.test.js
+PASS tests/unit/engines/infrastructure-custody.test.js
+PASS tests/unit/engines/compliance-engine.test.js
+PASS tests/unit/domain/saga-orchestrator.test.js
+PASS tests/unit/utils/safe-error.test.js
+/Users/dangtranhai/Downloads/TrustChecker/node_modules/pg-pool/index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+[error: role "test" does not exist] {
+  length: 96,
+  severity: 'FATAL',
+  code: '28000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'miscinit.c',
+  line: '801',
+  routine: 'InitializeSessionUserId'
+}
+
+Node.js v25.4.0
+PASS tests/unit/engines/forensic-logic.test.js
+PASS tests/unit/middleware/optimistic-lock.test.js
+PASS tests/unit/engines/entity-structuring.test.js
+PASS tests/unit/security/encryption.test.js
+  ● Console
+
+    console.error
+      [Encryption] Decrypt failed: Unsupported state or unable to authenticate data
+
+      166 |     } catch (err) {
+      167 |         _stats.errors++;
+    > 168 |         console.error('[Encryption] Decrypt failed:', err.message);
+          |                 ^
+      169 |         return ciphertext; // Return encrypted value rather than crash
+      170 |     }
+      171 | }
+
+      at decrypt (server/security/encryption.js:168:17)
+      at Object.<anonymous> (tests/unit/security/encryption.test.js:151:31)
+
+PASS tests/unit/engines/erqf.test.js
+PASS tests/unit/services/risk-scoring-utils.test.js
+PASS tests/unit/engines/ai-assistant.test.js
+PASS tests/unit/engines/risk-radar.test.js
+PASS tests/unit/security/expanded-security.test.js
+PASS tests/unit/utils/safe-json-and-async.test.js
+PASS tests/unit/engines/observability.test.js
+PASS tests/unit/engines/legal-entity.test.js
+PASS tests/unit/engines/infrastructure-metrics.test.js
+PASS tests/unit/middleware/metrics.test.js
+PASS tests/unit/services/digital-twin.test.js
+PASS tests/unit/config.test.js
+PASS tests/unit/middleware/response-wrapper.test.js
+PASS tests/unit/security/token-rotation.test.js
+PASS tests/unit/engines/regulatory-scenario.test.js
+PASS tests/unit/middleware/api-version.test.js
+PASS tests/unit/engines/economic-risk.test.js
+PASS tests/unit/middleware/session-timeout.test.js
+(node:24373) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/middleware/error-handler.test.js
+  ● Console
+
+    console.error
+      {"level":"error","type":"unhandled_error","trace":"trace-123","method":"GET","path":"/api/test","status":500,"error":"Something broke","stack":"Error: Something broke\n    at Object.<anonymous> (/Users/dangtranhai/Downloads/TrustChecker/tests/unit/middleware/error-handler.test.js:27:21)\n    at Promise.finally.completed (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1557:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1497:10)\n    at _callCircusTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1007:40)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at _runTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:947:3)\n    at /Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:849:7\n    at _runTestsForDescribeBlock (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:862:11)\n    at _runTestsForDescribeBlock (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:857:11)\n    at run (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:761:3)\n    at runAndTransformResultsToJestFormat (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1918:21)\n    at jestAdapter (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/runner.js:101:19)\n    at runTestInternal (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:275:16)\n    at runTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:343:7)\n    at Object.worker (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:497:12)","user":null,"org":null,"timestamp":"2026-03-22T08:23:56.504Z"}
+
+      12 |
+      13 |         // Log full error details
+    > 14 |         console.error(
+         |                 ^
+      15 |             JSON.stringify({
+      16 |                 level: 'error',
+      17 |                 type: 'unhandled_error',
+
+      at server/middleware/error-handler.js:14:17
+      at Object.<anonymous> (tests/unit/middleware/error-handler.test.js:28:9)
+
+    console.error
+      {"level":"error","type":"unhandled_error","trace":"trace-123","method":"GET","path":"/api/test","status":500,"error":"SQL connection failed","user":null,"org":null,"timestamp":"2026-03-22T08:23:56.514Z"}
+
+      12 |
+      13 |         // Log full error details
+    > 14 |         console.error(
+         |                 ^
+      15 |             JSON.stringify({
+      16 |                 level: 'error',
+      17 |                 type: 'unhandled_error',
+
+      at server/middleware/error-handler.js:14:17
+      at Object.<anonymous> (tests/unit/middleware/error-handler.test.js:37:9)
+
+    console.error
+      {"level":"error","type":"unhandled_error","trace":"trace-123","method":"GET","path":"/api/test","status":404,"error":"Not found","user":null,"org":null,"timestamp":"2026-03-22T08:23:56.559Z"}
+
+      12 |
+      13 |         // Log full error details
+    > 14 |         console.error(
+         |                 ^
+      15 |             JSON.stringify({
+      16 |                 level: 'error',
+      17 |                 type: 'unhandled_error',
+
+      at server/middleware/error-handler.js:14:17
+      at Object.<anonymous> (tests/unit/middleware/error-handler.test.js:46:9)
+
+    console.error
+      {"level":"error","type":"unhandled_error","trace":"trace-123","method":"GET","path":"/api/test","status":500,"error":"fail","stack":"Error: fail\n    at Object.<anonymous> (/Users/dangtranhai/Downloads/TrustChecker/tests/unit/middleware/error-handler.test.js:53:12)\n    at Promise.finally.completed (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1557:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1497:10)\n    at _callCircusTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1007:40)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at _runTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:947:3)\n    at /Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:849:7\n    at _runTestsForDescribeBlock (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:862:11)\n    at _runTestsForDescribeBlock (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:857:11)\n    at run (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:761:3)\n    at runAndTransformResultsToJestFormat (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1918:21)\n    at jestAdapter (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/runner.js:101:19)\n    at runTestInternal (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:275:16)\n    at runTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:343:7)\n    at Object.worker (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:497:12)","user":null,"org":null,"timestamp":"2026-03-22T08:23:56.562Z"}
+
+      12 |
+      13 |         // Log full error details
+    > 14 |         console.error(
+         |                 ^
+      15 |             JSON.stringify({
+      16 |                 level: 'error',
+      17 |                 type: 'unhandled_error',
+
+      at server/middleware/error-handler.js:14:17
+      at Object.<anonymous> (tests/unit/middleware/error-handler.test.js:53:9)
+
+    console.error
+      {"level":"error","type":"unhandled_error","trace":"req-456","method":"GET","path":"/api/test","status":500,"error":"fail","stack":"Error: fail\n    at Object.<anonymous> (/Users/dangtranhai/Downloads/TrustChecker/tests/unit/middleware/error-handler.test.js:59:12)\n    at Promise.finally.completed (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1557:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1497:10)\n    at _callCircusTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1007:40)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at _runTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:947:3)\n    at /Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:849:7\n    at _runTestsForDescribeBlock (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:862:11)\n    at _runTestsForDescribeBlock (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:857:11)\n    at run (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:761:3)\n    at runAndTransformResultsToJestFormat (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1918:21)\n    at jestAdapter (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/runner.js:101:19)\n    at runTestInternal (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:275:16)\n    at runTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:343:7)\n    at Object.worker (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:497:12)","user":null,"org":null,"timestamp":"2026-03-22T08:23:56.564Z"}
+
+      12 |
+      13 |         // Log full error details
+    > 14 |         console.error(
+         |                 ^
+      15 |             JSON.stringify({
+      16 |                 level: 'error',
+      17 |                 type: 'unhandled_error',
+
+      at server/middleware/error-handler.js:14:17
+      at Object.<anonymous> (tests/unit/middleware/error-handler.test.js:59:9)
+
+    console.error
+      {"level":"error","type":"unhandled_error","trace":"trace-123","method":"GET","path":"/api/test","status":500,"error":"rate limit","stack":"Error: rate limit\n    at Object.<anonymous> (/Users/dangtranhai/Downloads/TrustChecker/tests/unit/middleware/error-handler.test.js:65:21)\n    at Promise.finally.completed (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1557:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1497:10)\n    at _callCircusTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1007:40)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at _runTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:947:3)\n    at /Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:849:7\n    at _runTestsForDescribeBlock (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:862:11)\n    at _runTestsForDescribeBlock (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:857:11)\n    at run (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:761:3)\n    at runAndTransformResultsToJestFormat (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1918:21)\n    at jestAdapter (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/runner.js:101:19)\n    at runTestInternal (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:275:16)\n    at runTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:343:7)\n    at Object.worker (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:497:12)","user":null,"org":null,"timestamp":"2026-03-22T08:23:56.565Z"}
+
+      12 |
+      13 |         // Log full error details
+    > 14 |         console.error(
+         |                 ^
+      15 |             JSON.stringify({
+      16 |                 level: 'error',
+      17 |                 type: 'unhandled_error',
+
+      at server/middleware/error-handler.js:14:17
+      at Object.<anonymous> (tests/unit/middleware/error-handler.test.js:67:9)
+
+    console.error
+      {"level":"error","type":"unhandled_error","trace":"trace-123","method":"GET","path":"/api/test","status":500,"error":"fail","stack":"Error: fail\n    at Object.<anonymous> (/Users/dangtranhai/Downloads/TrustChecker/tests/unit/middleware/error-handler.test.js:74:12)\n    at Promise.finally.completed (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1557:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1497:10)\n    at _callCircusTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1007:40)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at _runTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:947:3)\n    at /Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:849:7\n    at _runTestsForDescribeBlock (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:862:11)\n    at _runTestsForDescribeBlock (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:857:11)\n    at run (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:761:3)\n    at runAndTransformResultsToJestFormat (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/jestAdapterInit.js:1918:21)\n    at jestAdapter (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-circus/build/runner.js:101:19)\n    at runTestInternal (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:275:16)\n    at runTest (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:343:7)\n    at Object.worker (/Users/dangtranhai/Downloads/TrustChecker/node_modules/jest-runner/build/testWorker.js:497:12)","user":null,"org":null,"timestamp":"2026-03-22T08:23:56.567Z"}
+
+      12 |
+      13 |         // Log full error details
+    > 14 |         console.error(
+         |                 ^
+      15 |             JSON.stringify({
+      16 |                 level: 'error',
+      17 |                 type: 'unhandled_error',
+
+      at server/middleware/error-handler.js:14:17
+      at Object.<anonymous> (tests/unit/middleware/error-handler.test.js:74:9)
+
+    console.error
+      {"level":"error","type":"unhandled_error","trace":"trace-123","method":"GET","path":"/api/test","status":500,"error":"fail","user":null,"org":null,"timestamp":"2026-03-22T08:23:56.569Z"}
+
+      12 |
+      13 |         // Log full error details
+    > 14 |         console.error(
+         |                 ^
+      15 |             JSON.stringify({
+      16 |                 level: 'error',
+      17 |                 type: 'unhandled_error',
+
+      at server/middleware/error-handler.js:14:17
+      at Object.<anonymous> (tests/unit/middleware/error-handler.test.js:81:9)
+
+PASS tests/unit/engines/incentive-architecture.test.js
+PASS tests/unit/middleware/i18n.test.js
+PASS tests/unit/engines/realtime-car.test.js
+PASS tests/unit/middleware/async-handler.test.js
+PASS tests/unit/engines/pricing-engine.test.js
+PASS tests/unit/lib/request-context.test.js
+PASS tests/unit/utils/errors.test.js
+PASS tests/unit/engines/systemic-stress.test.js
+PASS tests/unit/engines/ops-monitoring.test.js
+PASS tests/unit/services/events.test.js
+PASS tests/unit/engines/tiering-engine.test.js
+(node:24374) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/engines/scheduler.test.js
+  ● Console
+
+    console.log
+      ⏰ Scheduler started
+
+      at ScheduledTasks.start (server/engines/infrastructure/scheduler.js:90:17)
+
+    console.log
+      ⏰ Scheduler started
+
+      at ScheduledTasks.start (server/engines/infrastructure/scheduler.js:90:17)
+
+    console.log
+      ⏰ Scheduler started
+
+      at ScheduledTasks.start (server/engines/infrastructure/scheduler.js:90:17)
+
+    console.log
+      📦 Cache backend: In-Memory
+
+      at Object.<anonymous> (server/cache.js:202:9)
+
+PASS tests/unit/engines/crypto-governance.test.js
+PASS tests/unit/engines/anomaly-detector.test.js
+PASS tests/unit/utils/safe-json.test.js
+PASS tests/unit/engines/upgrade-governance.test.js
+PASS tests/unit/middleware/asyncHandler.test.js
+PASS tests/unit/engines/economic-logic.test.js
+PASS tests/unit/engines/risk-intelligence.test.js
+PASS tests/unit/middleware/security.test.js
+(node:24376) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/domain/unit-of-work.test.js
+PASS tests/unit/lib/error-codes.test.js
+PASS tests/unit/auth/mfa-guard.test.js
+PASS tests/unit/middleware/org.test.js
+PASS tests/unit/middleware/service-injector.test.js
+PASS tests/unit/middleware/featureGate.test.js
+(node:24377) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS tests/unit/security/incident-response.test.js
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+
+Summary of all failing tests
+FAIL tests/unit/middleware/expanded-middleware.test.js
+  ● password-policy validatePassword › rejects common passwords
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: false
+    Received: true
+
+      45 |     test('rejects common passwords', () => {
+      46 |         const r = validatePassword('Password123!!');
+    > 47 |         expect(r.valid).toBe(false);
+         |                         ^
+      48 |     });
+      49 |
+      50 |     test('accepts 16 char complex password', () => {
+
+      at Object.<anonymous> (tests/unit/middleware/expanded-middleware.test.js:47:25)
+
+  ● password-policy validatePassword › rejects null password
+
+    TypeError: Cannot read properties of null (reading 'toLowerCase')
+
+      20 |     if (!/[0-9]/.test(password)) errors.push('Must contain at least one digit');
+      21 |     if (!/[!@#$%^&*()_+\-=\[\]{};:'",.<>?/|`~]/.test(password)) errors.push('Must contain at least one special character');
+    > 22 |     if (COMMON_PASSWORDS.has(password.toLowerCase())) errors.push('Password is too common');
+         |                                       ^
+      23 |     return { valid: errors.length === 0, errors };
+      24 | }
+      25 |
+
+      at validatePassword (server/security/password-policy.js:22:39)
+      at Object.<anonymous> (tests/unit/middleware/expanded-middleware.test.js:61:19)
+
+  ● password-policy validatePassword › rejects undefined password
+
+    TypeError: Cannot read properties of undefined (reading 'toLowerCase')
+
+      20 |     if (!/[0-9]/.test(password)) errors.push('Must contain at least one digit');
+      21 |     if (!/[!@#$%^&*()_+\-=\[\]{};:'",.<>?/|`~]/.test(password)) errors.push('Must contain at least one special character');
+    > 22 |     if (COMMON_PASSWORDS.has(password.toLowerCase())) errors.push('Password is too common');
+         |                                       ^
+      23 |     return { valid: errors.length === 0, errors };
+      24 | }
+      25 |
+
+      at validatePassword (server/security/password-policy.js:22:39)
+      at Object.<anonymous> (tests/unit/middleware/expanded-middleware.test.js:66:19)
+
+
+Test Suites: 1 failed, 143 passed, 144 total
+Tests:       3 failed, 14 skipped, 2749 passed, 2766 total
+Snapshots:   0 total
+Time:        14.147 s
+Ran all test suites matching tests/unit/.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?

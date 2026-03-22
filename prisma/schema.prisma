@@ -117,6 +117,7 @@ model Session {
 
 model RefreshToken {
   id        String   @id @default(uuid())
+  familyId  String?  @map("family_id")
   userId    String   @map("user_id")
   tokenHash String   @map("token_hash")
   expiresAt DateTime @map("expires_at")
@@ -224,6 +225,9 @@ model Product {
   registeredBy   String?  @map("registered_by")
   orgId          String?  @map("org_id")
   trustScore     Float    @default(100.0) @map("trust_score")
+  weightKg       Float?   @map("weight_kg")
+  quantity       Int      @default(0)
+  price          Float?
   status         String   @default("active")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @map("updated_at")
