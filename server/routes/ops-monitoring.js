@@ -276,13 +276,12 @@ router.get('/bundle', async (req, res) => {
         // Module 3: Feature Flags
         (async () => {
             try {
-                const rows = await db.all('SELECT * FROM platform_feature_flags ORDER BY category, sort_order, key');
+                const rows = await db.all('SELECT key, label, description, icon, color, enabled FROM platform_feature_flags ORDER BY key');
                 const flagList = rows.map(r => ({
                     key: r.key,
                     label: r.label || r.key.replace(/_/g, ' '),
                     description: r.description || '',
                     enabled: !!r.enabled,
-                    category: r.category || 'general',
                     icon: r.icon || '⚡',
                     color: r.color || '#6b7280',
                 }));
