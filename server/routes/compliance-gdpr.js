@@ -573,7 +573,16 @@ router.get('/stats', async (req, res) => {
             frameworks,
             gdpr: { exports: gdprExports, deletions: gdprDeletions },
             audit_entries: auditEntries,
-            compliance_score: activePolicies > 0 ? 85 : 40,
+            compliance_score: Math.min(
+                100,
+                Math.round(
+                    (complianceRecords > 0 ? 30 : 0) +
+                        (auditEntries > 10 ? 20 : auditEntries > 0 ? 10 : 0) +
+                        (frameworks.length > 0 ? 20 : 0) +
+                        (activePolicies > 0 ? 20 : 0) +
+                        (gdprExports + gdprDeletions > 0 ? 10 : 0)
+                )
+            ),
             status: activePolicies > 0 ? 'compliant' : 'needs_attention',
         });
     } catch (e) {

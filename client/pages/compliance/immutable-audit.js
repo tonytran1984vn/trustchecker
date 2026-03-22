@@ -6,17 +6,19 @@ export function renderPage() {
   const chain = State._auditChain?.chain || {};
   const stats = State._auditChain?.stats || {};
   const entries = chain.chain || chain.entries || [];
-  const isValid = chain.valid !== false && chain.integrity !== 'broken';
+  const totalSeals = stats.total_seals || chain.total || entries.length || 0;
+  const hasChain = totalSeals > 0;
+  const isValid = hasChain && chain.valid !== false && chain.integrity !== 'broken';
 
   return `<div class="sa-page">
     <div class="sa-page-title"><h1>${icon('link', 28)} Immutable Audit Trail</h1>
       <div class="sa-title-actions">
-        <span class="sa-status-pill sa-pill-${isValid ? 'green' : 'red'}">${isValid ? '✅ Chain Intact' : '❌ Chain Broken'}</span>
+        <span class="sa-status-pill sa-pill-${!hasChain ? 'orange' : isValid ? 'green' : 'red'}">${!hasChain ? '⏳ No Chain Yet' : isValid ? '✅ Chain Intact' : '❌ Chain Broken'}</span>
       </div>
     </div>
 
     <div class="sa-metrics-row" style="margin-bottom:1.5rem">
-      ${_m('Chain Status', isValid ? 'Valid' : 'Broken', '', isValid ? 'green' : 'red', 'link')}
+      ${_m('Chain Status', !hasChain ? 'Empty' : isValid ? 'Valid' : 'Broken', '', !hasChain ? 'orange' : isValid ? 'green' : 'red', 'link')}
       ${_m('Total Seals', stats.total_seals || chain.total || entries.length || 0, '', 'blue', 'lock')}
       ${_m('Verified', chain.verified || entries.filter(e => e.valid).length || 0, '', 'teal', 'checkCircle')}
       ${_m('Audit Records', stats.total || 0, '', 'slate', 'scroll')}
@@ -27,7 +29,7 @@ export function renderPage() {
       <div style="background:var(--bg-secondary);padding:1rem;border-radius:8px;margin-bottom:1rem">
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;font-size:0.78rem">
           <div><span style="color:var(--text-secondary)">Integrity Protocol:</span> <strong>SHA-256 Chain</strong></div>
-          <div><span style="color:var(--text-secondary)">Verification:</span> <strong>${isValid ? 'All hashes match' : 'Hash mismatch detected'}</strong></div>
+          <div><span style="color:var(--text-secondary)">Verification:</span> <strong>${!hasChain ? 'No seals to verify' : isValid ? 'All hashes match' : 'Hash mismatch detected'}</strong></div>
           <div><span style="color:var(--text-secondary)">Last Verified:</span> <strong>${new Date().toLocaleString()}</strong></div>
         </div>
       </div>

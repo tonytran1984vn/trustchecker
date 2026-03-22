@@ -328,6 +328,11 @@ export function navigate(page, opts = {}) {
         super_admin: { dashboard: 'control-tower' },
         executive: { dashboard: 'exec-overview' },
         ops_manager: { dashboard: 'ops-planning' },
+        compliance_officer: { dashboard: 'compliance-dashboard' },
+        risk_officer: { dashboard: 'risk-dashboard' },
+        carbon_officer: { dashboard: 'carbon-workspace' },
+        security_officer: { dashboard: 'ca-governance' },
+        auditor: { dashboard: 'compliance-dashboard' },
     };
     const userRole = State.user?.active_role || State.user?.role;
     const redirect = _roleRedirects[userRole]?.[page];
