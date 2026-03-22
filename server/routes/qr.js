@@ -16,7 +16,7 @@ const { bulkScanDetector, replayDetector } = require('../middleware/blind-spot-d
 // TC-21-REUSE-CHECK: Detect QR code reuse pattern
 async function checkQrReuse(qrCodeId, qrData, ipAddr, deviceFp, db) {
     const crypto = require('crypto');
-const logger = require('../lib/logger');
+    const logger = require('../lib/logger');
     const ipHash = crypto
         .createHash('sha256')
         .update(ipAddr || '')
@@ -821,7 +821,7 @@ router.get('/scan-history', async (req, res) => {
         const conditions = [];
 
         if (orgId && req.user?.role !== 'super_admin') {
-            conditions.push('p.org_id = ?');
+            conditions.push('(p.org_id = ? OR p.org_id IS NULL)');
             params.push(orgId);
         }
         if (product_id) {
