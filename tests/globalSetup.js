@@ -7,5 +7,5 @@ module.exports = async function () {
     process.env.ENCRYPTION_KEY = 'test-encryption-key-32-chars-ok!';
     process.env.NODE_ENV = 'test';
     process.env.PORT = '0'; // random port
-    process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test_trustchecker';
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://dangtranhai@localhost:5432/trustchecker';
 };
