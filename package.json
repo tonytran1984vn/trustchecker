@@ -69,6 +69,7 @@
       "!server/node_modules/**"
     ],
     "testTimeout": 30000,
+    "testPathIgnorePatterns": ["/node_modules/", "e2e/.*\\.spec\\.js$"],
     "globalSetup": "./tests/globalSetup.js",
     "transformIgnorePatterns": [
       "node_modules/(?!(@noble|uuid|otplib|@otplib|@scure)/)"
