@@ -3,7 +3,7 @@
  * Manages emission factors from DB with version tracking.
  * 
  * Uses the unified db API (db.run, db.all, db.get) which works
- * for both PostgreSQL (Prisma) and SQLite backends.
+ * PostgreSQL via Prisma.
  * 
  * Each factor has version history, source attribution, and confidence score.
  */
@@ -22,7 +22,7 @@ let _initialized = false;
 async function initFactorTable() {
     if (_initialized) return;
     try {
-        // Use db.run which handles both PG and SQLite
+        // Use db.run for PostgreSQL
         await db.run(`CREATE TABLE IF NOT EXISTS emission_factors (
             id TEXT PRIMARY KEY,
             category TEXT NOT NULL,

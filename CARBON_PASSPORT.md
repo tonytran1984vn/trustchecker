@@ -157,7 +157,7 @@ Super Admin có vai trò chiến lược:
 | Cross-tenant ESG benchmark | So sánh carbon grade giữa tenants |
 | Industry carbon heatmap | FMCG vs Pharma vs Luxury |
 | ESG manipulation detection | Phát hiện offset fraud, greenwashing |
-| Offset fraud detection | Audit cross-tenant offset certificates |
+| Offset fraud detection | Audit cross-org offset certificates |
 | **Industry Carbon Index** (tương lai) | Publish industry ESG rating — giống Moody's |
 
 > Nếu đi hướng infrastructure: Super Admin có thể publish **Industry Carbon Index** — giống Moody's rating nhưng cho carbon. Carbon lúc đó không chỉ là feature, nó trở thành **platform-wide dataset asset**.
@@ -688,7 +688,7 @@ Carbon → Industry Carbon Index → Insurance Pricing → Bank ESG Risk → CBA
 ```
 Level 1: Carbon Calculator        ← Current (per-product footprint)
 Level 2: ESG Governance Module    ← Current (GRI + offset + blockchain)
-Level 3: Carbon Intelligence      ← Next (Risk integration + cross-tenant)
+Level 3: Carbon Intelligence      ← Next (Risk integration + cross-org)
 Level 4: Industry Carbon Index    ← Future (Moody's-style ESG rating)
 Level 5: Carbon Trading Platform  ← Vision (Offset marketplace + verification)
 ```
@@ -730,7 +730,7 @@ Carbon Passport trong hệ thống TrustChecker:
 | **Compliance** | Biến thành regulatory output (GRI, CSRD, CBAM) |
 | **Blockchain** | Bảo chứng tính bất biến (seal, anchor, evidence) |
 | **CEO** | Biến thành valuation KPI (ESG Grade, 2030 target) |
-| **Super Admin** | Biến thành industry index (cross-tenant benchmark) |
+| **Super Admin** | Biến thành industry index (cross-org benchmark) |
 
 ```
          ┌─── SCM Data ────────── raw material

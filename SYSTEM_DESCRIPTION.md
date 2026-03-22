@@ -140,7 +140,7 @@
 
 | Mount | Mô tả |
 |---|---|
-| `/api/infra-custody` | Encryption status, tenant isolation, key management, DR readiness |
+| `/api/infra-custody` | Encryption status, org isolation, key management, DR readiness |
 | `/api/hardening` | Security hardening checks, vulnerability scan, CSP headers, rate limiting |
 | `/api/platform` | Platform architecture, microservice topology, dependency graph |
 | `/api/economics` | **Unit economics**: compute/storage/gas/bandwidth cost per transaction, scale projection (1x-1000x), blockchain chain comparison |
@@ -615,7 +615,7 @@
 | **Anchoring Cross-Impact** | 4 risks: congestion, smart contract bug, chain fork, privacy leakage. Per-tenant namespacing |
 | **Contagion Breakers** | CCB-01: trust >5 tenants → KS-02. CCB-03: anchor backlog >10K → KS-04. CCB-04: netting chain >$1M → gross mode |
 
-**Engine**: `cross-tenant-contagion-engine.js` | **Endpoints**: 6
+**Engine**: `cross-org-contagion-engine.js` | **Endpoints**: 6
 
 ---
 

@@ -367,7 +367,7 @@ Product tracking, digital twins, EPCIS events, partner verification, trust graph
 Risk radar, anomaly detection, stakeholder management, governance overview, team & people
 
 ### 🏗️ Infrastructure (Super Admin)
-Platform monitoring, tenant management, critical infrastructure, kill switches, cross-tenant analysis
+Platform monitoring, tenant management, critical infrastructure, kill switches, cross-org analysis
 
 ---
 

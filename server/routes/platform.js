@@ -132,7 +132,7 @@ router.post('/orgs', async (req, res) => {
             [uuidv4(), req.user.id, orgId, JSON.stringify({ name, slug, plan, admin_username })]
         );
 
-        // Save if SQLite
+        // (no-op — PostgreSQL handles persistence)
         if (typeof db.save === 'function') await db.save();
 
         res.status(201).json({

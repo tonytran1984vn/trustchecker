@@ -393,7 +393,7 @@ graph TB
 #### 37. MGB Member (`mgb_member`) — Methodology Governance Board
 | Quyền | Propose/vote methodology versions, freeze emission factors |
 |---|---|
-| **⚠️** | KHÔNG phải nhân viên tenant. KHÔNG access tenant data. |
+| **⚠️** | KHÔNG phải nhân viên tenant. KHÔNG access org data. |
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## Tổng Quan
 
-**TrustChecker** là một nền tảng Enterprise Digital Trust Infrastructure — hệ thống quản lý niềm tin kỹ thuật số doanh nghiệp, xây dựng trên kiến trúc multi-tenant với 77 route modules, 91 engine files, và 68+ nhóm API. Hệ thống bao phủ toàn bộ vòng đời chuỗi cung ứng: từ xác thực sản phẩm, phát hiện gian lận, quản lý rủi ro, tới ESG/Carbon, compliance và governance cấp enterprise.
+**TrustChecker** là một nền tảng Enterprise Digital Trust Infrastructure — hệ thống quản lý niềm tin kỹ thuật số doanh nghiệp, xây dựng trên kiến trúc multi-org với 77 route modules, 91 engine files, và 68+ nhóm API. Hệ thống bao phủ toàn bộ vòng đời chuỗi cung ứng: từ xác thực sản phẩm, phát hiện gian lận, quản lý rủi ro, tới ESG/Carbon, compliance và governance cấp enterprise.
 
 ### Tech Stack
 
@@ -28,7 +28,7 @@
 - **Session Management**: Device fingerprint, IP tracking, session revocation
 
 ### 1.2 RBAC (Role-Based Access Control)
-Hierarchical multi-tenant model:
+Hierarchical multi-org model:
 
 ```
 super_admin > platform_admin > owner > admin > manager > operator > viewer > public
@@ -258,7 +258,7 @@ super_admin > platform_admin > owner > admin > manager > operator > viewer > pub
 
 ## 8. 🏗️ Platform & Administration
 
-### 8.1 Multi-Tenant Platform
+### 8.1 Multi-Org Platform
 - Platform stats, health monitoring
 - Feature flag management per tenant
 - Notification system (in-app + email)

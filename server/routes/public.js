@@ -9,7 +9,7 @@ const db = require('../db');
 router.get('/stats', async (req, res) => {
     try {
         // NODE-BP-1: Parallelize 11 independent queries
-        // Using PostgreSQL syntax (not SQLite)
+        // PostgreSQL syntax
         const [
             products,
             scans,

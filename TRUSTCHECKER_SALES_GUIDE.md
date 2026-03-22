@@ -192,7 +192,7 @@ TrustChecker là **nền tảng quản trị niềm tin số (Digital Trust Infr
 
 | Tính năng | Mô tả | Giá trị cho khách hàng |
 |---|---|---|
-| Tenant Isolation | Mỗi công ty = 1 tenant riêng biệt | Data không lẫn |
+| Org Isolation | Mỗi công ty = 1 tenant riêng biệt | Data không lẫn |
 | Control Tower | Dashboard quản trị tất cả tenant | Platform operator view |
 | Feature Flags | Bật/tắt tính năng per tenant | Upsell feature-by-feature |
 | Custom Branding | Logo, màu sắc riêng | White-label ready |

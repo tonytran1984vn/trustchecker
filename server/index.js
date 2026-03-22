@@ -2,7 +2,7 @@ require("dotenv").config();
 /**
  * TrustChecker v9.4 Server – Main Entry Point
  * Express + WebSocket server for the Distributed Digital Trust Infrastructure
- * Supports dual-mode: PostgreSQL (Prisma) or SQLite (sql.js)
+ * PostgreSQL (Prisma) backed server
  *
  * Boot sequence is split into focused modules:
  *   boot/middleware.js  — Security, observability, versioning, metering, org
@@ -229,7 +229,7 @@ async function boot() {
     // 9. Start server
     const PORT = process.env.PORT || 4000;
     server.listen(PORT, '0.0.0.0', () => {
-        const dbLabel = config.dbMode === DB_MODES.POSTGRESQL ? 'PostgreSQL (Prisma)' : 'SQLite (sql.js)';
+        const dbLabel = 'PostgreSQL (Prisma)';
         const redisLabel = redis ? '✅ Connected' : '⏭️  Skipped';
         console.log(`
 ╔══════════════════════════════════════════════════════════════╗

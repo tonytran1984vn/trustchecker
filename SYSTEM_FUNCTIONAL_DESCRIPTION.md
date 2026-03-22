@@ -37,7 +37,7 @@ TrustChecker là nền tảng quản trị niềm tin số (Digital Trust Infras
 
 > **Vai trò:** Quản trị viên nền tảng
 > **Đối tượng:** Platform operator, SaaS owner
-> **Quyền hạn:** Toàn quyền cross-tenant, quản trị hệ thống
+> **Quyền hạn:** Toàn quyền cross-org, quản trị hệ thống
 
 ### 2.1 Quản lý Thuê bao (Tenants)
 
@@ -55,7 +55,7 @@ TrustChecker là nền tảng quản trị niềm tin số (Digital Trust Infras
 | Chức năng | Trang | Mô tả |
 |---|---|---|
 | Global Feed | `sa-risk-feed` | Feed sự kiện rủi ro real-time từ tất cả tenant |
-| Risk Analytics | `sa-risk-analytics` | Phân tích xu hướng gian lận cross-tenant |
+| Risk Analytics | `sa-risk-analytics` | Phân tích xu hướng gian lận cross-org |
 | Suspicious Tenants | `sa-suspicious` | Tenant bị flag có hành vi bất thường |
 | AI Engine | `sa-ai-engine` | Cấu hình mô hình AI phát hiện gian lận |
 
@@ -93,7 +93,7 @@ TrustChecker là nền tảng quản trị niềm tin số (Digital Trust Infras
 | Audit Trail | `sa-audit` | Nhật ký kiểm toán immutable |
 | Data Governance | `sa-data-gov` | Data residency, GDPR, retention (platform-level) |
 | Key Management | `sa-keys` | Quản lý khóa mã hóa, rotation |
-| Feature Flags | `sa-feature-flags` | Bật/tắt tính năng per-tenant |
+| Feature Flags | `sa-feature-flags` | Bật/tắt tính năng per-org |
 | Risk Threshold | `sa-risk-threshold` | Ngưỡng cảnh báo rủi ro toàn cầu |
 | Global Settings | `sa-global-settings` | Cấu hình hệ thống toàn cục |
 

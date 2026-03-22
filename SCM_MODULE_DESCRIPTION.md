@@ -268,7 +268,7 @@ SCM không phải "module theo dõi hàng hóa". SCM là **Data Intelligence Bac
 | Code generation | — | ✅ | — | — | — | — | — |
 | Lock/Revoke batch | — | ✅* | — | — | ✅* | — | — |
 | Evidence export | ✅ | — | — | — | 👁 | ✅ | — |
-| Cross-tenant data | ✅ | — | — | — | — | — | — |
+| Cross-org data | ✅ | — | — | — | — | — | — |
 | API keys | ✅ | — | — | — | — | — | ✅ |
 
 Chi tiết đầy đủ: `sa/data-access-matrix.js` (35 resources × 6 domains)
@@ -351,7 +351,7 @@ Không phải tất cả duplicate là counterfeit. Raw dup rate 5.8% → phân 
 | Legal Admissibility | ✅ SHA-256 + RSA-2048 + RFC 3161 TSA + chain-of-custody |
 | Model Validation | ✅ 5-phase benchmark, performance template, independent validation framework |
 | ML Engine (Risk AI) | ✅ Feature store, AUC/ROC/confusion matrix, training pipeline, validation report |
-| Code Governance Hardening | ✅ Shannon entropy, per-tenant rate limits, HMAC-SHA256 central registry |
+| Code Governance Hardening | ✅ Shannon entropy, per-org rate limits, HMAC-SHA256 central registry |
 | Supply Route Tactical Depth | ✅ What-if simulation, historical replay, integrity scoring index, reverse flow |
 | Data Integrity Add-on | ✅ Blockchain seal engine, public verification portal, CEO trust report, chain-agnostic anchor |
 | Blockchain Governance | ✅ Role structure (SoD), zero-trust zones, escalation model, liability framework, maturity levels |

@@ -1,7 +1,7 @@
 /**
  * TrustChecker v9.5.1 — Database Layer (PostgreSQL ONLY)
  *
- * PostgreSQL via Prisma. No SQLite.
+ * PostgreSQL via Prisma.
  * DATABASE_URL must be set (via .env or PM2 ecosystem).
  *
  * v9.5.1: AsyncLocalStorage-based RLS context (fixes race condition).
@@ -78,7 +78,7 @@ class PrismaBackend {
   }
 
   // ─── SQL Dialect Translation ─────────────────────────────────
-  // Converts legacy SQLite-style SQL to PostgreSQL.
+  // Converts legacy SQL patterns to PostgreSQL-native syntax.
   // Many route files still use datetime('now') etc. — this handles them transparently.
 
   _translateSQL(sql) {

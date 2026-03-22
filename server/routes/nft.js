@@ -158,7 +158,7 @@ router.get('/:id/verify', async (req, res) => {
             : null;
 
         // Verify hash integrity by comparing stored hash against blockchain seal
-        // (Don't recompute — mint-time metadata uses JS Date which differs from SQLite datetime)
+        // (Don't recompute — mint-time metadata uses JS Date which differs from DB datetime)
         // ATK-17 FIX: Require actual blockchain seal for verification
         const hashValid = seal ? seal.data_hash === cert.metadata_hash : false;
 

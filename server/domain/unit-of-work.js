@@ -14,7 +14,7 @@ const crypto = require('crypto');
 
 class UnitOfWork {
     /**
-     * @param {Object} db - Database instance (Prisma or sql.js adapter)
+     * @param {Object} db - Database instance (Prisma adapter)
      * @param {Object} [options]
      * @param {Object} [options.eventBus] - Event bus for publishing after commit
      * @param {string} [options.orgId] - Current org context
@@ -163,39 +163,6 @@ class UnitOfWork {
                         }
                     }
                 });
-            } else if (this.db.prepare) {
-                // SQLite mode — simpler transaction
-                const begin = this.db.prepare('BEGIN TRANSACTION');
-                const commit = this.db.prepare('COMMIT');
-                const rollback = this.db.prepare('ROLLBACK');
-
-                try {
-                    begin.run();
-                    // Operations tracked but actual SQL already executed by caller
-                    // Just persist audit trail
-                    const auditStmt = this.db.prepare(
-                        `INSERT INTO audit_log (id, action, entity_type, entity_id, changes, user_id, org_id, timestamp)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-                    );
-                    for (const op of this._operations) {
-                        try {
-                            auditStmt.run(
-                                `audit_${crypto.randomBytes(6).toString('hex')}`,
-                                op.type,
-                                op.entity,
-                                op.id || 'new',
-                                JSON.stringify(op.changes || op.data || {}),
-                                this.userId,
-                                this.orgId,
-                                new Date().toISOString()
-                            );
-                        } catch (e) { /* best effort */ }
-                    }
-                    commit.run();
-                } catch (e) {
-                    try { rollback.run(); } catch (re) { /* ignore */ }
-                    throw e;
-                }
             }
 
             this._committed = true;

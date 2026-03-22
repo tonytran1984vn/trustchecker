@@ -200,7 +200,7 @@ Respond: ≤30 days (GDPR) / ≤30 days (PDPA)
 | Singapore | SG-region cloud | Tenant org | PDPA |
 | Cross-tenant analytics | Platform region (anonymized) | TrustChecker | Data Processing Agreement |
 
-**Transfer Mechanism:** Standard Contractual Clauses (SCCs) for EU↔non-EU transfers. No raw PII in cross-tenant analytics.
+**Transfer Mechanism:** Standard Contractual Clauses (SCCs) for EU↔non-EU transfers. No raw PII in cross-org analytics.
 
 ---
 
@@ -215,7 +215,7 @@ Respond: ≤30 days (GDPR) / ≤30 days (PDPA)
 | **R** — Repudiation | Audit | Deny action ("I didn't approve") | Actor ID + timestamp + IP in every log, signed evidence | L4 |
 | **I** — Info Disclosure | Privacy | PII leak, weight exposure, API response leak | Field-level RBAC, PII masking, response filtering per role | L2/L3 |
 | **D** — Denial of Service | Availability | API flood, scan burst, Kafka overflow | Rate limiting (1000/min), circuit breaker, DLQ, auto-scale | L5/L6 |
-| **E** — Elevation of Privilege | Access | Operator → Admin escalation, cross-tenant access | SoD enforcement, tenant namespace isolation, ABAC policies | L2 |
+| **E** — Elevation of Privilege | Access | Operator → Admin escalation, cross-org access | SoD enforcement, tenant namespace isolation, ABAC policies | L2 |
 
 ### 10.2 OWASP Top 10 Mitigation
 
@@ -240,7 +240,7 @@ Respond: ≤30 days (GDPR) / ≤30 days (PDPA)
 | Bulk data export by non-Compliance | Rate limiting on export API + role check | Block + alert to Security |
 | Weight manipulation without approval | SoD enforcement — propose ≠ approve ≠ deploy | Block at API level |
 | Off-hours access to Restricted data | Conditional access: time-based rules | Alert + session review |
-| Cross-tenant data browsing | Tenant namespace isolation + query logging | Alert to Super Admin |
+| Cross-org data browsing | Tenant namespace isolation + query logging | Alert to Super Admin |
 
 ### 10.4 Key Management & Rotation
 

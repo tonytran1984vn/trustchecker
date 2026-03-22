@@ -15,7 +15,6 @@ const REQUIRED_VARS = {
 };
 
 const DB_MODES = {
-    SQLITE: 'sqlite',
     POSTGRESQL: 'postgresql'
 };
 
@@ -47,19 +46,11 @@ function validateConfig() {
         }
     }
 
-    // Determine database mode
-    const dbMode = process.env.DATABASE_URL ? DB_MODES.POSTGRESQL : DB_MODES.SQLITE;
-
-    if (dbMode === DB_MODES.POSTGRESQL) {
-        console.log('📊 Database: PostgreSQL (via Prisma)');
-        if (process.env.REDIS_URL) {
-            console.log('📮 Cache: Redis');
-        }
-    } else {
-        console.log('📊 Database: SQLite (legacy mode)');
-        if (isProduction) {
-            warnings.push('Running SQLite in production — not recommended for scale');
-        }
+    // Database mode — PostgreSQL only
+    const dbMode = DB_MODES.POSTGRESQL;
+    console.log('📊 Database: PostgreSQL (via Prisma)');
+    if (process.env.REDIS_URL) {
+        console.log('📮 Cache: Redis');
     }
 
     // Report
