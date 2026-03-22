@@ -20,7 +20,7 @@ export function renderPage() {
     batch: c.affected_entity || '—',
     module: c.module || '—',
     region: (c.module || '').toUpperCase().slice(0, 3) || '—',
-    assigned: c.assigned_to || '—',
+    assigned: c.assigned_username || c.assigned_email?.split('@')[0] || (c.assigned_to && c.assigned_to.length < 30 ? c.assigned_to : '—'),
     sla: c.sla_breached ? 'SLA Breached' : 'Within SLA',
     severity: sevMap[c.severity] || c.severity || 'medium',
     rawSeverity: c.severity || 'SEV3',

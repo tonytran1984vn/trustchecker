@@ -202,19 +202,21 @@ router.get('/data/incidents', async (req, res) => {
     try {
         const orgId = getOrgId(req);
         const status = req.query.status || 'all';
-        let sql = 'SELECT * FROM ops_incidents_v2';
+        let sql = `SELECT i.*, u.username as assigned_username, u.email as assigned_email
+                   FROM ops_incidents_v2 i
+                   LEFT JOIN users u ON i.assigned_to = u.id`;
         const params = [];
         const conditions = [];
         if (orgId) {
-            conditions.push('org_id = ?');
+            conditions.push('i.org_id = ?');
             params.push(orgId);
         }
         if (status !== 'all') {
-            conditions.push('status = ?');
+            conditions.push('i.status = ?');
             params.push(status);
         }
         if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
-        sql += ' ORDER BY created_at DESC LIMIT 50';
+        sql += ' ORDER BY i.created_at DESC LIMIT 50';
         const rows = await db.prepare(sql).all(...params);
         res.json({ incidents: rows || [] });
     } catch (e) {
@@ -546,11 +548,9 @@ const KYC_APPROVER_ROLES = ['org_owner', 'company_admin', 'executive', 'complian
 function requireKYCApprover(req, res, next) {
     const role = req.user?.role;
     if (!KYC_APPROVER_ROLES.includes(role)) {
-        return res
-            .status(403)
-            .json({
-                error: 'Only org governance roles (org_owner, executive, compliance_officer) can approve/reject KYC. Platform admins cannot approve org operations.',
-            });
+        return res.status(403).json({
+            error: 'Only org governance roles (org_owner, executive, compliance_officer) can approve/reject KYC. Platform admins cannot approve org operations.',
+        });
     }
     next();
 }
