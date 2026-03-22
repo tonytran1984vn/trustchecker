@@ -10,7 +10,9 @@ function setupRoutes(app) {
     const publicRoutes = require('../routes/public');
     const apiDocsRoutes = require('../routes/api-docs');
     // A-11: Deep health check
-    try { app.use('/healthz', require('../routes/health')); } catch(e) {}
+    try {
+        app.use('/healthz', require('../routes/health'));
+    } catch (e) {}
 
     app.use('/api/public', scanLimit, publicRoutes);
     app.use('/api/docs', apiDocsRoutes);
@@ -155,19 +157,19 @@ function setupRoutes(app) {
         ['/crisis', crisisRoutes],
         ['/network', networkTopologyRoutes],
         ['/distribution', feeDistributionRoutes],
-        ['', infraMaturityRoutes],   // mounts /economics, /reserves, /sovereignty, /regulatory, /sla
+        ['', infraMaturityRoutes], // mounts /economics, /reserves, /sovereignty, /regulatory, /sla
         // ARCHIVED: ['/charter', charterRoutes],
         // ARCHIVED: ['', marketInfraRoutes],    // mounts /capital, /incentive, /risklab
-        ['', ipoGradeRoutes],       // mounts /oversight, /car, /decentralization, /legal, /finance, /treasury, /regscenario, /narrative
-        ['', apiLimit, criticalInfraRoutes],  // mounts /revenue-gov, /jurisdiction, /killswitch, /superadmin, /model-risk, /integration, /stress, /econrisk, /contagion
-        ['', apiLimit, legitimacyRoutes],     // mounts /economic-logic, /forensic, /jurisdiction-logic
+        ['', ipoGradeRoutes], // mounts /oversight, /car, /decentralization, /legal, /finance, /treasury, /regscenario, /narrative
+        ['', apiLimit, criticalInfraRoutes], // mounts /revenue-gov, /jurisdiction, /killswitch, /superadmin, /model-risk, /integration, /stress, /econrisk, /contagion
+        ['', apiLimit, legitimacyRoutes], // mounts /economic-logic, /forensic, /jurisdiction-logic
         // ARCHIVED: ['', apiLimit, coherenceRoutes],       // mounts /coherence, /playbook, /human-gov
-        ['', apiLimit, infrastructureRoutes],  // mounts /incentive-arch, /entity, /crypto-gov
-        ['', apiLimit, gapCoverageRoutes],     // mounts /data-ownership, /infra-metrics, /upgrade-gov
-        ['/cie', cieRoutes],                     // CIE v2.0 — Carbon Integrity Engine API
+        ['', apiLimit, infrastructureRoutes], // mounts /incentive-arch, /entity, /crypto-gov
+        ['', apiLimit, gapCoverageRoutes], // mounts /data-ownership, /infra-metrics, /upgrade-gov
+        ['/cie', cieRoutes], // CIE v2.0 — Carbon Integrity Engine API
         ['/carbon-officer', carbonOfficerRoutes], // Carbon Officer workspace dashboard
-        ['/carbon-actions', carbonActionsRoutes],   // Carbon Action Items bridge
-        ['/audit', auditChainRoutes],                // Audit hash chain verification
+        ['/carbon-actions', carbonActionsRoutes], // Carbon Action Items bridge
+        ['/audit', auditChainRoutes], // Audit hash chain verification
         ['/dual-approval', require('../routes/dual-approval')], // Dual-approval for GDPR/constitutional
         ['/record-governance', require('../routes/record-governance')], // P3: Immutable record proposals + version history
     ];
@@ -194,7 +196,9 @@ function setupRoutes(app) {
         const v1Controllers = require('../controllers/v1');
         app.use('/api/v1', authMiddleware, v1Controllers);
         console.log('[boot] V1 controllers mounted at /api/v1');
-    } catch(e) { console.warn('[boot] V1 controllers not loaded:', e.message); }
+    } catch (e) {
+        console.warn('[boot] V1 controllers not loaded:', e.message);
+    }
 
     // v9.5.0: Enterprise features
     app.use('/api/score-validation', require('../routes/score-validation'));
@@ -203,10 +207,10 @@ function setupRoutes(app) {
     app.use('/api/supplier-portal', require('../routes/supplier-portal'));
 
     // GDPR routes
-    var { dataExportHandler, dataDeleteHandler } = require('../middleware/gdpr');
+    const { dataExportHandler, dataDeleteHandler } = require('../middleware/gdpr');
     app.post('/api/gdpr/export', require('../auth').authMiddleware, dataExportHandler);
     app.post('/api/gdpr/delete', require('../auth').authMiddleware, dataDeleteHandler);
 }
 
 module.exports = { setupRoutes };
-    const complianceEvidenceRoutes = require("../routes/compliance-evidence");
+const complianceEvidenceRoutes = require('../routes/compliance-evidence');

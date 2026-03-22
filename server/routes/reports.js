@@ -210,7 +210,7 @@ router.get('/product-report', requirePermission('report:view'), async (req, res)
         const { format = 'json' } = req.query;
 
         const orgId = req.orgId;
-        let orgFilter = orgId ? ' WHERE p.org_id = ?' : '';
+        const orgFilter = orgId ? ' WHERE p.org_id = ?' : '';
         const orgP = orgId ? [orgId] : [];
 
         const products = await db.all(

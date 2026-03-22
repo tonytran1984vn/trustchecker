@@ -7,15 +7,15 @@
  *          GET /api/supplier-portal/my/improvements — improvement suggestions
  *          PUT /api/supplier-portal/my/assessment — self-assessment
  */
-var express = require('express');
-var router = express.Router();
-var db = require('../db');
-var { authMiddleware } = require('../auth');
+const express = require('express');
+const router = express.Router();
+const db = require('../db');
+const { authMiddleware } = require('../auth');
 
 // Public: view published supplier profile
 router.get('/:slug', async function (req, res) {
     try {
-        var result = await db.all(
+        const result = await db.all(
             'SELECT public_name, slug, description, website, country, certifications, public_trust_score, logo_url FROM supplier_profiles WHERE slug = $1 AND is_published = true',
             [req.params.slug]
         );
@@ -29,7 +29,7 @@ router.get('/:slug', async function (req, res) {
 // Authenticated routes
 router.get('/my/profile', authMiddleware, async function (req, res) {
     try {
-        var result = await db.all('SELECT * FROM supplier_profiles WHERE org_id = $1 LIMIT 1', [req.user.org_id]);
+        const result = await db.all('SELECT * FROM supplier_profiles WHERE org_id = $1 LIMIT 1', [req.user.org_id]);
         res.json({ profile: result[0] || null });
     } catch (err) {
         res.status(500).json({ error: 'Failed to load profile' });
@@ -38,12 +38,12 @@ router.get('/my/profile', authMiddleware, async function (req, res) {
 
 router.put('/my/profile', authMiddleware, async function (req, res) {
     try {
-        var b = req.body;
-        var slug = (b.public_name || '')
+        const b = req.body;
+        const slug = (b.public_name || '')
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/(^-|-$)/g, '');
-        var result = await db.all(
+        const result = await db.all(
             'INSERT INTO supplier_profiles (org_id, public_name, slug, description, website, country, certifications, logo_url, is_published) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (slug) DO UPDATE SET public_name=$2, description=$4, website=$5, country=$6, certifications=$7, logo_url=$8, is_published=$9, updated_at=NOW() RETURNING id, slug',
             [
                 req.user.org_id,
@@ -65,7 +65,7 @@ router.put('/my/profile', authMiddleware, async function (req, res) {
 
 router.get('/my/scores', authMiddleware, async function (req, res) {
     try {
-        var result = await db.all(
+        const result = await db.all(
             'SELECT sv.predicted_score, sv.actual_outcome, sv.accuracy_delta, sv.created_at FROM score_validations sv WHERE sv.org_id = $1 ORDER BY sv.created_at DESC LIMIT 50',
             [req.user.org_id]
         );
@@ -77,13 +77,13 @@ router.get('/my/scores', authMiddleware, async function (req, res) {
 
 router.get('/my/improvements', authMiddleware, async function (req, res) {
     try {
-        var result = await db.all('SELECT improvement_plan FROM supplier_profiles WHERE org_id = $1 LIMIT 1', [
+        const result = await db.all('SELECT improvement_plan FROM supplier_profiles WHERE org_id = $1 LIMIT 1', [
             req.user.org_id,
         ]);
-        var plan = (result[0] && result[0].improvement_plan) || [];
+        const plan = (result[0] && result[0].improvement_plan) || [];
 
         // Auto-generate improvement suggestions
-        var suggestions = [
+        const suggestions = [
             {
                 area: 'Certifications',
                 action: 'Add ISO 27001, SOC2, or industry-specific certifications',

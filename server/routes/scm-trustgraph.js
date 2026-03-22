@@ -240,10 +240,10 @@ router.get('/impact/:nodeId', async (req, res) => {
     try {
         const nodeId = req.params.nodeId;
         const orgId = req.user?.org_id || req.user?.orgId || null;
-        let partner = orgId
+        const partner = orgId
             ? await db.get('SELECT * FROM partners WHERE id = ? AND org_id = ?', [nodeId, orgId])
             : await db.get('SELECT * FROM partners WHERE id = ? LIMIT 1000', [nodeId]);
-        let product = !partner
+        const product = !partner
             ? orgId
                 ? await db.get('SELECT * FROM products WHERE id = ? AND org_id = ?', [nodeId, orgId])
                 : await db.get('SELECT * FROM products WHERE id = ? LIMIT 1000', [nodeId])

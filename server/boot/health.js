@@ -4,7 +4,29 @@
  */
 const path = require('path');
 
-function setupHealth(app, { config, db, redis, wss, waf, apiGateway, metrics, slo, eventBus, dlq, listEventTypes, partitionManager, domainRegistry, sagaOrchestrator, queryStore, replicaManager, getQueueStats, getAllBreakerStatus }) {
+function setupHealth(
+    app,
+    {
+        config,
+        db,
+        redis,
+        wss,
+        waf,
+        apiGateway,
+        metrics,
+        slo,
+        eventBus,
+        dlq,
+        listEventTypes,
+        partitionManager,
+        domainRegistry,
+        sagaOrchestrator,
+        queryStore,
+        replicaManager,
+        getQueueStats,
+        getAllBreakerStatus,
+    }
+) {
     const { authMiddleware, requireRole } = require('../auth');
 
     // ─── Basic Health ────────────────────────────────────────────────
@@ -37,10 +59,13 @@ function setupHealth(app, { config, db, redis, wss, waf, apiGateway, metrics, sl
             },
             uptime: Math.round(process.uptime()),
             timestamp: new Date().toISOString(),
-            ws_clients: wss.clients.size
+            ws_clients: wss.clients.size,
         });
     });
-    app.get('/api/v1/health', (req, res, next) => { req.url = '/api/health'; next('route'); });
+    app.get('/api/v1/health', (req, res, next) => {
+        req.url = '/api/health';
+        next('route');
+    });
 
     // ─── Observability Endpoints (admin only) ────────────────────────
     app.get('/api/metrics', authMiddleware, requireRole('admin'), (req, res) => {
@@ -88,9 +113,18 @@ function setupHealth(app, { config, db, redis, wss, waf, apiGateway, metrics, sl
     });
 
     // v1 aliases
-    app.get('/api/v1/metrics', (req, res, next) => { req.url = '/api/metrics'; next('route'); });
-    app.get('/api/v1/health/slo', (req, res, next) => { req.url = '/api/health/slo'; next('route'); });
-    app.get('/api/v1/events/schemas', (req, res, next) => { req.url = '/api/events/schemas'; next('route'); });
+    app.get('/api/v1/metrics', (req, res, next) => {
+        req.url = '/api/metrics';
+        next('route');
+    });
+    app.get('/api/v1/health/slo', (req, res, next) => {
+        req.url = '/api/health/slo';
+        next('route');
+    });
+    app.get('/api/v1/events/schemas', (req, res, next) => {
+        req.url = '/api/events/schemas';
+        next('route');
+    });
 
     // ─── Deep Health (admin only) ────────────────────────────────────
     app.get('/api/health/deep', authMiddleware, requireRole('admin'), async (req, res) => {
@@ -103,23 +137,41 @@ function setupHealth(app, { config, db, redis, wss, waf, apiGateway, metrics, sl
 
         let dbOk = false;
         let dbLatency = 0;
-        let tableStats = {};
+        const tableStats = {};
         try {
             const dbStart = Date.now();
-            await db.prepare("SELECT COUNT(*) as c FROM users").get();
+            await db.prepare('SELECT COUNT(*) as c FROM users').get();
             dbLatency = Date.now() - dbStart;
             dbOk = true;
 
-            const ALLOWED_TABLES = new Set(['users', 'products', 'scan_events', 'partners', 'shipments',
-                'fraud_alerts', 'inventory', 'batches', 'supply_chain_events', 'blockchain_seals',
-                'evidence_items', 'support_tickets', 'nft_certificates', 'audit_log', 'anomaly_detections']);
+            const ALLOWED_TABLES = new Set([
+                'users',
+                'products',
+                'scan_events',
+                'partners',
+                'shipments',
+                'fraud_alerts',
+                'inventory',
+                'batches',
+                'supply_chain_events',
+                'blockchain_seals',
+                'evidence_items',
+                'support_tickets',
+                'nft_certificates',
+                'audit_log',
+                'anomaly_detections',
+            ]);
             for (const t of ALLOWED_TABLES) {
                 try {
                     const r = await db.prepare('SELECT COUNT(*) as c FROM "' + t.replace(/"/g, '') + '"').get();
                     tableStats[t] = r?.c || 0;
-                } catch (e) { tableStats[t] = 'error'; }
+                } catch (e) {
+                    tableStats[t] = 'error';
+                }
             }
-        } catch (e) { dbOk = false; }
+        } catch (e) {
+            dbOk = false;
+        }
 
         const mem = process.memoryUsage();
         const cpus = require('os').cpus();
@@ -178,9 +230,29 @@ function setupHealth(app, { config, db, redis, wss, waf, apiGateway, metrics, sl
     });
 
     if (fs.existsSync(clientDist)) {
-        app.use(express.static(clientDist, { etag: false, maxAge: 0, setHeaders: (res, fp) => { if (fp.endsWith('.js') || fp.endsWith('.css')) { res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); } } }));
+        app.use(
+            express.static(clientDist, {
+                etag: false,
+                maxAge: 0,
+                setHeaders: (res, fp) => {
+                    if (fp.endsWith('.js') || fp.endsWith('.css')) {
+                        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                    }
+                },
+            })
+        );
     } else if (fs.existsSync(clientPublic)) {
-        app.use(express.static(clientPublic, { etag: false, maxAge: 0, setHeaders: (res, fp) => { if (fp.endsWith('.js') || fp.endsWith('.css')) { res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); } } }));
+        app.use(
+            express.static(clientPublic, {
+                etag: false,
+                maxAge: 0,
+                setHeaders: (res, fp) => {
+                    if (fp.endsWith('.js') || fp.endsWith('.css')) {
+                        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                    }
+                },
+            })
+        );
     }
 
     app.get('/check', (req, res) => {
@@ -227,9 +299,8 @@ function setupHealth(app, { config, db, redis, wss, waf, apiGateway, metrics, sl
         console.error(`❌ Unhandled error [${req.requestId || 'no-id'}] ${req.method} ${req.path}:`, err);
         if (req.user) console.error(`   User: ${req.user.id} (${req.user.role})`);
 
-        const message = process.env.NODE_ENV === 'production'
-            ? 'Internal server error'
-            : err.message || 'Internal server error';
+        const message =
+            process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message || 'Internal server error';
         res.status(err.status || err.statusCode || 500).json({
             error: message,
             code: 'INTERNAL_ERROR',

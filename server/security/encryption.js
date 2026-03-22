@@ -3,7 +3,7 @@
  * ═══════════════════════════════════════════════════════════════════
  * AES-256-GCM field-level encryption for PII fields.
  * Per-org key derivation from master key.
- * 
+ *
  * Features:
  *   - AES-256-GCM authenticated encryption
  *   - HKDF key derivation (master key + org salt)
@@ -11,7 +11,7 @@
  *   - Prisma middleware for automatic encrypt-on-write / decrypt-on-read
  *   - Key rotation support with re-encryption job
  *   - Master key loaded from secrets vault (not env vars)
- * 
+ *
  * PII Fields:
  *   User.email, KYCBusiness.representative_name,
  *   ConsentRecord.data_subject_email
@@ -24,9 +24,9 @@ const crypto = require('crypto');
 // ═══════════════════════════════════════════════════════════════════
 
 const ALGORITHM = 'aes-256-gcm';
-const KEY_LENGTH = 32;           // 256 bits
-const IV_LENGTH = 12;            // 96 bits for GCM
-const AUTH_TAG_LENGTH = 16;      // 128 bits
+const KEY_LENGTH = 32; // 256 bits
+const IV_LENGTH = 12; // 96 bits for GCM
+const AUTH_TAG_LENGTH = 16; // 128 bits
 const HKDF_HASH = 'sha256';
 const ENCRYPTED_PREFIX = 'enc:v1:'; // Versioned prefix for encrypted values
 
@@ -39,7 +39,7 @@ const PII_FIELDS = {
 };
 
 let _masterKey = null;
-let _stats = { encryptions: 0, decryptions: 0, errors: 0 };
+const _stats = { encryptions: 0, decryptions: 0, errors: 0 };
 
 // ── Derived key cache (orgId → Buffer) — avoids re-deriving on every call
 const _keyCache = new Map();
@@ -69,7 +69,10 @@ function _getCachedKey(masterKey, orgId) {
  * @returns {Buffer} 32-byte derived key
  */
 function deriveKey(masterKey, orgId) {
-    const salt = crypto.createHash('sha256').update(orgId || 'default').digest();
+    const salt = crypto
+        .createHash('sha256')
+        .update(orgId || 'default')
+        .digest();
     const info = Buffer.from(`trustchecker-pii-${orgId || 'default'}`, 'utf8');
     return crypto.hkdfSync(HKDF_HASH, masterKey, salt, info, KEY_LENGTH);
 }
@@ -176,10 +179,10 @@ function decrypt(ciphertext, orgId = 'default') {
 
 /**
  * Prisma middleware for automatic field-level encryption.
- * 
+ *
  * On create/update: encrypts PII fields before write.
  * On findMany/findFirst/findUnique: decrypts PII fields after read.
- * 
+ *
  * Usage:
  *   prisma.$use(encryptionMiddleware);
  */
@@ -192,9 +195,7 @@ async function encryptionMiddleware(params, next) {
     }
 
     // Get org ID from where clause or data
-    const orgId = params.args?.data?.organizationId
-        || params.args?.where?.organizationId
-        || 'default';
+    const orgId = params.args?.data?.organizationId || params.args?.where?.organizationId || 'default';
 
     // ─── Encrypt on write ────────────────────────────────────
     if (['create', 'update', 'upsert', 'createMany'].includes(params.action)) {
@@ -251,7 +252,7 @@ function decryptFields(obj, fields, orgId) {
 /**
  * Re-encrypt all PII fields with a new master key.
  * Call this during a key rotation event.
- * 
+ *
  * @param {Object} prisma — Prisma client instance
  * @param {Buffer} oldKey — previous master key
  * @param {Buffer} newKey — new master key
@@ -311,7 +312,9 @@ async function rotateKey(prisma, oldKey, newKey) {
 
                 if (changed) {
                     const updateData = {};
-                    fields.forEach(f => { if (record[f]) updateData[f] = record[f]; });
+                    fields.forEach(f => {
+                        if (record[f]) updateData[f] = record[f];
+                    });
 
                     await prisma[model.charAt(0).toLowerCase() + model.slice(1)].update({
                         where: { id: record.id },
@@ -329,7 +332,9 @@ async function rotateKey(prisma, oldKey, newKey) {
     // Only swap global key AFTER all re-encryption is complete
     _masterKey = newKey;
     _keyCache.clear(); // Invalidate derived key cache
-    console.log(`[Encryption] Key rotation complete: ${results.reencrypted} records re-encrypted, ${results.errors} errors`);
+    console.log(
+        `[Encryption] Key rotation complete: ${results.reencrypted} records re-encrypted, ${results.errors} errors`
+    );
     return results;
 }
 
@@ -340,7 +345,7 @@ async function rotateKey(prisma, oldKey, newKey) {
 /**
  * Initialize encryption with master key.
  * Key should come from secrets vault, not env vars directly.
- * 
+ *
  * @param {string} masterKeyHex — 64-char hex string (256 bits)
  */
 function initEncryption(masterKeyHex) {
@@ -352,7 +357,9 @@ function initEncryption(masterKeyHex) {
     try {
         _masterKey = Buffer.from(masterKeyHex, 'hex');
         if (_masterKey.length !== KEY_LENGTH) {
-            throw new Error(`Master key must be ${KEY_LENGTH} bytes (${KEY_LENGTH * 2} hex chars), got ${_masterKey.length}`);
+            throw new Error(
+                `Master key must be ${KEY_LENGTH} bytes (${KEY_LENGTH * 2} hex chars), got ${_masterKey.length}`
+            );
         }
         console.log('[Encryption] ✅ AES-256-GCM encryption initialized for PII fields');
     } catch (err) {

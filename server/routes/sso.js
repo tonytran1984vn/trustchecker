@@ -16,7 +16,7 @@ const { authMiddleware } = require('../auth');
 // Get SSO config (authenticated)
 router.get('/config', authMiddleware, async function (req, res) {
     try {
-        var result = await db.all(
+        const result = await db.all(
             'SELECT id, org_id, provider, issuer_url, sso_url, metadata_url, attribute_mapping, enabled, enforce, created_at FROM sso_configs WHERE org_id = $1',
             [req.user.org_id]
         );
@@ -29,11 +29,11 @@ router.get('/config', authMiddleware, async function (req, res) {
 // Update SSO config (admin only)
 router.put('/config', authMiddleware, async function (req, res) {
     try {
-        var b = req.body;
+        const b = req.body;
         if (!b.provider || !['saml', 'oauth2', 'oidc'].includes(b.provider)) {
             return res.status(400).json({ error: 'provider must be saml, oauth2, or oidc' });
         }
-        var result = await db.all(
+        const result = await db.all(
             'INSERT INTO sso_configs (org_id, provider, issuer_url, sso_url, certificate, client_id, client_secret, metadata_url, attribute_mapping, enabled, enforce) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (org_id) DO UPDATE SET provider=$2, issuer_url=$3, sso_url=$4, certificate=$5, client_id=$6, client_secret=$7, metadata_url=$8, attribute_mapping=$9, enabled=$10, enforce=$11, updated_at=NOW() RETURNING id',
             [
                 req.user.org_id,
@@ -58,19 +58,19 @@ router.put('/config', authMiddleware, async function (req, res) {
 // Initiate SSO login (unauthenticated — redirects to IdP)
 router.get('/login/:orgSlug', async function (req, res) {
     try {
-        var result = await db.all(
+        const result = await db.all(
             'SELECT sc.* FROM sso_configs sc JOIN organizations o ON o.id = sc.org_id WHERE o.slug = $1 AND sc.enabled = true',
             [req.params.orgSlug]
         );
         if (!result[0]) return res.status(404).json({ error: 'SSO not configured for this organization' });
-        var config = result[0];
+        const config = result[0];
 
-        var state = crypto.randomBytes(32).toString('hex');
+        const state = crypto.randomBytes(32).toString('hex');
         // Store state in session/cookie for CSRF protection
 
         if (config.provider === 'saml') {
             // SAML AuthnRequest redirect
-            var samlRequest = Buffer.from(
+            const samlRequest = Buffer.from(
                 '<samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" ID="_' +
                     crypto.randomUUID() +
                     '" Version="2.0" IssueInstant="' +
@@ -89,7 +89,7 @@ router.get('/login/:orgSlug', async function (req, res) {
         }
 
         if (config.provider === 'oauth2' || config.provider === 'oidc') {
-            var authUrl =
+            const authUrl =
                 config.sso_url +
                 '?client_id=' +
                 config.client_id +
@@ -111,7 +111,7 @@ router.post('/callback', async function (req, res) {
     try {
         // In production, validate SAML response signature or exchange OAuth2 code
         // For now, this is the framework — full SAML/OAuth2 validation requires passport-saml or similar
-        var body = req.body;
+        const body = req.body;
         res.json({
             status: 'callback_received',
             message: 'Full SAML/OAuth2 validation requires passport-saml or openid-client package',
@@ -124,8 +124,8 @@ router.post('/callback', async function (req, res) {
 
 // SAML metadata endpoint
 router.get('/metadata/:orgSlug', async function (req, res) {
-    var baseUrl = process.env.BASE_URL || 'http://localhost:4000';
-    var metadata =
+    const baseUrl = process.env.BASE_URL || 'http://localhost:4000';
+    const metadata =
         '<?xml version="1.0"?><md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="' +
         baseUrl +
         '/api/sso/metadata/' +

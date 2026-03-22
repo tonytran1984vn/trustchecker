@@ -1,6 +1,6 @@
 /**
  * Risk Scoring Engine V21.6 — Commercial-Ready Trust Protocol
- * 
+ *
  * V2: synthetic signals, log-freq, sliding window, recovery, explainability
  * V3 upgrades:
  *   3.1: Graph intelligence — collusion detection via actor-product clusters
@@ -26,9 +26,9 @@ const SIGNAL_CORRELATIONS = {
     'geo:frequency': 0.1,
     'geo:history': 0.15,
     'geo:graph': 0.2,
-    'frequency:history': 0.4,       // high: both temporal
+    'frequency:history': 0.4, // high: both temporal
     'frequency:graph': 0.25,
-    'history:graph': 0.5,           // highest: history informs graph
+    'history:graph': 0.5, // highest: history informs graph
 };
 
 async function initSignalStats() {
@@ -41,20 +41,23 @@ async function initSignalStats() {
             last_updated TIMESTAMPTZ DEFAULT NOW()
         )`);
         for (const s of SIGNAL_NAMES) {
-            await db.run(`INSERT INTO signal_stats (signal_name, learned_lr) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [s, DEFAULT_LR[s] || 1.0]);
+            await db.run(`INSERT INTO signal_stats (signal_name, learned_lr) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [
+                s,
+                DEFAULT_LR[s] || 1.0,
+            ]);
         }
-    } catch(_) {}
+    } catch (_) {}
 }
 // Fire and forget on load
 initSignalStats();
 
 // ─── WEIGHTS (V3: graph added, rebalanced) ────────────────────
 const WEIGHTS = {
-    scan_pattern: 0.30,  // V3: reduced from 0.35 to make room for graph
-    geo: 0.20,           // V3: reduced from 0.25
-    frequency: 0.15,     // V3: reduced from 0.20
-    history: 0.15,       // V3: reduced from 0.20
-    graph: 0.20,         // V3: NEW — collusion + cross-entity
+    scan_pattern: 0.3, // V3: reduced from 0.35 to make room for graph
+    geo: 0.2, // V3: reduced from 0.25
+    frequency: 0.15, // V3: reduced from 0.20
+    history: 0.15, // V3: reduced from 0.20
+    graph: 0.2, // V3: NEW — collusion + cross-entity
 };
 
 // ─── CATEGORY MULTIPLIERS ─────────────────────────────────────
@@ -72,12 +75,12 @@ const CATEGORY_MULT = {
 function haversine(lat1, lon1, lat2, lon2) {
     if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
     const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) *
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 // ─── TIME DECAY ───────────────────────────────────────────────
@@ -101,19 +104,19 @@ async function scanPatternScore(productId, actorId, scanType) {
     // Check if product is in SOLD state
     try {
         const state = await db.get(
-            "SELECT to_state FROM product_events WHERE product_id = $1 ORDER BY sequence_number DESC, created_at DESC LIMIT 1",
+            'SELECT to_state FROM product_events WHERE product_id = $1 ORDER BY sequence_number DESC, created_at DESC LIMIT 1',
             [productId]
         );
         if (state && !['sell', 'SOLD', 'SCANNED'].includes(state.to_state)) {
             score += 40 * 0.9;
             reasons.push({ rule: 'scan_before_sold', severity: 40, confidence: 0.9, state: state.to_state });
         }
-    } catch(_) {}
+    } catch (_) {}
 
     // Check first scanner role
     try {
         const firstScan = await db.get(
-            "SELECT scan_type, device_fingerprint FROM scan_events WHERE product_id = $1 ORDER BY scanned_at ASC LIMIT 1",
+            'SELECT scan_type, device_fingerprint FROM scan_events WHERE product_id = $1 ORDER BY scanned_at ASC LIMIT 1',
             [productId]
         );
         if (firstScan) {
@@ -125,7 +128,7 @@ async function scanPatternScore(productId, actorId, scanType) {
                 reasons.push({ rule: 'retailer_first_scan', severity: 30, confidence: 0.7 });
             }
         }
-    } catch(_) {}
+    } catch (_) {}
 
     // Multi-actor scanning same product
     try {
@@ -137,7 +140,7 @@ async function scanPatternScore(productId, actorId, scanType) {
             score += 20 * 0.85;
             reasons.push({ rule: 'multi_actor_scan', severity: 20, confidence: 0.85, actors: actors.c });
         }
-    } catch(_) {}
+    } catch (_) {}
 
     // Same actor scans many products
     try {
@@ -151,7 +154,7 @@ async function scanPatternScore(productId, actorId, scanType) {
                 reasons.push({ rule: 'actor_scans_many_products', severity: 30, confidence: 0.9, count: products.c });
             }
         }
-    } catch(_) {}
+    } catch (_) {}
 
     // Scan chain break (expected events missing)
     try {
@@ -163,7 +166,7 @@ async function scanPatternScore(productId, actorId, scanType) {
             score += 60 * 0.7;
             reasons.push({ rule: 'no_supply_chain_events', severity: 60, confidence: 0.7 });
         }
-    } catch(_) {}
+    } catch (_) {}
 
     return { score: Math.min(100, Math.round(score)), reasons };
 }
@@ -177,30 +180,49 @@ async function geoScore(productId, latitude, longitude, ipAddress) {
 
     try {
         const prevScan = await db.get(
-            "SELECT latitude, longitude, scanned_at, geo_country FROM scan_events WHERE product_id = $1 AND latitude IS NOT NULL ORDER BY scanned_at DESC LIMIT 1",
+            'SELECT latitude, longitude, scanned_at, geo_country FROM scan_events WHERE product_id = $1 AND latitude IS NOT NULL ORDER BY scanned_at DESC LIMIT 1',
             [productId]
         );
 
         if (prevScan && prevScan.latitude) {
             const distance = haversine(prevScan.latitude, prevScan.longitude, latitude, longitude);
             const timeDiffMin = (Date.now() - new Date(prevScan.scanned_at).getTime()) / 60000;
-            
+
             const gpsConfidence = 0.6; // Conservative — GPS can be spoofed
 
             if (distance > 1000 && timeDiffMin < 10) {
                 score += 90 * gpsConfidence; // impossible travel
-                reasons.push({ rule: 'impossible_travel', severity: 90, confidence: gpsConfidence, distance_km: Math.round(distance), time_min: Math.round(timeDiffMin) });
+                reasons.push({
+                    rule: 'impossible_travel',
+                    severity: 90,
+                    confidence: gpsConfidence,
+                    distance_km: Math.round(distance),
+                    time_min: Math.round(timeDiffMin),
+                });
             } else if (distance > 500 && timeDiffMin < 5) {
                 score += 70 * gpsConfidence;
-                reasons.push({ rule: 'suspicious_travel', severity: 70, confidence: gpsConfidence, distance_km: Math.round(distance), time_min: Math.round(timeDiffMin) });
+                reasons.push({
+                    rule: 'suspicious_travel',
+                    severity: 70,
+                    confidence: gpsConfidence,
+                    distance_km: Math.round(distance),
+                    time_min: Math.round(timeDiffMin),
+                });
             }
 
             // Slow geo drift: VN → TH → US in 1h (FIX: broader window)
             if (distance > 300 && timeDiffMin < 60 && timeDiffMin >= 10) {
                 const speedKmH = distance / (timeDiffMin / 60);
-                if (speedKmH > 900) { // Faster than commercial jet
+                if (speedKmH > 900) {
+                    // Faster than commercial jet
                     score += 40 * 0.5;
-                    reasons.push({ rule: 'geo_drift_fast', severity: 40, confidence: 0.5, distance_km: Math.round(distance), speed_kmh: Math.round(speedKmH) });
+                    reasons.push({
+                        rule: 'geo_drift_fast',
+                        severity: 40,
+                        confidence: 0.5,
+                        distance_km: Math.round(distance),
+                        speed_kmh: Math.round(speedKmH),
+                    });
                 }
             }
 
@@ -212,7 +234,7 @@ async function geoScore(productId, latitude, longitude, ipAddress) {
                 }
             }
         }
-    } catch(_) {}
+    } catch (_) {}
 
     return { score: Math.min(100, Math.round(score)), reasons };
 }
@@ -234,10 +256,16 @@ async function frequencyScore(productId, actorId) {
                 const logScore = logFrequencyScore(spm);
                 const confidence = Math.min(0.95, 0.7 + spm * 0.005); // confidence grows with volume
                 score += logScore * confidence;
-                reasons.push({ rule: 'frequency_log', severity: logScore, confidence: Math.round(confidence * 100) / 100, spm, formula: `log2(${spm})*15` });
+                reasons.push({
+                    rule: 'frequency_log',
+                    severity: logScore,
+                    confidence: Math.round(confidence * 100) / 100,
+                    spm,
+                    formula: `log2(${spm})*15`,
+                });
             }
         }
-    } catch(_) {}
+    } catch (_) {}
 
     // Same actor scanning many products fast (farming)
     try {
@@ -249,10 +277,16 @@ async function frequencyScore(productId, actorId) {
             if (actorRate && actorRate.products > 5) {
                 const farmScore = logFrequencyScore(actorRate.products);
                 score += farmScore * 0.9;
-                reasons.push({ rule: 'scan_farming', severity: farmScore, confidence: 0.9, products: actorRate.products, total: actorRate.total });
+                reasons.push({
+                    rule: 'scan_farming',
+                    severity: farmScore,
+                    confidence: 0.9,
+                    products: actorRate.products,
+                    total: actorRate.total,
+                });
             }
         }
-    } catch(_) {}
+    } catch (_) {}
 
     // Slow fraud: consistent scanning over long period
     try {
@@ -265,7 +299,7 @@ async function frequencyScore(productId, actorId) {
             score += slowScore * 0.7;
             reasons.push({ rule: 'slow_accumulation', severity: slowScore, confidence: 0.7, scans_24h: slowFraud.c });
         }
-    } catch(_) {}
+    } catch (_) {}
 
     // Frequency evasion detection: scan every 3-5s (just below threshold)
     try {
@@ -282,7 +316,7 @@ async function frequencyScore(productId, actorId) {
                 reasons.push({ rule: 'frequency_evasion', severity: evasionScore, confidence: 0.8, scans_5min: spm5 });
             }
         }
-    } catch(_) {}
+    } catch (_) {}
 
     return { score: Math.min(100, Math.round(score)), reasons };
 }
@@ -296,28 +330,46 @@ async function historyScore(productId, actorId) {
     try {
         if (actorId) {
             const profile = await db.get(
-                "SELECT flagged_count, blocked_count, avg_risk_score, last_risk_score, last_flagged_at, risk_level, total_scans FROM actor_risk_profiles WHERE actor_id = $1",
+                'SELECT flagged_count, blocked_count, avg_risk_score, last_risk_score, last_flagged_at, risk_level, total_scans FROM actor_risk_profiles WHERE actor_id = $1',
                 [actorId]
             );
             if (profile) {
                 // V2: Sliding window — use last_risk_score + avg for momentum
                 const historicalAvg = parseFloat(profile.avg_risk_score) || 0;
-                
+
                 if (profile.flagged_count > 0) {
-                    const daysSinceFlag = profile.last_flagged_at ? (Date.now() - new Date(profile.last_flagged_at).getTime()) / 86400000 : 365;
+                    const daysSinceFlag = profile.last_flagged_at
+                        ? (Date.now() - new Date(profile.last_flagged_at).getTime()) / 86400000
+                        : 365;
                     const decayed = timeDecay(40, daysSinceFlag);
                     score += decayed * 0.85;
-                    reasons.push({ rule: 'actor_flagged_before', severity: 40, confidence: 0.85, decayed: Math.round(decayed), days_since: Math.round(daysSinceFlag) });
+                    reasons.push({
+                        rule: 'actor_flagged_before',
+                        severity: 40,
+                        confidence: 0.85,
+                        decayed: Math.round(decayed),
+                        days_since: Math.round(daysSinceFlag),
+                    });
                 }
                 if (profile.blocked_count > 0) {
                     score += 30 * 0.9;
-                    reasons.push({ rule: 'actor_blocked_before', severity: 30, confidence: 0.9, blocked_count: profile.blocked_count });
+                    reasons.push({
+                        rule: 'actor_blocked_before',
+                        severity: 30,
+                        confidence: 0.9,
+                        blocked_count: profile.blocked_count,
+                    });
                 }
                 // V2: Risk momentum — historical avg contributes (FIX 1)
                 if (historicalAvg > 20) {
                     const momentumScore = Math.min(30, Math.round(historicalAvg * 0.4));
                     score += momentumScore * 0.7;
-                    reasons.push({ rule: 'risk_momentum', severity: momentumScore, confidence: 0.7, historical_avg: Math.round(historicalAvg) });
+                    reasons.push({
+                        rule: 'risk_momentum',
+                        severity: momentumScore,
+                        confidence: 0.7,
+                        historical_avg: Math.round(historicalAvg),
+                    });
                 }
             }
             // New actor (no history) — slight signal
@@ -326,7 +378,7 @@ async function historyScore(productId, actorId) {
                 reasons.push({ rule: 'new_actor', severity: 5, confidence: 0.5 });
             }
         }
-    } catch(_) {}
+    } catch (_) {}
 
     // Product history — sliding window (FIX 3)
     try {
@@ -340,10 +392,10 @@ async function historyScore(productId, actorId) {
             "SELECT COUNT(*) as c FROM scan_events WHERE product_id = $1 AND scanned_at > NOW() - INTERVAL '7 days'",
             [productId]
         );
-        
+
         const c24h = scans24h ? parseInt(scans24h.c) : 0;
         const c7d = scans7d ? parseInt(scans7d.c) : 0;
-        
+
         if (c24h > 5) {
             const s = Math.min(40, Math.round(Math.log2(c24h) * 10));
             score += s * 0.8;
@@ -364,7 +416,7 @@ async function historyScore(productId, actorId) {
             score += 50 * 0.85;
             reasons.push({ rule: 'product_flagged_before', severity: 50, confidence: 0.85, flags: productFlags.c });
         }
-    } catch(_) {}
+    } catch (_) {}
 
     return { score: Math.min(100, Math.round(score)), reasons };
 }
@@ -389,8 +441,12 @@ async function trustVolatility(actorId) {
         const avg = parseFloat(stats.avg) || 0;
         const cv = avg > 0 ? stddev / avg : 0;
         const penalty = Math.min(0.3, cv * 0.5);
-        return { volatility: Math.round(cv * 100) / 100, stddev: Math.round(stddev), penalty: Math.round(penalty * 100) / 100 };
-    } catch(_) {}
+        return {
+            volatility: Math.round(cv * 100) / 100,
+            stddev: Math.round(stddev),
+            penalty: Math.round(penalty * 100) / 100,
+        };
+    } catch (_) {}
     return { volatility: 0, penalty: 0 };
 }
 
@@ -413,7 +469,8 @@ async function riskTrendSlope(actorId) {
         const ys = scores.map(s => parseFloat(s.risk_score) || 0);
         const xMean = (n - 1) / 2;
         const yMean = ys.reduce((a, b) => a + b, 0) / n;
-        let num = 0, den = 0;
+        let num = 0,
+            den = 0;
         for (let i = 0; i < n; i++) {
             num += (xs[i] - xMean) * (ys[i] - yMean);
             den += (xs[i] - xMean) ** 2;
@@ -422,7 +479,7 @@ async function riskTrendSlope(actorId) {
         // Positive slope = risk trending up → trust penalty
         const penalty = slope > 0 ? Math.min(0.2, slope * 0.01) : 0;
         return { slope: Math.round(slope * 100) / 100, penalty: Math.round(penalty * 100) / 100, samples: n };
-    } catch(_) {}
+    } catch (_) {}
     return { slope: 0, penalty: 0 };
 }
 
@@ -433,8 +490,9 @@ async function trustPropagation(actorId) {
     if (!actorId) return { network_trust: 0.5, neighbor_count: 0, penalty: 0, edges: {} };
     try {
         // Edge 1: Product-sharing neighbors (hop 1, weight 1.0)
-        const productNeighbors = await db.all(
-            `SELECT se2.device_fingerprint, COUNT(DISTINCT se1.product_id) as shared_products
+        const productNeighbors =
+            (await db.all(
+                `SELECT se2.device_fingerprint, COUNT(DISTINCT se1.product_id) as shared_products
              FROM scan_events se1
              JOIN scan_events se2 ON se1.product_id = se2.product_id
              WHERE se1.device_fingerprint = $1
@@ -445,12 +503,13 @@ async function trustPropagation(actorId) {
              GROUP BY se2.device_fingerprint
              ORDER BY COUNT(DISTINCT se1.product_id) DESC
              LIMIT 15`,
-            [actorId]
-        ) || [];
+                [actorId]
+            )) || [];
 
         // Edge 2: IP-sharing neighbors (actors on same IP, weight 0.8)
-        const ipNeighbors = await db.all(
-            `SELECT se2.device_fingerprint, COUNT(DISTINCT se1.ip_address) as shared_ips
+        const ipNeighbors =
+            (await db.all(
+                `SELECT se2.device_fingerprint, COUNT(DISTINCT se1.ip_address) as shared_ips
              FROM scan_events se1
              JOIN scan_events se2 ON se1.ip_address = se2.ip_address
              WHERE se1.device_fingerprint = $1
@@ -462,8 +521,8 @@ async function trustPropagation(actorId) {
              GROUP BY se2.device_fingerprint
              ORDER BY COUNT(DISTINCT se1.ip_address) DESC
              LIMIT 10`,
-            [actorId]
-        ) || [];
+                [actorId]
+            )) || [];
 
         // Merge edges with weights and distance decay
         const neighborMap = new Map(); // fp -> { risk, totalWeight }
@@ -471,14 +530,16 @@ async function trustPropagation(actorId) {
 
         // Process product edges (strongest signal)
         for (const n of productNeighbors.slice(0, 10)) {
-            const profile = await db.get(
-                `SELECT avg_risk_score FROM actor_risk_profiles WHERE actor_id = $1`,
-                [n.device_fingerprint]
-            );
-            const risk = profile ? (parseFloat(profile.avg_risk_score) || 0) : 30;
+            const profile = await db.get(`SELECT avg_risk_score FROM actor_risk_profiles WHERE actor_id = $1`, [
+                n.device_fingerprint,
+            ]);
+            const risk = profile ? parseFloat(profile.avg_risk_score) || 0 : 30;
             const edgeWeight = (parseInt(n.shared_products) || 1) * 1.0 * HOP1_DECAY;
             const existing = neighborMap.get(n.device_fingerprint) || { risk: 0, weight: 0 };
-            neighborMap.set(n.device_fingerprint, { risk: existing.risk + risk * edgeWeight, weight: existing.weight + edgeWeight });
+            neighborMap.set(n.device_fingerprint, {
+                risk: existing.risk + risk * edgeWeight,
+                weight: existing.weight + edgeWeight,
+            });
         }
 
         // Process IP edges (secondary signal, weight 0.8)
@@ -486,34 +547,37 @@ async function trustPropagation(actorId) {
             if (neighborMap.has(n.device_fingerprint)) {
                 // Already connected via product — boost weight
                 const existing = neighborMap.get(n.device_fingerprint);
-                const profile = await db.get(
-                    `SELECT avg_risk_score FROM actor_risk_profiles WHERE actor_id = $1`,
-                    [n.device_fingerprint]
-                );
-                const risk = profile ? (parseFloat(profile.avg_risk_score) || 0) : 30;
+                const profile = await db.get(`SELECT avg_risk_score FROM actor_risk_profiles WHERE actor_id = $1`, [
+                    n.device_fingerprint,
+                ]);
+                const risk = profile ? parseFloat(profile.avg_risk_score) || 0 : 30;
                 const edgeWeight = (parseInt(n.shared_ips) || 1) * 0.8 * HOP1_DECAY;
-                neighborMap.set(n.device_fingerprint, { risk: existing.risk + risk * edgeWeight, weight: existing.weight + edgeWeight });
+                neighborMap.set(n.device_fingerprint, {
+                    risk: existing.risk + risk * edgeWeight,
+                    weight: existing.weight + edgeWeight,
+                });
             } else {
-                const profile = await db.get(
-                    `SELECT avg_risk_score FROM actor_risk_profiles WHERE actor_id = $1`,
-                    [n.device_fingerprint]
-                );
-                const risk = profile ? (parseFloat(profile.avg_risk_score) || 0) : 30;
+                const profile = await db.get(`SELECT avg_risk_score FROM actor_risk_profiles WHERE actor_id = $1`, [
+                    n.device_fingerprint,
+                ]);
+                const risk = profile ? parseFloat(profile.avg_risk_score) || 0 : 30;
                 const edgeWeight = (parseInt(n.shared_ips) || 1) * 0.8 * HOP1_DECAY;
                 neighborMap.set(n.device_fingerprint, { risk: risk * edgeWeight, weight: edgeWeight });
             }
         }
 
-        if (neighborMap.size === 0) return { network_trust: 0.5, neighbor_count: 0, penalty: 0, edges: { product: 0, ip: 0 } };
+        if (neighborMap.size === 0)
+            return { network_trust: 0.5, neighbor_count: 0, penalty: 0, edges: { product: 0, ip: 0 } };
 
         // Calculate weighted average risk
-        let totalWeightedRisk = 0, totalWeight = 0;
+        let totalWeightedRisk = 0,
+            totalWeight = 0;
         for (const [_, v] of neighborMap) {
             totalWeightedRisk += v.risk;
             totalWeight += v.weight;
         }
         const neighborAvgRisk = totalWeight > 0 ? totalWeightedRisk / totalWeight : 30;
-        const networkTrust = Math.max(0.1, 1 - (neighborAvgRisk / 100));
+        const networkTrust = Math.max(0.1, 1 - neighborAvgRisk / 100);
 
         // V8: Cap propagation penalty at 30% max influence
         const rawPenalty = networkTrust < 0.5 ? (0.5 - networkTrust) * 0.5 : 0;
@@ -526,7 +590,7 @@ async function trustPropagation(actorId) {
             penalty: Math.round(penalty * 100) / 100,
             edges: { product: productNeighbors.length, ip: ipNeighbors.length },
         };
-    } catch(_) {}
+    } catch (_) {}
     return { network_trust: 0.5, neighbor_count: 0, penalty: 0, edges: { product: 0, ip: 0 } };
 }
 
@@ -558,7 +622,15 @@ async function multiEdgeScore(actorId, ipAddress) {
                     // V9: Non-linear interaction — IP + product overlap = boosted
                     const interactionBoost = Math.min(15, Math.round(Math.sqrt(actors * products) * 3));
                     score += 35 + interactionBoost;
-                    reasons.push({ rule: 'multi_edge_ip_product', severity: 45 + interactionBoost, confidence: 0.75, actors, products, edge_types: ['ip', 'product'], interaction_boost: interactionBoost });
+                    reasons.push({
+                        rule: 'multi_edge_ip_product',
+                        severity: 45 + interactionBoost,
+                        confidence: 0.75,
+                        actors,
+                        products,
+                        edge_types: ['ip', 'product'],
+                        interaction_boost: interactionBoost,
+                    });
                 }
             }
         }
@@ -576,9 +648,15 @@ async function multiEdgeScore(actorId, ipAddress) {
         );
         if (crossIpSameProduct && parseInt(crossIpSameProduct.ips) >= 5) {
             score += 20;
-            reasons.push({ rule: 'multi_edge_cross_ip', severity: 30, confidence: 0.65, unique_ips: parseInt(crossIpSameProduct.ips), edge_types: ['ip', 'product'] });
+            reasons.push({
+                rule: 'multi_edge_cross_ip',
+                severity: 30,
+                confidence: 0.65,
+                unique_ips: parseInt(crossIpSameProduct.ips),
+                edge_types: ['ip', 'product'],
+            });
         }
-    } catch(_) {}
+    } catch (_) {}
     return { score: Math.min(50, score), reasons };
 }
 
@@ -591,7 +669,8 @@ async function bayesianRiskFusion(actorId, currentSignals) {
         // PRIOR: P(fraud) from actor + network + product
         let prior = 0.1;
         let dataPoints = 0;
-        let fraudCount = 0, legitCount = 0;
+        let fraudCount = 0,
+            legitCount = 0;
         if (actorId) {
             const profile = await db.get(
                 `SELECT total_scans, flagged_count, avg_risk_score FROM actor_risk_profiles WHERE actor_id = $1`,
@@ -621,7 +700,7 @@ async function bayesianRiskFusion(actorId, currentSignals) {
         ];
 
         // Fetch learned LRs
-        let learnedLRs = {};
+        const learnedLRs = {};
         let usingLearned = false;
         try {
             const stats = await db.all(`SELECT signal_name, fraud_count, legit_count, learned_lr FROM signal_stats`);
@@ -637,7 +716,7 @@ async function bayesianRiskFusion(actorId, currentSignals) {
                     }
                 }
             }
-        } catch(_) {}
+        } catch (_) {}
 
         // Combined likelihood using learned LRs
         let combinedLR = 1.0;
@@ -690,7 +769,7 @@ async function bayesianRiskFusion(actorId, currentSignals) {
 
         // V11: Calibrate posterior
         result.calibrated_posterior = calibrateProb(result.posterior);
-    } catch(_) {}
+    } catch (_) {}
     return result;
 }
 
@@ -700,12 +779,14 @@ async function updateSignalStats(signalName, isFraud, weight = 1.0) {
     try {
         const col = isFraud ? 'fraud_count' : 'legit_count';
         const increment = Math.max(0.1, Math.min(1.0, weight)); // weighted increment
-        await db.run(
-            `UPDATE signal_stats SET ${col} = ${col} + $1, last_updated = NOW() WHERE signal_name = $2`,
-            [increment, signalName]
-        );
+        await db.run(`UPDATE signal_stats SET ${col} = ${col} + $1, last_updated = NOW() WHERE signal_name = $2`, [
+            increment,
+            signalName,
+        ]);
         // Recompute learned LR with Laplace smoothing
-        const stats = await db.get(`SELECT fraud_count, legit_count FROM signal_stats WHERE signal_name = $1`, [signalName]);
+        const stats = await db.get(`SELECT fraud_count, legit_count FROM signal_stats WHERE signal_name = $1`, [
+            signalName,
+        ]);
         if (stats) {
             const fc = parseFloat(stats.fraud_count) || 0;
             const lc = parseFloat(stats.legit_count) || 0;
@@ -723,7 +804,7 @@ async function updateSignalStats(signalName, isFraud, weight = 1.0) {
             const finalLR = Math.max(0.5, Math.min(5.0, Math.round(blendedLR * 1000) / 1000));
             await db.run(`UPDATE signal_stats SET learned_lr = $1 WHERE signal_name = $2`, [finalLR, signalName]);
         }
-    } catch(_) {}
+    } catch (_) {}
 }
 
 // ─── V10: RECORD OUTCOME (feedback API) ────────────────
@@ -733,13 +814,13 @@ async function recordOutcome(actorId, isFraud, activeSignalNames, source = 'syst
     const weight = FEEDBACK_WEIGHT[source] || 0.3;
     const updated = [];
     try {
-        for (const sig of (activeSignalNames || SIGNAL_NAMES)) {
+        for (const sig of activeSignalNames || SIGNAL_NAMES) {
             if (SIGNAL_NAMES.includes(sig)) {
                 await updateSignalStats(sig, isFraud, weight);
                 updated.push(sig);
             }
         }
-    } catch(_) {}
+    } catch (_) {}
     return { updated, weight, source, is_fraud: isFraud };
 }
 
@@ -753,16 +834,18 @@ async function recordOutcomeWithDecision(actorId, isFraud, wasDetected, activeSi
 // ─── V10: GET LEARNED LRs (for inspection) ───────────────
 async function getLearnedLRs() {
     try {
-        const stats = await db.all(`SELECT signal_name, fraud_count, legit_count, learned_lr, last_updated FROM signal_stats ORDER BY signal_name`);
+        const stats = await db.all(
+            `SELECT signal_name, fraud_count, legit_count, learned_lr, last_updated FROM signal_stats ORDER BY signal_name`
+        );
         return (stats || []).map(s => ({
             signal: s.signal_name,
             fraud_count: parseInt(s.fraud_count) || 0,
             legit_count: parseInt(s.legit_count) || 0,
             learned_lr: parseFloat(s.learned_lr) || 1.0,
             default_lr: DEFAULT_LR[s.signal_name] || 1.0,
-            data_sufficient: ((parseInt(s.fraud_count) || 0) + (parseInt(s.legit_count) || 0)) >= 20,
+            data_sufficient: (parseInt(s.fraud_count) || 0) + (parseInt(s.legit_count) || 0) >= 20,
         }));
-    } catch(_) {}
+    } catch (_) {}
     return [];
 }
 
@@ -793,10 +876,26 @@ function signalCorrelationPenalty(activeSignalNames) {
 function calibrateProb(rawP) {
     // 20 bins: each 0.05 wide, calibrated values from domain knowledge
     const BINS = [
-        0.01, 0.02, 0.04, 0.06, 0.09,   // 0.00-0.25: very low
-        0.12, 0.16, 0.21, 0.27, 0.33,   // 0.25-0.50: low-medium
-        0.40, 0.47, 0.54, 0.61, 0.68,   // 0.50-0.75: medium-high
-        0.74, 0.80, 0.86, 0.92, 0.96,   // 0.75-1.00: high-very high
+        0.01,
+        0.02,
+        0.04,
+        0.06,
+        0.09, // 0.00-0.25: very low
+        0.12,
+        0.16,
+        0.21,
+        0.27,
+        0.33, // 0.25-0.50: low-medium
+        0.4,
+        0.47,
+        0.54,
+        0.61,
+        0.68, // 0.50-0.75: medium-high
+        0.74,
+        0.8,
+        0.86,
+        0.92,
+        0.96, // 0.75-1.00: high-very high
     ];
     const binWidth = 1.0 / BINS.length; // 0.05 each
     const idx = Math.min(BINS.length - 1, Math.floor(rawP / binWidth));
@@ -825,32 +924,39 @@ async function updateDecisionStats(wasDetected, isFraud) {
                 fraud_count = signal_stats.fraud_count + $2,
                 legit_count = signal_stats.legit_count + $3,
                 last_updated = NOW()`,
-            [`decision_${category}`, category === 'TP' || category === 'FN' ? 1 : 0, category === 'FP' || category === 'TN' ? 1 : 0]
+            [
+                `decision_${category}`,
+                category === 'TP' || category === 'FN' ? 1 : 0,
+                category === 'FP' || category === 'TN' ? 1 : 0,
+            ]
         );
-    } catch(_) {}
+    } catch (_) {}
 }
 
 async function getDecisionStats() {
     try {
         const stats = {};
         for (const cat of ['TP', 'FP', 'TN', 'FN']) {
-            const row = await db.get(`SELECT fraud_count, legit_count FROM signal_stats WHERE signal_name = $1`, [`decision_${cat}`]);
+            const row = await db.get(`SELECT fraud_count, legit_count FROM signal_stats WHERE signal_name = $1`, [
+                `decision_${cat}`,
+            ]);
             stats[cat] = row ? (parseInt(row.fraud_count) || 0) + (parseInt(row.legit_count) || 0) : 0;
         }
         const total = stats.TP + stats.FP + stats.TN + stats.FN;
-        const precision = (stats.TP + stats.FP) > 0 ? stats.TP / (stats.TP + stats.FP) : 0;
-        const recall = (stats.TP + stats.FN) > 0 ? stats.TP / (stats.TP + stats.FN) : 0;
-        const f1 = (precision + recall) > 0 ? 2 * precision * recall / (precision + recall) : 0;
+        const precision = stats.TP + stats.FP > 0 ? stats.TP / (stats.TP + stats.FP) : 0;
+        const recall = stats.TP + stats.FN > 0 ? stats.TP / (stats.TP + stats.FN) : 0;
+        const f1 = precision + recall > 0 ? (2 * precision * recall) / (precision + recall) : 0;
         // Cost-based loss: FN costs 5× FP
         const costLoss = stats.FN * 5 + stats.FP * 1;
         return {
-            ...stats, total,
+            ...stats,
+            total,
             precision: Math.round(precision * 1000) / 1000,
             recall: Math.round(recall * 1000) / 1000,
             f1: Math.round(f1 * 1000) / 1000,
             cost_loss: costLoss,
         };
-    } catch(_) {}
+    } catch (_) {}
     return { TP: 0, FP: 0, TN: 0, FN: 0, total: 0, precision: 0, recall: 0, f1: 0, cost_loss: 0 };
 }
 
@@ -858,10 +964,10 @@ async function getDecisionStats() {
 // Context-aware FN/FP costs per category + time
 function dynamicCost(category) {
     const COSTS = {
-        pharma:  { fn: 10, fp: 1, label: 'pharma (health risk)' },
-        luxury:  { fn: 8,  fp: 1, label: 'luxury (high value)' },
-        fmcg:    { fn: 3,  fp: 2, label: 'fmcg (volume, churn sensitive)' },
-        default: { fn: 5,  fp: 1, label: 'default' },
+        pharma: { fn: 10, fp: 1, label: 'pharma (health risk)' },
+        luxury: { fn: 8, fp: 1, label: 'luxury (high value)' },
+        fmcg: { fn: 3, fp: 2, label: 'fmcg (volume, churn sensitive)' },
+        default: { fn: 5, fp: 1, label: 'default' },
     };
     return COSTS[category] || COSTS.default;
 }
@@ -873,18 +979,25 @@ function smartExploration(baseEpsilon = 0.05, uncertainty = 0.5) {
     const effectiveEpsilon = Math.min(0.2, baseEpsilon + uncertainty * 0.2);
     const rand = Math.random();
     if (rand < effectiveEpsilon) {
-        return { explore: true, action: 'PASS', reason: 'smart_exploration', epsilon: Math.round(effectiveEpsilon * 1000) / 1000 };
+        return {
+            explore: true,
+            action: 'PASS',
+            reason: 'smart_exploration',
+            epsilon: Math.round(effectiveEpsilon * 1000) / 1000,
+        };
     }
     return { explore: false, epsilon: Math.round(effectiveEpsilon * 1000) / 1000 };
 }
 // Keep V12 compatibility
-function explorationBypass(epsilon = 0.05) { return smartExploration(epsilon, 0.5); }
+function explorationBypass(epsilon = 0.05) {
+    return smartExploration(epsilon, 0.5);
+}
 
 // ─── V13: AUTO-THRESHOLD WITH DAMPING ─────────────
 // Adjusts thresholds with 80/20 damping to prevent oscillation
 let _currentThresholds = { suspicious: 40, soft_block: 70, hard_block: 85 };
 let _safeThresholds = { ..._currentThresholds };
-let _safeLRs = null; // V13: LR snapshot for partial rollback
+const _safeLRs = null; // V13: LR snapshot for partial rollback
 
 async function autoThreshold(category) {
     try {
@@ -897,10 +1010,17 @@ async function autoThreshold(category) {
 
         let optimalSuspicious = _currentThresholds.suspicious;
         let optimalSoftBlock = _currentThresholds.soft_block;
-        if (fnRate > 0.3) { optimalSuspicious -= 3; optimalSoftBlock -= 2; }
-        else if (fnRate > 0.15) { optimalSuspicious -= 1; }
-        else if (fpRate > 0.3) { optimalSuspicious += 3; optimalSoftBlock += 2; }
-        else if (fpRate > 0.15) { optimalSuspicious += 1; }
+        if (fnRate > 0.3) {
+            optimalSuspicious -= 3;
+            optimalSoftBlock -= 2;
+        } else if (fnRate > 0.15) {
+            optimalSuspicious -= 1;
+        } else if (fpRate > 0.3) {
+            optimalSuspicious += 3;
+            optimalSoftBlock += 2;
+        } else if (fpRate > 0.15) {
+            optimalSuspicious += 1;
+        }
 
         // V13: DAMPING — 80% old + 20% optimal (prevents oscillation)
         const dampedSusp = Math.round(0.8 * _currentThresholds.suspicious + 0.2 * optimalSuspicious);
@@ -911,12 +1031,16 @@ async function autoThreshold(category) {
             soft_block: Math.max(55, Math.min(80, dampedSoft)),
             hard_block: _currentThresholds.hard_block,
         };
-    } catch(_) {}
+    } catch (_) {}
     return _currentThresholds;
 }
 
-function getThresholds() { return { ..._currentThresholds }; }
-function setThresholds(t) { _currentThresholds = { ...t }; }
+function getThresholds() {
+    return { ..._currentThresholds };
+}
+function setThresholds(t) {
+    _currentThresholds = { ...t };
+}
 
 // ─── V13: ROBUST DRIFT DETECTOR (KL + PSI) ───────
 // Uses blend of KL divergence + PSI for fewer false alarms
@@ -929,7 +1053,14 @@ async function driftDetector() {
             `SELECT total_score FROM risk_scores WHERE created_at > NOW() - INTERVAL '7 days' AND created_at < NOW() - INTERVAL '1 hour' ORDER BY created_at DESC LIMIT 1000`
         );
         if (!recent || recent.length < 20 || !historical || historical.length < 50) {
-            return { drift: false, reason: 'insufficient_data', kl: 0, psi: 0, drift_score: 0, recent_count: recent?.length || 0 };
+            return {
+                drift: false,
+                reason: 'insufficient_data',
+                kl: 0,
+                psi: 0,
+                drift_score: 0,
+                recent_count: recent?.length || 0,
+            };
         }
 
         const bins = 10;
@@ -945,7 +1076,8 @@ async function driftDetector() {
         }
         const rTotal = recent.length + bins;
         const hTotal = historical.length + bins;
-        let kl = 0, psi = 0;
+        let kl = 0,
+            psi = 0;
         for (let i = 0; i < bins; i++) {
             const p = (recentHist[i] + 1) / rTotal;
             const q = (histHist[i] + 1) / hTotal;
@@ -962,13 +1094,17 @@ async function driftDetector() {
         const histMean = historical.reduce((s, h) => s + (parseInt(h.total_score) || 0), 0) / historical.length;
 
         return {
-            drift: driftDetected, kl, psi, drift_score: driftScore,
+            drift: driftDetected,
+            kl,
+            psi,
+            drift_score: driftScore,
             recent_mean: Math.round(recentMean * 10) / 10,
             hist_mean: Math.round(histMean * 10) / 10,
             shift: Math.round((recentMean - histMean) * 10) / 10,
-            recent_count: recent.length, hist_count: historical.length,
+            recent_count: recent.length,
+            hist_count: historical.length,
         };
-    } catch(_) {}
+    } catch (_) {}
     return { drift: false, kl: 0, psi: 0, drift_score: 0, reason: 'error' };
 }
 
@@ -986,16 +1122,16 @@ function rollbackConfig() {
 // ─── V12: CAUSAL LIFT (measured) ───────────────────
 async function causalLift(signalName) {
     try {
-        const stats = await db.get(
-            `SELECT fraud_count, legit_count FROM signal_stats WHERE signal_name = $1`,
-            [signalName]
-        );
+        const stats = await db.get(`SELECT fraud_count, legit_count FROM signal_stats WHERE signal_name = $1`, [
+            signalName,
+        ]);
         if (!stats) return { lift: 0, p_fraud_with: 0, p_fraud_without: 0.1, signal: signalName };
 
         const fc = parseFloat(stats.fraud_count) || 0;
         const lc = parseFloat(stats.legit_count) || 0;
         const total = fc + lc;
-        if (total < 10) return { lift: 0, p_fraud_with: 0, p_fraud_without: 0.1, signal: signalName, reason: 'insufficient' };
+        if (total < 10)
+            return { lift: 0, p_fraud_with: 0, p_fraud_without: 0.1, signal: signalName, reason: 'insufficient' };
 
         // P(fraud | signal active)
         const pFraudWith = (fc + 1) / (total + 2); // Laplace
@@ -1010,7 +1146,7 @@ async function causalLift(signalName) {
             lift,
             is_causal: lift > 0.05 && total >= 20,
         };
-    } catch(_) {}
+    } catch (_) {}
     return { lift: 0, signal: signalName };
 }
 
@@ -1024,18 +1160,16 @@ function causalSignalScore(signalScores, allReasons) {
     const activeSignals = Object.entries(scores).filter(([_, v]) => v > 10);
     for (const [name, score] of activeSignals) {
         // Exclusivity: how much of total score comes from this signal alone
-        const totalOther = activeSignals
-            .filter(([n]) => n !== name)
-            .reduce((sum, [_, v]) => sum + v, 0);
+        const totalOther = activeSignals.filter(([n]) => n !== name).reduce((sum, [_, v]) => sum + v, 0);
         const exclusivity = totalOther > 0 ? score / (score + totalOther) : 1.0;
 
         // Signal-specific causal prior (domain knowledge)
         const CAUSAL_PRIOR = {
-            scan_pattern: 0.7,  // strong causal: scanning pattern directly indicates intent
-            geo: 0.8,           // strong causal: impossible travel is direct evidence
-            frequency: 0.5,     // medium: high frequency could be legit automation
-            history: 0.6,       // medium: past behavior predicts but doesn't cause
-            graph: 0.9,         // very strong: network collusion is direct cause
+            scan_pattern: 0.7, // strong causal: scanning pattern directly indicates intent
+            geo: 0.8, // strong causal: impossible travel is direct evidence
+            frequency: 0.5, // medium: high frequency could be legit automation
+            history: 0.6, // medium: past behavior predicts but doesn't cause
+            graph: 0.9, // very strong: network collusion is direct cause
         };
         const prior = CAUSAL_PRIOR[name] || 0.5;
 
@@ -1056,9 +1190,14 @@ function rankTopReasons(allReasons, maxReasons = 3) {
     if (!allReasons || allReasons.length === 0) return [];
     return allReasons
         .filter(r => r.severity && r.confidence)
-        .sort((a, b) => (b.severity * b.confidence) - (a.severity * a.confidence))
+        .sort((a, b) => b.severity * b.confidence - a.severity * a.confidence)
         .slice(0, maxReasons)
-        .map(r => ({ rule: r.rule, impact: Math.round(r.severity * r.confidence), severity: r.severity, confidence: r.confidence }));
+        .map(r => ({
+            rule: r.rule,
+            impact: Math.round(r.severity * r.confidence),
+            severity: r.severity,
+            confidence: r.confidence,
+        }));
 }
 
 // ─── V6: CROSS-ENTITY TRUST FUSION ──────────────────────────
@@ -1110,9 +1249,22 @@ async function actorTrustScore(actorId) {
             trust *= Math.exp(-lambda * inactiveDays);
         }
         trust = Math.max(0, Math.min(1.0, trust));
-        reasons.push({ trust, age_hours: Math.round(ageHours), flag_ratio: Math.round(flagRatio * 100) / 100, avg_risk: Math.round(avgRisk), volatility: vol.volatility, vol_penalty: vol.penalty, trend_slope: trend.slope, trend_penalty: trend.penalty, network_trust: network.network_trust, network_penalty: network.penalty, neighbor_count: network.neighbor_count, inactive_days: Math.round(inactiveDays * 10) / 10 });
+        reasons.push({
+            trust,
+            age_hours: Math.round(ageHours),
+            flag_ratio: Math.round(flagRatio * 100) / 100,
+            avg_risk: Math.round(avgRisk),
+            volatility: vol.volatility,
+            vol_penalty: vol.penalty,
+            trend_slope: trend.slope,
+            trend_penalty: trend.penalty,
+            network_trust: network.network_trust,
+            network_penalty: network.penalty,
+            neighbor_count: network.neighbor_count,
+            inactive_days: Math.round(inactiveDays * 10) / 10,
+        });
         return { trust, reasons, volatility: vol, trend, network };
-    } catch(_) {}
+    } catch (_) {}
     return { trust: 0.3, reasons: [] };
 }
 
@@ -1124,21 +1276,30 @@ async function deviceTrustScore(actorId) {
         const ipData = await db.get(
             `SELECT COUNT(DISTINCT ip_address) as ips, COUNT(*) as scans
              FROM scan_events WHERE device_fingerprint = $1
-             AND scanned_at > NOW() - INTERVAL '24 hours'`, [actorId]
+             AND scanned_at > NOW() - INTERVAL '24 hours'`,
+            [actorId]
         );
         const uniqueIPs = parseInt(ipData?.ips) || 0;
         const totalScans = parseInt(ipData?.scans) || 0;
         const typeData = await db.all(
             `SELECT DISTINCT scan_type FROM scan_events 
-             WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '24 hours'`, [actorId]
+             WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '24 hours'`,
+            [actorId]
         );
         const uniqueTypes = typeData ? typeData.length : 0;
-        let trust = 0.7, stability = 'stable';
-        if (uniqueIPs > 10) { trust -= 0.4; stability = 'rotating'; }
-        else if (uniqueIPs > 5) { trust -= 0.2; stability = 'unstable'; }
-        else if (uniqueIPs <= 2) trust += 0.1;
-        if (uniqueTypes >= 3) { trust -= 0.3; stability = 'chameleon'; }
-        else if (uniqueTypes >= 2) trust -= 0.1;
+        let trust = 0.7,
+            stability = 'stable';
+        if (uniqueIPs > 10) {
+            trust -= 0.4;
+            stability = 'rotating';
+        } else if (uniqueIPs > 5) {
+            trust -= 0.2;
+            stability = 'unstable';
+        } else if (uniqueIPs <= 2) trust += 0.1;
+        if (uniqueTypes >= 3) {
+            trust -= 0.3;
+            stability = 'chameleon';
+        } else if (uniqueTypes >= 2) trust -= 0.1;
         if (totalScans < 3) trust -= 0.1;
         // V6: Cross-actor device reuse penalty
         try {
@@ -1147,16 +1308,29 @@ async function deviceTrustScore(actorId) {
                  FROM scan_events WHERE ip_address IN (
                      SELECT DISTINCT ip_address FROM scan_events 
                      WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '1 hour'
-                 ) AND scanned_at > NOW() - INTERVAL '1 hour'`, [actorId]
+                 ) AND scanned_at > NOW() - INTERVAL '1 hour'`,
+                [actorId]
             );
             const fpCount = parseInt(ipActors?.fp_count) || 0;
-            if (fpCount > 10) { trust -= 0.3; stability = 'shared_device'; reasons.push({ rule: 'device_reuse_high', actors_sharing: fpCount }); }
-            else if (fpCount > 5) { trust -= 0.15; reasons.push({ rule: 'device_reuse_moderate', actors_sharing: fpCount }); }
-        } catch(_) {}
+            if (fpCount > 10) {
+                trust -= 0.3;
+                stability = 'shared_device';
+                reasons.push({ rule: 'device_reuse_high', actors_sharing: fpCount });
+            } else if (fpCount > 5) {
+                trust -= 0.15;
+                reasons.push({ rule: 'device_reuse_moderate', actors_sharing: fpCount });
+            }
+        } catch (_) {}
         trust = Math.max(0, Math.min(1.0, trust));
-        reasons.push({ trust, stability, unique_ips: uniqueIPs, unique_types: uniqueTypes, total_scans_24h: totalScans });
+        reasons.push({
+            trust,
+            stability,
+            unique_ips: uniqueIPs,
+            unique_types: uniqueTypes,
+            total_scans_24h: totalScans,
+        });
         return { trust, stability, reasons };
-    } catch(_) {}
+    } catch (_) {}
     return { trust: 0.5, stability: 'unknown', reasons: [] };
 }
 
@@ -1169,7 +1343,8 @@ async function multiHopCollusion(actorId) {
         const myProducts = await db.all(
             `SELECT DISTINCT product_id FROM scan_events 
              WHERE device_fingerprint = $1 AND scanned_at > NOW() - INTERVAL '1 hour'
-             LIMIT ${GRAPH_LIMITS.MAX_NODES}`, [actorId]
+             LIMIT ${GRAPH_LIMITS.MAX_NODES}`,
+            [actorId]
         );
         if (!myProducts || myProducts.length === 0) return { hops: 0, cluster_size: 0, score: 0, reasons };
         const productIds = myProducts.map(r => r.product_id);
@@ -1210,7 +1385,7 @@ async function multiHopCollusion(actorId) {
         try {
             const trustResults = await Promise.all(sampleActors.map(a => actorTrustScore(a)));
             avgTrust = trustResults.reduce((sum, t) => sum + t.trust, 0) / trustResults.length;
-        } catch(_) {}
+        } catch (_) {}
 
         // V5: Trust-weighted severity: low-trust cluster = higher risk
         const trustMultiplier = 1.5 - avgTrust; // 0.5 trust → 1.0×, 0.0 trust → 1.5×, 1.0 trust → 0.5×
@@ -1221,15 +1396,33 @@ async function multiHopCollusion(actorId) {
         if (clusterSize >= 4 && totalProducts >= 3) {
             const baseSeverity = Math.min(80, Math.round(60 * trustMultiplier));
             score += baseSeverity * 0.8;
-            reasons.push({ rule: 'multi_hop_cluster', severity: baseSeverity, confidence: 0.8, cluster_size: clusterSize, products: totalProducts, hops: 2, avg_trust: Math.round(avgTrust * 100) / 100, density, traversal: 'multi_factor' });
+            reasons.push({
+                rule: 'multi_hop_cluster',
+                severity: baseSeverity,
+                confidence: 0.8,
+                cluster_size: clusterSize,
+                products: totalProducts,
+                hops: 2,
+                avg_trust: Math.round(avgTrust * 100) / 100,
+                density,
+                traversal: 'multi_factor',
+            });
         } else if (clusterSize >= 3 && totalProducts >= 2) {
             const baseSeverity = Math.min(60, Math.round(35 * trustMultiplier));
             score += baseSeverity * 0.7;
-            reasons.push({ rule: 'multi_hop_small', severity: baseSeverity, confidence: 0.7, cluster_size: clusterSize, products: totalProducts, hops: 2, avg_trust: Math.round(avgTrust * 100) / 100 });
+            reasons.push({
+                rule: 'multi_hop_small',
+                severity: baseSeverity,
+                confidence: 0.7,
+                cluster_size: clusterSize,
+                products: totalProducts,
+                hops: 2,
+                avg_trust: Math.round(avgTrust * 100) / 100,
+            });
         }
 
         return { hops: 2, cluster_size: clusterSize, score, reasons, avg_trust: avgTrust };
-    } catch(_) {}
+    } catch (_) {}
     return { hops: 0, cluster_size: 0, score: 0, reasons };
 }
 
@@ -1259,17 +1452,29 @@ async function roleSwitchDetection(actorId, productId) {
             if (hasSupplyChain && hasConsumer) {
                 const sev = Math.round(55 * trustMod);
                 score += sev * 0.85;
-                reasons.push({ rule: 'role_switch_supply_consumer', severity: sev, confidence: 0.85, roles, device_trust: devTrust.trust });
+                reasons.push({
+                    rule: 'role_switch_supply_consumer',
+                    severity: sev,
+                    confidence: 0.85,
+                    roles,
+                    device_trust: devTrust.trust,
+                });
             } else if (roleHistory.length >= 3) {
                 const sev = Math.round(40 * trustMod);
                 score += sev * 0.8;
-                reasons.push({ rule: 'role_switch_multi', severity: sev, confidence: 0.8, roles, device_trust: devTrust.trust });
+                reasons.push({
+                    rule: 'role_switch_multi',
+                    severity: sev,
+                    confidence: 0.8,
+                    roles,
+                    device_trust: devTrust.trust,
+                });
             } else {
                 score += 20 * 0.6;
                 reasons.push({ rule: 'role_switch_dual', severity: 20, confidence: 0.6, roles });
             }
         }
-    } catch(_) {}
+    } catch (_) {}
     return { score: Math.min(80, Math.round(score)), reasons };
 }
 
@@ -1291,8 +1496,8 @@ async function deviceIdentityScore(actorId, ipAddress) {
             );
             if (ipCluster) {
                 const actorCount = parseInt(ipCluster.actors);
-                
-                // V5: WiFi sharing check — if actors have DIFFERENT behavior patterns, 
+
+                // V5: WiFi sharing check — if actors have DIFFERENT behavior patterns,
                 // likely shared WiFi (office/cafe), not same entity
                 let behaviorOverlap = 0;
                 if (actorCount >= 3 && actorId) {
@@ -1309,24 +1514,36 @@ async function deviceIdentityScore(actorId, ipAddress) {
                             [ipAddress]
                         );
                         behaviorOverlap = overlap ? parseInt(overlap.shared_products) || 0 : 0;
-                    } catch(_) {}
+                    } catch (_) {}
                 }
 
                 if (actorCount >= 5 && behaviorOverlap > 0) {
                     // Many actors + same products = real cluster (not WiFi sharing)
                     score += 50 * 0.85;
-                    reasons.push({ rule: 'ip_cluster_confirmed', severity: 50, confidence: 0.85, actors: actorCount, behavior_overlap: behaviorOverlap });
+                    reasons.push({
+                        rule: 'ip_cluster_confirmed',
+                        severity: 50,
+                        confidence: 0.85,
+                        actors: actorCount,
+                        behavior_overlap: behaviorOverlap,
+                    });
                 } else if (actorCount >= 5 && behaviorOverlap === 0) {
                     // Many actors but different products = likely WiFi sharing → lower confidence
                     score += 20 * 0.5;
-                    reasons.push({ rule: 'ip_cluster_wifi_likely', severity: 20, confidence: 0.5, actors: actorCount, note: 'possible WiFi sharing' });
+                    reasons.push({
+                        rule: 'ip_cluster_wifi_likely',
+                        severity: 20,
+                        confidence: 0.5,
+                        actors: actorCount,
+                        note: 'possible WiFi sharing',
+                    });
                 } else if (actorCount >= 3) {
                     score += 25 * 0.65;
                     reasons.push({ rule: 'ip_cluster_moderate', severity: 25, confidence: 0.65, actors: actorCount });
                 }
             }
         }
-    } catch(_) {}
+    } catch (_) {}
 
     // Fingerprint IP rotation (VPN detection) — kept from V4
     try {
@@ -1339,10 +1556,15 @@ async function deviceIdentityScore(actorId, ipAddress) {
             );
             if (ipDiversity && parseInt(ipDiversity.ips) > 5) {
                 score += 30 * 0.65;
-                reasons.push({ rule: 'fingerprint_ip_rotation', severity: 30, confidence: 0.65, unique_ips: parseInt(ipDiversity.ips) });
+                reasons.push({
+                    rule: 'fingerprint_ip_rotation',
+                    severity: 30,
+                    confidence: 0.65,
+                    unique_ips: parseInt(ipDiversity.ips),
+                });
             }
         }
-    } catch(_) {}
+    } catch (_) {}
 
     return { score: Math.min(80, Math.round(score)), reasons, merged_identities: 0 };
 }
@@ -1373,17 +1595,30 @@ async function graphScore(productId, actorId, ipAddress) {
                 if (roles.has('distributor') && roles.has('retailer') && roles.has('consumer')) {
                     const baseScore = 70 * 0.85 * w.weight;
                     score += baseScore;
-                    reasons.push({ rule: `chain_collusion_${w.label}`, severity: 70, confidence: 0.85, weight: w.weight, actors: actors.length, roles: [...roles] });
+                    reasons.push({
+                        rule: `chain_collusion_${w.label}`,
+                        severity: 70,
+                        confidence: 0.85,
+                        weight: w.weight,
+                        actors: actors.length,
+                        roles: [...roles],
+                    });
                     break; // Don't double-count same collusion across windows
                 } else if (roles.size >= 2 && actors.length >= 4) {
                     const baseScore = 45 * 0.75 * w.weight;
                     score += baseScore;
-                    reasons.push({ rule: `partial_cluster_${w.label}`, severity: 45, confidence: 0.75, weight: w.weight, actors: actors.length });
+                    reasons.push({
+                        rule: `partial_cluster_${w.label}`,
+                        severity: 45,
+                        confidence: 0.75,
+                        weight: w.weight,
+                        actors: actors.length,
+                    });
                     break;
                 }
             }
         }
-    } catch(_) {}
+    } catch (_) {}
 
     // === V3 (kept): Cross-product correlation ===
     try {
@@ -1404,29 +1639,53 @@ async function graphScore(productId, actorId, ipAddress) {
                     reasons.push({ rule: 'cross_product_high', severity: 40, confidence: 0.8, products_1h: pCount });
                 } else if (pCount > 5) {
                     score += 20 * 0.7;
-                    reasons.push({ rule: 'cross_product_moderate', severity: 20, confidence: 0.7, products_1h: pCount });
+                    reasons.push({
+                        rule: 'cross_product_moderate',
+                        severity: 20,
+                        confidence: 0.7,
+                        products_1h: pCount,
+                    });
                 }
             }
         }
-    } catch(_) {}
+    } catch (_) {}
 
     // === V4: Multi-hop collusion ===
     const multiHop = await multiHopCollusion(actorId);
-    if (multiHop.score > 0) { score += multiHop.score; reasons.push(...multiHop.reasons); }
+    if (multiHop.score > 0) {
+        score += multiHop.score;
+        reasons.push(...multiHop.reasons);
+    }
 
     // === V4: Role-switch detection ===
     const roleSwitch = await roleSwitchDetection(actorId, productId);
-    if (roleSwitch.score > 0) { score += roleSwitch.score; reasons.push(...roleSwitch.reasons); }
+    if (roleSwitch.score > 0) {
+        score += roleSwitch.score;
+        reasons.push(...roleSwitch.reasons);
+    }
 
     // === V4: Device-level identity ===
     const deviceId = await deviceIdentityScore(actorId, ipAddress);
-    if (deviceId.score > 0) { score += deviceId.score; reasons.push(...deviceId.reasons); }
+    if (deviceId.score > 0) {
+        score += deviceId.score;
+        reasons.push(...deviceId.reasons);
+    }
 
     // === V8 NEW: Multi-edge graph scoring ===
     const multiEdge = await multiEdgeScore(actorId, ipAddress);
-    if (multiEdge.score > 0) { score += multiEdge.score; reasons.push(...multiEdge.reasons); }
+    if (multiEdge.score > 0) {
+        score += multiEdge.score;
+        reasons.push(...multiEdge.reasons);
+    }
 
-    return { score: Math.min(100, Math.round(score)), reasons, multi_hop: multiHop, role_switch: roleSwitch, device_identity: deviceId, multi_edge: multiEdge };
+    return {
+        score: Math.min(100, Math.round(score)),
+        reasons,
+        multi_hop: multiHop,
+        role_switch: roleSwitch,
+        device_identity: deviceId,
+        multi_edge: multiEdge,
+    };
 }
 
 // ─── V3 3.2: COLD-START PENALTY ──────────────────────────────
@@ -1436,10 +1695,9 @@ async function coldStartPenalty(actorId) {
     let penalty = 0;
 
     try {
-        const profile = await db.get(
-            "SELECT created_at, total_scans FROM actor_risk_profiles WHERE actor_id = $1",
-            [actorId]
-        );
+        const profile = await db.get('SELECT created_at, total_scans FROM actor_risk_profiles WHERE actor_id = $1', [
+            actorId,
+        ]);
         if (!profile) {
             // Brand new actor — no profile at all
             penalty = 15;
@@ -1448,14 +1706,24 @@ async function coldStartPenalty(actorId) {
             const ageHours = (Date.now() - new Date(profile.created_at).getTime()) / 3600000;
             if (ageHours < 1) {
                 penalty = 20;
-                reasons.push({ rule: 'actor_age_lt_1h', severity: 20, confidence: 0.7, age_hours: Math.round(ageHours * 10) / 10 });
+                reasons.push({
+                    rule: 'actor_age_lt_1h',
+                    severity: 20,
+                    confidence: 0.7,
+                    age_hours: Math.round(ageHours * 10) / 10,
+                });
             } else if (ageHours < 24) {
                 // Proportional: 20 at 0h → 5 at 24h
                 penalty = Math.round(20 * (1 - ageHours / 24));
-                reasons.push({ rule: 'actor_age_lt_24h', severity: penalty, confidence: 0.6, age_hours: Math.round(ageHours) });
+                reasons.push({
+                    rule: 'actor_age_lt_24h',
+                    severity: penalty,
+                    confidence: 0.6,
+                    age_hours: Math.round(ageHours),
+                });
             }
         }
-    } catch(_) {
+    } catch (_) {
         penalty = 10;
         reasons.push({ rule: 'cold_start_fallback', severity: 10, confidence: 0.5 });
     }
@@ -1468,7 +1736,7 @@ async function checkRecovery(actorId) {
     if (!actorId) return null;
     try {
         const profile = await db.get(
-            "SELECT risk_level, last_flagged_at, updated_at FROM actor_risk_profiles WHERE actor_id = $1",
+            'SELECT risk_level, last_flagged_at, updated_at FROM actor_risk_profiles WHERE actor_id = $1',
             [actorId]
         );
         if (!profile || profile.risk_level === 'NORMAL') return null;
@@ -1478,21 +1746,21 @@ async function checkRecovery(actorId) {
             "SELECT COUNT(*) as c FROM risk_scores WHERE actor_id = $1 AND decision != 'NORMAL' AND created_at > NOW() - INTERVAL '24 hours'",
             [actorId]
         );
-        
+
         if (recentFlags && parseInt(recentFlags.c) === 0) {
             // No anomaly for 24h → downgrade enforcement by 1 level
             const levels = ['HARD_BLOCK', 'SOFT_BLOCK', 'SUSPICIOUS', 'NORMAL'];
             const currentIdx = levels.indexOf(profile.risk_level);
             const newLevel = currentIdx < levels.length - 1 ? levels[currentIdx + 1] : 'NORMAL';
-            
-            await db.run(
-                "UPDATE actor_risk_profiles SET risk_level = $1, updated_at = NOW() WHERE actor_id = $2",
-                [newLevel, actorId]
-            );
-            
+
+            await db.run('UPDATE actor_risk_profiles SET risk_level = $1, updated_at = NOW() WHERE actor_id = $2', [
+                newLevel,
+                actorId,
+            ]);
+
             return { recovered: true, from: profile.risk_level, to: newLevel, clean_hours: 24 };
         }
-    } catch(_) {}
+    } catch (_) {}
     return null;
 }
 
@@ -1509,18 +1777,19 @@ async function calculateRisk(input) {
         geoScore(productId, latitude, longitude, ipAddress),
         frequencyScore(productId, actorId),
         historyScore(productId, actorId),
-        graphScore(productId, actorId, ipAddress),  // V4: graph + multi-hop + identity
+        graphScore(productId, actorId, ipAddress), // V4: graph + multi-hop + identity
     ]);
 
     // V3: Cold-start penalty
     const coldStart = await coldStartPenalty(actorId);
 
     // V3: 5-feature weighted score (rebalanced weights)
-    let rawScore = WEIGHTS.scan_pattern * p.score 
-        + WEIGHTS.geo * g.score 
-        + WEIGHTS.frequency * f.score 
-        + WEIGHTS.history * h.score
-        + WEIGHTS.graph * gr.score;  // V3: graph contribution
+    let rawScore =
+        WEIGHTS.scan_pattern * p.score +
+        WEIGHTS.geo * g.score +
+        WEIGHTS.frequency * f.score +
+        WEIGHTS.history * h.score +
+        WEIGHTS.graph * gr.score; // V3: graph contribution
 
     // V3: Add cold-start penalty (direct add, not weighted)
     rawScore += coldStart.penalty;
@@ -1531,7 +1800,10 @@ async function calculateRisk(input) {
     let momentumContribution = 0;
     try {
         if (actorId) {
-            const profile = await db.get("SELECT avg_risk_score, total_scans FROM actor_risk_profiles WHERE actor_id = $1", [actorId]);
+            const profile = await db.get(
+                'SELECT avg_risk_score, total_scans FROM actor_risk_profiles WHERE actor_id = $1',
+                [actorId]
+            );
             if (profile && profile.total_scans > 2) {
                 momentum = parseFloat(profile.avg_risk_score) || 0;
                 // V3 anti-poisoning: cap influence per event = max 5 points
@@ -1539,7 +1811,7 @@ async function calculateRisk(input) {
                 rawScore = rawScore + momentumContribution; // V3: additive instead of blend
             }
         }
-    } catch(_) {}
+    } catch (_) {}
 
     // Category multiplier
     const catMult = CATEGORY_MULT[category] || CATEGORY_MULT.default;
@@ -1550,15 +1822,27 @@ async function calculateRisk(input) {
     // Progressive enforcement decision (V12: auto-tuned thresholds)
     const thresholds = _currentThresholds;
     let decision, autoAction;
-    if (totalScore > thresholds.hard_block) { decision = 'HARD_BLOCK'; autoAction = 'blocked'; }
-    else if (totalScore >= thresholds.soft_block) { decision = 'SOFT_BLOCK'; autoAction = 'flagged'; }
-    else if (totalScore >= thresholds.suspicious) { decision = 'SUSPICIOUS'; autoAction = 'warned'; }
-    else { decision = 'NORMAL'; autoAction = 'none'; }
+    if (totalScore > thresholds.hard_block) {
+        decision = 'HARD_BLOCK';
+        autoAction = 'blocked';
+    } else if (totalScore >= thresholds.soft_block) {
+        decision = 'SOFT_BLOCK';
+        autoAction = 'flagged';
+    } else if (totalScore >= thresholds.suspicious) {
+        decision = 'SUSPICIOUS';
+        autoAction = 'warned';
+    } else {
+        decision = 'NORMAL';
+        autoAction = 'none';
+    }
 
     // V13: Smart exploration — uncertainty-driven
     const bayesianResult = await bayesianRiskFusion(actorId, {
-        pattern: p.score, geo: g.score, frequency: f.score,
-        history: h.score, graph: gr.score,
+        pattern: p.score,
+        geo: g.score,
+        frequency: f.score,
+        history: h.score,
+        graph: gr.score,
     });
     const exploration = smartExploration(0.05, bayesianResult.uncertainty || 0.5);
     let explored = false;
@@ -1574,7 +1858,7 @@ async function calculateRisk(input) {
         geo: g.score,
         frequency: f.score,
         history: h.score,
-        graph: gr.score,              // V3
+        graph: gr.score, // V3
         cold_start: coldStart.penalty, // V3
         momentum: Math.round(momentum),
         momentum_contribution: Math.round(momentumContribution), // V3: capped
@@ -1588,23 +1872,45 @@ async function calculateRisk(input) {
         await db.run(
             `INSERT INTO risk_scores (product_id, actor_id, scan_pattern_score, geo_score, frequency_score, history_score, total_score, decision, auto_action, reasons)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [productId, actorId, p.score, g.score, f.score, h.score, totalScore, decision, autoAction, JSON.stringify({ reasons: allReasons, breakdown, recovery, graph_score: gr.score, cold_start: coldStart.penalty })]
+            [
+                productId,
+                actorId,
+                p.score,
+                g.score,
+                f.score,
+                h.score,
+                totalScore,
+                decision,
+                autoAction,
+                JSON.stringify({
+                    reasons: allReasons,
+                    breakdown,
+                    recovery,
+                    graph_score: gr.score,
+                    cold_start: coldStart.penalty,
+                }),
+            ]
         );
-    } catch(_) {}
+    } catch (_) {}
 
     // Synthetic risk injection — update actor profile with FRACTIONAL flagging
     try {
         if (actorId) {
             let flagIncrement = 0;
             let blockIncrement = 0;
-            if (totalScore >= 70) { flagIncrement = 1; }
-            else if (totalScore >= 50) { flagIncrement = 0.7; }
-            else if (totalScore >= 30) { flagIncrement = 0.3; }
+            if (totalScore >= 70) {
+                flagIncrement = 1;
+            } else if (totalScore >= 50) {
+                flagIncrement = 0.7;
+            } else if (totalScore >= 30) {
+                flagIncrement = 0.3;
+            }
 
             if (decision === 'HARD_BLOCK') blockIncrement = 1;
             const lastFlaggedAt = flagIncrement > 0 ? new Date() : null;
 
-            await db.run(`
+            await db.run(
+                `
                 INSERT INTO actor_risk_profiles (actor_id, total_scans, flagged_count, blocked_count, avg_risk_score, last_risk_score, risk_level, last_flagged_at, updated_at)
                 VALUES ($1, 1, $2::numeric, $3, $4::numeric, $4::integer, $5, $6, NOW())
                 ON CONFLICT (actor_id) DO UPDATE SET
@@ -1616,18 +1922,27 @@ async function calculateRisk(input) {
                     risk_level = $5,
                     last_flagged_at = CASE WHEN $2::numeric > 0 THEN NOW() ELSE actor_risk_profiles.last_flagged_at END,
                     updated_at = NOW()
-            `, [actorId, flagIncrement, blockIncrement, totalScore, decision, lastFlaggedAt]);
+            `,
+                [actorId, flagIncrement, blockIncrement, totalScore, decision, lastFlaggedAt]
+            );
         }
-    } catch(_) {}
+    } catch (_) {}
 
     // Log action for forensics (any non-NORMAL)
     if (decision !== 'NORMAL') {
         try {
             await db.run(
-                "INSERT INTO risk_actions_log (product_id, actor_id, risk_score, action, reasons, metadata) VALUES ($1, $2, $3, $4, $5, $6)",
-                [productId, actorId, totalScore, decision, JSON.stringify(allReasons), JSON.stringify({ category, catMult, breakdown, recovery })]
+                'INSERT INTO risk_actions_log (product_id, actor_id, risk_score, action, reasons, metadata) VALUES ($1, $2, $3, $4, $5, $6)',
+                [
+                    productId,
+                    actorId,
+                    totalScore,
+                    decision,
+                    JSON.stringify(allReasons),
+                    JSON.stringify({ category, catMult, breakdown, recovery }),
+                ]
             );
-        } catch(_) {}
+        } catch (_) {}
     }
 
     // ═══ V21.6: Auto-record hooks (ROI, Market, Trust) ═══════════
@@ -1650,31 +1965,39 @@ async function calculateRisk(input) {
                 updated_at = NOW()`,
             [_orgId, isBlock ? 1 : 0, isBlock ? _val : 0, isBlock ? 0 : _val]
         );
-    } catch(_) {}
+    } catch (_) {}
 
     // 2. Market data auto-record: every scan → insert market_data with region
     try {
-        const _region = input.region || input.country || (latitude && longitude ? `${Math.round(latitude)},${Math.round(longitude)}` : 'unknown');
+        const _region =
+            input.region ||
+            input.country ||
+            (latitude && longitude ? `${Math.round(latitude)},${Math.round(longitude)}` : 'unknown');
         const isFraud = decision === 'HARD_BLOCK';
         marketIntelligence('record', { region: _region, category, risk_score: totalScore, is_fraud: isFraud });
         await db.run(
             `INSERT INTO market_data (region, category, risk_score, is_fraud, org_id) VALUES ($1, $2, $3, $4, $5)`,
             [_region, category || 'default', totalScore, isFraud, _orgId]
         );
-    } catch(_) {}
+    } catch (_) {}
 
     // 3. Trust auto-share: new actors with clear patterns → auto-share to trust network
     try {
         if (actorId && (totalScore >= 50 || totalScore <= 10)) {
-            const trustScore = 1 - (totalScore / 100);
+            const trustScore = 1 - totalScore / 100;
             trustNetworkShare(_orgId, actorId, trustScore, { auto: true, decision, score: totalScore });
             await db.run(
                 `INSERT INTO trust_network_data (org_id, actor_id, trust_score, metadata)
                  VALUES ($1, $2, $3, $4)`,
-                [_orgId, actorId, trustScore, JSON.stringify({ auto: true, decision, risk_score: totalScore, category })]
+                [
+                    _orgId,
+                    actorId,
+                    trustScore,
+                    JSON.stringify({ auto: true, decision, risk_score: totalScore, category }),
+                ]
             );
         }
-    } catch(_) {}
+    } catch (_) {}
     // ═══════════════════════════════════════════════════════════════
 
     return {
@@ -1686,7 +2009,7 @@ async function calculateRisk(input) {
             geo: { score: g.score, weight: WEIGHTS.geo, reasons: g.reasons },
             frequency: { score: f.score, weight: WEIGHTS.frequency, reasons: f.reasons },
             history: { score: h.score, weight: WEIGHTS.history, reasons: h.reasons },
-            graph: { score: gr.score, weight: WEIGHTS.graph, reasons: gr.reasons },  // V3
+            graph: { score: gr.score, weight: WEIGHTS.graph, reasons: gr.reasons }, // V3
         },
         breakdown,
         momentum: Math.round(momentum),
@@ -1767,22 +2090,58 @@ async function calculateRisk(input) {
 // ─── V14: EVOLVING ATTACKER SIMULATION ──────────────
 // Mutates + evolves attacks based on what bypassed
 const _BASE_ATTACKS = [
-    { name: 'Farm attack', actors: 20, scans_per_actor: 3, overlap_ips: true, role: 'consumer',
-      description: 'Distributed scan farm', expected_detection: 'graph + frequency' },
-    { name: 'Slow probing', actors: 1, scans_per_actor: 50, overlap_ips: false, role: 'distributor',
-      description: 'Slow enumeration under radar', expected_detection: 'frequency + history' },
-    { name: 'Role juggling', actors: 5, scans_per_actor: 10, overlap_ips: true, role: 'mixed',
-      description: 'Alternating roles to evade patterns', expected_detection: 'role_switch + graph' },
-    { name: 'Device spoofing', actors: 3, scans_per_actor: 15, overlap_ips: false, role: 'consumer',
-      description: 'Random device/IP per scan', expected_detection: 'trust + scan_pattern' },
-    { name: 'Supply chain infiltrate', actors: 2, scans_per_actor: 8, overlap_ips: true, role: 'distributor',
-      description: 'Embed in legit supply chain', expected_detection: 'trust_propagation + multi_edge' },
+    {
+        name: 'Farm attack',
+        actors: 20,
+        scans_per_actor: 3,
+        overlap_ips: true,
+        role: 'consumer',
+        description: 'Distributed scan farm',
+        expected_detection: 'graph + frequency',
+    },
+    {
+        name: 'Slow probing',
+        actors: 1,
+        scans_per_actor: 50,
+        overlap_ips: false,
+        role: 'distributor',
+        description: 'Slow enumeration under radar',
+        expected_detection: 'frequency + history',
+    },
+    {
+        name: 'Role juggling',
+        actors: 5,
+        scans_per_actor: 10,
+        overlap_ips: true,
+        role: 'mixed',
+        description: 'Alternating roles to evade patterns',
+        expected_detection: 'role_switch + graph',
+    },
+    {
+        name: 'Device spoofing',
+        actors: 3,
+        scans_per_actor: 15,
+        overlap_ips: false,
+        role: 'consumer',
+        description: 'Random device/IP per scan',
+        expected_detection: 'trust + scan_pattern',
+    },
+    {
+        name: 'Supply chain infiltrate',
+        actors: 2,
+        scans_per_actor: 8,
+        overlap_ips: true,
+        role: 'distributor',
+        description: 'Embed in legit supply chain',
+        expected_detection: 'trust_propagation + multi_edge',
+    },
 ];
-let _evolvedAttacks = [];
+const _evolvedAttacks = [];
 
 function attackerSimulation() {
     return _BASE_ATTACKS.map((t, i) => ({
-        id: `ATK-${i+1}`, ...t,
+        id: `ATK-${i + 1}`,
+        ...t,
         total_scans: t.actors * t.scans_per_actor,
         risk_level: t.actors * t.scans_per_actor > 30 ? 'HIGH' : 'MEDIUM',
     }));
@@ -1811,7 +2170,9 @@ function evolveAttacker(parentA = 0, parentB = 1) {
     return mutant;
 }
 
-function getEvolvedAttacks() { return [..._evolvedAttacks]; }
+function getEvolvedAttacks() {
+    return [..._evolvedAttacks];
+}
 
 // ─── V14: THREAT HYSTERESIS ───────────────────────
 // Prevents flip-flopping between threat levels
@@ -1872,12 +2233,16 @@ async function strategyPrediction() {
             hist_avg: Math.round(histAvgScore * 10) / 10,
             hysteresis: true,
         };
-    } catch(_) {}
+    } catch (_) {}
     return { threat_level: _threatState, is_escalating: false, score_trend: 0, hysteresis: true };
 }
 
-function getThreatState() { return _threatState; }
-function setThreatState(s) { _threatState = s; }
+function getThreatState() {
+    return _threatState;
+}
+function setThreatState(s) {
+    _threatState = s;
+}
 
 // ─── V14: MULTI-DIMENSIONAL DEFENSE ───────────────
 async function multiDimensionalDefense() {
@@ -1909,7 +2274,9 @@ async function multiDimensionalDefense() {
     result.action_count = result.actions.length;
     return result;
 }
-async function preemptiveDefense() { return multiDimensionalDefense(); }
+async function preemptiveDefense() {
+    return multiDimensionalDefense();
+}
 
 // ─── V14: OBJECTIVE FEEDBACK LOOP ─────────────────
 let _lastNetValue = null;
@@ -1921,9 +2288,12 @@ async function objectiveFeedback(category) {
     const txValue = avgTxValue[category] || avgTxValue.default;
     const revenueProtected = stats.TP * txValue;
     const frictionCost = stats.FP * txValue * 0.1;
-    const fraudLoss = stats.FN * txValue * cost.fn / 5;
+    const fraudLoss = (stats.FN * txValue * cost.fn) / 5;
     const netValue = revenueProtected - frictionCost - fraudLoss;
-    const efficiency = stats.total > 0 ? Math.round((revenueProtected / Math.max(1, revenueProtected + frictionCost + fraudLoss)) * 100) : 0;
+    const efficiency =
+        stats.total > 0
+            ? Math.round((revenueProtected / Math.max(1, revenueProtected + frictionCost + fraudLoss)) * 100)
+            : 0;
 
     let feedback = 'neutral';
     let adjustment = 0;
@@ -1949,7 +2319,9 @@ async function objectiveFeedback(category) {
         adjustment,
     };
 }
-async function globalObjective(category) { return objectiveFeedback(category); }
+async function globalObjective(category) {
+    return objectiveFeedback(category);
+}
 
 // ─── V15: DATA-DRIVEN PAYOFF MATRIX ─────────────
 // Base payoffs + learned adjustments from real outcomes
@@ -1961,11 +2333,11 @@ function payoffMatrix() {
 
     const atkBase = { farm: 0.6, slow_probe: 0.7, role_juggle: 0.5, device_spoof: 0.4, supply_chain: 0.8 };
     const defEffect = {
-        baseline:        { farm: 0.0, slow_probe: 0.0, role_juggle: 0.0, device_spoof: 0.0, supply_chain: 0.0 },
+        baseline: { farm: 0.0, slow_probe: 0.0, role_juggle: 0.0, device_spoof: 0.0, supply_chain: 0.0 },
         tight_threshold: { farm: 0.3, slow_probe: 0.1, role_juggle: 0.2, device_spoof: 0.1, supply_chain: 0.15 },
-        graph_boost:     { farm: 0.5, slow_probe: 0.1, role_juggle: 0.4, device_spoof: 0.1, supply_chain: 0.3 },
-        trust_dampen:    { farm: 0.2, slow_probe: 0.2, role_juggle: 0.1, device_spoof: 0.3, supply_chain: 0.5 },
-        full_defense:    { farm: 0.6, slow_probe: 0.3, role_juggle: 0.5, device_spoof: 0.4, supply_chain: 0.6 },
+        graph_boost: { farm: 0.5, slow_probe: 0.1, role_juggle: 0.4, device_spoof: 0.1, supply_chain: 0.3 },
+        trust_dampen: { farm: 0.2, slow_probe: 0.2, role_juggle: 0.1, device_spoof: 0.3, supply_chain: 0.5 },
+        full_defense: { farm: 0.6, slow_probe: 0.3, role_juggle: 0.5, device_spoof: 0.4, supply_chain: 0.6 },
     };
     const defCostBase = { baseline: 0, tight_threshold: 0.1, graph_boost: 0.15, trust_dampen: 0.1, full_defense: 0.3 };
 
@@ -2005,7 +2377,9 @@ function updatePayoff(attackType, defenseUsed, attackSucceeded) {
     return _payoffAdjustments[key];
 }
 
-function getPayoffAdjustments() { return { ..._payoffAdjustments }; }
+function getPayoffAdjustments() {
+    return { ..._payoffAdjustments };
+}
 
 // ─── V15: MIXED-STRATEGY NASH EQUILIBRIUM ───────
 function mixedStrategyNash() {
@@ -2013,7 +2387,8 @@ function mixedStrategyNash() {
     const scores = {};
     let totalScore = 0;
     for (const def of pm.defender_strategies) {
-        let maxLoss = 0, avgLoss = 0;
+        let maxLoss = 0,
+            avgLoss = 0;
         for (const atk of pm.attacker_strategies) {
             const loss = pm.matrix[atk][def].total_loss;
             if (loss > maxLoss) maxLoss = loss;
@@ -2065,21 +2440,27 @@ function sampleDefense() {
 // V14 compat + V15 mixed strategy
 function nashEquilibrium() {
     const pm = payoffMatrix();
-    let bestDefender = null, bestWorstCase = Infinity;
+    let bestDefender = null,
+        bestWorstCase = Infinity;
     for (const def of pm.defender_strategies) {
         let worstCase = 0;
         for (const atk of pm.attacker_strategies) {
             const totalLoss = pm.matrix[atk][def].total_loss;
             if (totalLoss > worstCase) worstCase = totalLoss;
         }
-        if (worstCase < bestWorstCase) { bestWorstCase = worstCase; bestDefender = def; }
+        if (worstCase < bestWorstCase) {
+            bestWorstCase = worstCase;
+            bestDefender = def;
+        }
     }
     const mixed = mixedStrategyNash();
     return {
         optimal_defense: bestDefender,
         minimax_loss: Math.round(bestWorstCase * 100) / 100,
         mixed_strategy: mixed.distribution,
-        recommendation: `Mixed: ${Object.entries(mixed.distribution).map(([d,p])=>`${d}(${Math.round(p*100)}%)`).join(', ')}`,
+        recommendation: `Mixed: ${Object.entries(mixed.distribution)
+            .map(([d, p]) => `${d}(${Math.round(p * 100)}%)`)
+            .join(', ')}`,
     };
 }
 
@@ -2135,33 +2516,58 @@ function continuousAttackVector(params = {}) {
         device_spoof: [0.6, 0.3, 0.8, 0.2, 0.4],
         supply_chain: [0.3, 0.7, 0.4, 0.9, 0.6],
     };
-    let bestType = 'farm', bestSim = -1;
+    let bestType = 'farm',
+        bestSim = -1;
     const vArr = [v.speed, v.distribution, v.identity_switch, v.graph_depth, v.temporal_pattern];
     for (const [type, sig] of Object.entries(signatures)) {
-        let dot = 0, magA = 0, magB = 0;
-        for (let i = 0; i < 5; i++) { dot += vArr[i] * sig[i]; magA += vArr[i] ** 2; magB += sig[i] ** 2; }
+        let dot = 0,
+            magA = 0,
+            magB = 0;
+        for (let i = 0; i < 5; i++) {
+            dot += vArr[i] * sig[i];
+            magA += vArr[i] ** 2;
+            magB += sig[i] ** 2;
+        }
         const sim = dot / (Math.sqrt(magA) * Math.sqrt(magB) + 0.001);
-        if (sim > bestSim) { bestSim = sim; bestType = type; }
+        if (sim > bestSim) {
+            bestSim = sim;
+            bestType = type;
+        }
     }
-    return { vector: v, magnitude: Math.round(magnitude * 1000) / 1000, nearest_type: bestType, similarity: Math.round(bestSim * 1000) / 1000, dimensions: 5 };
+    return {
+        vector: v,
+        magnitude: Math.round(magnitude * 1000) / 1000,
+        nearest_type: bestType,
+        similarity: Math.round(bestSim * 1000) / 1000,
+        dimensions: 5,
+    };
 }
 
 // ─── V15: REPEATED GAME MEMORY ──────────────────
 function recordGameRound(attackType, defenseUsed, outcome) {
-    const round = { round: _gameHistory.length + 1, attack_type: attackType, defense_used: defenseUsed, outcome, timestamp: Date.now() };
+    const round = {
+        round: _gameHistory.length + 1,
+        attack_type: attackType,
+        defense_used: defenseUsed,
+        outcome,
+        timestamp: Date.now(),
+    };
     _gameHistory.push(round);
     updatePayoff(attackType, defenseUsed, outcome === 'passed');
     return round;
 }
 
-function getGameHistory() { return [..._gameHistory]; }
+function getGameHistory() {
+    return [..._gameHistory];
+}
 
 function adaptiveStrategy() {
     if (_gameHistory.length < 5) {
         return { strategy: 'explore', reason: 'insufficient_history', rounds: _gameHistory.length };
     }
     const recent = _gameHistory.slice(-20);
-    const attackCounts = {}, defenseOutcomes = {};
+    const attackCounts = {},
+        defenseOutcomes = {};
     for (const r of recent) {
         attackCounts[r.attack_type] = (attackCounts[r.attack_type] || 0) + 1;
         if (!defenseOutcomes[r.defense_used]) defenseOutcomes[r.defense_used] = { blocked: 0, passed: 0 };
@@ -2169,21 +2575,29 @@ function adaptiveStrategy() {
         else defenseOutcomes[r.defense_used].passed++;
     }
     const topAttack = Object.entries(attackCounts).sort((a, b) => b[1] - a[1])[0];
-    let bestDef = null, bestRate = -1;
+    let bestDef = null,
+        bestRate = -1;
     for (const [def, stats] of Object.entries(defenseOutcomes)) {
         const rate = stats.blocked / (stats.blocked + stats.passed + 0.01);
-        if (rate > bestRate) { bestRate = rate; bestDef = def; }
+        if (rate > bestRate) {
+            bestRate = rate;
+            bestDef = def;
+        }
     }
     return {
-        strategy: 'adapt', top_attack: topAttack ? { type: topAttack[0], count: topAttack[1] } : null,
-        best_defense: bestDef, best_block_rate: Math.round(bestRate * 100) / 100,
-        rounds_analyzed: recent.length, total_rounds: _gameHistory.length,
+        strategy: 'adapt',
+        top_attack: topAttack ? { type: topAttack[0], count: topAttack[1] } : null,
+        best_defense: bestDef,
+        best_block_rate: Math.round(bestRate * 100) / 100,
+        rounds_analyzed: recent.length,
+        total_rounds: _gameHistory.length,
     };
 }
 
 // ─── V16: LATENT RISK DETECTOR ──────────────────
 // Detects "stealth attacks" — expected fraud from patterns > observed fraud
-let _observedFraud = 0, _expectedFraud = 0;
+const _observedFraud = 0,
+    _expectedFraud = 0;
 
 function latentRiskDetector() {
     // Expected fraud: based on recent high-risk scans that SHOULD have been fraud
@@ -2254,7 +2668,12 @@ function feedbackCredibility(source, outcome, recentOutcomes = []) {
     }
 
     const credibility = Math.round(sourceWeight * consistency * anomalyScore * 100) / 100;
-    return { credibility, source_weight: sourceWeight, consistency: Math.round(consistency * 100) / 100, anomaly_score: anomalyScore };
+    return {
+        credibility,
+        source_weight: sourceWeight,
+        consistency: Math.round(consistency * 100) / 100,
+        anomaly_score: anomalyScore,
+    };
 }
 
 // ─── V16: LONG-TERM VALUE (γ DISCOUNT) ─────────
@@ -2283,7 +2702,9 @@ function longTermValue(gamma = 0.8) {
         gamma,
         total_value: Math.round(V * 1000) / 1000,
         suspicious_buildup: suspiciousBuildUp,
-        recommendation: suspiciousBuildUp ? 'Possible slow-farming detected — consider preemptive action' : 'Stable trajectory',
+        recommendation: suspiciousBuildUp
+            ? 'Possible slow-farming detected — consider preemptive action'
+            : 'Stable trajectory',
     };
 }
 
@@ -2346,9 +2767,8 @@ function metaLearner() {
     // Global learning rate: average of per-strategy rates
     const rates = Object.values(_metaState.strategy_performance).map(s => s.learning_rate);
     const prevGLR = _metaState.global_learning_rate;
-    _metaState.global_learning_rate = rates.length > 0
-        ? Math.round((rates.reduce((s, r) => s + r, 0) / rates.length) * 100) / 100
-        : 0.15;
+    _metaState.global_learning_rate =
+        rates.length > 0 ? Math.round((rates.reduce((s, r) => s + r, 0) / rates.length) * 100) / 100 : 0.15;
 
     // V17: Safety revert — if performance drops > 20%, revert meta
     if (_metaState.adaptations.length >= 2) {
@@ -2375,7 +2795,9 @@ function metaLearner() {
     };
 }
 
-function getMetaState() { return { ..._metaState }; }
+function getMetaState() {
+    return { ..._metaState };
+}
 function resetMetaState() {
     _metaState.generation = 0;
     _metaState.strategy_performance = {};
@@ -2390,7 +2812,11 @@ function stealthResponseProtocol() {
     if (latent.stealth_alert) {
         // Auto-activate defensive measures
         const th = getThresholds();
-        setThresholds({ suspicious: Math.max(20, th.suspicious - 3), soft_block: Math.max(50, th.soft_block - 3), hard_block: Math.max(70, th.hard_block - 3) });
+        setThresholds({
+            suspicious: Math.max(20, th.suspicious - 3),
+            soft_block: Math.max(50, th.soft_block - 3),
+            hard_block: Math.max(70, th.hard_block - 3),
+        });
         actions.push('threshold_tightened');
         actions.push('exploration_increased');
         actions.push('graph_sensitivity_boosted');
@@ -2455,7 +2881,8 @@ function systemSelfAwareness() {
     const regret = Math.round((ev.optimal_expected_loss - bestPossible) * 1000) / 1000;
 
     // Composite health score
-    const health = Math.round((1 - calibrationError * 0.3 - driftScore * 0.3 - instability * 0.2 - latent.gap * 0.2) * 100) / 100;
+    const health =
+        Math.round((1 - calibrationError * 0.3 - driftScore * 0.3 - instability * 0.2 - latent.gap * 0.2) * 100) / 100;
     const safeMode = health < 0.5;
 
     return {
@@ -2480,7 +2907,8 @@ const _evolutionState = {
 
 function signalEvolution() {
     _evolutionState.generation++;
-    const promoted = [], demoted = [];
+    const promoted = [],
+        demoted = [];
 
     // Evaluate signal importance from recent game outcomes
     const recent = _gameHistory.slice(-30);
@@ -2495,7 +2923,7 @@ function signalEvolution() {
     const passedRounds = recent.filter(r => r.outcome === 'passed').length;
     const globalBlockRate = blockedRounds / Math.max(1, recent.length);
     // Global objective: minimize FN (passed attacks are bad)
-    const globalScore = 1 - (passedRounds / Math.max(1, recent.length)); // higher = better
+    const globalScore = 1 - passedRounds / Math.max(1, recent.length); // higher = better
 
     for (const sig of signalNames) {
         if (!_evolutionState.signal_weights[sig]) _evolutionState.signal_weights[sig] = 1.0;
@@ -2519,7 +2947,11 @@ function signalEvolution() {
     if (!idCheck.all_passed) {
         // Rollback evolution — identity violation
         _evolutionState.generation--;
-        return { generation: _evolutionState.generation, status: 'rejected_by_governance', violation: idCheck.violations };
+        return {
+            generation: _evolutionState.generation,
+            status: 'rejected_by_governance',
+            violation: idCheck.violations,
+        };
     }
 
     _evolutionState.promoted = promoted;
@@ -2535,7 +2967,9 @@ function signalEvolution() {
     };
 }
 
-function getEvolutionState() { return { ..._evolutionState }; }
+function getEvolutionState() {
+    return { ..._evolutionState };
+}
 
 // ─── V18: META ANCHOR / REGULARIZATION ──────
 const _metaBaseline = { learning_rate: 0.15, strategy_distribution: null };
@@ -2594,9 +3028,11 @@ function driftVsBias() {
         is_drift: isDrift,
         is_bias: isBias,
         action,
-        rationale: isDrift ? 'Data distribution changed — adapt signals' :
-                   isBias ? 'Model systematic error — revert to known-good config' :
-                   'System operating normally',
+        rationale: isDrift
+            ? 'Data distribution changed — adapt signals'
+            : isBias
+              ? 'Model systematic error — revert to known-good config'
+              : 'System operating normally',
     };
 }
 
@@ -2616,7 +3052,8 @@ function recordFailure(config, outcome) {
 function checkFailureMemory(proposedConfig) {
     // Check similarity to past bad configs
     for (const failure of _failureMemory) {
-        let matchCount = 0, totalKeys = 0;
+        let matchCount = 0,
+            totalKeys = 0;
         for (const [k, v] of Object.entries(failure.config)) {
             totalKeys++;
             if (proposedConfig[k] !== undefined) {
@@ -2632,18 +3069,20 @@ function checkFailureMemory(proposedConfig) {
     return { safe: true, similarity: 0, checked: _failureMemory.length };
 }
 
-function getFailureMemory() { return [..._failureMemory]; }
+function getFailureMemory() {
+    return [..._failureMemory];
+}
 
 // ─── V18: IDENTITY CONSTRAINTS (CONSTITUTION) ─
 const _systemConstitution = {
     // Invariants that MUST hold — no evolution can violate these
-    min_entropy_ratio: 0.5,       // strategy never fully deterministic
-    max_learning_rate: 0.3,       // no wild meta adaptation
-    min_learning_rate: 0.01,      // never freeze learning
-    max_signal_weight: 2.0,       // no single signal dominance
-    min_signal_weight: 0.5,       // no signal extinction
-    max_latent_gap: 0.5,          // stealth detection must work
-    max_drift_tolerance: 0.8,     // system must respond to drift
+    min_entropy_ratio: 0.5, // strategy never fully deterministic
+    max_learning_rate: 0.3, // no wild meta adaptation
+    min_learning_rate: 0.01, // never freeze learning
+    max_signal_weight: 2.0, // no single signal dominance
+    min_signal_weight: 0.5, // no signal extinction
+    max_latent_gap: 0.5, // stealth detection must work
+    max_drift_tolerance: 0.8, // system must respond to drift
 };
 
 function identityConstraints() {
@@ -2662,20 +3101,40 @@ function identityConstraints() {
     // Check meta LR bounds
     for (const [def, perf] of Object.entries(meta.strategy_performance)) {
         if (perf.learning_rate > _systemConstitution.max_learning_rate) {
-            violations.push({ rule: 'max_lr', strategy: def, value: perf.learning_rate, limit: _systemConstitution.max_learning_rate });
+            violations.push({
+                rule: 'max_lr',
+                strategy: def,
+                value: perf.learning_rate,
+                limit: _systemConstitution.max_learning_rate,
+            });
         }
         if (perf.learning_rate < _systemConstitution.min_learning_rate) {
-            violations.push({ rule: 'min_lr', strategy: def, value: perf.learning_rate, limit: _systemConstitution.min_learning_rate });
+            violations.push({
+                rule: 'min_lr',
+                strategy: def,
+                value: perf.learning_rate,
+                limit: _systemConstitution.min_learning_rate,
+            });
         }
     }
 
     // Check signal weights
     for (const [sig, w] of Object.entries(evo.signal_weights || {})) {
         if (w > _systemConstitution.max_signal_weight) {
-            violations.push({ rule: 'max_signal_weight', signal: sig, value: w, limit: _systemConstitution.max_signal_weight });
+            violations.push({
+                rule: 'max_signal_weight',
+                signal: sig,
+                value: w,
+                limit: _systemConstitution.max_signal_weight,
+            });
         }
         if (w < _systemConstitution.min_signal_weight) {
-            violations.push({ rule: 'min_signal_weight', signal: sig, value: w, limit: _systemConstitution.min_signal_weight });
+            violations.push({
+                rule: 'min_signal_weight',
+                signal: sig,
+                value: w,
+                limit: _systemConstitution.min_signal_weight,
+            });
         }
     }
 
@@ -2687,7 +3146,9 @@ function identityConstraints() {
     };
 }
 
-function getConstitution() { return { ..._systemConstitution }; }
+function getConstitution() {
+    return { ..._systemConstitution };
+}
 
 // ─── V18: GOVERNANCE CHECK (WRAPS ALL) ──────
 function governanceCheck() {
@@ -2726,7 +3187,13 @@ function metaConstitution(proposedChanges, approver = 'system') {
         // Safety: no change > 20% in one update
         const changePct = Math.abs(newValue - oldValue) / Math.max(0.001, Math.abs(oldValue));
         if (changePct > 0.2) {
-            rejected.push({ key, reason: 'change_too_large', old: oldValue, new: newValue, pct: Math.round(changePct * 100) });
+            rejected.push({
+                key,
+                reason: 'change_too_large',
+                old: oldValue,
+                new: newValue,
+                pct: Math.round(changePct * 100),
+            });
             continue;
         }
         _systemConstitution[key] = newValue;
@@ -2753,7 +3220,9 @@ function metaConstitution(proposedChanges, approver = 'system') {
     };
 }
 
-function getConstitutionAudit() { return [..._constitutionAudit]; }
+function getConstitutionAudit() {
+    return [..._constitutionAudit];
+}
 
 // ─── V19: DUAL-SPEED EVOLUTION ────────────
 function dualSpeedEvolution(proposedUpdate) {
@@ -2784,9 +3253,10 @@ function dualSpeedEvolution(proposedUpdate) {
         requires_validation,
         identity_ok: identity.all_passed,
         health: health.health,
-        rationale: path === 'fast'
-            ? 'Low-risk update within constraints — auto-commit'
-            : 'High-risk or degraded state — requires validation before commit',
+        rationale:
+            path === 'fast'
+                ? 'Low-risk update within constraints — auto-commit'
+                : 'High-risk or degraded state — requires validation before commit',
     };
 }
 
@@ -2795,7 +3265,7 @@ function shadowSystem(score, decision) {
     // Shadow = loose model with higher sensitivity
     const shadowMultiplier = 1.3; // 30% more sensitive
     const shadowScore = (score || 0) * shadowMultiplier;
-    const mainBlock = (decision === 'block' || decision === 'soft_block');
+    const mainBlock = decision === 'block' || decision === 'soft_block';
 
     // Shadow decision at lower threshold
     const shadowThresholds = { suspicious: 25, soft_block: 40, hard_block: 55 };
@@ -2805,7 +3275,7 @@ function shadowSystem(score, decision) {
     else if (shadowScore >= shadowThresholds.suspicious) shadowDecision = 'suspicious';
 
     const mainPass = !mainBlock;
-    const shadowBlock = (shadowDecision === 'block' || shadowDecision === 'soft_block');
+    const shadowBlock = shadowDecision === 'block' || shadowDecision === 'soft_block';
 
     // Divergence = shadow sees risk but main doesn't
     const divergence = mainPass && shadowBlock;
@@ -2861,7 +3331,9 @@ function humanGovernance(action, actor, reason, params = {}) {
     };
 }
 
-function getHumanOverrides() { return [..._humanOverrides]; }
+function getHumanOverrides() {
+    return [..._humanOverrides];
+}
 
 // ─── V19: DECISION ORCHESTRATION ─────────
 function decisionOrchestration(score, decision) {
@@ -2958,7 +3430,9 @@ function humanReliability(analystId, wasCorrect, agreedWithSystem) {
     };
 }
 
-function getAnalystScores() { return { ..._analystScores }; }
+function getAnalystScores() {
+    return { ..._analystScores };
+}
 
 function weightedFeedback(analystId, outcome) {
     const a = _analystScores[analystId];
@@ -2986,12 +3460,12 @@ function incentiveAlignment(decision, score, category) {
         // Blocking: prevent fraud loss but risk false positive
         const fraudProb = Math.min(1, score / 100);
         netImpact = Math.round((fraudProb * fnCost - (1 - fraudProb) * fpCost) * 100) / 100;
-        rationale = `P(fraud)=${fraudProb.toFixed(2)}: saved $${Math.round(fraudProb * fnCost)} vs risked $${Math.round((1-fraudProb) * fpCost)}`;
+        rationale = `P(fraud)=${fraudProb.toFixed(2)}: saved $${Math.round(fraudProb * fnCost)} vs risked $${Math.round((1 - fraudProb) * fpCost)}`;
     } else {
         // Passing: earn revenue but risk fraud
         const fraudProb = Math.min(1, score / 100);
         netImpact = Math.round(((1 - fraudProb) * txValue - fraudProb * fnCost) * 100) / 100;
-        rationale = `P(clean)=${(1-fraudProb).toFixed(2)}: earn $${Math.round((1-fraudProb) * txValue)} vs risk $${Math.round(fraudProb * fnCost)}`;
+        rationale = `P(clean)=${(1 - fraudProb).toFixed(2)}: earn $${Math.round((1 - fraudProb) * txValue)} vs risk $${Math.round(fraudProb * fnCost)}`;
     }
 
     return {
@@ -3028,7 +3502,7 @@ function trustNetworkQuery(actorId) {
     if (matches.length === 0) return { found: false, actor_id: actorId, cross_org_score: null };
 
     // Aggregate cross-org trust
-    const avgScore = Math.round(matches.reduce((s, m) => s + m.trust_score, 0) / matches.length * 100) / 100;
+    const avgScore = Math.round((matches.reduce((s, m) => s + m.trust_score, 0) / matches.length) * 100) / 100;
     const orgs = [...new Set(matches.map(m => m.org_id))];
 
     return {
@@ -3052,7 +3526,8 @@ function platformTrustScore(actorId, localScore) {
 
     // V21: Credibility-weighted aggregation
     const matches = _trustNetwork.filter(e => e.actor_id === actorId);
-    let weightedSum = 0, weightTotal = 0;
+    let weightedSum = 0,
+        weightTotal = 0;
     for (const m of matches) {
         const cred = _orgCredibility[m.org_id];
         const w = cred ? cred.credibility : 0.5;
@@ -3078,7 +3553,9 @@ function platformTrustScore(actorId, localScore) {
     };
 }
 
-function getTrustNetwork() { return [..._trustNetwork]; }
+function getTrustNetwork() {
+    return [..._trustNetwork];
+}
 
 // ─── V21: ORG CREDIBILITY LAYER ───────────
 const _orgCredibility = {};
@@ -3086,8 +3563,11 @@ const _orgCredibility = {};
 function orgCredibility(orgId, wasAccurate, agreedWithConsensus) {
     if (!_orgCredibility[orgId]) {
         _orgCredibility[orgId] = {
-            reports: 0, accurate: 0, agreed: 0,
-            false_positives: 0, credibility: 0.5,
+            reports: 0,
+            accurate: 0,
+            agreed: 0,
+            false_positives: 0,
+            credibility: 0.5,
         };
     }
     const o = _orgCredibility[orgId];
@@ -3112,7 +3592,9 @@ function orgCredibility(orgId, wasAccurate, agreedWithConsensus) {
     };
 }
 
-function getOrgCredibility() { return { ..._orgCredibility }; }
+function getOrgCredibility() {
+    return { ..._orgCredibility };
+}
 
 // ─── V21: NETWORK CONFIDENCE GATING ──────
 function networkConfidence() {
@@ -3125,7 +3607,8 @@ function networkConfidence() {
         if (!actorScores[e.actor_id]) actorScores[e.actor_id] = [];
         actorScores[e.actor_id].push(e.trust_score);
     }
-    let totalVariance = 0, actorCount = 0;
+    let totalVariance = 0,
+        actorCount = 0;
     for (const scores of Object.values(actorScores)) {
         if (scores.length >= 2) {
             const mean = scores.reduce((s, v) => s + v, 0) / scores.length;
@@ -3162,10 +3645,19 @@ function crossOrgIncentive(orgId) {
 
     // Tier system
     let tier, influence;
-    if (contribution > 0.7) { tier = 'platinum'; influence = 1.5; }
-    else if (contribution > 0.4) { tier = 'gold'; influence = 1.0; }
-    else if (contribution > 0.1) { tier = 'silver'; influence = 0.7; }
-    else { tier = 'bronze'; influence = 0.3; }
+    if (contribution > 0.7) {
+        tier = 'platinum';
+        influence = 1.5;
+    } else if (contribution > 0.4) {
+        tier = 'gold';
+        influence = 1.0;
+    } else if (contribution > 0.1) {
+        tier = 'silver';
+        influence = 0.7;
+    } else {
+        tier = 'bronze';
+        influence = 0.3;
+    }
 
     return {
         org_id: orgId,
@@ -3315,7 +3807,7 @@ function roiDashboard(action, data) {
 
     if (action === 'set_baseline') {
         _roiTracker.baseline_loss_rate = data?.loss_rate || 0.05;
-        _roiTracker.fraud_missed_before = Math.round((_roiTracker.total_scans * _roiTracker.baseline_loss_rate));
+        _roiTracker.fraud_missed_before = Math.round(_roiTracker.total_scans * _roiTracker.baseline_loss_rate);
         return { baseline_set: true, loss_rate: _roiTracker.baseline_loss_rate };
     }
 
@@ -3330,8 +3822,8 @@ function roiDashboard(action, data) {
         metric: 'revenue_protection',
         total_scans: _roiTracker.total_scans,
         fraud_detected: _roiTracker.fraud_detected,
-        detection_rate: _roiTracker.total_scans > 0
-            ? Math.round((_roiTracker.fraud_detected / _roiTracker.total_scans) * 100) : 0,
+        detection_rate:
+            _roiTracker.total_scans > 0 ? Math.round((_roiTracker.fraud_detected / _roiTracker.total_scans) * 100) : 0,
         before: { monthly_loss: beforeLoss, loss_rate: _roiTracker.baseline_loss_rate },
         after: { monthly_loss: afterLoss, reduction_pct: savePct },
         delta: { saved, saved_pct: savePct },
@@ -3411,7 +3903,9 @@ function networkInsight(type, data) {
     return { type: 'unknown', error: 'unknown insight type' };
 }
 
-function getNetworkInsights() { return [..._networkInsights]; }
+function getNetworkInsights() {
+    return [..._networkInsights];
+}
 
 // ─── V21.6: MARKET INTELLIGENCE (data moat) ───
 const _marketData = [];
@@ -3451,10 +3945,127 @@ function marketIntelligence(action, data) {
         total_records: _marketData.length,
         hotspots,
         top_risk_region: hotspots[0]?.region || 'none',
-        narrative: hotspots.length > 0
-            ? `Khu vực rủi ro cao nhất: ${hotspots[0].region} (${hotspots[0].fraud_rate}% fraud rate)`
-            : 'Chưa đủ dữ liệu',
+        narrative:
+            hotspots.length > 0
+                ? `Khu vực rủi ro cao nhất: ${hotspots[0].region} (${hotspots[0].fraud_rate}% fraud rate)`
+                : 'Chưa đủ dữ liệu',
     };
 }
 
-module.exports = { calculateRisk, scanPatternScore, geoScore, frequencyScore, historyScore, graphScore, multiHopCollusion, roleSwitchDetection, deviceIdentityScore, multiEdgeScore, bayesianRiskFusion, rankTopReasons, updateSignalStats, recordOutcome, recordOutcomeWithDecision, getLearnedLRs, getDecisionStats, updateDecisionStats, signalCorrelationPenalty, calibrateProb, causalSignalScore, causalLift, dynamicCost, explorationBypass, smartExploration, autoThreshold, getThresholds, setThresholds, driftDetector, snapshotConfig, rollbackConfig, attackerSimulation, evolveAttacker, getEvolvedAttacks, strategyPrediction, getThreatState, setThreatState, preemptiveDefense, multiDimensionalDefense, globalObjective, objectiveFeedback, payoffMatrix, updatePayoff, getPayoffAdjustments, nashEquilibrium, mixedStrategyNash, sampleDefense, expectedValueOptimizer, continuousAttackVector, recordGameRound, getGameHistory, adaptiveStrategy, latentRiskDetector, strategyEntropy, feedbackCredibility, longTermValue, metaLearner, getMetaState, resetMetaState, stealthResponseProtocol, adaptiveEntropyFloor, systemSelfAwareness, signalEvolution, getEvolutionState, metaAnchor, driftVsBias, recordFailure, checkFailureMemory, getFailureMemory, identityConstraints, getConstitution, governanceCheck, metaConstitution, getConstitutionAudit, dualSpeedEvolution, shadowSystem, humanGovernance, getHumanOverrides, decisionOrchestration, slaAwareDecision, humanReliability, getAnalystScores, weightedFeedback, incentiveAlignment, trustNetworkShare, trustNetworkQuery, platformTrustScore, getTrustNetwork, orgCredibility, getOrgCredibility, networkConfidence, crossOrgIncentive, conflictDetection, trustContract, trustApiStandard, roiDashboard, networkInsight, getNetworkInsights, marketIntelligence, initSignalStats, actorTrustScore, deviceTrustScore, trustVolatility, trustPropagation, riskTrendSlope, entityTrustFusion, coldStartPenalty, checkRecovery, logFrequencyScore, WEIGHTS, CATEGORY_MULT, GRAPH_LIMITS, SIGNAL_NAMES, DEFAULT_LR, SIGNAL_CORRELATIONS };
+module.exports = {
+    calculateRisk,
+    scanPatternScore,
+    geoScore,
+    frequencyScore,
+    historyScore,
+    graphScore,
+    multiHopCollusion,
+    roleSwitchDetection,
+    deviceIdentityScore,
+    multiEdgeScore,
+    bayesianRiskFusion,
+    rankTopReasons,
+    updateSignalStats,
+    recordOutcome,
+    recordOutcomeWithDecision,
+    getLearnedLRs,
+    getDecisionStats,
+    updateDecisionStats,
+    signalCorrelationPenalty,
+    calibrateProb,
+    causalSignalScore,
+    causalLift,
+    dynamicCost,
+    explorationBypass,
+    smartExploration,
+    autoThreshold,
+    getThresholds,
+    setThresholds,
+    driftDetector,
+    snapshotConfig,
+    rollbackConfig,
+    attackerSimulation,
+    evolveAttacker,
+    getEvolvedAttacks,
+    strategyPrediction,
+    getThreatState,
+    setThreatState,
+    preemptiveDefense,
+    multiDimensionalDefense,
+    globalObjective,
+    objectiveFeedback,
+    payoffMatrix,
+    updatePayoff,
+    getPayoffAdjustments,
+    nashEquilibrium,
+    mixedStrategyNash,
+    sampleDefense,
+    expectedValueOptimizer,
+    continuousAttackVector,
+    recordGameRound,
+    getGameHistory,
+    adaptiveStrategy,
+    latentRiskDetector,
+    strategyEntropy,
+    feedbackCredibility,
+    longTermValue,
+    metaLearner,
+    getMetaState,
+    resetMetaState,
+    stealthResponseProtocol,
+    adaptiveEntropyFloor,
+    systemSelfAwareness,
+    signalEvolution,
+    getEvolutionState,
+    metaAnchor,
+    driftVsBias,
+    recordFailure,
+    checkFailureMemory,
+    getFailureMemory,
+    identityConstraints,
+    getConstitution,
+    governanceCheck,
+    metaConstitution,
+    getConstitutionAudit,
+    dualSpeedEvolution,
+    shadowSystem,
+    humanGovernance,
+    getHumanOverrides,
+    decisionOrchestration,
+    slaAwareDecision,
+    humanReliability,
+    getAnalystScores,
+    weightedFeedback,
+    incentiveAlignment,
+    trustNetworkShare,
+    trustNetworkQuery,
+    platformTrustScore,
+    getTrustNetwork,
+    orgCredibility,
+    getOrgCredibility,
+    networkConfidence,
+    crossOrgIncentive,
+    conflictDetection,
+    trustContract,
+    trustApiStandard,
+    roiDashboard,
+    networkInsight,
+    getNetworkInsights,
+    marketIntelligence,
+    initSignalStats,
+    actorTrustScore,
+    deviceTrustScore,
+    trustVolatility,
+    trustPropagation,
+    riskTrendSlope,
+    entityTrustFusion,
+    coldStartPenalty,
+    checkRecovery,
+    logFrequencyScore,
+    WEIGHTS,
+    CATEGORY_MULT,
+    GRAPH_LIMITS,
+    SIGNAL_NAMES,
+    DEFAULT_LR,
+    SIGNAL_CORRELATIONS,
+};

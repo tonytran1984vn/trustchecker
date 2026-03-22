@@ -14,7 +14,7 @@ router.use(authMiddleware);
 
 router.get('/metrics', async function (req, res) {
     try {
-        var metrics = await engine.getAccuracyMetrics(req.user.org_id);
+        const metrics = await engine.getAccuracyMetrics(req.user.org_id);
         res.json({ metrics: metrics, timestamp: new Date().toISOString() });
     } catch (err) {
         res.status(500).json({ error: 'Failed to load metrics' });
@@ -23,7 +23,7 @@ router.get('/metrics', async function (req, res) {
 
 router.get('/pending', async function (req, res) {
     try {
-        var pending = await engine.getPendingValidations(req.user.org_id, parseInt(req.query.limit) || 50);
+        const pending = await engine.getPendingValidations(req.user.org_id, parseInt(req.query.limit) || 50);
         res.json({ validations: pending, count: pending.length });
     } catch (err) {
         res.status(500).json({ error: 'Failed to load pending validations' });
@@ -32,11 +32,11 @@ router.get('/pending', async function (req, res) {
 
 router.post('/record', async function (req, res) {
     try {
-        var body = req.body;
+        const body = req.body;
         if (!body.entity_type || !body.entity_id || body.predicted_score === undefined) {
             return res.status(400).json({ error: 'entity_type, entity_id, predicted_score required' });
         }
-        var result = await engine.recordPrediction(
+        const result = await engine.recordPrediction(
             req.user.org_id,
             body.entity_type,
             body.entity_id,
@@ -51,11 +51,11 @@ router.post('/record', async function (req, res) {
 
 router.post('/:id/validate', async function (req, res) {
     try {
-        var body = req.body;
+        const body = req.body;
         if (!body.actual_outcome) {
             return res.status(400).json({ error: 'actual_outcome required (incident|no_incident|fraud|compliant)' });
         }
-        var result = await engine.validateOutcome(req.params.id, body.actual_outcome, req.user.id);
+        const result = await engine.validateOutcome(req.params.id, body.actual_outcome, req.user.id);
         if (!result) return res.status(404).json({ error: 'Validation not found' });
         res.json({ validation: result, status: 'validated' });
     } catch (err) {

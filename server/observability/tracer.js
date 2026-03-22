@@ -245,9 +245,9 @@ const OTLP_ENDPOINT = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || null;
 const BATCH_FLUSH_INTERVAL = parseInt(process.env.OTEL_BATCH_FLUSH_MS || '5000', 10);
 const BATCH_MAX_SIZE = parseInt(process.env.OTEL_BATCH_MAX_SIZE || '512', 10);
 
-let _batchBuffer = [];
+const _batchBuffer = [];
 let _batchTimer = null;
-let _exportStats = { exported: 0, errors: 0, dropped: 0 };
+const _exportStats = { exported: 0, errors: 0, dropped: 0 };
 
 /**
  * Convert internal span to OTLP JSON format.
@@ -276,7 +276,7 @@ function spanToOTLP(span) {
 }
 
 function mapKindToOTLP(kind) {
-    const map = { 'internal': 1, 'server': 2, 'client': 3, 'producer': 4, 'consumer': 5 };
+    const map = { internal: 1, server: 2, client: 3, producer: 4, consumer: 5 };
     return map[kind] || 1;
 }
 
@@ -323,15 +323,19 @@ async function flushBatch() {
     const spans = _batchBuffer.splice(0);
 
     const payload = JSON.stringify({
-        resourceSpans: [{
-            resource: {
-                attributes: objectToAttributes(_resource),
+        resourceSpans: [
+            {
+                resource: {
+                    attributes: objectToAttributes(_resource),
+                },
+                scopeSpans: [
+                    {
+                        scope: { name: 'trustchecker-tracer', version: '2.0.0' },
+                        spans: spans.map(spanToOTLP),
+                    },
+                ],
             },
-            scopeSpans: [{
-                scope: { name: 'trustchecker-tracer', version: '2.0.0' },
-                spans: spans.map(spanToOTLP),
-            }],
-        }],
+        ],
     });
 
     try {
@@ -339,29 +343,33 @@ async function flushBatch() {
         const transport = url.protocol === 'https:' ? https : http;
 
         await new Promise((resolve, reject) => {
-            const req = transport.request(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(payload),
+            const req = transport.request(
+                url,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Content-Length': Buffer.byteLength(payload),
+                    },
+                    timeout: 10_000,
                 },
-                timeout: 10_000,
-            }, (res) => {
-                let body = '';
-                res.on('data', chunk => body += chunk);
-                res.on('end', () => {
-                    if (res.statusCode >= 200 && res.statusCode < 300) {
-                        _exportStats.exported += spans.length;
-                        resolve();
-                    } else {
-                        _exportStats.errors++;
-                        console.warn(`[Tracer] OTLP export failed: ${res.statusCode} ${body.slice(0, 100)}`);
-                        reject(new Error(`OTLP ${res.statusCode}`));
-                    }
-                });
-            });
+                res => {
+                    let body = '';
+                    res.on('data', chunk => (body += chunk));
+                    res.on('end', () => {
+                        if (res.statusCode >= 200 && res.statusCode < 300) {
+                            _exportStats.exported += spans.length;
+                            resolve();
+                        } else {
+                            _exportStats.errors++;
+                            console.warn(`[Tracer] OTLP export failed: ${res.statusCode} ${body.slice(0, 100)}`);
+                            reject(new Error(`OTLP ${res.statusCode}`));
+                        }
+                    });
+                }
+            );
 
-            req.on('error', (err) => {
+            req.on('error', err => {
                 _exportStats.errors++;
                 console.warn(`[Tracer] OTLP connection error: ${err.message}`);
                 reject(err);
@@ -376,7 +384,6 @@ async function flushBatch() {
             req.write(payload);
             req.end();
         });
-
     } catch (err) {
         // Spans are dropped — don't block application
         _exportStats.dropped += spans.length;

@@ -46,19 +46,24 @@ code{background:#f0f0f5;padding:2px 6px;border-radius:4px;font-size:13px}
 
     /** Password reset email */
     passwordReset(username, resetToken, resetUrl) {
-        return this._wrap('Reset Your Password', `
+        return this._wrap(
+            'Reset Your Password',
+            `
 <h2>Password Reset Request</h2>
 <p>Hi <strong>${username}</strong>,</p>
 <p>We received a request to reset your password. Click the button below to create a new password:</p>
 <center><a href="${resetUrl || '#'}?token=${resetToken}" class="btn">Reset Password</a></center>
 <p>Or copy this code: <code>${resetToken}</code></p>
 <div class="alert-box alert-warning">This token expires in 1 hour. If you didn't request this, ignore this email.</div>
-        `);
+        `
+        );
     }
 
     /** Welcome email */
     welcome(username, loginUrl) {
-        return this._wrap('Welcome to TrustChecker', `
+        return this._wrap(
+            'Welcome to TrustChecker',
+            `
 <h2>Welcome aboard, ${username}! 🎉</h2>
 <p>Your account has been created successfully. You now have access to the world's most advanced anti-counterfeit verification platform.</p>
 <center>
@@ -67,7 +72,8 @@ code{background:#f0f0f5;padding:2px 6px;border-radius:4px;font-size:13px}
 <div class="metric"><div class="val">24/7</div><div class="label">API Access</div></div>
 </center>
 <center><a href="${loginUrl || '#'}" class="btn">Go to Dashboard</a></center>
-        `);
+        `
+        );
     }
 
     /** Fraud alert email */
@@ -75,7 +81,9 @@ code{background:#f0f0f5;padding:2px 6px;border-radius:4px;font-size:13px}
         const severity = fraudScore > 0.8 ? 'CRITICAL' : fraudScore > 0.5 ? 'HIGH' : 'MEDIUM';
         const alertClass = fraudScore > 0.8 ? 'alert-danger' : 'alert-warning';
 
-        return this._wrap(`Fraud Alert — ${severity}`, `
+        return this._wrap(
+            `Fraud Alert — ${severity}`,
+            `
 <h2>⚠️ Fraud Alert Detected</h2>
 <div class="alert-box ${alertClass}"><strong>${severity} SEVERITY</strong> — Suspicious activity detected</div>
 <p><strong>Product:</strong> ${productName}<br>
@@ -83,15 +91,19 @@ code{background:#f0f0f5;padding:2px 6px;border-radius:4px;font-size:13px}
 <strong>Scan ID:</strong> <code>${scanId}</code></p>
 <p>${alertDetails || 'Please review this alert immediately in your dashboard.'}</p>
 <center><a href="#" class="btn">Review Alert</a></center>
-        `);
+        `
+        );
     }
 
     /** Scan verification receipt */
     scanReceipt(productName, result, trustScore, fraudScore, sealHash) {
         const resultIcon = result === 'valid' ? '✅' : result === 'suspicious' ? '⚠️' : '❌';
-        const alertClass = result === 'valid' ? 'alert-success' : result === 'suspicious' ? 'alert-warning' : 'alert-danger';
+        const alertClass =
+            result === 'valid' ? 'alert-success' : result === 'suspicious' ? 'alert-warning' : 'alert-danger';
 
-        return this._wrap('Scan Verification Receipt', `
+        return this._wrap(
+            'Scan Verification Receipt',
+            `
 <h2>${resultIcon} Scan Complete</h2>
 <div class="alert-box ${alertClass}"><strong>Result:</strong> ${result.toUpperCase()}</div>
 <p><strong>Product:</strong> ${productName}</p>
@@ -100,12 +112,15 @@ code{background:#f0f0f5;padding:2px 6px;border-radius:4px;font-size:13px}
 <div class="metric"><div class="val">${(fraudScore * 100).toFixed(0)}%</div><div class="label">Fraud Risk</div></div>
 </center>
 <p><strong>Blockchain Seal:</strong> <code>${sealHash || 'N/A'}</code></p>
-        `);
+        `
+        );
     }
 
     /** Invoice/payment email */
     invoice(planName, amount, currency, invoiceId, period) {
-        return this._wrap('Payment Confirmation', `
+        return this._wrap(
+            'Payment Confirmation',
+            `
 <h2>Payment Received 💳</h2>
 <div class="alert-box alert-success"><strong>Payment successful!</strong></div>
 <p><strong>Plan:</strong> ${planName}<br>
@@ -113,25 +128,32 @@ code{background:#f0f0f5;padding:2px 6px;border-radius:4px;font-size:13px}
 <strong>Invoice ID:</strong> <code>${invoiceId}</code><br>
 <strong>Period:</strong> ${period || 'Current billing cycle'}</p>
 <center><a href="#" class="btn">View Invoice</a></center>
-        `);
+        `
+        );
     }
 
     /** KYC status update */
     kycStatus(businessName, status, reason) {
         const icon = status === 'approved' ? '✅' : status === 'rejected' ? '❌' : '⏳';
-        const alertClass = status === 'approved' ? 'alert-success' : status === 'rejected' ? 'alert-danger' : 'alert-warning';
+        const alertClass =
+            status === 'approved' ? 'alert-success' : status === 'rejected' ? 'alert-danger' : 'alert-warning';
 
-        return this._wrap('KYC Verification Update', `
+        return this._wrap(
+            'KYC Verification Update',
+            `
 <h2>${icon} KYC Verification — ${status.toUpperCase()}</h2>
 <div class="alert-box ${alertClass}"><strong>${businessName}</strong> — ${status}</div>
 <p>${reason || 'Your verification has been processed.'}</p>
 <center><a href="#" class="btn">View Details</a></center>
-        `);
+        `
+        );
     }
 
     /** Weekly summary digest */
     weeklyDigest(stats) {
-        return this._wrap('Weekly Activity Digest', `
+        return this._wrap(
+            'Weekly Activity Digest',
+            `
 <h2>📊 Your Weekly Summary</h2>
 <center>
 <div class="metric"><div class="val">${stats.total_scans || 0}</div><div class="label">Total Scans</div></div>
@@ -141,18 +163,39 @@ code{background:#f0f0f5;padding:2px 6px;border-radius:4px;font-size:13px}
 </center>
 <p>Keep up the great work protecting your supply chain! 🛡️</p>
 <center><a href="#" class="btn">View Full Report</a></center>
-        `);
+        `
+        );
     }
 
     /** Get all available templates list */
     listTemplates() {
         return [
-            { name: 'password_reset', description: 'Password reset with token', params: ['username', 'resetToken', 'resetUrl'] },
+            {
+                name: 'password_reset',
+                description: 'Password reset with token',
+                params: ['username', 'resetToken', 'resetUrl'],
+            },
             { name: 'welcome', description: 'New user welcome', params: ['username', 'loginUrl'] },
-            { name: 'fraud_alert', description: 'Fraud detection notification', params: ['productName', 'fraudScore', 'scanId', 'alertDetails'] },
-            { name: 'scan_receipt', description: 'Scan verification receipt', params: ['productName', 'result', 'trustScore', 'fraudScore', 'sealHash'] },
-            { name: 'invoice', description: 'Payment confirmation', params: ['planName', 'amount', 'currency', 'invoiceId', 'period'] },
-            { name: 'kyc_status', description: 'KYC verification update', params: ['businessName', 'status', 'reason'] },
+            {
+                name: 'fraud_alert',
+                description: 'Fraud detection notification',
+                params: ['productName', 'fraudScore', 'scanId', 'alertDetails'],
+            },
+            {
+                name: 'scan_receipt',
+                description: 'Scan verification receipt',
+                params: ['productName', 'result', 'trustScore', 'fraudScore', 'sealHash'],
+            },
+            {
+                name: 'invoice',
+                description: 'Payment confirmation',
+                params: ['planName', 'amount', 'currency', 'invoiceId', 'period'],
+            },
+            {
+                name: 'kyc_status',
+                description: 'KYC verification update',
+                params: ['businessName', 'status', 'reason'],
+            },
             { name: 'weekly_digest', description: 'Weekly activity summary', params: ['stats'] },
         ];
     }
@@ -162,11 +205,18 @@ code{background:#f0f0f5;padding:2px 6px;border-radius:4px;font-size:13px}
         const sampleData = {
             password_reset: () => this.passwordReset('John Doe', 'abc123xyz', 'https://trustchecker.app/reset'),
             welcome: () => this.welcome('John Doe', 'https://trustchecker.app/dashboard'),
-            fraud_alert: () => this.fraudAlert('Premium Headphones XR-500', 0.87, 'scan-abc-123', 'Multiple scans from unauthorized region'),
+            fraud_alert: () =>
+                this.fraudAlert(
+                    'Premium Headphones XR-500',
+                    0.87,
+                    'scan-abc-123',
+                    'Multiple scans from unauthorized region'
+                ),
             scan_receipt: () => this.scanReceipt('Premium Headphones XR-500', 'valid', 92, 0.05, '0xab3f...9cd1'),
             invoice: () => this.invoice('Professional', 99, 'USD', 'INV-2026-001', 'Feb 2026'),
             kyc_status: () => this.kycStatus('Acme Corporation', 'approved', 'All verification checks passed'),
-            weekly_digest: () => this.weeklyDigest({ total_scans: 347, fraud_alerts: 3, avg_trust: 88, new_products: 12 }),
+            weekly_digest: () =>
+                this.weeklyDigest({ total_scans: 347, fraud_alerts: 3, avg_trust: 88, new_products: 12 }),
         };
 
         return sampleData[templateName] ? sampleData[templateName]() : null;
@@ -174,28 +224,41 @@ code{background:#f0f0f5;padding:2px 6px;border-radius:4px;font-size:13px}
 
     /** Supplier Network Invitation */
     supplierInvite(inviterName, inviterOrg, companyName, joinUrl, message) {
-        var msgBlock = message ? '<div class="alert-box alert-success"><strong>Message from ' + inviterName + ':</strong><br>' + message + '</div>' : '';
-        return this._wrap("Network Invitation", 
+        const msgBlock = message
+            ? '<div class="alert-box alert-success"><strong>Message from ' +
+              inviterName +
+              ':</strong><br>' +
+              message +
+              '</div>'
+            : '';
+        return this._wrap(
+            'Network Invitation',
             '<div class="body">' +
-            '<h2>You are invited to join the TrustChecker Network</h2>' +
-            '<p><strong>' + inviterName + '</strong> from <strong>' + inviterOrg + '</strong> has invited <strong>' + companyName + '</strong> to join the TrustChecker Supply Chain Trust Network.</p>' +
-            msgBlock +
-            '<p>By joining, you will:</p>' +
-            '<ul style="color:#4a4a68;line-height:2">' +
-            '<li>Build your <strong>verified trust profile</strong></li>' +
-            '<li>Share trust scores with your supply chain partners</li>' +
-            '<li>Gain visibility across the network</li>' +
-            '<li>Access compliance and ESG tools — free for suppliers</li>' +
-            '</ul>' +
-            '<div style="text-align:center">' +
-            '<a href="' + joinUrl + '" class="btn" style="color:#fff">Join the Network →</a>' +
-            '</div>' +
-            '<p style="font-size:13px;color:#9a9abd;margin-top:24px">This invitation expires in 30 days.</p>' +
-            '</div>'
+                '<h2>You are invited to join the TrustChecker Network</h2>' +
+                '<p><strong>' +
+                inviterName +
+                '</strong> from <strong>' +
+                inviterOrg +
+                '</strong> has invited <strong>' +
+                companyName +
+                '</strong> to join the TrustChecker Supply Chain Trust Network.</p>' +
+                msgBlock +
+                '<p>By joining, you will:</p>' +
+                '<ul style="color:#4a4a68;line-height:2">' +
+                '<li>Build your <strong>verified trust profile</strong></li>' +
+                '<li>Share trust scores with your supply chain partners</li>' +
+                '<li>Gain visibility across the network</li>' +
+                '<li>Access compliance and ESG tools — free for suppliers</li>' +
+                '</ul>' +
+                '<div style="text-align:center">' +
+                '<a href="' +
+                joinUrl +
+                '" class="btn" style="color:#fff">Join the Network →</a>' +
+                '</div>' +
+                '<p style="font-size:13px;color:#9a9abd;margin-top:24px">This invitation expires in 30 days.</p>' +
+                '</div>'
         );
     }
-
-
 }
 
 module.exports = new EmailTemplates();

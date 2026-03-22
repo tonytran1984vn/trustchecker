@@ -340,7 +340,7 @@ router.get('/graph', async function (req, res) {
             .map(function (p) {
                 return p.network_org_id;
             });
-        var secondDegree = [];
+        let secondDegree = [];
         if (networkOrgIds.length > 0) {
             const placeholders = networkOrgIds
                 .map(function (_, i) {

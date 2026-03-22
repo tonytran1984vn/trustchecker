@@ -39,7 +39,7 @@ async function getNextAccount() {
 
     const today = new Date().toISOString().slice(0, 10);
     const dailyLimit = cfg.daily_limit || 450;
-    let idx = cfg.round_robin_index || 0;
+    const idx = cfg.round_robin_index || 0;
 
     // Try each account starting from current index
     for (let attempt = 0; attempt < accounts.length; attempt++) {
@@ -63,7 +63,9 @@ async function getNextAccount() {
                     "UPDATE email_settings SET smtp_accounts = $1::jsonb, round_robin_index = $2, updated_at = NOW() WHERE id = 'default'",
                     [JSON.stringify(accounts), nextIdx]
                 );
-            } catch (e) { console.error('[Email] Counter update error:', e.message); }
+            } catch (e) {
+                console.error('[Email] Counter update error:', e.message);
+            }
 
             return { email: acct.email, password: acct.password, index: i, sent_today: acct.sent_today };
         }
@@ -89,7 +91,7 @@ function createTransporter(cfg, account) {
 
 // ── HTML Email Templates ────────────────────────────────────────
 const TEMPLATES = {
-    fraud_detected: (data) => ({
+    fraud_detected: data => ({
         subject: '🚨 Fraud Detected — TrustChecker Alert',
         html: alertTemplate('Fraud Detected', '#ef4444', '🚨', [
             `<b>Product:</b> ${data.product_name || 'Unknown'}`,
@@ -97,7 +99,7 @@ const TEMPLATES = {
             `<b>Details:</b> ${data.details || 'Suspicious activity detected.'}`,
         ]),
     }),
-    scan_anomaly: (data) => ({
+    scan_anomaly: data => ({
         subject: '⚠️ Scan Anomaly — TrustChecker Alert',
         html: alertTemplate('Scan Anomaly', '#f59e0b', '⚠️', [
             `<b>Product:</b> ${data.product_name || 'Unknown'}`,
@@ -105,21 +107,21 @@ const TEMPLATES = {
             `<b>Details:</b> ${data.details || 'Unusual scan pattern detected.'}`,
         ]),
     }),
-    sla_violation: (data) => ({
+    sla_violation: data => ({
         subject: '⏰ SLA Violation — TrustChecker Alert',
         html: alertTemplate('SLA Violation', '#f97316', '⏰', [
             `<b>Service:</b> ${data.service_name || 'Unknown'}`,
             `<b>Violation:</b> ${data.violation || 'Response time exceeded threshold.'}`,
         ]),
     }),
-    new_org: (data) => ({
+    new_org: data => ({
         subject: '🏢 New Org Registered — TrustChecker',
         html: alertTemplate('New Org Registered', '#3b82f6', '🏢', [
             `<b>Organization:</b> ${data.org_name || 'Unknown'}`,
             `<b>Admin:</b> ${data.admin_email || 'Unknown'}`,
         ]),
     }),
-    usage_threshold: (data) => ({
+    usage_threshold: data => ({
         subject: '📊 Usage Threshold Alert — TrustChecker',
         html: alertTemplate('Usage Threshold Exceeded', '#f59e0b', '📊', [
             `<b>Metric:</b> ${data.metric || 'API calls'}`,
@@ -127,7 +129,7 @@ const TEMPLATES = {
             `<b>Limit:</b> ${data.limit || 'N/A'}`,
         ]),
     }),
-    certificate_expiry: (data) => ({
+    certificate_expiry: data => ({
         subject: '🔒 Certificate Expiring — TrustChecker Alert',
         html: alertTemplate('Certificate Expiring', '#ef4444', '🔒', [
             `<b>Certificate:</b> ${data.cert_name || 'SSL/TLS'}`,
@@ -135,7 +137,7 @@ const TEMPLATES = {
             `<b>Action:</b> Renew immediately to avoid service disruption.`,
         ]),
     }),
-    system_health: (data) => ({
+    system_health: data => ({
         subject: '🖥️ System Health Alert — TrustChecker',
         html: alertTemplate('System Health Alert', '#ef4444', '🖥️', [
             `<b>Component:</b> ${data.component || 'Unknown'}`,
@@ -143,7 +145,7 @@ const TEMPLATES = {
             `<b>Details:</b> ${data.details || 'System performance issue detected.'}`,
         ]),
     }),
-    payment_failed: (data) => ({
+    payment_failed: data => ({
         subject: '💳 Payment Failed — TrustChecker Alert',
         html: alertTemplate('Payment Failed', '#ef4444', '💳', [
             `<b>Org:</b> ${data.org_name || 'Unknown'}`,
@@ -151,7 +153,7 @@ const TEMPLATES = {
             `<b>Reason:</b> ${data.reason || 'Payment processing error.'}`,
         ]),
     }),
-    test: (data) => ({
+    test: data => ({
         subject: '✅ Test Email — TrustChecker Alerts Working!',
         html: alertTemplate('Test Email', '#10b981', '✅', [
             `<b>Status:</b> Email alerts are configured correctly!`,
@@ -192,7 +194,8 @@ async function sendAlert(eventType, eventData = {}) {
         if (!recipients.length) return { sent: false, reason: 'No recipients configured' };
 
         const account = await getNextAccount();
-        if (!account) return { sent: false, reason: 'No available SMTP accounts (daily limit reached or none configured)' };
+        if (!account)
+            return { sent: false, reason: 'No available SMTP accounts (daily limit reached or none configured)' };
 
         const template = TEMPLATES[eventType];
         if (!template) return { sent: false, reason: `No template for event: ${eventType}` };
@@ -208,7 +211,9 @@ async function sendAlert(eventType, eventData = {}) {
             html,
         });
 
-        console.log(`[Email] Alert sent: ${eventType} via ${account.email} (${account.sent_today}/${cfg.daily_limit || 450} today) → ${recipients.join(', ')}`);
+        console.log(
+            `[Email] Alert sent: ${eventType} via ${account.email} (${account.sent_today}/${cfg.daily_limit || 450} today) → ${recipients.join(', ')}`
+        );
         return { sent: true, messageId: info.messageId, via: account.email, recipients };
     } catch (e) {
         console.error(`[Email] Send failed (${eventType}):`, e.message);
@@ -229,7 +234,10 @@ async function sendTestEmail() {
         if (!account) throw new Error('No SMTP accounts configured or all exceeded daily limit');
 
         const transporter = createTransporter(cfg, account);
-        const { subject, html } = TEMPLATES.test({ sent_via: 'SMTP Round-Robin', account: `${account.email} (#${account.index + 1})` });
+        const { subject, html } = TEMPLATES.test({
+            sent_via: 'SMTP Round-Robin',
+            account: `${account.email} (#${account.index + 1})`,
+        });
 
         const info = await transporter.sendMail({
             from: `"${cfg.from_name || 'TrustChecker Alerts'}" <${account.email}>`,

@@ -14,7 +14,7 @@ router.use(authMiddleware);
 
 router.get('/supplier/:name', async function (req, res) {
     try {
-        var intel = await engine.getSupplierIntelligence(decodeURIComponent(req.params.name));
+        const intel = await engine.getSupplierIntelligence(decodeURIComponent(req.params.name));
         if (!intel) return res.json({ message: 'No network data available for this supplier', data: null });
         res.json({ intelligence: intel });
     } catch (err) {
@@ -25,7 +25,7 @@ router.get('/supplier/:name', async function (req, res) {
 router.get('/search', async function (req, res) {
     try {
         if (!req.query.q) return res.status(400).json({ error: 'query parameter q required' });
-        var results = await engine.searchSuppliers(req.query.q, { limit: parseInt(req.query.limit) || 20 });
+        const results = await engine.searchSuppliers(req.query.q, { limit: parseInt(req.query.limit) || 20 });
         res.json({ suppliers: results, count: results.length });
     } catch (err) {
         res.status(500).json({ error: 'Search failed' });
@@ -34,7 +34,7 @@ router.get('/search', async function (req, res) {
 
 router.get('/benchmarks', async function (req, res) {
     try {
-        var benchmarks = await engine.getIndustryBenchmarks();
+        const benchmarks = await engine.getIndustryBenchmarks();
         res.json({ benchmarks: benchmarks });
     } catch (err) {
         res.status(500).json({ error: 'Failed to load benchmarks' });
@@ -43,7 +43,7 @@ router.get('/benchmarks', async function (req, res) {
 
 router.post('/refresh', async function (req, res) {
     try {
-        var result = await engine.refreshIntelligence();
+        const result = await engine.refreshIntelligence();
         res.json({ status: 'refreshed', duration_ms: result.duration_ms, suppliers: result.row_count });
     } catch (err) {
         res.status(500).json({ error: 'Refresh failed: ' + err.message });

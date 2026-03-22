@@ -5,7 +5,7 @@
  * - Data export endpoint
  * - Right to deletion (RTBF)
  */
-var db = require('../db');
+const db = require('../db');
 
 function gdprMiddleware(req, res, next) {
     // Add data residency headers
@@ -16,7 +16,7 @@ function gdprMiddleware(req, res, next) {
 
 function dataExportHandler(req, res) {
     // GDPR Article 20: Right to data portability
-    var userId = req.user && req.user.id;
+    const userId = req.user && req.user.id;
     if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
     res.json({
@@ -32,7 +32,7 @@ function dataExportHandler(req, res) {
 
 function dataDeleteHandler(req, res) {
     // GDPR Article 17: Right to erasure
-    var userId = req.user && req.user.id;
+    const userId = req.user && req.user.id;
     if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
     res.json({

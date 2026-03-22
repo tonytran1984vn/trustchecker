@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
         const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 50));
         const offset = (page - 1) * limit;
 
-        let where = ['1=1'];
+        const where = ['1=1'];
         const params = [];
 
         // Org isolation — non-super_admin users see only their org's logs

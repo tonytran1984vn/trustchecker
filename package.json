@@ -62,6 +62,7 @@
   },
   "jest": {
     "testEnvironment": "node",
+    "coverageProvider": "v8",
     "coverageDirectory": "coverage",
     "collectCoverageFrom": [
       "server/**/*.js",

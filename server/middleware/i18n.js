@@ -2,15 +2,15 @@
  * i18n (Internationalization) Middleware v1.0
  * Supports: en, vi, zh, ja, ko, de, fr, es
  */
-var SUPPORTED_LOCALES = ['en', 'vi', 'zh', 'ja', 'ko', 'de', 'fr', 'es'];
-var DEFAULT_LOCALE = 'en';
+const SUPPORTED_LOCALES = ['en', 'vi', 'zh', 'ja', 'ko', 'de', 'fr', 'es'];
+const DEFAULT_LOCALE = 'en';
 
 function i18nMiddleware(req, res, next) {
     // Determine locale from Accept-Language header or query param
-    var locale = req.query.lang || DEFAULT_LOCALE;
-    var acceptLang = req.headers['accept-language'];
+    let locale = req.query.lang || DEFAULT_LOCALE;
+    const acceptLang = req.headers['accept-language'];
     if (acceptLang && !req.query.lang) {
-        var match = acceptLang.match(/^([a-z]{2})/i);
+        const match = acceptLang.match(/^([a-z]{2})/i);
         if (match && SUPPORTED_LOCALES.includes(match[1].toLowerCase())) {
             locale = match[1].toLowerCase();
         }
