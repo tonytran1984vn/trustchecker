@@ -1,9 +1,31 @@
 node_modules
 npm-debug.log
-data/*.db
-.env
 .git
 .gitignore
-*.md
+.env
+.env.*
+!.env.docker
+
+# Dev/build artifacts
+data/
+uploads/
+logs/
+*.db
+*.log
+
+# Scripts and tools
+scripts/
+services/
+monitoring/
 tests/
 .agent/
+.gemini/
+
+# Docs
+*.md
+!README.md
+LICENSE
+
+# IDE
+.vscode/
+.idea/
