@@ -207,7 +207,7 @@ function renderOverview() {
   const recentCritical = (d.recent_critical_5 || []).map(a => `
     <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
       <span><span style="padding:2px 8px;border-radius:4px;background:${actionColor(a.action)};color:#fff;font-size:0.68rem">${a.action}</span></span>
-      <span style="color:var(--text-muted)">${a.actor_email || '—'} · ${timeAgo(a.created_at)}</span>
+      <span style="color:var(--text-muted)">${a.actor_email || '—'} · ${timeAgo(a.timestamp || a.created_at)}</span>
     </div>
   `).join('') || '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:0.72rem">No recent critical actions</div>';
 
@@ -510,11 +510,11 @@ function renderPrivilege() {
     let det = {}; try { det = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {}; } catch (_) { }
     return `
     <tr>
-      <td style="font-size:0.68rem;color:var(--text-muted)">${timeAgo(a.created_at)}</td>
+      <td style="font-size:0.68rem;color:var(--text-muted)">${timeAgo(a.timestamp || a.created_at)}</td>
       <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(a.action)}">${a.action}</span></td>
       <td style="font-size:0.72rem">${esc(a.actor_email || '—')}</td>
       <td style="font-size:0.72rem">${esc(a.target_email || det.email || '—')}</td>
-      <td style="font-size:0.68rem;color:var(--text-muted)">${det.role || det.role_name || '—'}</td>
+      <td style="font-size:0.68rem;color:var(--text-muted)">${det.role || det.role_name || (det.role_ids ? det.role_ids[0] : '—')}</td>
     </tr>`;
   }).join('');
 
@@ -524,7 +524,7 @@ function renderPrivilege() {
     return `
     <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
       <span>🚫 <strong>${esc(e.actor_email || '—')}</strong> — ${det.reason || 'Self-elevation blocked'}</span>
-      <span style="color:var(--text-muted)">${timeAgo(e.created_at)}</span>
+      <span style="color:var(--text-muted)">${timeAgo(e.timestamp || e.created_at)}</span>
     </div>`;
   }).join('') || '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:0.72rem">✅ No self-elevation attempts</div>';
 
@@ -625,7 +625,7 @@ function renderRiskMonitoring() {
     let det = {}; try { det = typeof s.details === 'string' ? JSON.parse(s.details) : s.details || {}; } catch (_) { }
     return `
     <tr>
-      <td style="font-size:0.72rem;color:var(--text-muted)">${timeAgo(s.created_at)}</td>
+      <td style="font-size:0.72rem;color:var(--text-muted)">${timeAgo(s.timestamp || s.created_at)}</td>
       <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(s.action)}">${s.action}</span></td>
       <td style="font-size:0.72rem">${esc(s.actor_email || '—')}</td>
       <td style="font-size:0.68rem;color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${det.reason || det.message || det.ip || '—'}</td>
@@ -637,7 +637,7 @@ function renderRiskMonitoring() {
     return `
     <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
       <span><span style="background:#ef444420;color:#ef4444;padding:2px 8px;border-radius:4px;font-size:0.68rem">${a.action}</span> ${esc(a.actor_email || '—')}</span>
-      <span style="color:var(--text-muted)">${timeAgo(a.created_at)}</span>
+      <span style="color:var(--text-muted)">${timeAgo(a.timestamp || a.created_at)}</span>
     </div>`;
   }).join('') || '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.72rem">✅ No anomalies detected</div>';
 
@@ -646,7 +646,7 @@ function renderRiskMonitoring() {
     return `
     <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
       <span>🌐 <strong>${esc(ip.actor_email || '—')}</strong> — ${det.ip || det.new_ip || 'Unknown IP'}</span>
-      <span style="color:var(--text-muted)">${timeAgo(ip.created_at)}</span>
+      <span style="color:var(--text-muted)">${timeAgo(ip.timestamp || ip.created_at)}</span>
     </div>`;
   }).join('') || '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:0.72rem">No new IP logins</div>';
 
@@ -681,7 +681,7 @@ function renderActivityContent(d) {
     let det = {}; try { det = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {}; } catch (_) { }
     return `
     <tr>
-      <td style="font-size:0.72rem;color:var(--text-muted)">${timeAgo(a.created_at)}</td>
+      <td style="font-size:0.72rem;color:var(--text-muted)">${timeAgo(a.timestamp || a.created_at)}</td>
       <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(a.action)}">${a.action}</span></td>
       <td style="font-size:0.72rem">${esc(a.actor_email || '—')}</td>
       <td style="font-size:0.68rem;color:var(--text-muted);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${det.email || det.role || det.justification || '—'}</td>
@@ -698,7 +698,7 @@ function renderActivityContent(d) {
         <strong style="margin-left:8px">${esc(e.actor_email || '—')}</strong>
         <div style="font-size:0.68rem;color:var(--text-muted);margin-top:4px">${det.justification || '—'}</div>
       </div>
-      <span style="color:var(--text-muted);white-space:nowrap;margin-left:12px">${timeAgo(e.created_at)}</span>
+      <span style="color:var(--text-muted);white-space:nowrap;margin-left:12px">${timeAgo(e.timestamp || e.created_at)}</span>
     </div>`;
   }).join('') || '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.72rem">✅ No emergency actions recorded</div>';
 
@@ -707,7 +707,7 @@ function renderActivityContent(d) {
     return `
     <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.72rem">
       <span>👑 <strong>${esc(a.actor_email || '—')}</strong> appointed <strong>${esc(a.target_email || det.email || '—')}</strong> as ${toTitleCase((det.role || '—').replace(/_/g, ' '))}</span>
-      <span style="color:var(--text-muted)">${timeAgo(a.created_at)}</span>
+      <span style="color:var(--text-muted)">${timeAgo(a.timestamp || a.created_at)}</span>
     </div>`;
   }).join('') || '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:0.72rem">No appointment history</div>';
 
@@ -788,7 +788,7 @@ function renderCompliance() {
 
       // GDPR activity rows
       const gdprRows = gdprAct.map(a => `<tr>
-        <td style="font-size:0.72rem;color:var(--text-muted)">${timeAgo(a.created_at)}</td>
+        <td style="font-size:0.72rem;color:var(--text-muted)">${timeAgo(a.timestamp || a.created_at)}</td>
         <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(a.action)}">${a.action}</span></td>
         <td style="font-size:0.72rem">${esc(a.actor_email || '—')}</td>
       </tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);padding:16px;font-size:0.72rem">No GDPR activity recorded</td></tr>';
