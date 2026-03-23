@@ -889,7 +889,7 @@ router.get('/blockchain/verify', async (req, res) => {
 // ─── GET /api/qr/dashboard-stats ─────────────────────────────────────────────
 router.get('/dashboard-stats', async (req, res) => {
     try {
-        const oid = req.orgId;
+        const oid = req.orgId || req.user?.org_id || req.user?.orgId;
         const orgF = oid ? ' WHERE org_id = ?' : '';
         const orgP = oid ? [oid] : [];
         // NODE-BP-1: Parallelize independent DB queries
