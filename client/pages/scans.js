@@ -12,10 +12,11 @@ let _perPage = 20;
 let _filterProduct = '';
 let _filterCategory = '';
 let _filterResult = '';
+let _filterCity = '';
 let _total = 0;
 let _totalPages = 0;
 let _scans = [];
-let _filterMeta = { products: [], categories: [], results: [] };
+let _filterMeta = { products: [], categories: [], results: [], cities: [] };
 let _loading = false;
 
 // ─── Load scans from API ────────────────────────────────────
@@ -28,6 +29,7 @@ async function loadScans() {
     if (_filterProduct) url += `&product_id=${encodeURIComponent(_filterProduct)}`;
     if (_filterCategory) url += `&category=${encodeURIComponent(_filterCategory)}`;
     if (_filterResult) url += `&result=${encodeURIComponent(_filterResult)}`;
+    if (_filterCity) url += `&city=${encodeURIComponent(_filterCity)}`;
 
     const res = await API.get(url);
     _scans = res.scans || [];
@@ -82,12 +84,14 @@ function onFilterCategory(val) {
 }
 
 function onFilterResult(val) { _filterResult = val; _page = 1; loadScans(); }
+function onFilterCity(val) { _filterCity = val; _page = 1; loadScans(); }
 function goToPage(p) { _page = Math.max(1, Math.min(p, _totalPages)); loadScans(); }
 
 function clearAllFilters() {
   _filterProduct = '';
   _filterCategory = '';
   _filterResult = '';
+  _filterCity = '';
   _page = 1;
   loadScans();
 }
@@ -98,7 +102,7 @@ export function renderPage() {
   const to = Math.min(_page * _perPage, _total);
   const visibleProducts = _getVisibleProducts();
   const visibleCategories = _getVisibleCategories();
-  const hasFilters = _filterProduct || _filterCategory || _filterResult;
+  const hasFilters = _filterProduct || _filterCategory || _filterResult || _filterCity;
 
   return `
     <div class="card">
@@ -120,6 +124,10 @@ export function renderPage() {
         <select class="input" style="max-width:160px;font-size:0.78rem;padding:6px 10px" onchange="window._scanFilterResult(this.value)">
           <option value="">All Results</option>
           ${_filterMeta.results.map(r => `<option value="${r}" ${_filterResult === r ? 'selected' : ''}>${r.charAt(0).toUpperCase() + r.slice(1)}</option>`).join('')}
+        </select>
+        <select class="input" style="max-width:160px;font-size:0.78rem;padding:6px 10px" onchange="window._scanFilterCity(this.value)">
+          <option value="">All Cities (${(_filterMeta.cities || []).length})</option>
+          ${(_filterMeta.cities || []).map(c => `<option value="${c}" ${_filterCity === c ? 'selected' : ''}>${c}</option>`).join('')}
         </select>
         ${hasFilters ? `<button class="btn btn-sm" onclick="window._scanClearFilters()" style="font-size:0.72rem;color:var(--rose)">✕ Clear</button>` : ''}
         <div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-muted)">
@@ -205,5 +213,6 @@ window._scanPerPageChange = onPerPageChange;
 window._scanFilterProduct = onFilterProduct;
 window._scanFilterCategory = onFilterCategory;
 window._scanFilterResult = onFilterResult;
+window._scanFilterCity = onFilterCity;
 window._scanGoPage = goToPage;
 window._scanClearFilters = clearAllFilters;

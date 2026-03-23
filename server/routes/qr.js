@@ -810,7 +810,7 @@ router.get('/ownership/:qr_data', async (req, res) => {
 // ─── GET /api/qr/scan-history ────────────────────────────────────────────────
 router.get('/scan-history', async (req, res) => {
     try {
-        const { product_id, category, result, limit = 20, offset = 0 } = req.query;
+        const { product_id, category, result, city, limit = 20, offset = 0 } = req.query;
         const orgId = req.user?.org_id || req.user?.orgId;
         const params = [];
         const countParams = [];
@@ -836,6 +836,11 @@ router.get('/scan-history', async (req, res) => {
             params.push(result);
             countParams.push(result);
         }
+        if (city) {
+            conditions.push('se.geo_city = ?');
+            params.push(city);
+            countParams.push(city);
+        }
 
         const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
 
@@ -860,14 +865,12 @@ router.get('/scan-history', async (req, res) => {
         const effOrgId = orgId && req.user?.role !== 'super_admin' ? orgId : null;
         const orgCond = effOrgId ? ' AND se.org_id = ?' : '';
         const orgParams = effOrgId ? [effOrgId] : [];
-        const [products, categories, results] = await Promise.all([
-            // Products that have at least 1 scan — include category for frontend linking
+        const [products, categories, results, cities] = await Promise.all([
             db
                 .prepare(
                     `SELECT DISTINCT p.id, p.name, p.category FROM scan_events se INNER JOIN products p ON se.product_id = p.id WHERE 1=1${orgCond} ORDER BY p.name`
                 )
                 .all(...orgParams),
-            // Categories that have at least 1 scan
             db
                 .prepare(
                     `SELECT DISTINCT p.category FROM scan_events se INNER JOIN products p ON se.product_id = p.id WHERE p.category IS NOT NULL AND p.category != ''${orgCond} ORDER BY p.category`
@@ -876,6 +879,11 @@ router.get('/scan-history', async (req, res) => {
             db
                 .prepare(
                     `SELECT DISTINCT se.result FROM scan_events se WHERE se.result IS NOT NULL${orgCond} ORDER BY se.result`
+                )
+                .all(...orgParams),
+            db
+                .prepare(
+                    `SELECT DISTINCT se.geo_city FROM scan_events se WHERE se.geo_city IS NOT NULL AND se.geo_city != ''${orgCond} ORDER BY se.geo_city`
                 )
                 .all(...orgParams),
         ]);
@@ -890,6 +898,7 @@ router.get('/scan-history', async (req, res) => {
                 products: products.map(p => ({ id: p.id, name: p.name, category: p.category })),
                 categories: categories.map(c => c.category),
                 results: results.map(r => r.result),
+                cities: cities.map(c => c.geo_city),
             },
         });
     } catch (err) {
