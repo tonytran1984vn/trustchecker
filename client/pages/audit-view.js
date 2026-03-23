@@ -7,7 +7,7 @@
 
 import { State, render } from '../core/state.js';
 import { renderVirtualTable } from '../components/virtual-table.js';
-import { api } from '../services/api.js';
+import { API } from '../core/api.js';
 import { escapeHTML } from '../utils/sanitize.js';
 
 let _tableInstance = null;
@@ -134,7 +134,7 @@ async function loadAuditData() {
         if (from) params.set('from', from);
         if (to) params.set('to', to);
 
-        const res = await api(`/api/audit?${params.toString()}`);
+        const res = await API.get(`/audit?${params.toString()}`);
         const data = res.events || res.data || [];
 
         // Update stats
@@ -244,7 +244,7 @@ function formatJSON(val) {
 
 async function exportAudit(format) {
     try {
-        const res = await api('/api/audit?limit=10000');
+        const res = await API.get('/audit?limit=10000');
         const data = res.events || res.data || [];
 
         if (format === 'json') {

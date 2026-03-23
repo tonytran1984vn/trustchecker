@@ -40,7 +40,7 @@ export function renderPage() {
       <table class="data-table"><thead><tr><th>Entity</th><th>Framework</th><th>Requirement</th><th>Status</th><th>Next Review</th></tr></thead><tbody>
         ${records.map(r => {
           const entityName = pMap[r.entity_id] || (r.entity_id ? r.entity_id.slice(0, 8) : '—');
-          const nextReview = r.next_review || r.last_audit ? computeNextReview(r.next_review || r.last_audit) : '—';
+          const nextReview = computeNextReview(r.next_review || r.last_audit || r.created_at);
           return `<tr><td>${entityName}</td><td><strong>${r.framework}</strong></td><td>${r.requirement || '—'}</td><td><span class="badge ${r.status === 'compliant' ? 'badge-green' : r.status === 'expired' ? 'badge-red' : 'badge-yellow'}">${(r.status || '').toUpperCase()}</span></td><td>${nextReview}</td></tr>`;
         }).join('')}
       </tbody></table>
