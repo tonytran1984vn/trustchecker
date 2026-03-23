@@ -531,24 +531,10 @@ router.get('/stats', async (req, res) => {
                 ])
             )?.c || 0;
 
-        // Also count compliance_policies (access controls, risk policies, etc.)
-        let totalCompPolicies = 0,
-            activeCompPolicies = 0;
-        try {
-            totalCompPolicies =
-                (await db.get('SELECT COUNT(*) as c FROM compliance_policies WHERE org_id = $1', [orgId]))?.c || 0;
-            activeCompPolicies =
-                (
-                    await db.get('SELECT COUNT(*) as c FROM compliance_policies WHERE is_active = 1 AND org_id = $1', [
-                        orgId,
-                    ])
-                )?.c || 0;
-        } catch (e) {
-            /* table may not exist */
-        }
-
-        const totalPolicies = totalRetention + totalCompPolicies;
-        const activePolicies = activeRetention + activeCompPolicies;
+        // When no DB retention policies exist, /policies endpoint returns 6 defaults (all active)
+        const DEFAULT_RETENTION_COUNT = 6;
+        const totalPolicies = totalRetention > 0 ? totalRetention : DEFAULT_RETENTION_COUNT;
+        const activePolicies = totalRetention > 0 ? activeRetention : DEFAULT_RETENTION_COUNT;
         const auditEntries = (await db.get('SELECT COUNT(*) as c FROM audit_log WHERE org_id = $1', [orgId]))?.c || 0;
 
         let complianceRecords = 0;
