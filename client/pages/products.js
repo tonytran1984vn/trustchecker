@@ -13,9 +13,9 @@ export function renderPage() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;gap:12px">
       <input class="input" style="max-width:300px" placeholder="Search products..." oninput="searchProducts(this.value)">
       <div style="display:flex;gap:8px">
-        <button class="btn" onclick="showDeletionHistory()" title="View QR deletion history">🗑️ Deletion Log</button>
+        ${State.user?.role !== 'viewer' ? '<button class="btn" onclick="showDeletionHistory()" title="View QR deletion history">🗑️ Deletion Log</button>' : ''}
         <button class="btn" onclick="exportProductsCSV()" title="Export CSV">📊 Export CSV</button>
-        <button class="btn btn-primary" onclick="showAddProduct()">+ Add Product</button>
+        ${State.user?.role !== 'viewer' ? '<button class="btn btn-primary" onclick="showAddProduct()">+ Add Product</button>' : ''}
       </div>
     </div>
     <div class="product-grid" id="product-grid">
@@ -135,7 +135,7 @@ async function showProductDetail(id) {
                     ${c.scan_count > 0 ? `<span class="badge valid" style="margin-left:6px;font-size:0.6rem">${c.scan_count} scans</span>` : ''}
                     ${c.deleted_at ? '<span class="badge suspicious" style="margin-left:6px;font-size:0.6rem">Deleted</span>' : ''}
                   </div>
-                  ${!c.deleted_at ? `
+                  ${!c.deleted_at && State.user?.role !== 'viewer' ? `
                     <button class="btn btn-sm" onclick="deleteQrCode('${c.id}','${p.id}')" style="color:var(--rose);font-size:0.7rem" title="Delete QR code">🗑️</button>
                   ` : ''}
                 </div>
