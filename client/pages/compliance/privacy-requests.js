@@ -1,4 +1,4 @@
-/** Compliance – Privacy Requests (Consent Management + Data Deletion) */
+/** Compliance – Privacy Requests (Admin View + Personal Consent Management) */
 import { icon } from '../../core/icons.js';
 import { State } from '../../core/state.js';
 import { API } from '../../core/api.js';
@@ -6,9 +6,40 @@ import { API } from '../../core/api.js';
 export function renderPage() {
   const consent = State._gdprConsent || {};
   const categories = consent.consent_categories || [];
+  const report = State._complianceData?.report || {};
+  const dsr = report.data_subject_requests || {};
+  const userStats = report.user_statistics || {};
+  const isAdmin = ['compliance_officer', 'org_owner', 'super_admin', 'admin'].includes(State.user?.active_role || State.user?.role);
 
   return `<div class="sa-page">
-    <div class="sa-page-title"><h1>${icon('lock', 28)} Privacy & Consent</h1></div>
+    <div class="sa-page-title"><h1>${icon('lock', 28)} Privacy & Data Requests</h1></div>
+
+    ${isAdmin ? `
+    <div class="sa-metrics-row" style="margin-bottom:1.5rem">
+      ${_m('Total Users', userStats.total_users ?? 0, '', 'blue', 'users')}
+      ${_m('Consented', userStats.consented_users ?? 0, userStats.consent_rate || '—', 'green', 'checkCircle')}
+      ${_m('Data Exports', dsr.exports ?? 0, 'GDPR Article 15', 'purple', 'download')}
+      ${_m('Deletions', dsr.deletions ?? 0, 'GDPR Article 17', dsr.deletions > 0 ? 'red' : 'slate', 'trash2')}
+    </div>
+
+    <div class="sa-card" style="margin-bottom:1.5rem">
+      <h3 style="margin-bottom:1rem">${icon('activity', 18)} Organization Privacy Overview</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:0.78rem">
+        <div style="padding:0.75rem;background:var(--bg-secondary);border-radius:8px">
+          <div style="font-weight:700;margin-bottom:0.5rem">Consent Rate</div>
+          <div style="font-size:1.5rem;font-weight:700;color:var(--accent-green,#10b981)">${userStats.consent_rate || '—'}</div>
+          <div style="color:var(--text-secondary);font-size:0.72rem">${userStats.consented_users ?? 0} of ${userStats.total_users ?? 0} users</div>
+        </div>
+        <div style="padding:0.75rem;background:var(--bg-secondary);border-radius:8px">
+          <div style="font-weight:700;margin-bottom:0.5rem">Data Subject Requests</div>
+          <div style="color:var(--text-secondary);line-height:1.8">
+            <div>📤 <strong>${dsr.exports ?? 0}</strong> data export requests</div>
+            <div>🗑️ <strong>${dsr.deletions ?? 0}</strong> deletion requests</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    ` : ''}
 
     <div class="sa-card" style="margin-bottom:1.5rem;background:linear-gradient(135deg,rgba(16,185,129,0.05),rgba(59,130,246,0.05));border:1px solid rgba(16,185,129,0.15)">
       <div style="display:flex;align-items:center;gap:0.75rem">
@@ -55,6 +86,8 @@ export function renderPage() {
     </div>
   </div>`;
 }
+
+function _m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div>${s ? `<div class="sa-metric-sub">${s}</div>` : ''}</div></div>`; }
 
 function _toggle(id, label, desc, checked, disabled) {
   return `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem;background:var(--bg-secondary);border-radius:8px">
@@ -107,4 +140,3 @@ export function initPage() {
     } catch (e) { window.showToast?.('❌ Deletion failed: ' + e.message, 'error'); }
   };
 }
-

@@ -522,14 +522,33 @@ router.get('/report', requirePermission('compliance:manage'), async (req, res) =
 router.get('/stats', async (req, res) => {
     try {
         const orgId = req.user.orgId;
-        const totalPolicies =
+        const totalRetention =
             (await db.get('SELECT COUNT(*) as c FROM data_retention_policies WHERE org_id = $1', [orgId]))?.c || 0;
-        const activePolicies =
+        const activeRetention =
             (
                 await db.get('SELECT COUNT(*) as c FROM data_retention_policies WHERE is_active = 1 AND org_id = $1', [
                     orgId,
                 ])
             )?.c || 0;
+
+        // Also count compliance_policies (access controls, risk policies, etc.)
+        let totalCompPolicies = 0,
+            activeCompPolicies = 0;
+        try {
+            totalCompPolicies =
+                (await db.get('SELECT COUNT(*) as c FROM compliance_policies WHERE org_id = $1', [orgId]))?.c || 0;
+            activeCompPolicies =
+                (
+                    await db.get('SELECT COUNT(*) as c FROM compliance_policies WHERE is_active = 1 AND org_id = $1', [
+                        orgId,
+                    ])
+                )?.c || 0;
+        } catch (e) {
+            /* table may not exist */
+        }
+
+        const totalPolicies = totalRetention + totalCompPolicies;
+        const activePolicies = activeRetention + activeCompPolicies;
         const auditEntries = (await db.get('SELECT COUNT(*) as c FROM audit_log WHERE org_id = $1', [orgId]))?.c || 0;
 
         let complianceRecords = 0;

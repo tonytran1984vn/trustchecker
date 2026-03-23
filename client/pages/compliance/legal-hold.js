@@ -5,15 +5,17 @@ import { State } from '../../core/state.js';
 export function renderPage() {
   const chain = State._auditChain?.chain || {};
   const stats = State._auditChain?.stats || {};
-  const isValid = chain.valid !== false && chain.integrity !== 'broken';
+  const totalSeals = stats.total_seals || chain.total || 0;
+  const hasChain = totalSeals > 0;
+  const isValid = hasChain && chain.valid !== false && chain.integrity !== 'broken';
 
   return `<div class="sa-page">
     <div class="sa-page-title"><h1>${icon('lock', 28)} Legal Hold & Preservation</h1></div>
 
     <div class="sa-metrics-row" style="margin-bottom:1.5rem">
-      ${_m('Preservation Status', isValid ? 'Active' : 'Review Needed', '', isValid ? 'green' : 'red', 'lock')}
+      ${_m('Preservation Status', !hasChain ? 'Pending' : isValid ? 'Active' : 'Review Needed', '', !hasChain ? 'orange' : isValid ? 'green' : 'red', 'lock')}
       ${_m('Blockchain Seals', stats.total_seals || chain.total || 0, '', 'blue', 'link')}
-      ${_m('Chain Integrity', isValid ? 'Valid' : 'Broken', '', isValid ? 'green' : 'red', 'shield')}
+      ${_m('Chain Integrity', !hasChain ? 'No Chain' : isValid ? 'Valid' : 'Broken', '', !hasChain ? 'orange' : isValid ? 'green' : 'red', 'shield')}
       ${_m('Audit Records', stats.total || 0, 'preserved', 'purple', 'scroll')}
     </div>
 
