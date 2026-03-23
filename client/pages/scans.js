@@ -1,5 +1,5 @@
 /**
- * TrustChecker – Scans Page (Paginated + Filterable)
+ * TrustChecker – Scans Page (Paginated + Filterable + Interdependent Filters)
  */
 import { State, render } from '../core/state.js';
 import { API } from '../core/api.js';
@@ -35,7 +35,7 @@ async function loadScans() {
     _totalPages = res.total_pages || 1;
     _page = res.page || 1;
     if (res.filters) _filterMeta = res.filters;
-    State.scanHistory = _scans; // keep in sync for CSV export
+    State.scanHistory = _scans;
   } catch (e) {
     showToast('Failed to load scans', 'error');
     _scans = [];
@@ -44,17 +44,61 @@ async function loadScans() {
   render();
 }
 
+// ─── Derived filter options (interdependent) ────────────────
+function _getVisibleProducts() {
+  if (!_filterCategory) return _filterMeta.products;
+  return _filterMeta.products.filter(p => p.category === _filterCategory);
+}
+
+function _getVisibleCategories() {
+  if (!_filterProduct) return _filterMeta.categories;
+  const prod = _filterMeta.products.find(p => p.id === _filterProduct);
+  return prod?.category ? [prod.category] : _filterMeta.categories;
+}
+
 // ─── Event handlers ─────────────────────────────────────────
 function onPerPageChange(val) { _perPage = Number(val); _page = 1; loadScans(); }
-function onFilterProduct(val) { _filterProduct = val; _page = 1; loadScans(); }
-function onFilterCategory(val) { _filterCategory = val; _page = 1; loadScans(); }
+
+function onFilterProduct(val) {
+  _filterProduct = val;
+  // Auto-set category when product is selected
+  if (val) {
+    const prod = _filterMeta.products.find(p => p.id === val);
+    if (prod?.category) _filterCategory = prod.category;
+  }
+  _page = 1;
+  loadScans();
+}
+
+function onFilterCategory(val) {
+  _filterCategory = val;
+  // Clear product if it doesn't belong to the new category
+  if (val && _filterProduct) {
+    const prod = _filterMeta.products.find(p => p.id === _filterProduct);
+    if (prod && prod.category !== val) _filterProduct = '';
+  }
+  _page = 1;
+  loadScans();
+}
+
 function onFilterResult(val) { _filterResult = val; _page = 1; loadScans(); }
 function goToPage(p) { _page = Math.max(1, Math.min(p, _totalPages)); loadScans(); }
+
+function clearAllFilters() {
+  _filterProduct = '';
+  _filterCategory = '';
+  _filterResult = '';
+  _page = 1;
+  loadScans();
+}
 
 // ─── Render ─────────────────────────────────────────────────
 export function renderPage() {
   const from = _total === 0 ? 0 : (_page - 1) * _perPage + 1;
   const to = Math.min(_page * _perPage, _total);
+  const visibleProducts = _getVisibleProducts();
+  const visibleCategories = _getVisibleCategories();
+  const hasFilters = _filterProduct || _filterCategory || _filterResult;
 
   return `
     <div class="card">
@@ -66,17 +110,18 @@ export function renderPage() {
       <!-- Filter Bar -->
       <div style="display:flex;gap:10px;padding:0 20px 16px;flex-wrap:wrap;align-items:center">
         <select class="input" style="max-width:200px;font-size:0.78rem;padding:6px 10px" onchange="window._scanFilterProduct(this.value)">
-          <option value="">All Products</option>
-          ${_filterMeta.products.map(p => `<option value="${p.id}" ${_filterProduct === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+          <option value="">All Products (${visibleProducts.length})</option>
+          ${visibleProducts.map(p => `<option value="${p.id}" ${_filterProduct === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
         </select>
         <select class="input" style="max-width:160px;font-size:0.78rem;padding:6px 10px" onchange="window._scanFilterCategory(this.value)">
-          <option value="">All Categories</option>
-          ${_filterMeta.categories.map(c => `<option value="${c}" ${_filterCategory === c ? 'selected' : ''}>${c}</option>`).join('')}
+          <option value="">All Categories (${visibleCategories.length})</option>
+          ${visibleCategories.map(c => `<option value="${c}" ${_filterCategory === c ? 'selected' : ''}>${c}</option>`).join('')}
         </select>
         <select class="input" style="max-width:160px;font-size:0.78rem;padding:6px 10px" onchange="window._scanFilterResult(this.value)">
           <option value="">All Results</option>
           ${_filterMeta.results.map(r => `<option value="${r}" ${_filterResult === r ? 'selected' : ''}>${r.charAt(0).toUpperCase() + r.slice(1)}</option>`).join('')}
         </select>
+        ${hasFilters ? `<button class="btn btn-sm" onclick="window._scanClearFilters()" style="font-size:0.72rem;color:var(--rose)">✕ Clear</button>` : ''}
         <div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-muted)">
           <span>Show</span>
           <select class="input" style="width:70px;font-size:0.78rem;padding:6px 8px" onchange="window._scanPerPageChange(this.value)">
@@ -136,7 +181,6 @@ function _buildPageNumbers() {
       .map(p => `<button class="btn btn-sm${p === _page ? ' btn-primary' : ''}" onclick="window._scanGoPage(${p})" style="min-width:32px;${p === _page ? 'pointer-events:none' : ''}">${p}</button>`)
       .join('');
   }
-  // Ellipsis pagination for many pages
   const pages = [];
   pages.push(1);
   if (_page > 3) pages.push('...');
@@ -162,3 +206,4 @@ window._scanFilterProduct = onFilterProduct;
 window._scanFilterCategory = onFilterCategory;
 window._scanFilterResult = onFilterResult;
 window._scanGoPage = goToPage;
+window._scanClearFilters = clearAllFilters;

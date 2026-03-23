@@ -856,20 +856,27 @@ router.get('/scan-history', async (req, res) => {
 
         const scans = await db.prepare(dataQuery).all(...params);
 
-        // Distinct products & categories for filter dropdowns — scoped to org
+        // Distinct products & categories — ONLY those with actual scan events
         const effOrgId = orgId && req.user?.role !== 'super_admin' ? orgId : null;
-        const orgFilter = effOrgId ? ' WHERE org_id = ?' : '';
-        const orgFilterAnd = effOrgId ? ' WHERE org_id = ? AND' : ' WHERE';
+        const orgCond = effOrgId ? ' AND se.org_id = ?' : '';
         const orgParams = effOrgId ? [effOrgId] : [];
         const [products, categories, results] = await Promise.all([
-            db.prepare(`SELECT DISTINCT id, name FROM products${orgFilter} ORDER BY name`).all(...orgParams),
+            // Products that have at least 1 scan — include category for frontend linking
             db
                 .prepare(
-                    `SELECT DISTINCT category FROM products${orgFilterAnd} category IS NOT NULL AND category != '' ORDER BY category`
+                    `SELECT DISTINCT p.id, p.name, p.category FROM scan_events se INNER JOIN products p ON se.product_id = p.id WHERE 1=1${orgCond} ORDER BY p.name`
+                )
+                .all(...orgParams),
+            // Categories that have at least 1 scan
+            db
+                .prepare(
+                    `SELECT DISTINCT p.category FROM scan_events se INNER JOIN products p ON se.product_id = p.id WHERE p.category IS NOT NULL AND p.category != ''${orgCond} ORDER BY p.category`
                 )
                 .all(...orgParams),
             db
-                .prepare(`SELECT DISTINCT result FROM scan_events${orgFilterAnd} result IS NOT NULL ORDER BY result`)
+                .prepare(
+                    `SELECT DISTINCT se.result FROM scan_events se WHERE se.result IS NOT NULL${orgCond} ORDER BY se.result`
+                )
                 .all(...orgParams),
         ]);
 
@@ -880,7 +887,7 @@ router.get('/scan-history', async (req, res) => {
             per_page: perPage,
             total_pages: Math.ceil(total / perPage),
             filters: {
-                products: products.map(p => ({ id: p.id, name: p.name })),
+                products: products.map(p => ({ id: p.id, name: p.name, category: p.category })),
                 categories: categories.map(c => c.category),
                 results: results.map(r => r.result),
             },
