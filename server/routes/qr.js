@@ -856,10 +856,11 @@ router.get('/scan-history', async (req, res) => {
 
         const scans = await db.prepare(dataQuery).all(...params);
 
-        // Distinct products & categories for filter dropdowns (cached per org)
-        const orgFilter = orgId ? ' WHERE org_id = ?' : '';
-        const orgFilterAnd = orgId ? ' WHERE org_id = ? AND' : ' WHERE';
-        const orgParams = orgId ? [orgId] : [];
+        // Distinct products & categories for filter dropdowns — scoped to org
+        const effOrgId = orgId && req.user?.role !== 'super_admin' ? orgId : null;
+        const orgFilter = effOrgId ? ' WHERE org_id = ?' : '';
+        const orgFilterAnd = effOrgId ? ' WHERE org_id = ? AND' : ' WHERE';
+        const orgParams = effOrgId ? [effOrgId] : [];
         const [products, categories, results] = await Promise.all([
             db.prepare(`SELECT DISTINCT id, name FROM products${orgFilter} ORDER BY name`).all(...orgParams),
             db
