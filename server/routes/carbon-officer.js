@@ -144,15 +144,14 @@ router.get('/dashboard', cacheMiddleware(60), async (req, res) => {
         // ── Recent carbon activity (audit log) ──────────────────────
         let recent_activity = [];
         try {
+            // Show all org activity (general audit trail) — carbon-specific actions are too rare
             const q = orgId
                 ? `SELECT al.*, u.email as actor_email FROM audit_log al
                    LEFT JOIN users u ON al.actor_id = u.id
-                   WHERE (al.action LIKE '%carbon%' OR al.action LIKE '%CARBON%' OR al.action LIKE '%emission%' OR al.action LIKE '%CIP%' OR al.entity_type = 'carbon_credit')
-                   AND u.org_id = ?
-                   ORDER BY al.timestamp DESC LIMIT 15 LIMIT 1000`
+                   WHERE u.org_id = ?
+                   ORDER BY al.timestamp DESC LIMIT 15`
                 : `SELECT al.*, u.email as actor_email FROM audit_log al
                    LEFT JOIN users u ON al.actor_id = u.id
-                   WHERE al.action LIKE '%carbon%' OR al.action LIKE '%CARBON%' OR al.action LIKE '%emission%' OR al.action LIKE '%CIP%' OR al.entity_type = 'carbon_credit'
                    ORDER BY al.timestamp DESC LIMIT 15`;
             recent_activity = orgId ? await db.prepare(q).all(orgId) : await db.prepare(q).all();
             recent_activity = recent_activity || [];

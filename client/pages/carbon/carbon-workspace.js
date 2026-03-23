@@ -1196,6 +1196,7 @@ function renderActions() {
       ${kpi('Open', stats.open || 0, '#f59e0b', 'Pending actions')}
       ${kpi('In Progress', stats.in_progress || 0, '#3b82f6', 'Being worked on')}
       ${kpi('Done', stats.done || 0, '#10b981', 'Completed')}
+      ${kpi('Dismissed', stats.dismissed || 0, '#6b7280', 'Dismissed')}
       ${kpi('Total', stats.total || 0, 'var(--text-primary,#1e293b)', 'All actions')}
     </div>
 
