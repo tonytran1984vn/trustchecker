@@ -273,3 +273,8 @@ function downloadBlob(blob, filename) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
+
+// Router-compatible exports (lazy loader expects renderPage + initPage)
+export function renderPage() { return renderAuditView(); }
+export function initPage() { mountAuditView(); }
+
