@@ -134,7 +134,7 @@ async function loadAuditData() {
         if (from) params.set('from', from);
         if (to) params.set('to', to);
 
-        const res = await API.get(`/audit?${params.toString()}`);
+        const res = await API.get(`/audit-log?${params.toString()}`);
         const data = res.events || res.data || [];
 
         // Update stats
@@ -244,7 +244,7 @@ function formatJSON(val) {
 
 async function exportAudit(format) {
     try {
-        const res = await API.get('/audit?limit=10000');
+        const res = await API.get('/audit-log?limit=10000');
         const data = res.events || res.data || [];
 
         if (format === 'json') {
