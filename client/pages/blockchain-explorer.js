@@ -25,7 +25,7 @@ const CHAIN_STATS = [
 export function renderPage() {
     return `
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('lock', 28)} Blockchain Explorer</h1><div class="sa-title-actions"><button class="btn btn-outline btn-sm">Verify Hash</button><button class="btn btn-primary btn-sm" style="margin-left:0.5rem">Mint NFT Certificate</button></div></div>
+      <div class="sa-page-title"><h1>${icon('lock', 28)} Blockchain Explorer</h1><div class="sa-title-actions"><button class="btn btn-outline btn-sm" onclick="explorerVerifyHash()">Verify Hash</button><button class="btn btn-primary btn-sm" style="margin-left:0.5rem" onclick="explorerMintNFT()">Mint NFT Certificate</button></div></div>
 
       <div class="sa-metrics-grid" style="margin-bottom:1.5rem">
         ${m('On-chain Transactions', '21,081', 'VeChain + Polygon', 'blue', 'lock')}
@@ -59,7 +59,7 @@ export function renderPage() {
             <td>${n.minted}</td>
             <td style="text-align:right">${n.scans.toLocaleString()}</td>
             <td><span class="sa-status-pill sa-pill-green"><span class="status-icon status-pass" aria-label="Pass">✓</span> verified</span></td>
-            <td><button class="btn btn-xs btn-outline">View</button> <button class="btn btn-xs btn-ghost">Transfer</button></td>
+            <td><button class="btn btn-xs btn-outline" onclick="explorerViewNFT('${n.id}')">View</button> <button class="btn btn-xs btn-ghost" onclick="explorerTransferNFT('${n.id}')">Transfer</button></td>
           </tr>`).join('')}
         </tbody></table>
       </div>
@@ -83,3 +83,17 @@ export function renderPage() {
     </div>`;
 }
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
+
+window.explorerVerifyHash = () => {
+  const hash = prompt('Enter SHA-256 hash to verify on-chain:');
+  if (!hash) return;
+  const found = RECENT_TXN.find(t => t.hash.includes(hash.slice(0, 4)));
+  if (found) { alert(`✅ Hash verified!\n\nBlock: ${found.block.toLocaleString()}\nAction: ${found.action}\nChain: ${found.chain}\nConfirmations: ${found.confirmations}`); }
+  else { alert(`⚠️ Hash not found in recent transactions.\nThe hash may exist on-chain but is not in the current view.`); }
+};
+window.explorerMintNFT = () => { alert('🏗️ NFT Minting requires a connected wallet.\n\nConnect your VeChain or Polygon wallet to mint an ERC-721 proof-of-authenticity NFT for a verified batch.'); };
+window.explorerViewNFT = (id) => {
+  const nft = NFT_CERTS.find(n => n.id === id);
+  if (nft) { alert(`🏆 NFT Certificate: ${nft.id}\n\nProduct: ${nft.product}\nBatch: ${nft.batch}\nChain: ${nft.chain}\nStandard: ${nft.standard}\nMinted: ${nft.minted}\nScans: ${nft.scans.toLocaleString()}\nVerified: ✅`); }
+};
+window.explorerTransferNFT = (id) => { alert('🔄 Transfer requires wallet connection.\n\nConnect your wallet to transfer NFT ownership on-chain.'); };

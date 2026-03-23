@@ -62,19 +62,21 @@ export function renderPage() {
   `;
 }
 async function showUploadEvidence() {
-  State.modal = {
-    title: '🔒 Upload Evidence',
-    body: `
+  State.modal = `
+    <div class="modal">
+      <div class="modal-title">🔒 Upload Evidence</div>
       <div class="form-group"><label>Title*</label><input type="text" id="ev-title" class="form-input" placeholder="Evidence title"></div>
       <div class="form-group"><label>Description</label><textarea id="ev-desc" class="form-input" rows="3" placeholder="Description"></textarea></div>
-      <div class="form-row">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="form-group"><label>Entity Type</label><input type="text" id="ev-etype" class="form-input" placeholder="product, shipment…"></div>
         <div class="form-group"><label>Entity ID</label><input type="text" id="ev-eid" class="form-input" placeholder="Related entity ID"></div>
       </div>
-    `,
-    action: 'submitEvidence()',
-    actionLabel: 'Upload & Anchor'
-  };
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-primary" onclick="submitEvidence()" style="flex:1">Upload & Anchor</button>
+        <button class="btn" onclick="State.modal=null;render()">Cancel</button>
+      </div>
+    </div>
+  `;
   render();
 }
 async function submitEvidence() {
@@ -113,9 +115,24 @@ async function exportEvidence(id) {
     }
   } catch (e) { showToast('Export failed', 'error'); }
 }
+async function downloadForensicReport(id) {
+  try {
+    const report = await API.get(`/evidence/${id}/export`);
+    const w = window.open('', '_blank');
+    if (w) {
+      w.document.title = `Forensic Report – ${id}`;
+      const pre = w.document.createElement('pre');
+      pre.style.cssText = 'font-family:monospace;white-space:pre-wrap;padding:24px;background:#0f172a;color:#e2e8f0;max-width:100%';
+      pre.textContent = JSON.stringify(report, null, 2);
+      w.document.body.style.cssText = 'margin:0;background:#0f172a';
+      w.document.body.appendChild(pre);
+    }
+  } catch (e) { showToast('Forensic report failed', 'error'); }
+}
 
 // Window exports for onclick handlers
 window.showUploadEvidence = showUploadEvidence;
 window.submitEvidence = submitEvidence;
 window.verifyEvidence = verifyEvidence;
 window.exportEvidence = exportEvidence;
+window.downloadForensicReport = downloadForensicReport;
