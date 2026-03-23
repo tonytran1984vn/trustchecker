@@ -423,7 +423,14 @@ export async function loadPageData(page) {
             render();
             setTimeout(() => {
                 if (_pageCache['dashboard']?.initDashboardCharts) _pageCache['dashboard'].initDashboardCharts();
-            }, 50);
+            }, 200);
+            // Retry at 500ms to handle slow DOM rendering
+            setTimeout(() => {
+                const wrap = document.getElementById('scanDonutWrap');
+                if (wrap && !wrap.innerHTML.trim()) {
+                    if (_pageCache['dashboard']?.initDashboardCharts) _pageCache['dashboard'].initDashboardCharts();
+                }
+            }, 500);
         } else if (page === 'products') {
             const res = await API.get('/products');
             State.products = res.products || [];
