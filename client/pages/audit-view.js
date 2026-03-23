@@ -135,7 +135,7 @@ async function loadAuditData() {
         if (to) params.set('to', to);
 
         const res = await API.get(`/audit-log?${params.toString()}`);
-        const data = res.events || res.data || [];
+        const data = res.entries || res.events || res.data || [];
 
         // Update stats
         const today = new Date().toISOString().split('T')[0];
@@ -245,7 +245,7 @@ function formatJSON(val) {
 async function exportAudit(format) {
     try {
         const res = await API.get('/audit-log?limit=10000');
-        const data = res.events || res.data || [];
+        const data = res.entries || res.events || res.data || [];
 
         if (format === 'json') {
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
