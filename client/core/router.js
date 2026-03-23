@@ -440,8 +440,7 @@ export async function loadPageData(page) {
             State.fraudAlerts = res.alerts || [];
             render();
         } else if (page === 'scans') {
-            const res = await API.get('/qr/scan-history?limit=50');
-            State.scanHistory = res.scans || [];
+            // Scans page manages its own pagination via initPage()
             render();
         } else if (page === 'blockchain') {
             State.blockchain = await API.get('/qr/blockchain');

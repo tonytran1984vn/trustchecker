@@ -810,31 +810,80 @@ router.get('/ownership/:qr_data', async (req, res) => {
 // ─── GET /api/qr/scan-history ────────────────────────────────────────────────
 router.get('/scan-history', async (req, res) => {
     try {
-        const { product_id, limit = 50 } = req.query;
+        const { product_id, category, result, limit = 20, offset = 0 } = req.query;
         const orgId = req.user?.org_id || req.user?.orgId;
-        let query = `
-      SELECT se.*, p.name as product_name, p.sku as product_sku
-      FROM scan_events se
-      LEFT JOIN products p ON se.product_id = p.id
-    `;
         const params = [];
+        const countParams = [];
         const conditions = [];
 
         if (orgId && req.user?.role !== 'super_admin') {
             conditions.push('se.org_id = ?');
             params.push(orgId);
+            countParams.push(orgId);
         }
         if (product_id) {
             conditions.push('se.product_id = ?');
             params.push(product_id);
+            countParams.push(product_id);
         }
-        if (conditions.length) query += ' WHERE ' + conditions.join(' AND ');
+        if (category) {
+            conditions.push('p.category = ?');
+            params.push(category);
+            countParams.push(category);
+        }
+        if (result) {
+            conditions.push('se.result = ?');
+            params.push(result);
+            countParams.push(result);
+        }
 
-        query += ' ORDER BY se.scanned_at DESC LIMIT ?';
-        params.push(Math.min(Number(limit) || 50, 200));
+        const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
 
-        const scans = await db.prepare(query).all(...params);
-        res.json({ scans });
+        // Total count for pagination
+        const countQuery = `SELECT COUNT(*) as total FROM scan_events se LEFT JOIN products p ON se.product_id = p.id${where}`;
+        const totalResult = await db.prepare(countQuery).get(...countParams);
+        const total = totalResult?.total || 0;
+
+        // Paginated data
+        const perPage = Math.min(Math.max(Number(limit) || 20, 1), 200);
+        const skip = Math.max(Number(offset) || 0, 0);
+        const dataQuery = `
+      SELECT se.*, p.name as product_name, p.sku as product_sku, p.category as product_category
+      FROM scan_events se
+      LEFT JOIN products p ON se.product_id = p.id${where}
+      ORDER BY se.scanned_at DESC LIMIT ? OFFSET ?`;
+        params.push(perPage, skip);
+
+        const scans = await db.prepare(dataQuery).all(...params);
+
+        // Distinct products & categories for filter dropdowns (cached per org)
+        const orgFilter = orgId ? ' WHERE org_id = ?' : '';
+        const orgFilterAnd = orgId ? ' WHERE org_id = ? AND' : ' WHERE';
+        const orgParams = orgId ? [orgId] : [];
+        const [products, categories, results] = await Promise.all([
+            db.prepare(`SELECT DISTINCT id, name FROM products${orgFilter} ORDER BY name`).all(...orgParams),
+            db
+                .prepare(
+                    `SELECT DISTINCT category FROM products${orgFilterAnd} category IS NOT NULL AND category != '' ORDER BY category`
+                )
+                .all(...orgParams),
+            db
+                .prepare(`SELECT DISTINCT result FROM scan_events${orgFilterAnd} result IS NOT NULL ORDER BY result`)
+                .all(...orgParams),
+        ]);
+
+        res.json({
+            scans,
+            total,
+            page: Math.floor(skip / perPage) + 1,
+            per_page: perPage,
+            total_pages: Math.ceil(total / perPage),
+            filters: {
+                products: products.map(p => ({ id: p.id, name: p.name })),
+                categories: categories.map(c => c.category),
+                results: results.map(r => r.result),
+            },
+        });
     } catch (err) {
         logger.error('Scan history error:', err);
         res.status(500).json({ error: 'Failed to fetch scan history' });
