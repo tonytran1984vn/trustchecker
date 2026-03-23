@@ -380,7 +380,7 @@ export function renderPage() {
     let page = State.page;
 
     // v10.1: Auto-correct default 'dashboard' page for roles with dedicated landing pages
-    const _roleLanding = { org_owner: 'owner-governance', super_admin: 'control-tower', platform_security: 'control-tower', data_gov_officer: 'compliance-dashboard', executive: 'exec-overview', carbon_officer: 'carbon-workspace', ops_manager: 'ops-planning', risk_officer: 'risk-dashboard', compliance_officer: 'compliance-dashboard', developer: 'it-authentication', ggc_member: 'green-finance', risk_committee: 'hardening', ivu_validator: 'mrmf', scm_analyst: 'ops-dashboard', blockchain_operator: 'identity', auditor: 'compliance-dashboard', company_admin: 'dashboard', security_officer: 'ca-governance' };
+    const _roleLanding = { org_owner: 'owner-governance', super_admin: 'control-tower', platform_security: 'control-tower', data_gov_officer: 'compliance-dashboard', executive: 'exec-overview', carbon_officer: 'carbon-workspace', ops_manager: 'ops-planning', risk_officer: 'risk-dashboard', compliance_officer: 'compliance-dashboard', developer: 'it-authentication', ggc_member: 'green-finance', risk_committee: 'hardening', ivu_validator: 'mrmf', scm_analyst: 'ops-dashboard', blockchain_operator: 'blockchain', auditor: 'compliance-dashboard', company_admin: 'dashboard', security_officer: 'ca-governance' };
     const correctPage = _roleLanding[State.user?.active_role || State.user?.role];
     if (correctPage && page === 'dashboard') {
         State.page = correctPage;
@@ -1035,7 +1035,7 @@ function _defaultPageForRole() {
         compliance_officer: 'compliance-dashboard', developer: 'it-authentication',
         ggc_member: 'green-finance', risk_committee: 'hardening',
         ivu_validator: 'mrmf', scm_analyst: 'ops-dashboard',
-        blockchain_operator: 'identity', carbon_officer: 'carbon-workspace',
+        blockchain_operator: 'blockchain', carbon_officer: 'carbon-workspace',
         auditor: 'compliance-dashboard',
     };
     return map[role] || 'dashboard';
