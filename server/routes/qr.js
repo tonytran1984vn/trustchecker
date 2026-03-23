@@ -821,7 +821,7 @@ router.get('/scan-history', async (req, res) => {
         const conditions = [];
 
         if (orgId && req.user?.role !== 'super_admin') {
-            conditions.push('(p.org_id = ? OR p.org_id IS NULL)');
+            conditions.push('se.org_id = ?');
             params.push(orgId);
         }
         if (product_id) {
