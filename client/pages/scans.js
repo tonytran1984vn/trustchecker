@@ -121,13 +121,13 @@ export function renderPage() {
           <option value="">All Categories (${visibleCategories.length})</option>
           ${visibleCategories.map(c => `<option value="${c}" ${_filterCategory === c ? 'selected' : ''}>${c}</option>`).join('')}
         </select>
-        <select class="input" style="max-width:160px;font-size:0.78rem;padding:6px 10px" onchange="window._scanFilterResult(this.value)">
-          <option value="">All Results</option>
-          ${_filterMeta.results.map(r => `<option value="${r}" ${_filterResult === r ? 'selected' : ''}>${r.charAt(0).toUpperCase() + r.slice(1)}</option>`).join('')}
-        </select>
         <select class="input" style="max-width:160px;font-size:0.78rem;padding:6px 10px" onchange="window._scanFilterCity(this.value)">
           <option value="">All Cities (${(_filterMeta.cities || []).length})</option>
           ${(_filterMeta.cities || []).map(c => `<option value="${c}" ${_filterCity === c ? 'selected' : ''}>${c}</option>`).join('')}
+        </select>
+        <select class="input" style="max-width:160px;font-size:0.78rem;padding:6px 10px" onchange="window._scanFilterResult(this.value)">
+          <option value="">All Results</option>
+          ${_filterMeta.results.map(r => `<option value="${r}" ${_filterResult === r ? 'selected' : ''}>${r.charAt(0).toUpperCase() + r.slice(1)}</option>`).join('')}
         </select>
         ${hasFilters ? `<button class="btn btn-sm" onclick="window._scanClearFilters()" style="font-size:0.72rem;color:var(--rose)">✕ Clear</button>` : ''}
         <div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-muted)">

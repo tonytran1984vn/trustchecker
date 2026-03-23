@@ -865,7 +865,7 @@ router.get('/scan-history', async (req, res) => {
         const effOrgId = orgId && req.user?.role !== 'super_admin' ? orgId : null;
         const orgCond = effOrgId ? ' AND se.org_id = ?' : '';
         const orgParams = effOrgId ? [effOrgId] : [];
-        const [products, categories, results, cities] = await Promise.all([
+        const [products, categories, cities, results] = await Promise.all([
             db
                 .prepare(
                     `SELECT DISTINCT p.id, p.name, p.category FROM scan_events se INNER JOIN products p ON se.product_id = p.id WHERE 1=1${orgCond} ORDER BY p.name`
@@ -873,17 +873,17 @@ router.get('/scan-history', async (req, res) => {
                 .all(...orgParams),
             db
                 .prepare(
-                    `SELECT DISTINCT p.category FROM scan_events se INNER JOIN products p ON se.product_id = p.id WHERE p.category IS NOT NULL AND p.category != ''${orgCond} ORDER BY p.category`
+                    `SELECT DISTINCT p.category FROM scan_events se INNER JOIN products p ON se.product_id = p.id WHERE p.category IS NOT NULL AND LENGTH(p.category) > 0${orgCond} ORDER BY p.category`
+                )
+                .all(...orgParams),
+            db
+                .prepare(
+                    `SELECT DISTINCT se.geo_city FROM scan_events se WHERE se.geo_city IS NOT NULL AND LENGTH(se.geo_city) > 0${orgCond} ORDER BY se.geo_city`
                 )
                 .all(...orgParams),
             db
                 .prepare(
                     `SELECT DISTINCT se.result FROM scan_events se WHERE se.result IS NOT NULL${orgCond} ORDER BY se.result`
-                )
-                .all(...orgParams),
-            db
-                .prepare(
-                    `SELECT DISTINCT se.geo_city FROM scan_events se WHERE se.geo_city IS NOT NULL AND se.geo_city != ''${orgCond} ORDER BY se.geo_city`
                 )
                 .all(...orgParams),
         ]);
