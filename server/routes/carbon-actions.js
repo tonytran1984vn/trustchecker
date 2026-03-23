@@ -87,7 +87,9 @@ router.get('/', cacheMiddleware(10), async (req, res) => {
             .catch(() => []);
         const stats = { open: 0, in_progress: 0, done: 0, dismissed: 0, total: 0 };
         allActions.forEach(r => {
-            stats[r.status] = r.cnt;
+            // Map 'completed' → 'done' for frontend consistency
+            const key = r.status === 'completed' ? 'done' : r.status;
+            stats[key] = (stats[key] || 0) + r.cnt;
             stats.total += r.cnt;
         });
 
