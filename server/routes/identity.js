@@ -14,8 +14,8 @@ router.use(authMiddleware);
 const init = async () => {
     try {
         await db.exec(`
-    CREATE TABLE IF NOT EXISTS did_registry (id TEXT PRIMARY KEY, did TEXT UNIQUE NOT NULL, entity_type TEXT, entity_id TEXT, org_id TEXT, did_document TEXT, public_key TEXT, status TEXT DEFAULT 'active', created_at DATETIME DEFAULT (NOW()));
-    CREATE TABLE IF NOT EXISTS verifiable_credentials (id TEXT PRIMARY KEY, vc_id TEXT UNIQUE NOT NULL, credential_type TEXT, issuer_did TEXT, subject_did TEXT, credential TEXT, proof_hash TEXT, status TEXT DEFAULT 'active', valid_until DATETIME, org_id TEXT, created_at DATETIME DEFAULT (NOW()));
+    CREATE TABLE IF NOT EXISTS did_registry (id TEXT PRIMARY KEY, did TEXT UNIQUE NOT NULL, entity_type TEXT, entity_id TEXT, org_id TEXT, did_document TEXT, public_key TEXT, status TEXT DEFAULT 'active', created_at TIMESTAMPTZ DEFAULT NOW());
+    CREATE TABLE IF NOT EXISTS verifiable_credentials (id TEXT PRIMARY KEY, vc_id TEXT UNIQUE NOT NULL, credential_type TEXT, issuer_did TEXT, subject_did TEXT, credential TEXT, proof_hash TEXT, status TEXT DEFAULT 'active', valid_until TIMESTAMPTZ, org_id TEXT, created_at TIMESTAMPTZ DEFAULT NOW());
 `);
     } catch (e) {}
 };

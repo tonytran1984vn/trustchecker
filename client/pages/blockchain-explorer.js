@@ -1,7 +1,7 @@
 /**
  * Blockchain Explorer — On-chain verification, NFT certificates, transaction history
  */
-import { icon } from '../../core/icons.js';
+import { icon } from '../core/icons.js';
 
 const RECENT_TXN = [
     { hash: '0xa3f8…d91e', block: 18492031, action: 'batch.register', batch: 'B-2026-0895', chain: 'VeChain', timestamp: '2026-02-19 17:15', gas: '0.012 VET', status: 'confirmed', confirmations: 42 },
