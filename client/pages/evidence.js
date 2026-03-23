@@ -63,17 +63,30 @@ export function renderPage() {
 }
 async function showUploadEvidence() {
   State.modal = `
-    <div class="modal">
+    <div class="modal" style="max-width:520px">
       <div class="modal-title">🔒 Upload Evidence</div>
-      <div class="form-group"><label>Title*</label><input type="text" id="ev-title" class="form-input" placeholder="Evidence title"></div>
-      <div class="form-group"><label>Description</label><textarea id="ev-desc" class="form-input" rows="3" placeholder="Description"></textarea></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group"><label>Entity Type</label><input type="text" id="ev-etype" class="form-input" placeholder="product, shipment…"></div>
-        <div class="form-group"><label>Entity ID</label><input type="text" id="ev-eid" class="form-input" placeholder="Related entity ID"></div>
+      <p style="font-size:0.82rem;color:var(--text-secondary);margin:4px 0 16px">Upload a document or file to anchor it on the blockchain for tamper-proof verification.</p>
+      <div class="form-group" style="margin-bottom:12px">
+        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:6px">Title *</label>
+        <input type="text" id="ev-title" class="form-input" placeholder="e.g. GMP Compliance Certificate" style="width:100%;padding:10px 12px">
       </div>
-      <div style="display:flex;gap:8px;margin-top:16px">
-        <button class="btn btn-primary" onclick="submitEvidence()" style="flex:1">Upload & Anchor</button>
-        <button class="btn" onclick="State.modal=null;render()">Cancel</button>
+      <div class="form-group" style="margin-bottom:12px">
+        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:6px">Description</label>
+        <textarea id="ev-desc" class="form-input" rows="3" placeholder="Brief description of the evidence..." style="width:100%;padding:10px 12px;resize:vertical"></textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px">
+        <div class="form-group">
+          <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:6px">Entity Type</label>
+          <input type="text" id="ev-etype" class="form-input" placeholder="product, shipment…" style="width:100%;padding:10px 12px">
+        </div>
+        <div class="form-group">
+          <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--text-secondary);margin-bottom:6px">Entity ID</label>
+          <input type="text" id="ev-eid" class="form-input" placeholder="Related entity ID" style="width:100%;padding:10px 12px">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:20px">
+        <button class="btn btn-primary" onclick="submitEvidence()" style="flex:1;padding:10px">🔗 Upload & Anchor</button>
+        <button class="btn" onclick="State.modal=null;render()" style="padding:10px 20px">Cancel</button>
       </div>
     </div>
   `;

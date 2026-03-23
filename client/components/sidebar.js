@@ -113,7 +113,6 @@ const ROLE_VISIBILITY = {
     domains: ['command-center', 'operations'],
     items: [
       'dashboard',
-      'products', 'scans',
     ],
     extraItems: [
       { id: 'identity', domain: 'operations', icon: icon('shield'), label: 'DID / VC' },

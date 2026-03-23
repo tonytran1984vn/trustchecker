@@ -2,6 +2,7 @@
  * Blockchain Explorer — On-chain verification, NFT certificates, transaction history
  */
 import { icon } from '../core/icons.js';
+import { State, render } from '../core/state.js';
 
 const RECENT_TXN = [
     { hash: '0xa3f8…d91e', block: 18492031, action: 'batch.register', batch: 'B-2026-0895', chain: 'VeChain', timestamp: '2026-02-19 17:15', gas: '0.012 VET', status: 'confirmed', confirmations: 42 },
@@ -84,16 +85,112 @@ export function renderPage() {
 }
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
 
-window.explorerVerifyHash = () => {
-  const hash = prompt('Enter SHA-256 hash to verify on-chain:');
-  if (!hash) return;
-  const found = RECENT_TXN.find(t => t.hash.includes(hash.slice(0, 4)));
-  if (found) { alert(`✅ Hash verified!\n\nBlock: ${found.block.toLocaleString()}\nAction: ${found.action}\nChain: ${found.chain}\nConfirmations: ${found.confirmations}`); }
-  else { alert(`⚠️ Hash not found in recent transactions.\nThe hash may exist on-chain but is not in the current view.`); }
+// ─── Modal helpers ──────────────────────────────────────────
+function showModal(html) { State.modal = html; render(); }
+function closeModal() { State.modal = null; render(); }
+
+function gridRow(label, value) {
+  return '<div><span style="color:var(--text-secondary)">' + label + '</span><br><strong>' + value + '</strong></div>';
+}
+
+window.explorerVerifyHash = function() {
+  showModal(
+    '<div class="modal" style="max-width:480px">' +
+    '<div class="modal-title">' + icon('search', 20) + ' Verify Transaction Hash</div>' +
+    '<p style="font-size:0.82rem;color:var(--text-secondary);margin:8px 0 16px">Enter a SHA-256 transaction hash to verify its on-chain status.</p>' +
+    '<div class="form-group"><input type="text" id="verify-hash-input" class="form-input" placeholder="0xa3f8…d91e" style="font-family:\'JetBrains Mono\',monospace;font-size:0.82rem"></div>' +
+    '<div style="display:flex;gap:8px;margin-top:16px">' +
+    '<button class="btn btn-primary" style="flex:1" onclick="doVerifyHash()">🔍 Verify</button>' +
+    '<button class="btn" onclick="closeExplorerModal()">Cancel</button>' +
+    '</div></div>'
+  );
 };
-window.explorerMintNFT = () => { alert('🏗️ NFT Minting requires a connected wallet.\n\nConnect your VeChain or Polygon wallet to mint an ERC-721 proof-of-authenticity NFT for a verified batch.'); };
-window.explorerViewNFT = (id) => {
-  const nft = NFT_CERTS.find(n => n.id === id);
-  if (nft) { alert(`🏆 NFT Certificate: ${nft.id}\n\nProduct: ${nft.product}\nBatch: ${nft.batch}\nChain: ${nft.chain}\nStandard: ${nft.standard}\nMinted: ${nft.minted}\nScans: ${nft.scans.toLocaleString()}\nVerified: ✅`); }
+
+window.doVerifyHash = function() {
+  var hash = document.getElementById('verify-hash-input');
+  if (!hash || !hash.value) return;
+  var val = hash.value;
+  var found = RECENT_TXN.find(function(t) { return t.hash.indexOf(val.slice(0, 4)) !== -1; });
+  if (found) {
+    showModal(
+      '<div class="modal" style="max-width:480px">' +
+      '<div class="modal-title">✅ Hash Verified</div>' +
+      '<div style="background:var(--surface);border-radius:8px;padding:16px;margin:12px 0">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:0.82rem">' +
+      gridRow('Block', found.block.toLocaleString()) +
+      gridRow('Action', found.action) +
+      gridRow('Chain', found.chain) +
+      gridRow('Confirmations', String(found.confirmations)) +
+      gridRow('Batch', found.batch) +
+      '<div><span style="color:var(--text-secondary)">Status</span><br><span class="badge valid">' + found.status + '</span></div>' +
+      '</div></div>' +
+      '<button class="btn" style="width:100%;margin-top:8px" onclick="closeExplorerModal()">Close</button>' +
+      '</div>'
+    );
+  } else {
+    showModal(
+      '<div class="modal" style="max-width:400px">' +
+      '<div class="modal-title">⚠️ Hash Not Found</div>' +
+      '<p style="font-size:0.82rem;color:var(--text-secondary);margin:12px 0">The hash was not found in recent transactions. It may exist on-chain but is not in the current view.</p>' +
+      '<button class="btn" style="width:100%;margin-top:8px" onclick="closeExplorerModal()">Close</button>' +
+      '</div>'
+    );
+  }
 };
-window.explorerTransferNFT = (id) => { alert('🔄 Transfer requires wallet connection.\n\nConnect your wallet to transfer NFT ownership on-chain.'); };
+
+window.explorerMintNFT = function() {
+  showModal(
+    '<div class="modal" style="max-width:440px">' +
+    '<div class="modal-title">' + icon('zap', 20) + ' Mint NFT Certificate</div>' +
+    '<div style="background:var(--surface);border-radius:8px;padding:20px;margin:12px 0;text-align:center">' +
+    '<div style="font-size:2rem;margin-bottom:8px">🔗</div>' +
+    '<p style="font-size:0.85rem;color:var(--text-secondary);margin:0">Connect your VeChain or Polygon wallet to mint an ERC-721 proof-of-authenticity NFT for a verified batch.</p>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:16px">' +
+    '<button class="btn btn-primary" style="flex:1" disabled>Connect Wallet</button>' +
+    '<button class="btn" onclick="closeExplorerModal()">Close</button>' +
+    '</div></div>'
+  );
+};
+
+window.explorerViewNFT = function(id) {
+  var nft = NFT_CERTS.find(function(n) { return n.id === id; });
+  if (!nft) return;
+  showModal(
+    '<div class="modal" style="max-width:500px">' +
+    '<div class="modal-title">🏆 NFT Certificate</div>' +
+    '<div style="background:var(--surface);border-radius:8px;padding:16px;margin:12px 0">' +
+    '<div style="font-family:\'JetBrains Mono\',monospace;font-size:0.72rem;color:var(--cyan);margin-bottom:12px">' + nft.id + '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:0.82rem">' +
+    gridRow('Product', nft.product) +
+    gridRow('Batch', nft.batch) +
+    gridRow('Chain', nft.chain) +
+    gridRow('Standard', nft.standard) +
+    gridRow('Minted', nft.minted) +
+    gridRow('Scans', nft.scans.toLocaleString()) +
+    '</div>' +
+    '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:6px">' +
+    '<span class="badge valid">✓ Verified</span>' +
+    '<span style="font-size:0.75rem;color:var(--text-secondary)">On-chain proof-of-authenticity</span>' +
+    '</div></div>' +
+    '<button class="btn" style="width:100%;margin-top:8px" onclick="closeExplorerModal()">Close</button>' +
+    '</div>'
+  );
+};
+
+window.explorerTransferNFT = function(id) {
+  showModal(
+    '<div class="modal" style="max-width:440px">' +
+    '<div class="modal-title">🔄 Transfer NFT</div>' +
+    '<div style="background:var(--surface);border-radius:8px;padding:20px;margin:12px 0;text-align:center">' +
+    '<div style="font-size:2rem;margin-bottom:8px">👛</div>' +
+    '<p style="font-size:0.85rem;color:var(--text-secondary);margin:0">Connect your wallet to transfer NFT ownership on-chain. The new owner will receive full verification rights.</p>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:16px">' +
+    '<button class="btn btn-primary" style="flex:1" disabled>Connect Wallet</button>' +
+    '<button class="btn" onclick="closeExplorerModal()">Close</button>' +
+    '</div></div>'
+  );
+};
+
+window.closeExplorerModal = closeModal;
