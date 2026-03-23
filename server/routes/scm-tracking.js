@@ -109,12 +109,10 @@ router.post(
             const { acquireProductLock } = require('../middleware/blind-spot-defense');
             const lockAcquired = await acquireProductLock(product_id);
             if (!lockAcquired) {
-                return res
-                    .status(409)
-                    .json({
-                        error: 'Product is being updated by another request. Please retry.',
-                        code: 'CONCURRENT_UPDATE',
-                    });
+                return res.status(409).json({
+                    error: 'Product is being updated by another request. Please retry.',
+                    code: 'CONCURRENT_UPDATE',
+                });
             }
 
             const transition = await validateTransition(product_id, batch_id, event_type);
@@ -443,115 +441,98 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
     try {
         const orgId = req.user?.org_id || req.user?.orgId || null;
 
-        // Batches — filtered by org_id via products table
-        const totalBatches = orgId
-            ? (
-                  await db.get(
+        // Run ALL count queries in parallel for fast dashboard loading
+        const [
+            totalBatchesRow,
+            totalEventsRow,
+            totalPartnersRow,
+            totalShipmentsRow,
+            activeShipmentsRow,
+            totalLeaksRow,
+            slaViolationsRow,
+            avgTrustRow,
+            eventsByType,
+            recentEvents,
+        ] = await Promise.all([
+            // 1. Total batches
+            orgId
+                ? db.get(
                       'SELECT COUNT(*) as c FROM batches b JOIN products p ON b.product_id = p.id WHERE p.org_id = ?',
                       [orgId]
                   )
-              )?.c || 0
-            : (await db.get('SELECT COUNT(*) as c FROM batches'))?.c || 0;
-
-        // Events — filtered by org_id via products table
-        const totalEvents = orgId
-            ? (
-                  await db.get(
+                : db.get('SELECT COUNT(*) as c FROM batches'),
+            // 2. Total events
+            orgId
+                ? db.get(
                       'SELECT COUNT(*) as c FROM supply_chain_events sce JOIN products p ON sce.product_id = p.id WHERE p.org_id = ?',
                       [orgId]
                   )
-              )?.c || 0
-            : (await db.get('SELECT COUNT(*) as c FROM supply_chain_events'))?.c || 0;
-
-        // Partners — filtered directly by org_id
-        const totalPartners = orgId
-            ? (await db.get('SELECT COUNT(*) as c FROM partners WHERE org_id = ?', [orgId]))?.c || 0
-            : (await db.get('SELECT COUNT(*) as c FROM partners'))?.c || 0;
-
-        // Shipments — filtered by org_id via partners
-        const totalShipments = orgId
-            ? (
-                  await db.get(
+                : db.get('SELECT COUNT(*) as c FROM supply_chain_events'),
+            // 3. Total partners
+            orgId
+                ? db.get('SELECT COUNT(*) as c FROM partners WHERE org_id = ?', [orgId])
+                : db.get('SELECT COUNT(*) as c FROM partners'),
+            // 4. Total shipments
+            orgId
+                ? db.get(
                       'SELECT COUNT(*) as c FROM shipments s LEFT JOIN partners fp ON s.from_partner_id = fp.id LEFT JOIN partners tp ON s.to_partner_id = tp.id WHERE (fp.org_id = ? OR tp.org_id = ?)',
                       [orgId, orgId]
                   )
-              )?.c || 0
-            : (await db.get('SELECT COUNT(*) as c FROM shipments'))?.c || 0;
-
-        const activeShipments = orgId
-            ? (
-                  await db.get(
+                : db.get('SELECT COUNT(*) as c FROM shipments'),
+            // 5. Active shipments
+            orgId
+                ? db.get(
                       "SELECT COUNT(*) as c FROM shipments s LEFT JOIN partners fp ON s.from_partner_id = fp.id LEFT JOIN partners tp ON s.to_partner_id = tp.id WHERE s.status IN ('pending','in_transit') AND (fp.org_id = ? OR tp.org_id = ?)",
                       [orgId, orgId]
                   )
-              )?.c || 0
-            : (await db.get("SELECT COUNT(*) as c FROM shipments WHERE status IN ('pending','in_transit')"))?.c || 0;
-
-        // Leaks — filtered by org_id via products
-        const totalLeaks = orgId
-            ? (
-                  await db.get(
+                : db.get("SELECT COUNT(*) as c FROM shipments WHERE status IN ('pending','in_transit')"),
+            // 6. Open leaks
+            orgId
+                ? db.get(
                       "SELECT COUNT(*) as c FROM leak_alerts la JOIN products p ON la.product_id = p.id WHERE la.status = 'open' AND p.org_id = ?",
                       [orgId]
                   )
-              )?.c || 0
-            : (await db.get("SELECT COUNT(*) as c FROM leak_alerts WHERE status = 'open'"))?.c || 0;
-
-        // SLA violations — filtered by org_id via partners
-        const slaViolations = orgId
-            ? (
-                  await db.get(
+                : db.get("SELECT COUNT(*) as c FROM leak_alerts WHERE status = 'open'"),
+            // 7. SLA violations
+            orgId
+                ? db.get(
                       "SELECT COUNT(*) as c FROM sla_violations sv JOIN partners p ON sv.partner_id = p.id WHERE sv.status = 'open' AND p.org_id = ?",
                       [orgId]
                   )
-              )?.c || 0
-            : (await db.get("SELECT COUNT(*) as c FROM sla_violations WHERE status = 'open'"))?.c || 0;
-
-        const avgPartnerTrust = orgId
-            ? (await db.get('SELECT COALESCE(AVG(trust_score), 50) as avg FROM partners WHERE org_id = ?', [orgId]))
-                  ?.avg || 50
-            : (await db.get('SELECT COALESCE(AVG(trust_score), 50) as avg FROM partners'))?.avg || 50;
-
-        // Events by type — filtered
-        const eventsByType = orgId
-            ? await db.all(
-                  'SELECT sce.event_type, COUNT(*) as count FROM supply_chain_events sce JOIN products p ON sce.product_id = p.id WHERE p.org_id = ? GROUP BY sce.event_type ORDER BY count DESC LIMIT 1000',
-                  [orgId]
-              )
-            : await db.all(
-                  'SELECT event_type, COUNT(*) as count FROM supply_chain_events GROUP BY event_type ORDER BY count DESC LIMIT 1000'
-              );
-
-        // Recent events — filtered
-        const recentEvents = orgId
-            ? await db.all(
-                  `
-          SELECT sce.*, p.name as partner_name, pr.name as product_name
-          FROM supply_chain_events sce
-          LEFT JOIN partners p ON sce.partner_id = p.id
-          LEFT JOIN products pr ON sce.product_id = pr.id
-          WHERE pr.org_id = ?
-          ORDER BY sce.created_at DESC LIMIT 10
-        `,
-                  [orgId]
-              )
-            : await db.all(`
-          SELECT sce.*, p.name as partner_name, pr.name as product_name
-          FROM supply_chain_events sce
-          LEFT JOIN partners p ON sce.partner_id = p.id
-          LEFT JOIN products pr ON sce.product_id = pr.id
-          ORDER BY sce.created_at DESC LIMIT 10
-        `);
+                : db.get("SELECT COUNT(*) as c FROM sla_violations WHERE status = 'open'"),
+            // 8. Avg partner trust
+            orgId
+                ? db.get('SELECT COALESCE(AVG(trust_score), 50) as avg FROM partners WHERE org_id = ?', [orgId])
+                : db.get('SELECT COALESCE(AVG(trust_score), 50) as avg FROM partners'),
+            // 9. Events by type
+            orgId
+                ? db.all(
+                      'SELECT sce.event_type, COUNT(*) as count FROM supply_chain_events sce JOIN products p ON sce.product_id = p.id WHERE p.org_id = ? GROUP BY sce.event_type ORDER BY count DESC LIMIT 1000',
+                      [orgId]
+                  )
+                : db.all(
+                      'SELECT event_type, COUNT(*) as count FROM supply_chain_events GROUP BY event_type ORDER BY count DESC LIMIT 1000'
+                  ),
+            // 10. Recent events
+            orgId
+                ? db.all(
+                      'SELECT sce.*, p.name as partner_name, pr.name as product_name FROM supply_chain_events sce LEFT JOIN partners p ON sce.partner_id = p.id LEFT JOIN products pr ON sce.product_id = pr.id WHERE pr.org_id = ? ORDER BY sce.created_at DESC LIMIT 10',
+                      [orgId]
+                  )
+                : db.all(
+                      'SELECT sce.*, p.name as partner_name, pr.name as product_name FROM supply_chain_events sce LEFT JOIN partners p ON sce.partner_id = p.id LEFT JOIN products pr ON sce.product_id = pr.id ORDER BY sce.created_at DESC LIMIT 10'
+                  ),
+        ]);
 
         res.json({
-            total_batches: totalBatches,
-            total_events: totalEvents,
-            total_partners: totalPartners,
-            total_shipments: totalShipments,
-            active_shipments: activeShipments,
-            open_leaks: totalLeaks,
-            sla_violations: slaViolations,
-            avg_partner_trust: Math.round(avgPartnerTrust),
+            total_batches: totalBatchesRow?.c || 0,
+            total_events: totalEventsRow?.c || 0,
+            total_partners: totalPartnersRow?.c || 0,
+            total_shipments: totalShipmentsRow?.c || 0,
+            active_shipments: activeShipmentsRow?.c || 0,
+            open_leaks: totalLeaksRow?.c || 0,
+            sla_violations: slaViolationsRow?.c || 0,
+            avg_partner_trust: Math.round(avgTrustRow?.avg || 50),
             events_by_type: eventsByType,
             recent_events: recentEvents,
         });

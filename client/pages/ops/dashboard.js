@@ -14,37 +14,33 @@ export function renderPage() {
   const whCache = window._opsWhCache || {};
   const monCache = window._opsMonCache || {};
   const incCache = window._opsIncCache || {};
+  const dashCache = window._opsDashStats || {};
 
   const batches = prodCache.batches?.batches || [];
-  const batchCount = batches.length;
-  const activeBatches = batches.filter(b => b.status === 'active').length;
-  const transitBatches = batches.filter(b => b.status === 'in_transit').length;
+  const batchCount = dashCache.total_batches ?? batches.length;
+  const activeBatches = dashCache.active_shipments ?? batches.filter(b => b.status === 'active').length;
+  const transitBatches = dashCache.active_shipments ?? batches.filter(b => b.status === 'in_transit').length;
   const shipments = whCache.shipments?.shipments || [];
-  const pendingShipments = shipments.filter(s => s.status === 'pending' || s.status === 'in_transit').length;
-  const openIncidents = (incCache.openCases?.incidents || monCache.openCases?.incidents || []).length;
+  const pendingShipments = dashCache.active_shipments ?? shipments.filter(s => s.status === 'pending' || s.status === 'in_transit').length;
+  const openIncidents = dashCache.open_leaks ?? (incCache.openCases?.incidents || monCache.openCases?.incidents || []).length;
   const scans = monCache.scanHistory?.scans || [];
-  const scanCount = scans.length;
-  const anomalyCount = scans.filter(s => s.fraud_score > 0.3).length;
+  const scanCount = dashCache.total_events ?? scans.length;
+  const anomalyCount = dashCache.sla_violations ?? scans.filter(s => s.fraud_score > 0.3).length;
 
-  // Self-load when caches are empty (e.g. scm_analyst role never triggers ops workspace loaders)
-  if (batchCount === 0 && !window._opsDashSelfLoaded) {
+  // Fast KPI load: single /scm/dashboard call returns pre-computed counts
+  if (!window._opsDashSelfLoaded) {
     window._opsDashSelfLoaded = true;
-    if (!window._opsProdCache) window._opsProdCache = {};
-    if (!window._opsWhCache) window._opsWhCache = {};
-    if (!window._opsMonCache) window._opsMonCache = {};
-    if (!window._opsIncCache) window._opsIncCache = {};
-    Promise.all([
-      API.get('/scm/batches?limit=50').catch(() => ({ batches: [] })),
-      API.get('/logistics/shipments?limit=50').catch(() => ({ shipments: [] })),
-      API.get('/qr/scan-history?limit=100').catch(() => ({ scans: [] })),
-      API.get('/scm/incidents?status=open&limit=50').catch(() => ({ incidents: [] })),
-    ]).then(([batchRes, shipRes, scanRes, incRes]) => {
-      window._opsProdCache.batches = batchRes;
-      window._opsWhCache.shipments = shipRes;
-      window._opsMonCache.scanHistory = scanRes;
-      window._opsIncCache.openCases = incRes;
+    // Phase 1: Fast summary counts (single lightweight query)
+    API.get('/scm/dashboard').then(stats => {
+      window._opsDashStats = stats;
       if (typeof window.render === 'function') window.render();
-    });
+    }).catch(() => {});
+    // Phase 2: Lazy-load full batch list for the table (runs in background)
+    API.get('/scm/batches?limit=50').then(batchRes => {
+      if (!window._opsProdCache) window._opsProdCache = {};
+      window._opsProdCache.batches = batchRes;
+      if (typeof window.render === 'function') window.render();
+    }).catch(() => {});
   }
 
   return `
