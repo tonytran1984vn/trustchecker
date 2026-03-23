@@ -463,7 +463,7 @@ function switchRole(role) {
     risk_committee: 'hardening',
     ivu_validator: 'mrmf',
     scm_analyst: 'dashboard',
-    blockchain_operator: 'identity',
+    blockchain_operator: 'blockchain',
     carbon_officer: 'carbon-workspace',
     auditor: 'audit-view',
   };
@@ -1451,7 +1451,7 @@ function goHome() {
     risk_committee: 'hardening',
     ivu_validator: 'mrmf',
     scm_analyst: 'dashboard',
-    blockchain_operator: 'identity',
+    blockchain_operator: 'blockchain',
     carbon_officer: 'carbon-workspace',
     auditor: 'audit-view',
   };
