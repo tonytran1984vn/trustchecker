@@ -21,7 +21,7 @@ export function renderPage() {
               <td style="font-family:'JetBrains Mono';font-size:0.75rem;color:${s.fraud_score > 0.5 ? 'var(--rose)' : 'var(--emerald)'}">${(s.fraud_score * 100).toFixed(0)}%</td>
               <td style="font-family:'JetBrains Mono';font-size:0.75rem;color:${scoreColor(s.trust_score)}">${Math.round(s.trust_score)}</td>
               <td style="font-size:0.75rem">${s.geo_city || '—'}</td>
-              <td style="font-family:'JetBrains Mono';font-size:0.72rem">${s.response_time_ms}ms</td>
+              <td style="font-family:'JetBrains Mono';font-size:0.72rem">${s.response_time_ms != null ? s.response_time_ms + 'ms' : '—'}</td>
               <td class="event-time">${timeAgo(s.scanned_at)}</td>
             </tr>
           `).join('')}

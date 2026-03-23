@@ -5,6 +5,7 @@
  * Matches reference design for Production & QC.
  */
 import { icon } from '../../core/icons.js';
+import { API } from '../../core/api.js';
 
 const ACCENT = '#0d9488';
 
@@ -25,9 +26,25 @@ export function renderPage() {
   const scanCount = scans.length;
   const anomalyCount = scans.filter(s => s.fraud_score > 0.3).length;
 
-  // Try re-render after cache loads
-  if (batchCount === 0 && window._opsProdReady) {
-    window._opsProdReady.then(() => { if (typeof window.render === 'function') window.render(); });
+  // Self-load when caches are empty (e.g. scm_analyst role never triggers ops workspace loaders)
+  if (batchCount === 0 && !window._opsDashSelfLoaded) {
+    window._opsDashSelfLoaded = true;
+    if (!window._opsProdCache) window._opsProdCache = {};
+    if (!window._opsWhCache) window._opsWhCache = {};
+    if (!window._opsMonCache) window._opsMonCache = {};
+    if (!window._opsIncCache) window._opsIncCache = {};
+    Promise.all([
+      API.get('/scm/batches?limit=50').catch(() => ({ batches: [] })),
+      API.get('/logistics/shipments?limit=50').catch(() => ({ shipments: [] })),
+      API.get('/qr/scan-history?limit=100').catch(() => ({ scans: [] })),
+      API.get('/scm/incidents?status=open&limit=50').catch(() => ({ incidents: [] })),
+    ]).then(([batchRes, shipRes, scanRes, incRes]) => {
+      window._opsProdCache.batches = batchRes;
+      window._opsWhCache.shipments = shipRes;
+      window._opsMonCache.scanHistory = scanRes;
+      window._opsIncCache.openCases = incRes;
+      if (typeof window.render === 'function') window.render();
+    });
   }
 
   return `

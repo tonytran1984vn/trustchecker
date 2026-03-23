@@ -286,17 +286,20 @@ async function load() {
   try {
     if (window._caOpsReady) { try { await window._caOpsReady; } catch { } }
     const oc = window._caOpsCache;
-    let evRes, bRes;
+    let evRes, bRes, pRes;
     if (oc?.events && oc?.batches && oc._loadedAt && !events) {
-      evRes = oc.events; bRes = oc.batches;
+      evRes = oc.events; bRes = oc.batches; pRes = oc.products || { products: [] };
     } else {
-      [evRes, bRes] = await Promise.all([
+      [evRes, bRes, pRes] = await Promise.all([
         API.get('/scm/events?limit=500').catch(() => ({ events: [] })),
         API.get('/scm/batches?limit=20').catch(() => ({ batches: [] })),
+        API.get('/scm/products?limit=200').catch(() => ({ products: [] })),
       ]);
     }
     events = Array.isArray(evRes) ? evRes : (evRes.events || []);
     batches = Array.isArray(bRes) ? bRes : (bRes.batches || []);
+    // Cache products for name lookup
+    window._traceProducts = Array.isArray(pRes) ? pRes : (pRes.products || []);
   } catch (e) { events = []; batches = []; }
   loading = false;
   setTimeout(() => { const el = document.getElementById('traceability-root'); if (el) el.innerHTML = renderContent ? renderContent() : ''; }, 50);
@@ -305,6 +308,12 @@ async function load() {
 function renderContent() {
   if (!events && !loading) { load(); }
   if (loading && !events) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Traceability...</div></div>`;
+
+  // Build product name lookup from batches + cached products
+  const _productNames = {};
+  (batches || []).forEach(b => { if (b.product_id && b.product_name) _productNames[b.product_id] = b.product_name; });
+  (window._traceProducts || []).forEach(p => { if (p.id && p.name) _productNames[p.id] = p.name; });
+  ((typeof State !== 'undefined' && State.products) || window._caOpsCache?.products?.products || []).forEach(p => { if (p.id && p.name) _productNames[p.id] = p.name; });
 
   return `
     <div class="sa-page">
@@ -343,7 +352,8 @@ function renderTabContent() {
           ${evList.slice(0, 20).map(e => {
       const time = e.created_at ? new Date(e.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
       const level = e.event_type === 'anomaly' || e.event_type === 'alert' ? 'critical' : e.event_type === 'transfer' ? 'warning' : 'info';
-      return timelineItem(time, (e.event_type || 'event').replace(/_/g, ' ') + (e.location ? ' — ' + e.location : ''), e.description || e.notes || (e.product_id ? 'Product: ' + e.product_id.substring(0, 8) : '—'), level);
+      const productLabel = e.product_id ? (_productNames[e.product_id] || 'Product: ' + e.product_id.substring(0, 8)) : '';
+      return timelineItem(time, (e.event_type || 'event').replace(/_/g, ' ').toUpperCase() + (e.location ? ' — ' + e.location : ''), e.description || e.notes || productLabel || '—', level);
     }).join('')}
         </div>
       </div>

@@ -83,7 +83,10 @@ function renderContent() {
 
   const list = batches || [];
   const filtered = filter === 'all' ? list : list.filter(b => b.status === filter);
-  const statuses = ['all', 'created', 'shipped', 'in_transit', 'delivered', 'recalled'];
+  // Build statuses dynamically from actual data so no batches are hidden
+  const statusSet = new Set();
+  list.forEach(b => { if (b.status) statusSet.add(b.status); });
+  const statuses = ['all', ...['active', 'created', 'manufactured', 'shipped', 'in_transit', 'delivered', 'verified', 'recalled'].filter(s => statusSet.has(s)), ...[...statusSet].filter(s => !['active', 'created', 'manufactured', 'shipped', 'in_transit', 'delivered', 'verified', 'recalled'].includes(s))];
   const counts = {};
   statuses.forEach(s => { counts[s] = s === 'all' ? list.length : list.filter(b => b.status === s).length; });
 
@@ -116,7 +119,7 @@ function renderContent() {
                 <td class="sa-code">${(b.quantity || 0).toLocaleString()}</td>
                 <td>${b.origin_facility || '—'}</td>
                 <td style="color:var(--text-secondary)">${b.manufactured_date ? new Date(b.manufactured_date).toLocaleDateString('en-US') : '—'}</td>
-                <td><span class="sa-status-pill sa-pill-${b.status === 'delivered' ? 'green' : b.status === 'shipped' || b.status === 'in_transit' ? 'blue' : b.status === 'created' ? 'orange' : b.status === 'recalled' ? 'red' : 'orange'}">${b.status || 'created'}</span></td>
+                <td><span class="sa-status-pill sa-pill-${b.status === 'delivered' || b.status === 'completed' ? 'green' : b.status === 'shipped' || b.status === 'in_transit' ? 'blue' : b.status === 'active' || b.status === 'verified' ? 'green' : b.status === 'manufactured' ? 'purple' : b.status === 'recalled' || b.status === 'issue' ? 'red' : 'orange'}">${(b.status || 'created').replace(/_/g, ' ')}</span></td>
                 <td style="color:var(--text-secondary)">${b.created_at ? new Date(b.created_at).toLocaleDateString('en-US') : '—'}</td>
               </tr>
             `).join('')}
