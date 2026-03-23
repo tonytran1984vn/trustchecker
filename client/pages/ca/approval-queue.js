@@ -22,7 +22,7 @@ async function _load() {
     let res;
     if (gc?.approvals && gc._loadedAt && !_approvals) { res = gc.approvals; }
     else { res = await API.get('/org-admin/approvals'); }
-    _approvals = res.approvals || [];
+    _approvals = res?.approvals || (Array.isArray(res) ? res : []);
   } catch (e) { _approvals = []; }
   _loading = false;
   const el = document.getElementById('approval-queue-root');

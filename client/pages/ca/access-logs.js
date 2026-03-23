@@ -70,12 +70,12 @@ function renderContent() {
     const details = typeof l.details === 'string' ? (() => { try { return JSON.parse(l.details); } catch (e) { return {}; } })() : (l.details || {});
     const detailStr = Object.entries(details).slice(0, 2).map(([k, v]) => k + ': ' + v).join(', ') || '—';
     return `<tr>
-                <td><strong>${l.actor_id ? l.actor_id.substring(0, 8) : '—'}</strong></td>
+                <td><strong>${l.actor_name || (l.actor_id ? l.actor_id.substring(0, 8) : '—')}</strong></td>
                 <td><span class="sa-status-pill sa-pill-${l.action?.includes('FAIL') || l.action?.includes('DELETE') ? 'red' : l.action?.includes('CREATE') ? 'green' : 'blue'}">${(l.action || '').replace(/_/g, ' ')}</span></td>
                 <td>${l.entity_type || '—'}</td>
                 <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.78rem;color:var(--text-secondary)">${detailStr}</td>
                 <td class="sa-code">${l.ip_address || '—'}</td>
-                <td style="color:var(--text-secondary)">${timeAgo(l.created_at)}</td>
+                <td style="color:var(--text-secondary)">${timeAgo(l.timestamp || l.created_at)}</td>
               </tr>`;
   }).join('')}
           </tbody>

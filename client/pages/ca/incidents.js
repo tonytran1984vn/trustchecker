@@ -122,7 +122,7 @@ function renderContent() {
                 <td><strong class="sa-code">${i.incident_id || i.id?.substring(0, 12) || '—'}</strong></td>
                 <td>${i.title || i.description || '—'}</td>
                 <td><span class="sa-score sa-score-${i.severity === 'critical' ? 'danger' : i.severity === 'high' ? 'warning' : i.severity === 'medium' ? 'info' : 'low'}">${i.severity || 'medium'}</span></td>
-                <td>${i.assignee || i.assigned_to || '—'}</td>
+                <td>${i.assigned_username || i.assignee || (i.assigned_to ? i.assigned_to.slice(0,8) + '…' : '—')}</td>
                 <td>
                   <select onchange="window._incStatus('${i.id}', this.value)" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border-color,#334155);background:transparent;color:inherit;font-size:0.78rem;cursor:pointer">
                     ${['open', 'investigating', 'resolved', 'closed'].map(s => `<option value="${s}" ${i.status === s ? 'selected' : ''}>${s}</option>`).join('')}
