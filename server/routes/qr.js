@@ -866,11 +866,9 @@ router.get('/fraud-alerts', async (req, res) => {
 // ─── GET /api/qr/blockchain ─────────────────────────────────────────────────
 router.get('/blockchain', async (req, res) => {
     try {
-        // Set org context for RLS filtering
-        const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
-        if (orgId) db.setOrgContext(orgId);
-        const stats = await blockchainEngine.getStats();
-        const recent = await blockchainEngine.getRecent(20);
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId || null;
+        const stats = await blockchainEngine.getStats(orgId);
+        const recent = await blockchainEngine.getRecent(20, orgId);
         res.json({ stats, recent_seals: recent });
     } catch (err) {
         logger.error('Blockchain error:', err);
