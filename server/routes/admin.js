@@ -214,7 +214,7 @@ router.post('/users', async (req, res) => {
 
         await db
             .prepare(
-                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)'
             )
             .run(
                 uuidv4(),
@@ -222,7 +222,8 @@ router.post('/users', async (req, res) => {
                 'USER_CREATED',
                 'user',
                 id,
-                JSON.stringify({ email, role, created_by: req.user.email || req.user.username })
+                JSON.stringify({ email, role, created_by: req.user.email || req.user.username }),
+                req.ip || null
             );
 
         res.status(201).json({ id, username: displayName, email, role, company, message: 'User created successfully' });
@@ -253,7 +254,7 @@ router.put('/users/:id/role', async (req, res) => {
 
         await db
             .prepare(
-                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)'
             )
             .run(
                 uuidv4(),
@@ -261,7 +262,8 @@ router.put('/users/:id/role', async (req, res) => {
                 'USER_ROLE_CHANGED',
                 'user',
                 req.params.id,
-                JSON.stringify({ username: user.username, new_role: role })
+                JSON.stringify({ username: user.username, new_role: role }),
+                req.ip || null
             );
 
         res.json({ user_id: req.params.id, username: user.username, new_role: role });
@@ -285,7 +287,7 @@ router.put('/users/:id/status', async (req, res) => {
 
         await db
             .prepare(
-                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)'
             )
             .run(
                 uuidv4(),
@@ -293,7 +295,8 @@ router.put('/users/:id/status', async (req, res) => {
                 'USER_STATUS_CHANGED',
                 'user',
                 req.params.id,
-                JSON.stringify({ username: user.username, new_status: status })
+                JSON.stringify({ username: user.username, new_status: status }),
+                req.ip || null
             );
 
         res.json({ user_id: req.params.id, username: user.username, new_status: status });
@@ -339,8 +342,16 @@ router.delete('/users/:id', async (req, res) => {
         await db.run('UPDATE sessions SET revoked = true WHERE user_id = $1', [req.params.id]);
 
         await db.run(
-            'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
-            [uuidv4(), req.user.id, 'USER_DELETED', 'user', req.params.id, JSON.stringify({ username: user.username })]
+            'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [
+                uuidv4(),
+                req.user.id,
+                'USER_DELETED',
+                'user',
+                req.params.id,
+                JSON.stringify({ username: user.username }),
+                req.ip || null,
+            ]
         );
 
         res.json({ message: `User ${user.username} deactivated`, user_id: req.params.id, soft_deleted: true });
@@ -367,7 +378,7 @@ router.post('/users/:id/reset-password', authMiddleware, requirePermission('org:
 
         await db
             .prepare(
-                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)'
             )
             .run(
                 uuidv4(),
@@ -375,7 +386,8 @@ router.post('/users/:id/reset-password', authMiddleware, requirePermission('org:
                 'ADMIN_PASSWORD_RESET',
                 'user',
                 req.params.id,
-                JSON.stringify({ username: user.username })
+                JSON.stringify({ username: user.username }),
+                req.ip || null
             );
 
         res.json({ user_id: req.params.id, message: 'Password reset successfully' });
@@ -493,7 +505,7 @@ router.put('/settings', async (req, res) => {
 
         await db
             .prepare(
-                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)'
             )
             .run(
                 uuidv4(),
@@ -501,7 +513,8 @@ router.put('/settings', async (req, res) => {
                 'SYSTEM_SETTINGS',
                 'system',
                 'settings',
-                JSON.stringify({ ...sanitized, updated_at: new Date().toISOString(), updated_by: req.user.id })
+                JSON.stringify({ ...sanitized, updated_at: new Date().toISOString(), updated_by: req.user.id }),
+                req.ip || null
             );
 
         res.json({ message: 'System settings updated', settings: sanitized });
@@ -578,7 +591,7 @@ router.get('/metrics', async (req, res) => {
 
 async function getDBSize() {
     try {
-        const row = await db.get("SELECT pg_database_size(current_database()) / (1024*1024) as size_mb");
+        const row = await db.get('SELECT pg_database_size(current_database()) / (1024*1024) as size_mb');
         return Math.round((row?.size_mb || 0) * 100) / 100;
     } catch (e) {
         logger.warn('[admin] getDBSize failed:', e.message);

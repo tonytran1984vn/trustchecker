@@ -11,7 +11,7 @@ const db = require('../db');
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
     console.error('\n❌ FATAL: JWT_SECRET env var is required!');
-    console.error('   Generate one: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"\n');
+    console.error("   Generate one: node -e \"console.log(require('crypto').randomBytes(64).toString('hex'))\"\n");
     process.exit(1);
 }
 // JWT_SECRET is now required — enforced above
@@ -23,19 +23,47 @@ const LOCKOUT_MINUTES = 15;
 // v2.0 Role Hierarchy (L1-L5 Authority Map)
 const ROLE_HIERARCHY = {
     // L5: Platform Layer
-    super_admin: 5, platform_security: 5, data_gov_officer: 5,
-    global_risk_committee: 5, change_management_officer: 5, incident_response_lead: 5,
+    super_admin: 5,
+    platform_security: 5,
+    data_gov_officer: 5,
+    global_risk_committee: 5,
+    change_management_officer: 5,
+    incident_response_lead: 5,
     // L4: Global Governance
-    ggc_member: 4, risk_committee: 4, compliance_officer: 4, ivu_validator: 4,
+    ggc_member: 4,
+    risk_committee: 4,
+    compliance_officer: 4,
+    ivu_validator: 4,
     // L3: Org Governance
-    org_owner: 3, admin: 3, company_admin: 3, executive: 3, carbon_officer: 3, security_officer: 3,
+    org_owner: 3,
+    admin: 3,
+    company_admin: 3,
+    executive: 3,
+    carbon_officer: 3,
+    security_officer: 3,
     // L2: Operational
-    ops_manager: 2, risk_officer: 2, scm_analyst: 2, disclosure_officer: 2,
+    ops_manager: 2,
+    risk_officer: 2,
+    scm_analyst: 2,
+    disclosure_officer: 2,
     // L1: Technical Execution
-    developer: 1, blockchain_operator: 1, operator: 1, auditor: 1, viewer: 1,
-    data_steward: 1, legal_counsel: 1, board_observer: 1, supplier_contributor: 1,
-    esg_reporting_manager: 1, external_auditor: 1, financial_viewer: 1, public_verifier: 1,
-    internal_reviewer: 1, export_officer: 1, mgb_member: 1, ivu_registry_admin: 1,
+    developer: 1,
+    blockchain_operator: 1,
+    operator: 1,
+    auditor: 1,
+    viewer: 1,
+    data_steward: 1,
+    legal_counsel: 1,
+    board_observer: 1,
+    supplier_contributor: 1,
+    esg_reporting_manager: 1,
+    external_auditor: 1,
+    financial_viewer: 1,
+    public_verifier: 1,
+    internal_reviewer: 1,
+    export_officer: 1,
+    mgb_member: 1,
+    ivu_registry_admin: 1,
 };
 
 // ─── Middleware: Verify JWT ──────────────────────────────────────────────────
@@ -54,7 +82,8 @@ async function authMiddleware(req, res, next) {
         // Update session last_active (non-blocking — don't kill auth if this fails)
         if (decoded.session_id) {
             try {
-                await db.prepare("UPDATE sessions SET last_active = NOW() WHERE id = ? AND revoked = false")
+                await db
+                    .prepare('UPDATE sessions SET last_active = NOW() WHERE id = ? AND revoked = false')
                     .run(decoded.session_id);
             } catch (sessionErr) {
                 console.warn(`[Auth] Session update failed (non-critical): ${sessionErr.message}`);
@@ -105,18 +134,19 @@ async function generateTokenPair(user, sessionId, options = {}) {
         payload.orgSchema = user.orgSchema || user.org_schema || null;
     }
 
-    const accessToken = jwt.sign(
-        payload,
-        JWT_SECRET,
-        { expiresIn: JWT_EXPIRY, issuer: 'trustchecker', audience: 'trustchecker-users' }
-    );
+    const accessToken = jwt.sign(payload, JWT_SECRET, {
+        expiresIn: JWT_EXPIRY,
+        issuer: 'trustchecker',
+        audience: 'trustchecker-users',
+    });
 
     const refreshToken = crypto.randomBytes(48).toString('hex');
     const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
     const familyId = options?.familyId || uuidv4(); // ATK-08: token family tracking
     const expiresAt = new Date(Date.now() + REFRESH_EXPIRY_DAYS * 86400000).toISOString();
 
-    await db.prepare(`INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, family_id) VALUES (?, ?, ?, ?, ?)`)
+    await db
+        .prepare(`INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, family_id) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), user.id, refreshHash, expiresAt, familyId);
 
     return { accessToken, refreshToken };
@@ -126,12 +156,14 @@ async function generateTokenPair(user, sessionId, options = {}) {
 
 async function enrichUserWithOrg(user) {
     try {
-        const org = await db.prepare(
-            `SELECT o.id, o.name, o.slug, o.plan, o.schema_name, o.feature_flags
+        const org = await db
+            .prepare(
+                `SELECT o.id, o.name, o.slug, o.plan, o.schema_name, o.feature_flags
              FROM organizations o
              JOIN users u ON u.org_id = o.id
              WHERE u.id = ?`
-        ).get(user.id);
+            )
+            .get(user.id);
         if (org) {
             user.orgId = org.id;
             user.orgSlug = org.slug;
@@ -159,11 +191,15 @@ async function createSession(userId, req) {
     const deviceFingerprint = crypto.createHash('sha256').update(fpSource).digest('hex').substring(0, 16);
 
     try {
-        await db.prepare('INSERT INTO sessions (id, user_id, ip_address, user_agent, device_fingerprint) VALUES (?, ?, ?, ?, ?)')
+        await db
+            .prepare(
+                'INSERT INTO sessions (id, user_id, ip_address, user_agent, device_fingerprint) VALUES (?, ?, ?, ?, ?)'
+            )
             .run(sessionId, userId, ip, ua, deviceFingerprint);
     } catch (e) {
         // Fallback without device_fingerprint if column doesn't exist yet
-        await db.prepare('INSERT INTO sessions (id, user_id, ip_address, user_agent) VALUES (?, ?, ?, ?)')
+        await db
+            .prepare('INSERT INTO sessions (id, user_id, ip_address, user_agent) VALUES (?, ?, ?, ?)')
             .run(sessionId, userId, ip, ua);
     }
     return sessionId;
@@ -174,24 +210,33 @@ async function createSession(userId, req) {
 async function checkIPAnomaly(userId, currentIP) {
     try {
         // Get distinct IPs from last 30 sessions
-        const knownIPs = await db.all(
-            `SELECT ip_address FROM (SELECT DISTINCT ON (ip_address) ip_address, last_active FROM sessions WHERE user_id = ? AND revoked = false ORDER BY ip_address, last_active DESC) sub ORDER BY last_active DESC LIMIT 30`,
-            [userId]
-        ).catch(() => []);
+        const knownIPs = await db
+            .all(
+                `SELECT ip_address FROM (SELECT DISTINCT ON (ip_address) ip_address, last_active FROM sessions WHERE user_id = ? AND revoked = false ORDER BY ip_address, last_active DESC) sub ORDER BY last_active DESC LIMIT 30`,
+                [userId]
+            )
+            .catch(() => []);
         const knownSet = new Set(knownIPs.map(r => r.ip_address));
 
         if (knownSet.size === 0) return { anomaly: false, reason: 'first_login' };
         if (knownSet.has(currentIP)) return { anomaly: false, reason: 'known_ip' };
 
         // New IP detected — log it
+        const ipAddr = currentIP || 'unknown';
         await db.run(
-            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'NEW_IP_LOGIN', 'session', ?, ?)`,
-            [uuidv4(), userId, uuidv4(), JSON.stringify({
-                new_ip: currentIP,
-                known_ips: [...knownSet].slice(0, 5),
-                severity: 'warning',
-                message: 'Login from previously unseen IP address'
-            })]
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, 'NEW_IP_LOGIN', 'session', ?, ?, ?)`,
+            [
+                uuidv4(),
+                userId,
+                uuidv4(),
+                JSON.stringify({
+                    new_ip: currentIP,
+                    known_ips: [...knownSet].slice(0, 5),
+                    severity: 'warning',
+                    message: 'Login from previously unseen IP address',
+                }),
+                ipAddr,
+            ]
         );
 
         return { anomaly: true, reason: 'new_ip', ip: currentIP };
@@ -217,12 +262,18 @@ async function cleanupExpiredRoles(userId) {
             );
             // Audit log
             await db.run(
-                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'ROLE_EXPIRED', 'user', ?, ?)`,
-                [uuidv4(), 'system', userId, JSON.stringify({
-                    expired_roles: expired.map(r => r.name),
-                    count: expired.length,
-                    severity: 'info'
-                })]
+                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, 'ROLE_EXPIRED', 'user', ?, ?, ?)`,
+                [
+                    uuidv4(),
+                    'system',
+                    userId,
+                    JSON.stringify({
+                        expired_roles: expired.map(r => r.name),
+                        count: expired.length,
+                        severity: 'info',
+                    }),
+                    null,
+                ]
             );
         }
         return expired;
@@ -235,11 +286,22 @@ async function cleanupExpiredRoles(userId) {
 const { requirePermission, requireConstitutional, requirePlatformAdmin, requireOrgAdmin } = require('./rbac');
 
 module.exports = {
-    JWT_SECRET, JWT_EXPIRY, REFRESH_EXPIRY_DAYS, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES,
+    JWT_SECRET,
+    JWT_EXPIRY,
+    REFRESH_EXPIRY_DAYS,
+    MAX_FAILED_ATTEMPTS,
+    LOCKOUT_MINUTES,
     ROLE_HIERARCHY,
-    authMiddleware, requireRole,
-    requirePermission, requireConstitutional, requirePlatformAdmin, requireOrgAdmin,
-    generateTokenPair, enrichUserWithOrg, createSession,
+    authMiddleware,
+    requireRole,
+    requirePermission,
+    requireConstitutional,
+    requirePlatformAdmin,
+    requireOrgAdmin,
+    generateTokenPair,
+    enrichUserWithOrg,
+    createSession,
     // P3: Advanced Security
-    checkIPAnomaly, cleanupExpiredRoles,
+    checkIPAnomaly,
+    cleanupExpiredRoles,
 };

@@ -219,9 +219,17 @@ router.post('/policies/execute', requirePermission('compliance:manage'), async (
 
         await db
             .prepare(
-                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)'
             )
-            .run(uuidv4(), req.user.id, 'RETENTION_EXECUTED', 'system', 'retention', JSON.stringify({ results }));
+            .run(
+                uuidv4(),
+                req.user.id,
+                'RETENTION_EXECUTED',
+                'system',
+                'retention',
+                JSON.stringify({ results }),
+                req.ip || null
+            );
 
         res.json({ executed: results.length, results });
     } catch (e) {
@@ -318,7 +326,7 @@ router.get('/gdpr/export', async (req, res) => {
         try {
             await db
                 .prepare(
-                    'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+                    'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
                 )
                 .run(
                     uuidv4(),
@@ -327,7 +335,8 @@ router.get('/gdpr/export', async (req, res) => {
                     'user',
                     userId,
                     JSON.stringify({ records_exported: auditLog.length + scans.length + tickets.length }),
-                    orgId
+                    orgId,
+                    req.ip || null
                 );
         } catch (e) {
             logger.warn('[gdpr] audit log insert failed:', e.message);
@@ -383,7 +392,7 @@ router.delete('/gdpr/delete', async (req, res) => {
 
         await db
             .prepare(
-                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)'
             )
             .run(
                 uuidv4(),
@@ -391,7 +400,8 @@ router.delete('/gdpr/delete', async (req, res) => {
                 'GDPR_DELETION',
                 'user',
                 userId,
-                JSON.stringify({ anonymized: true, timestamp: new Date().toISOString() })
+                JSON.stringify({ anonymized: true, timestamp: new Date().toISOString() }),
+                req.ip || null
             );
 
         res.json({
@@ -448,7 +458,7 @@ router.post('/gdpr/consent', async (req, res) => {
 
         await db
             .prepare(
-                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, org_id, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
             )
             .run(
                 uuidv4(),
@@ -463,7 +473,8 @@ router.post('/gdpr/consent', async (req, res) => {
                     timestamp: new Date().toISOString(),
                     ip: req.ip,
                 }),
-                req.user.orgId
+                req.user.orgId,
+                req.ip || null
             );
 
         res.json({

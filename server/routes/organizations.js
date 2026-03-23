@@ -217,7 +217,7 @@ router.post('/', requireSuperAdmin(), async (req, res) => {
         // Audit
         await db
             .prepare(
-                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`
+                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)`
             )
             .run(
                 uuidv4(),
@@ -233,7 +233,8 @@ router.post('/', requireSuperAdmin(), async (req, res) => {
                     roles_provisioned: rolesProvisioned,
                     org_owner_email: owner_email,
                     org_owner_created: ownerCreated,
-                })
+                }),
+                req.ip || null
             );
 
         if (typeof db.save === 'function') await db.save();
@@ -277,7 +278,7 @@ router.put('/:id/plan', requireSuperAdmin(), async (req, res) => {
         // Audit
         await db
             .prepare(
-                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`
+                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)`
             )
             .run(
                 uuidv4(),
@@ -285,7 +286,8 @@ router.put('/:id/plan', requireSuperAdmin(), async (req, res) => {
                 'ORG_PLAN_CHANGED',
                 'organization',
                 req.params.id,
-                JSON.stringify({ old_plan: org.plan, new_plan: plan })
+                JSON.stringify({ old_plan: org.plan, new_plan: plan }),
+                req.ip || null
             );
 
         res.json({ message: 'Plan updated', org_id: req.params.id, plan });
@@ -312,7 +314,7 @@ router.delete('/:id', requireSuperAdmin(), async (req, res) => {
         // Audit
         await db
             .prepare(
-                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`
+                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)`
             )
             .run(
                 uuidv4(),
@@ -320,7 +322,8 @@ router.delete('/:id', requireSuperAdmin(), async (req, res) => {
                 'ORG_DEACTIVATED',
                 'organization',
                 req.params.id,
-                JSON.stringify({ name: org.name, slug: org.slug })
+                JSON.stringify({ name: org.name, slug: org.slug }),
+                req.ip || null
             );
 
         res.json({ message: 'Organization deactivated', org_id: req.params.id });
