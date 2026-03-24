@@ -33,19 +33,27 @@ function setupHealth(
     app.get('/api/health', async (req, res) => {
         const { cache } = require('../cache');
         const mem = process.memoryUsage();
+
+        // Fetch async stats concurrently to reduce latency
+        const [cacheStats, dlqDepth, partitionHealth] = await Promise.all([
+            cache.stats().catch(() => ({})),
+            dlq.depth().catch(() => 0),
+            partitionManager.checkHealth().catch(() => ({})),
+        ]);
+
         res.json({
             status: 'healthy',
             service: 'TrustChecker v9.4.0',
             api_version: 'v1',
             database: config.dbMode,
             redis: !!redis,
-            cache: await cache.stats(),
+            cache: cacheStats,
             queue: getQueueStats(),
             circuit_breakers: getAllBreakerStatus(),
             event_bus: eventBus.getStats(),
-            dlq: await dlq.depth(),
+            dlq: dlqDepth,
             slo: slo.getReport().status,
-            partitions: await partitionManager.checkHealth(),
+            partitions: partitionHealth,
             domain_registry: domainRegistry.getStats(),
             sagas: sagaOrchestrator.getStats(),
             query_store: queryStore.getStats(),

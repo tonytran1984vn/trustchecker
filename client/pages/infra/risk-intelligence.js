@@ -23,6 +23,12 @@ async function load() {
     }, 50);
 }
 function renderContent() {
+    const role = State.user?.role || '';
+    const riskRoles = ['risk_officer', 'risk_committee', 'executive', 'admin', 'superadmin'];
+    if (!riskRoles.includes(role)) {
+        return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)"><h3>Access Denied</h3><p>Risk Intelligence workspace is restricted to authorized risk and executive roles.</p></div></div>`;
+    }
+
     const m = D.mrm; const r = D.resilience; const s = D.sensitivity;
     if (!m?.model_id) return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('activity')} Risk Intelligence Infrastructure</h1></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${'<div class="infra-skeleton" style="min-height:120px"></div>'.repeat(4)}</div></div>`;
     return `
