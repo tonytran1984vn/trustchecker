@@ -508,13 +508,15 @@ function renderPrivilege() {
   // Recent role assignments
   const roleAssignments = (d.recent_role_assignments || []).slice(0, 15).map(a => {
     let det = {}; try { det = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {}; } catch (_) { }
+    const target = a.target_email || det.email || det.target_email || (a.action.includes('PENDING') ? a.actor_email : null) || '(self)';
+    const role = det.role || det.role_name || det.target_role || (det.role_ids ? det.role_ids[0] : '') || (a.action.includes('PENDING') ? 'pending' : '');
     return `
     <tr>
       <td style="font-size:0.68rem;color:var(--text-muted)">${timeAgo(a.timestamp || a.created_at)}</td>
       <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(a.action)}">${a.action}</span></td>
       <td style="font-size:0.72rem">${esc(a.actor_email || '—')}</td>
-      <td style="font-size:0.72rem">${esc(a.target_email || det.email || '—')}</td>
-      <td style="font-size:0.68rem;color:var(--text-muted)">${det.role || det.role_name || (det.role_ids ? det.role_ids[0] : '—')}</td>
+      <td style="font-size:0.72rem">${esc(target)}</td>
+      <td style="font-size:0.68rem;color:var(--text-muted)">${esc(role) || '—'}</td>
     </tr>`;
   }).join('');
 
@@ -676,15 +678,31 @@ function renderRiskMonitoring() {
 }
 
 // Activity Log content (sub-tab of Risk & Activity)
+function _govDetailFallback(action, det) {
+  const map = {
+    ORG_CREATED: 'Organization created',
+    RISK_MODEL_DEPLOY: 'Risk model deployed',
+    CARBON_MINT: 'Carbon credit minted',
+    USER_CREATED: det.username || 'New user',
+    ROLES_ASSIGNED: (det.role_ids || []).join(', ') || 'Roles updated',
+    HIGH_RISK_ROLE_PENDING: 'Pending approval',
+    HIGH_RISK_ROLE_APPROVED: 'Approved',
+    HIGH_RISK_ROLE_REJECTED: 'Rejected',
+    SCHEMA_CHANGE: 'Schema updated',
+    REGULATORY_EXPORT: 'Export completed',
+  };
+  return map[action] || Object.values(det).filter(v => typeof v === 'string' && v.length > 0 && v.length < 100)[0] || action.replace(/_/g, ' ').toLowerCase();
+}
 function renderActivityContent(d) {
   const govRows = (d.governance_actions || []).map(a => {
     let det = {}; try { det = typeof a.details === 'string' ? JSON.parse(a.details) : a.details || {}; } catch (_) { }
+    const detailText = det.email || det.role || det.justification || det.org_name || det.model_version || det.token_id || det.username || det.target_role || det.appointed_by || det.triggered_by || _govDetailFallback(a.action, det);
     return `
     <tr>
       <td style="font-size:0.72rem;color:var(--text-muted)">${timeAgo(a.timestamp || a.created_at)}</td>
       <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(a.action)}">${a.action}</span></td>
       <td style="font-size:0.72rem">${esc(a.actor_email || '—')}</td>
-      <td style="font-size:0.68rem;color:var(--text-muted);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${det.email || det.role || det.justification || '—'}</td>
+      <td style="font-size:0.68rem;color:var(--text-muted);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(detailText)}</td>
       <td style="font-size:0.68rem;color:${det.severity === 'critical' ? '#ef4444' : det.severity === 'high' ? '#f59e0b' : 'var(--text-muted)'}">${det.severity || 'normal'}</td>
     </tr>`;
   }).join('');
@@ -872,7 +890,7 @@ function renderFinancial() {
       const planName = toTitleCase((p.plan_name || 'N/A').replace(/_/g, ' '));
       const billingCycle = p.billing_cycle || 'monthly';
       const price = p.price_monthly || 0;
-      const sla = p.sla_level ? toTitleCase(p.sla_level) : '—';
+      const sla = p.sla_level ? toTitleCase(p.sla_level) : 'Standard';
       const period = data.period || new Date().toISOString().substring(0, 7);
       const allInvoices = data.invoices || [];
       const totalPaid = data.total_paid || allInvoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.amount || 0), 0);
