@@ -13,6 +13,7 @@ export function renderPage() {
   const d = _data;
   const fi = d.financial_impact;
   const sv = d.savings;
+  const cs = d.costs || {};
   const pf = d.performance;
 
   return `
@@ -26,7 +27,7 @@ export function renderPage() {
       <section class="exec-section">
         <h2 class="exec-section-title">${icon('creditCard', 20)} Financial Impact (YTD)</h2>
         <div class="exec-kpi-grid" style="grid-template-columns: repeat(4, 1fr)">
-          ${kpi('Estimated Fraud Loss', fmtMoney(fi.estimated_fraud_loss), fi.estimated_fraud_loss < 100000, 'alert')}
+          ${kpi('Estimated Fraud Loss', fmtMoney(fi.estimated_fraud_exposure || fi.estimated_fraud_loss), fi.estimated_fraud_exposure < 100000, 'alert')}
           ${kpi('Revenue Protected', fmtMoney(fi.revenue_protected), true, 'shield')}
           ${kpi('System ROI', fi.system_roi > 0 ? (fi.system_roi * 100).toFixed(0) + '%' : 'N/A', fi.system_roi > 1, 'barChart')}
           ${kpi('Cost per Verification', fi.cost_per_verification > 0 ? '$' + fi.cost_per_verification.toFixed(3) : 'N/A', true, 'zap')}
@@ -40,13 +41,13 @@ export function renderPage() {
           <div class="exec-card">
             <h3>Cost Savings</h3>
             <div class="exec-finance-list">
-              ${financeRow('Counterfeit Prevention', fmtMoney(sv.counterfeit_prevention), 'savings')}
-              ${financeRow('Recall Cost Reduction', fmtMoney(sv.recall_reduction), 'savings')}
-              ${financeRow('Manual Audit Elimination', fmtMoney(sv.audit_elimination), 'savings')}
+              ${financeRow('Incremental Detection Value', fmtMoney(sv.incremental_detection), 'savings')}
+              ${financeRow('Audit Automation Savings', fmtMoney(sv.audit_automation), 'savings')}
+              ${financeRow('Reduced Penalty Risk', fmtMoney(sv.reduced_penalty), 'savings')}
             </div>
             <div class="exec-finance-total">
-              <strong>Total Savings</strong>
-              <strong style="color:#22c55e">${fmtMoney(sv.total)}</strong>
+              <strong>Total Economic Benefit</strong>
+              <strong style="color:#22c55e">${fmtMoney(sv.total_economic_benefit)}</strong>
             </div>
           </div>
           <div class="exec-card">
