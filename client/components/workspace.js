@@ -17,8 +17,12 @@ import { injectMyActionsWidget } from './my-actions-widget.js';
  * @param {string} [config.activeTab] - Currently active tab id
  */
 export function renderWorkspace({ domain, title, subtitle, icon, tabs, activeTab }) {
-  // Determine which tab is active
-  const currentTab = activeTab || State._wsTab?.[domain] || tabs[0]?.id;
+  // Determine which tab is active (priority: explicit > in-memory > sessionStorage > first tab)
+  const storedTab = (() => { try { return sessionStorage.getItem(`ws_tab_${domain}`); } catch { return null; } })();
+  const currentTab = activeTab || State._wsTab?.[domain] || storedTab || tabs[0]?.id;
+  // Sync in-memory state with restored tab
+  if (!State._wsTab) State._wsTab = {};
+  if (!State._wsTab[domain] && currentTab) State._wsTab[domain] = currentTab;
 
   // Find active tab config
   const active = tabs.find(t => t.id === currentTab) || tabs[0];
@@ -92,5 +96,7 @@ export function renderWorkspace({ domain, title, subtitle, icon, tabs, activeTab
 window._wsSwitch = function (domain, tabId) {
   if (!State._wsTab) State._wsTab = {};
   State._wsTab[domain] = tabId;
+  // Persist to sessionStorage so tab survives page refresh
+  try { sessionStorage.setItem(`ws_tab_${domain}`, tabId); } catch {}
   render();
 };
