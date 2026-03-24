@@ -26,7 +26,15 @@ export async function injectMyActionsWidget(targetId) {
     const API = window.API;
     if (!API) return;
 
-    const data = await API.get('/carbon-actions/my').catch(() => ({ actions: [], total: 0 }));
+    // Cache for 60s to prevent redundant API calls during navigation
+    const cache = window._carbonActionsCache || {};
+    let data;
+    if (cache._data && cache._ts && (Date.now() - cache._ts < 60000)) {
+      data = cache._data;
+    } else {
+      data = await API.get('/carbon-actions/my').catch(() => ({ actions: [], total: 0 }));
+      window._carbonActionsCache = { _data: data, _ts: Date.now() };
+    }
     const actions = data.actions || [];
 
     if (actions.length === 0) {
@@ -98,6 +106,8 @@ window._myActionUpdate = async function (id, newStatus) {
     const API = window.API;
     if (!API) return;
     await API.patch(`/carbon-actions/${id}`, { status: newStatus });
+    // Bust cache so re-inject sees fresh data
+    window._carbonActionsCache = null;
     // Re-inject to refresh
     injectMyActionsWidget('my-actions-widget');
   } catch (e) {
