@@ -520,7 +520,7 @@ router.get('/report', requirePermission('compliance:manage'), async (req, res) =
                 right_to_deletion: 'compliant',
                 consent_management: consented > 0 ? 'compliant' : 'needs_attention',
                 data_retention: retentionPolicies.length > 0 ? 'compliant' : 'needs_attention',
-                encryption: 'compliant (bcrypt + SHA-256)',
+                encryption: 'compliant',
                 breach_notification: 'monitoring_active',
             },
         });

@@ -96,13 +96,17 @@ router.get('/', async (req, res) => {
  */
 router.get('/stats', async (req, res) => {
     try {
+        const orgId = req.user?.org_id || req.user?.orgId;
+        const orgWhere = orgId ? ' WHERE org_id = ?' : '';
+        const orgAnd = orgId ? ' AND org_id = ?' : '';
+        const orgParams = orgId ? [orgId] : [];
         const [total, today, byAction] = await Promise.all([
-            db.get(
-                `SELECT COUNT(*) as count FROM audit_log` + (req.orgId ? ` WHERE org_id = ?` : ''),
-                req.orgId ? [req.orgId] : []
+            db.get(`SELECT COUNT(*) as count FROM audit_log${orgWhere}`, orgParams),
+            db.get(`SELECT COUNT(*) as count FROM audit_log WHERE timestamp >= CURRENT_DATE${orgAnd}`, orgParams),
+            db.all(
+                `SELECT action, COUNT(*) as count FROM audit_log${orgWhere} GROUP BY action ORDER BY count DESC LIMIT 10`,
+                orgParams
             ),
-            db.get(`SELECT COUNT(*) as count FROM audit_log WHERE timestamp >= CURRENT_DATE`),
-            db.all(`SELECT action, COUNT(*) as count FROM audit_log GROUP BY action ORDER BY count DESC LIMIT 10`),
         ]);
 
         res.json({

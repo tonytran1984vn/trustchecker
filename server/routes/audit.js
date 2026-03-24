@@ -38,26 +38,25 @@ router.get('/verify-chain', requireOrgAdmin(), async (req, res) => {
 });
 
 // ─── GET /stats — Audit log statistics ──────────────────────────────────────
-router.get('/stats', requireOrgAdmin(), async (req, res) => {
+router.get('/stats', async (req, res) => {
     try {
-        const total = await db.get(
-            'SELECT COUNT(*) as count FROM audit_log' + (req.orgId ? ' WHERE org_id = ?' : ''),
-            req.orgId ? [req.orgId] : []
-        );
+        const orgId = req.user?.org_id || req.user?.orgId;
+        const orgWhere = orgId ? ' WHERE org_id = ?' : '';
+        const orgAnd = orgId ? ' AND org_id = ?' : '';
+        const orgParams = orgId ? [orgId] : [];
+        const total = await db.get(`SELECT COUNT(*) as count FROM audit_log${orgWhere}`, orgParams);
         const hashed = await db.get(
-            'SELECT COUNT(*) as count FROM audit_log WHERE entry_hash IS NOT NULL' +
-                (req.orgId ? ' AND org_id = ?' : ''),
-            req.orgId ? [req.orgId] : []
+            `SELECT COUNT(*) as count FROM audit_log WHERE entry_hash IS NOT NULL${orgAnd}`,
+            orgParams
         );
         const recent = await db.all(
-            'SELECT action, COUNT(*) as count FROM audit_log' +
-                (req.orgId ? ' WHERE org_id = ?' : '') +
-                ' GROUP BY action ORDER BY count DESC LIMIT 20',
-            req.orgId ? [req.orgId] : []
+            `SELECT action, COUNT(*) as count FROM audit_log${orgWhere} GROUP BY action ORDER BY count DESC LIMIT 20`,
+            orgParams
         );
 
         res.json({
             total_entries: total?.count || 0,
+            total: total?.count || 0,
             hashed_entries: hashed?.count || 0,
             hash_coverage: total?.count > 0 ? Math.round((hashed?.count / total?.count) * 100) : 0,
             top_actions: recent,

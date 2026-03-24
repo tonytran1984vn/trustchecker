@@ -12,6 +12,24 @@ const { withTransaction } = require('../middleware/transaction');
 const logger = require('../lib/logger');
 router.use(authMiddleware);
 
+// Workspace isolation: only risk-related roles may access /api/risk-graph/*
+const RISK_ALLOWED_ROLES = new Set([
+    'risk_officer',
+    'risk_committee',
+    'super_admin',
+    'platform_security',
+    'executive',
+    'org_owner',
+    'company_admin',
+    'admin',
+]);
+router.use((req, res, next) => {
+    if (!RISK_ALLOWED_ROLES.has(req.user?.role)) {
+        return res.status(403).json({ error: 'Access denied: risk workspace restricted' });
+    }
+    next();
+});
+
 // GET /behavior — Behavioral risk analysis
 router.get('/behavior', cacheMiddleware(120), async (req, res) => {
     try {
