@@ -449,7 +449,8 @@ class PrismaBackend {
                 const ctx = safeGetContext();
                 orgId = ctx.orgId || '';
             }
-            await client.query(orgId ? 'SET app.current_org = $1' : "SET app.current_org = ''", orgId ? [orgId] : []);
+            // set_config() supports parameterized queries (SET doesn't with raw pg)
+            await client.query("SELECT set_config('app.current_org', $1, true)", [orgId || '']);
 
             // Run all queries sequentially on same connection (fast: ~10ms each)
             const results = [];
