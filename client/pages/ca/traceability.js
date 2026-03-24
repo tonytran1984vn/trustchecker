@@ -297,7 +297,7 @@ async function load() {
       [evRes, bRes, pRes] = await Promise.all([
         API.get('/scm/events?limit=500').catch(() => ({ events: [] })),
         API.get('/scm/batches?limit=20').catch(() => ({ batches: [] })),
-        API.get('/scm/products?limit=200').catch(() => ({ products: [] })),
+        API.get('/products?limit=200').catch(() => ({ products: [] })),
       ]);
     }
     events = Array.isArray(evRes) ? evRes : (evRes.events || []);
