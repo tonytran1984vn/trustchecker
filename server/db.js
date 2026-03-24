@@ -433,6 +433,46 @@ class PrismaBackend {
         });
     }
 
+    /**
+     * Run multiple queries on a SINGLE raw PG connection (bypasses Prisma overhead).
+     * Best for read-heavy analytics endpoints where _withRLS() overhead is the bottleneck.
+     * Still sets RLS context via app.current_org.
+     * @param {Array<{sql: string, params?: any[]}>} queries
+     * @param {string} [orgId] - Optional org_id for RLS context
+     * @returns {Promise<Array<row[]>>}
+     */
+    async rawBatch(queries, orgId) {
+        const client = await this._pool.connect();
+        try {
+            // Set RLS context
+            if (!orgId) {
+                const ctx = safeGetContext();
+                orgId = ctx.orgId || '';
+            }
+            await client.query(orgId ? 'SET app.current_org = $1' : "SET app.current_org = ''", orgId ? [orgId] : []);
+
+            // Run all queries sequentially on same connection (fast: ~10ms each)
+            const results = [];
+            for (const q of queries) {
+                const sql = this._translateSQL(q.sql);
+                if (!sql) {
+                    results.push([]);
+                    continue;
+                }
+                try {
+                    const r = await client.query(sql, q.params || []);
+                    results.push(r.rows.map(row => this._convert(row)));
+                } catch (e) {
+                    logger.warn('rawBatch query error', { error: e.message, sql: (q.sql || '').slice(0, 100) });
+                    results.push([]);
+                }
+            }
+            return results;
+        } finally {
+            client.release();
+        }
+    }
+
     exec() {
         /* no-op: Prisma manages schema via migrations */
     }

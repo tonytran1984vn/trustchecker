@@ -351,9 +351,9 @@ router.get('/risk-analytics', cacheMiddleware(120), async (req, res) => {
                   },
               ];
 
-        // ── Single connection, all queries in parallel ──
+        // ── Single raw PG connection, sequential queries (bypasses Prisma overhead) ──
         const [suspRows, regionRows, catRows, patternRows, benchRows] = await db
-            .allBatch(queries)
+            .rawBatch(queries, orgId)
             .catch(() => [[], [], [], [], []]);
 
         // ── Process Suspicious Organizations ──
