@@ -12,6 +12,7 @@ let events = null, batches = null, loading = false, activeTab = 'timeline';
 let _selectedBatch = 'all'; // batch filter for geo view
 let _mapInstance = null;
 let _mapLayers = [];
+let _productNames = {};
 
 // ═══ Known coordinates (fast lookup, no network needed) ═══
 const GEO_COORDS = {
@@ -313,7 +314,7 @@ function renderContent() {
   if (loading && !events) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Traceability...</div></div>`;
 
   // Build product name lookup from batches + cached products
-  const _productNames = {};
+  _productNames = {};
   (batches || []).forEach(b => { if (b.product_id && b.product_name) _productNames[b.product_id] = b.product_name; });
   (window._traceProducts || []).forEach(p => { if (p.id && p.name) _productNames[p.id] = p.name; });
   ((typeof State !== 'undefined' && State.products) || window._caOpsCache?.products?.products || []).forEach(p => { if (p.id && p.name) _productNames[p.id] = p.name; });
