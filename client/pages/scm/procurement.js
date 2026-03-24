@@ -32,7 +32,7 @@ export function renderPage() {
 
       <div class="sa-metrics-row" style="margin-bottom:1.5rem">
         ${m('Active POs', orders.length.toString(), `${pending} pending approval`, 'blue', 'clipboard')}
-        ${m('MTD Spend', '$' + Math.round(totalSpend / 1000) + 'K', 'from DB', 'green', 'creditCard')}
+        ${m('MTD Spend', '$' + Math.round(totalSpend / 1000) + 'K', orders.length + ' purchase orders', 'green', 'creditCard')}
         ${m('On-Time Delivery', '94.2%', 'Target: >95%', 'orange', 'clock')}
         ${m('Active Contracts', CONTRACTS.length.toString(), '$2.78M annual value', 'green', 'scroll')}
       </div>

@@ -18,9 +18,10 @@ export function renderPage() {
 
   const batches = prodCache.batches?.batches || [];
   const batchCount = dashCache.total_batches ?? batches.length;
-  const activeBatches = dashCache.active_shipments ?? batches.filter(b => b.status === 'active').length;
+  const activeBatches = batches.filter(b => b.status === 'active').length || dashCache.active_batches || 0;
   const transitBatches = dashCache.active_shipments ?? batches.filter(b => b.status === 'in_transit').length;
   const shipments = whCache.shipments?.shipments || [];
+  const totalShipments = dashCache.total_shipments ?? shipments.length;
   const pendingShipments = dashCache.active_shipments ?? shipments.filter(s => s.status === 'pending' || s.status === 'in_transit').length;
   const openIncidents = dashCache.open_leaks ?? (incCache.openCases?.incidents || monCache.openCases?.incidents || []).length;
   const scans = monCache.scanHistory?.scans || [];
@@ -53,7 +54,7 @@ export function renderPage() {
       <!-- ── Metrics Row ───────────────────────────────────── -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:2rem">
         ${metricCard(icon('products', 22, ACCENT), 'Total Batches', batchCount, `${activeBatches} active`, ACCENT)}
-        ${metricCard(icon('network', 22, '#ef4444'), 'In Transit', transitBatches, `${shipments.length} total shipments`, '#ef4444')}
+        ${metricCard(icon('network', 22, '#ef4444'), 'In Transit', transitBatches, `${totalShipments} total shipments`, '#ef4444')}
         ${metricCard(icon('clock', 22, '#6366f1'), 'Pending Transfers', pendingShipments, pendingShipments > 3 ? '↗ Above average' : 'Normal', '#6366f1')}
         ${metricCard(icon('alertTriangle', 22, '#ef4444'), 'Open Incidents', openIncidents, openIncidents > 0 ? 'Requires attention' : 'All clear ✓', openIncidents > 0 ? '#ef4444' : '#22c55e')}
         ${metricCard(icon('search', 22, '#0ea5e9'), 'Scan Events', scanCount, `${anomalyCount} anomalies`, '#0ea5e9')}
