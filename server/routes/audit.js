@@ -45,10 +45,15 @@ router.get('/stats', async (req, res) => {
         const orgAnd = orgId ? ' AND org_id = ?' : '';
         const orgParams = orgId ? [orgId] : [];
         const total = await db.get(`SELECT COUNT(*) as count FROM audit_log${orgWhere}`, orgParams);
-        const hashed = await db.get(
-            `SELECT COUNT(*) as count FROM audit_log WHERE entry_hash IS NOT NULL${orgAnd}`,
-            orgParams
-        );
+        let hashed = { count: 0 };
+        try {
+            hashed = await db.get(
+                `SELECT COUNT(*) as count FROM audit_log WHERE entry_hash IS NOT NULL${orgAnd}`,
+                orgParams
+            );
+        } catch (_) {
+            /* entry_hash column may not exist */
+        }
         const recent = await db.all(
             `SELECT action, COUNT(*) as count FROM audit_log${orgWhere} GROUP BY action ORDER BY count DESC LIMIT 20`,
             orgParams
