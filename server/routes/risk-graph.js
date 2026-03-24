@@ -308,183 +308,53 @@ router.get('/fraud-feed', async (req, res) => {
 router.get('/risk-analytics', cacheMiddleware(120), async (req, res) => {
     try {
         const orgId = req.user?.org_id || req.user?.orgId || null;
-        const orgFilterProduct = orgId ? ' AND p.org_id = ?' : '';
-        const orgParamsProduct = orgId ? [orgId] : [];
 
-        // ── Run ALL independent queries in parallel ──
-        const [suspRows, regionRows, catRows, patternRows, benchRows] = await Promise.all([
-            // Suspicious Organizations (Cases tab) — scoped to org
-            orgId
-                ? db
-                      .all(
-                          `
-                SELECT o.id, o.name, o.slug, o.plan, o.status as org_status,
-                       COUNT(fa.id) as fraud_count,
-                       SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count,
-                       SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count,
-                       AVG(CASE WHEN se.fraud_score IS NOT NULL THEN se.fraud_score ELSE 0 END) as avg_fraud_score,
-                       COUNT(DISTINCT fa.alert_type) as pattern_types
-                FROM organizations o
-                LEFT JOIN users u2 ON u2.org_id = o.id
-                LEFT JOIN products p ON p.registered_by = u2.id
-                LEFT JOIN fraud_alerts fa ON fa.product_id = p.id
-                LEFT JOIN scan_events se ON se.product_id = p.id AND se.result IN ('suspicious','failed')
-                WHERE o.id = ?
-                GROUP BY o.id, o.name, o.slug, o.plan, o.status
-                HAVING COUNT(fa.id) > 0
-                ORDER BY fraud_count DESC
-                LIMIT 20
-              `,
-                          [orgId]
-                      )
-                      .catch(() => [])
-                : db
-                      .all(
-                          `
-                SELECT o.id, o.name, o.slug, o.plan, o.status as org_status,
-                       COUNT(fa.id) as fraud_count,
-                       SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count,
-                       SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count,
-                       0 as avg_fraud_score,
-                       COUNT(DISTINCT fa.alert_type) as pattern_types
-                FROM organizations o
-                LEFT JOIN fraud_alerts fa ON fa.org_id = o.id
-                GROUP BY o.id, o.name, o.slug, o.plan, o.status
-                HAVING COUNT(fa.id) > 0
-                ORDER BY fraud_count DESC
-                LIMIT 20
-              `
-                      )
-                      .catch(() => []),
+        // ── Build query list based on org scope ──
+        const queries = orgId
+            ? [
+                  {
+                      sql: `SELECT o.id, o.name, o.slug, o.plan, o.status as org_status, COUNT(fa.id) as fraud_count, SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count, SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count, AVG(CASE WHEN se.fraud_score IS NOT NULL THEN se.fraud_score ELSE 0 END) as avg_fraud_score, COUNT(DISTINCT fa.alert_type) as pattern_types FROM organizations o LEFT JOIN users u2 ON u2.org_id = o.id LEFT JOIN products p ON p.registered_by = u2.id LEFT JOIN fraud_alerts fa ON fa.product_id = p.id LEFT JOIN scan_events se ON se.product_id = p.id AND se.result IN ('suspicious','failed') WHERE o.id = $1 GROUP BY o.id, o.name, o.slug, o.plan, o.status HAVING COUNT(fa.id) > 0 ORDER BY fraud_count DESC LIMIT 20`,
+                      params: [orgId],
+                  },
+                  {
+                      sql: `SELECT se.geo_country, COUNT(*) as total, SUM(CASE WHEN se.result IN ('suspicious','failed') THEN 1 ELSE 0 END) as risky FROM scan_events se LEFT JOIN products p ON se.product_id = p.id WHERE se.geo_country IS NOT NULL AND p.org_id = $1 GROUP BY se.geo_country ORDER BY risky DESC LIMIT 20`,
+                      params: [orgId],
+                  },
+                  {
+                      sql: `SELECT p.category, COUNT(fa.id) as fraud_count, 0 as scan_count FROM products p LEFT JOIN fraud_alerts fa ON fa.product_id = p.id WHERE p.category IS NOT NULL AND p.org_id = $1 GROUP BY p.category ORDER BY fraud_count DESC LIMIT 10`,
+                      params: [orgId],
+                  },
+                  {
+                      sql: `SELECT fa.alert_type, COUNT(*) as incidents, SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical, SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count FROM fraud_alerts fa LEFT JOIN products p ON fa.product_id = p.id WHERE p.org_id = $1 GROUP BY fa.alert_type ORDER BY incidents DESC LIMIT 15`,
+                      params: [orgId],
+                  },
+                  {
+                      sql: `SELECT o.name, o.slug, COUNT(DISTINCT se.id) as scan_count, SUM(CASE WHEN se.result IN ('suspicious','failed') THEN 1 ELSE 0 END) as bad_scans, COUNT(DISTINCT fa.id) as fraud_count, AVG(ts.score) as avg_trust FROM organizations o LEFT JOIN users u3 ON u3.org_id = o.id LEFT JOIN products p ON p.registered_by = u3.id LEFT JOIN scan_events se ON se.product_id = p.id LEFT JOIN fraud_alerts fa ON fa.product_id = p.id LEFT JOIN trust_scores ts ON ts.product_id = p.id WHERE o.id = $1 GROUP BY o.name, o.slug ORDER BY fraud_count DESC LIMIT 15`,
+                      params: [orgId],
+                  },
+              ]
+            : [
+                  {
+                      sql: `SELECT o.id, o.name, o.slug, o.plan, o.status as org_status, COUNT(fa.id) as fraud_count, SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count, SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical_count, 0 as avg_fraud_score, COUNT(DISTINCT fa.alert_type) as pattern_types FROM organizations o LEFT JOIN fraud_alerts fa ON fa.org_id = o.id GROUP BY o.id, o.name, o.slug, o.plan, o.status HAVING COUNT(fa.id) > 0 ORDER BY fraud_count DESC LIMIT 20`,
+                  },
+                  {
+                      sql: `SELECT geo_country, COUNT(*) as total, SUM(CASE WHEN result IN ('suspicious','failed') THEN 1 ELSE 0 END) as risky FROM scan_events WHERE geo_country IS NOT NULL AND scanned_at > NOW() - INTERVAL '90 days' GROUP BY geo_country ORDER BY risky DESC LIMIT 20`,
+                  },
+                  {
+                      sql: `SELECT p.category, COUNT(fa.id) as fraud_count, 0 as scan_count FROM products p LEFT JOIN fraud_alerts fa ON fa.product_id = p.id WHERE p.category IS NOT NULL GROUP BY p.category ORDER BY fraud_count DESC LIMIT 10`,
+                  },
+                  {
+                      sql: `SELECT alert_type, COUNT(*) as incidents, SUM(CASE WHEN severity='critical' THEN 1 ELSE 0 END) as critical, SUM(CASE WHEN status='open' THEN 1 ELSE 0 END) as open_count FROM fraud_alerts GROUP BY alert_type ORDER BY incidents DESC LIMIT 15`,
+                  },
+                  {
+                      sql: `WITH scan_agg AS (SELECT p.org_id, COUNT(se.id) as scan_count, COUNT(CASE WHEN se.result IN ('suspicious','failed') THEN 1 END) as bad_scans FROM scan_events se JOIN products p ON se.product_id = p.id WHERE se.scanned_at > NOW() - INTERVAL '90 days' GROUP BY p.org_id), fraud_agg AS (SELECT org_id, COUNT(id) as fraud_count FROM fraud_alerts GROUP BY org_id), trust_agg AS (SELECT org_id, AVG(score) as avg_trust FROM trust_scores GROUP BY org_id) SELECT o.name, o.slug, COALESCE(sa.scan_count,0) as scan_count, COALESCE(sa.bad_scans,0) as bad_scans, COALESCE(fa.fraud_count,0) as fraud_count, ta.avg_trust FROM organizations o LEFT JOIN scan_agg sa ON sa.org_id = o.id LEFT JOIN fraud_agg fa ON fa.org_id = o.id LEFT JOIN trust_agg ta ON ta.org_id = o.id WHERE o.status = 'active' ORDER BY fraud_count DESC LIMIT 15`,
+                  },
+              ];
 
-            // Risk by Region (Analytics tab) — scoped via product→org
-            orgId
-                ? db
-                      .all(
-                          `
-                SELECT se.geo_country, COUNT(*) as total,
-                       SUM(CASE WHEN se.result IN ('suspicious','failed') THEN 1 ELSE 0 END) as risky
-                FROM scan_events se
-                LEFT JOIN products p ON se.product_id = p.id
-                WHERE se.geo_country IS NOT NULL AND p.org_id = ?
-                GROUP BY se.geo_country ORDER BY risky DESC LIMIT 20
-              `,
-                          [orgId]
-                      )
-                      .catch(() => [])
-                : db
-                      .all(
-                          `
-                SELECT geo_country, COUNT(*) as total,
-                       SUM(CASE WHEN result IN ('suspicious','failed') THEN 1 ELSE 0 END) as risky
-                FROM scan_events WHERE geo_country IS NOT NULL AND scanned_at > NOW() - INTERVAL '90 days'
-                GROUP BY geo_country ORDER BY risky DESC LIMIT 20
-              `
-                      )
-                      .catch(() => []),
-
-            // Risk by Industry / Category — scoped via product→org
-            orgId
-                ? db
-                      .all(
-                          `
-                SELECT p.category, COUNT(fa.id) as fraud_count, 0 as scan_count
-                FROM products p
-                LEFT JOIN fraud_alerts fa ON fa.product_id = p.id
-                WHERE p.category IS NOT NULL AND p.org_id = ?
-                GROUP BY p.category ORDER BY fraud_count DESC LIMIT 10
-              `,
-                          [orgId]
-                      )
-                      .catch(() => [])
-                : db
-                      .all(
-                          `
-                SELECT p.category, COUNT(fa.id) as fraud_count, 0 as scan_count
-                FROM products p
-                LEFT JOIN fraud_alerts fa ON fa.product_id = p.id
-                WHERE p.category IS NOT NULL
-                GROUP BY p.category ORDER BY fraud_count DESC LIMIT 10
-              `
-                      )
-                      .catch(() => []),
-
-            // Fraud Pattern Clustering — scoped via product→org
-            orgId
-                ? db
-                      .all(
-                          `
-                SELECT fa.alert_type, COUNT(*) as incidents,
-                       SUM(CASE WHEN fa.severity='critical' THEN 1 ELSE 0 END) as critical,
-                       SUM(CASE WHEN fa.status='open' THEN 1 ELSE 0 END) as open_count
-                FROM fraud_alerts fa
-                LEFT JOIN products p ON fa.product_id = p.id
-                WHERE p.org_id = ?
-                GROUP BY fa.alert_type ORDER BY incidents DESC LIMIT 15
-              `,
-                          [orgId]
-                      )
-                      .catch(() => [])
-                : db
-                      .all(
-                          `
-                SELECT alert_type, COUNT(*) as incidents,
-                       SUM(CASE WHEN severity='critical' THEN 1 ELSE 0 END) as critical,
-                       SUM(CASE WHEN status='open' THEN 1 ELSE 0 END) as open_count
-                FROM fraud_alerts
-                GROUP BY alert_type ORDER BY incidents DESC LIMIT 15
-              `
-                      )
-                      .catch(() => []),
-
-            // Org Benchmark Heatmap — scoped to own org
-            orgId
-                ? db
-                      .all(
-                          `
-                SELECT o.name, o.slug,
-                       COUNT(DISTINCT se.id) as scan_count,
-                       SUM(CASE WHEN se.result IN ('suspicious','failed') THEN 1 ELSE 0 END) as bad_scans,
-                       COUNT(DISTINCT fa.id) as fraud_count,
-                       AVG(ts.score) as avg_trust
-                FROM organizations o
-                LEFT JOIN users u3 ON u3.org_id = o.id
-                LEFT JOIN products p ON p.registered_by = u3.id
-                LEFT JOIN scan_events se ON se.product_id = p.id
-                LEFT JOIN fraud_alerts fa ON fa.product_id = p.id
-                LEFT JOIN trust_scores ts ON ts.product_id = p.id
-                WHERE o.id = ?
-                GROUP BY o.name, o.slug
-                ORDER BY fraud_count DESC
-                LIMIT 15
-              `,
-                          [orgId]
-                      )
-                      .catch(() => [])
-                : db
-                      .all(
-                          `WITH scan_agg AS (
-                            SELECT p.org_id, COUNT(se.id) as scan_count,
-                                   COUNT(CASE WHEN se.result IN ('suspicious','failed') THEN 1 END) as bad_scans
-                            FROM scan_events se JOIN products p ON se.product_id = p.id
-                            WHERE se.scanned_at > NOW() - INTERVAL '90 days' GROUP BY p.org_id
-                          ),
-                          fraud_agg AS (SELECT org_id, COUNT(id) as fraud_count FROM fraud_alerts GROUP BY org_id),
-                          trust_agg AS (SELECT org_id, AVG(score) as avg_trust FROM trust_scores GROUP BY org_id)
-                          SELECT o.name, o.slug,
-                            COALESCE(sa.scan_count,0) as scan_count,
-                            COALESCE(sa.bad_scans,0) as bad_scans,
-                            COALESCE(fa.fraud_count,0) as fraud_count,
-                            ta.avg_trust
-                          FROM organizations o
-                          LEFT JOIN scan_agg sa ON sa.org_id = o.id
-                          LEFT JOIN fraud_agg fa ON fa.org_id = o.id
-                          LEFT JOIN trust_agg ta ON ta.org_id = o.id
-                          WHERE o.status = 'active'
-                          ORDER BY fraud_count DESC LIMIT 15`
-                      )
-                      .catch(() => []),
-        ]);
+        // ── Single connection, all queries in parallel ──
+        const [suspRows, regionRows, catRows, patternRows, benchRows] = await db
+            .allBatch(queries)
+            .catch(() => [[], [], [], [], []]);
 
         // ── Process Suspicious Organizations ──
         const suspiciousOrgs = suspRows.map(t => ({
