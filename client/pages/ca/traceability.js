@@ -284,7 +284,10 @@ window._caTraceTab = (t) => {
 async function load() {
   if (loading) return; loading = true;
   try {
-    if (window._caOpsReady) { try { await window._caOpsReady; } catch { } }
+    if (window._caOpsReady) {
+      try { await Promise.race([window._caOpsReady, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000))]); }
+      catch { /* ops cache unavailable for this role — fall through to direct API fetch */ }
+    }
     const oc = window._caOpsCache;
     let evRes, bRes, pRes;
     if (oc?.events && oc?.batches && oc._loadedAt && !events) {

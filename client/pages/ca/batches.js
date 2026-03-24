@@ -66,7 +66,7 @@ export function renderPage() {
 async function load() {
   if (loading) return; loading = true;
   try {
-    if (window._caOpsReady) { try { await window._caOpsReady; } catch { } }
+    if (window._caOpsReady) { try { await Promise.race([window._caOpsReady, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000))]); } catch { } }
     const oc = window._caOpsCache;
     let res;
     if (oc?.batches && oc._loadedAt && !batches) { res = oc.batches; }
