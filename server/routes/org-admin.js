@@ -2155,6 +2155,35 @@ router.get('/owner/compliance', requireOrgOwner(), async (req, res) => {
 // All queries scoped by org_id
 // ═════════════════════════════════════════════════════════════════════════════
 
+// ─── CCS Response Cache (60s TTL per org per endpoint) ───────────────────────
+const _ccsCache = new Map();
+const CCS_CACHE_TTL = 60_000; // 60 seconds
+
+function ccsGet(orgId, key) {
+    const k = `${orgId}:${key}`;
+    const entry = _ccsCache.get(k);
+    if (entry && Date.now() - entry.ts < CCS_CACHE_TTL) return entry.data;
+    return null;
+}
+
+function ccsSet(orgId, key, data) {
+    const k = `${orgId}:${key}`;
+    _ccsCache.set(k, { data, ts: Date.now() });
+    // Evict stale entries periodically (keep map small)
+    if (_ccsCache.size > 500) {
+        const now = Date.now();
+        for (const [ek, ev] of _ccsCache) {
+            if (now - ev.ts > CCS_CACHE_TTL * 2) _ccsCache.delete(ek);
+        }
+    }
+}
+
+function ccsClearOrg(orgId) {
+    for (const k of _ccsCache.keys()) {
+        if (k.startsWith(orgId + ':')) _ccsCache.delete(k);
+    }
+}
+
 function requireExecutiveAccess() {
     return (req, res, next) => {
         if (!['org_owner', 'super_admin', 'executive', 'company_admin'].includes(req.user.role)) {
@@ -2168,6 +2197,8 @@ function requireExecutiveAccess() {
 router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => {
     try {
         const tid = req.orgId;
+        const cached = ccsGet(tid, 'exposure');
+        if (cached) return res.json(cached);
 
         const [
             productStats,
@@ -2356,7 +2387,7 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         const faCritical = parseInt(fa.critical) || 0;
         const faHigh = parseInt(fa.high) || 0;
 
-        res.json({
+        const result = {
             exposure,
             scenarios,
             products: {
@@ -2408,7 +2439,9 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             },
             // Multi-BU (Phase 2) — only present when bu_config exists
             ...(perBU ? { per_bu: perBU, group_aggregated: groupAggregated } : {}),
-        });
+        };
+        ccsSet(tid, 'exposure', result);
+        res.json(result);
     } catch (err) {
         logger.error('[CCS] Exposure error:', err);
         res.status(500).json({ error: 'Failed to load capital exposure data' });
@@ -2420,6 +2453,9 @@ router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
     try {
         const tid = req.orgId;
         const isFullRange = req.query.range === 'full';
+        const cacheKey = isFullRange ? 'trends-full' : 'trends';
+        const cached = ccsGet(tid, cacheKey);
+        if (cached) return res.json(cached);
         const weekInterval = isFullRange ? '52 weeks' : '12 weeks';
 
         const weeks = await db.all(
@@ -2537,6 +2573,7 @@ router.get('/owner/ccs/trends', requireExecutiveAccess(), async (req, res) => {
             }
         }
 
+        ccsSet(tid, cacheKey, result);
         res.json(result);
     } catch (err) {
         logger.error('[CCS] Trends error:', err);
@@ -2670,6 +2707,8 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
 router.get('/owner/ccs/alerts', requireExecutiveAccess(), async (req, res) => {
     try {
         const tid = req.orgId;
+        const cached = ccsGet(tid, 'alerts');
+        if (cached) return res.json(cached);
         const alerts = [];
 
         // 1. Critical fraud alerts (unresolved)
@@ -2766,7 +2805,9 @@ router.get('/owner/ccs/alerts', requireExecutiveAccess(), async (req, res) => {
         const sev = { critical: 0, high: 1, medium: 2, low: 3 };
         alerts.sort((a, b) => (sev[a.severity] ?? 9) - (sev[b.severity] ?? 9));
 
-        res.json({ alerts, total: alerts.length });
+        const result = { alerts, total: alerts.length };
+        ccsSet(tid, 'alerts', result);
+        res.json(result);
     } catch (err) {
         logger.error('[CCS] Alerts error:', err);
         res.status(500).json({ error: 'Failed to load alerts' });
@@ -2777,6 +2818,9 @@ router.get('/owner/ccs/alerts', requireExecutiveAccess(), async (req, res) => {
 router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
     try {
         const tid = req.orgId;
+        const cacheKey = req.query.detail === 'full' ? 'roi-full' : 'roi';
+        const cached = ccsGet(tid, cacheKey);
+        if (cached) return res.json(cached);
 
         const [scanTotals, counterfeitsAll, firstDetection, productCount] = await Promise.all([
             db.get(
@@ -2961,6 +3005,7 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
             }));
         }
 
+        ccsSet(tid, cacheKey, result);
         res.json(result);
     } catch (err) {
         logger.error('[CCS] ROI error:', err);
@@ -3025,6 +3070,7 @@ router.patch('/owner/ccs/bu-config', requireExecutiveAccess(), async (req, res) 
             [require('uuid').v4(), req.user.id, tid, JSON.stringify(settings.bu_config)]
         );
 
+        ccsClearOrg(tid); // invalidate CCS cache after BU config change
         res.json({ success: true, bu_config: settings.bu_config });
     } catch (err) {
         logger.error('[CCS] BU config save error:', err);
@@ -3036,6 +3082,8 @@ router.patch('/owner/ccs/bu-config', requireExecutiveAccess(), async (req, res) 
 router.get('/owner/ccs/decisions', requireExecutiveAccess(), async (req, res) => {
     try {
         const tid = req.orgId;
+        const cached = ccsGet(tid, 'decisions');
+        if (cached) return res.json(cached);
 
         const [criticalAlerts, complianceDeadlines, pendingApprovals, recentAnomalies, recentAudit] = await Promise.all(
             [
@@ -3129,7 +3177,7 @@ router.get('/owner/ccs/decisions', requireExecutiveAccess(), async (req, res) =>
             return { action: a.action, actor: a.actor_email, time: a.created_at, details };
         });
 
-        res.json({
+        const _decResult = {
             strategic_alerts,
             compliance_actions,
             governance_actions,
@@ -3147,7 +3195,9 @@ router.get('/owner/ccs/decisions', requireExecutiveAccess(), async (req, res) =>
                 high: strategic_alerts.filter(a => a.severity === 'high').length,
                 compliance_urgent: compliance_actions.filter(c => c.urgency === 'critical').length,
             },
-        });
+        };
+        ccsSet(tid, 'decisions', _decResult);
+        res.json(_decResult);
     } catch (err) {
         logger.error('[CCS] Decisions error:', err);
         res.status(500).json({ error: 'Failed to load decision data' });
@@ -3158,6 +3208,8 @@ router.get('/owner/ccs/decisions', requireExecutiveAccess(), async (req, res) =>
 router.get('/owner/ccs/valuation', requireExecutiveAccess(), async (req, res) => {
     try {
         const tid = req.orgId;
+        const cached = ccsGet(tid, 'valuation');
+        if (cached) return res.json(cached);
 
         const [orgInfo, compStats, scanStats, fraudStats, userStats, retentionStats, consentStats, invoiceStats] =
             await Promise.all([
@@ -3259,7 +3311,7 @@ router.get('/owner/ccs/valuation', requireExecutiveAccess(), async (req, res) =>
         const capitalEfficiency =
             platformCost > 0 && evUplift > 0 ? Math.round((evUplift / platformCost) * 100) / 100 : 0;
 
-        res.json({
+        const _valResult = {
             financial_inputs: {
                 annual_revenue: annualRevenue,
                 ebitda,
@@ -3295,7 +3347,9 @@ router.get('/owner/ccs/valuation', requireExecutiveAccess(), async (req, res) =>
                     platformCost > 0 && evUplift > 0 ? Math.round((platformCost / (evUplift / 12)) * 10) / 10 : 0,
             },
             org_plan: orgInfo?.plan || 'free',
-        });
+        };
+        ccsSet(tid, 'valuation', _valResult);
+        res.json(_valResult);
     } catch (err) {
         logger.error('[CCS] Valuation error:', err);
         res.status(500).json({ error: 'Failed to load valuation data' });
@@ -3362,6 +3416,7 @@ router.patch('/owner/org-financials', requireExecutiveAccess(), async (req, res)
             [require('uuid').v4(), req.user.id, tid, JSON.stringify(settings.financials)]
         );
 
+        ccsClearOrg(tid); // invalidate CCS cache after financial config change
         res.json({ success: true, financials: settings.financials });
     } catch (err) {
         logger.error('[CCS] Financials update error:', err);
