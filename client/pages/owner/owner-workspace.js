@@ -34,6 +34,7 @@ let _riskMonLoaded = false;
 let _govLogLoaded = false;
 let _teamLoaded = false;
 let _riskSubTab = 'signals'; // 'signals' or 'activity'
+let _dashLoading = false; // dedup guard
 
 // ─── Tab Registry ───────────────────────────────────────────
 const OWNER_TABS = [
@@ -90,6 +91,8 @@ window._riskSubTab = function (sub) {
 
 // ─── Data Loaders ───────────────────────────────────────────
 async function loadOwnerData() {
+  if (_dashLoading) return; // dedup
+  _dashLoading = true;
   try {
     // Primary dashboard data
     _ownerData = await API.get('/org-admin/owner/dashboard');
@@ -109,10 +112,13 @@ async function loadOwnerData() {
     console.error('[Owner] Dashboard load error:', e);
     _ownerData = {};
     renderOwnerContent();
+  } finally {
+    _dashLoading = false;
   }
 }
 
 async function loadPrivilegeData() {
+  if (_privilegeLoaded) { renderOwnerContent(); return; }
   try {
     _privilegeData = await API.get('/org-admin/owner/privilege-governance');
     _privilegeLoaded = true;
@@ -121,6 +127,7 @@ async function loadPrivilegeData() {
 }
 
 async function loadRiskMonitoring() {
+  if (_riskMonLoaded) { renderOwnerContent(); return; }
   try {
     _riskData = await API.get('/org-admin/owner/risk-monitoring');
     _riskMonLoaded = true;
@@ -129,6 +136,7 @@ async function loadRiskMonitoring() {
 }
 
 async function loadGovernanceLog() {
+  if (_govLogLoaded) { if (_activeTab === 'risk' && _riskMonLoaded) renderOwnerContent(); return; }
   try {
     _govLogData = await API.get('/org-admin/owner/governance-log');
     _govLogLoaded = true;
@@ -137,6 +145,7 @@ async function loadGovernanceLog() {
 }
 
 async function loadTeamData() {
+  if (_teamLoaded) { renderOwnerContent(); return; }
   try {
     _teamData = await API.get('/org-admin/owner/access-oversight');
     _teamLoaded = true;
