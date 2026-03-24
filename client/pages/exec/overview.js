@@ -14,6 +14,7 @@ let _exposure = null, _decisions = null, _valuation = null;
 let _trends = null, _alerts = null, _roi = null;
 let _catData = [], _catPage = 1, _catSize = 10;
 let _decData = [], _decPage = 1, _decSize = 5;
+let _ccsLoading = false; // dedup guard
 
 export function renderPage() {
   loadCCSData();
@@ -35,6 +36,8 @@ export function renderPage() {
 }
 
 async function loadCCSData() {
+  if (_ccsLoading) return; // dedup: skip if already loading
+  _ccsLoading = true;
   try {
     const API = window.API;
     [_exposure, _decisions, _valuation, _trends, _alerts, _roi] = await Promise.all([
@@ -66,6 +69,8 @@ async function loadCCSData() {
     console.error('[CCS] Load error:', e);
     const el = document.getElementById('ccs-overview-content');
     if (el) el.innerHTML = '<div style="text-align:center;padding:40px;color:#ef4444">Failed to load Capital Command data</div>';
+  } finally {
+    _ccsLoading = false;
   }
 }
 
