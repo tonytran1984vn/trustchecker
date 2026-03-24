@@ -584,8 +584,8 @@ router.get('/bundle', cacheMiddleware(120), async (req, res) => {
                 orgId
                     ? db
                           .all(
-                              `SELECT o.name, o.slug, COUNT(DISTINCT se.id) as scan_count, SUM(CASE WHEN se.result IN ('suspicious','failed') THEN 1 ELSE 0 END) as bad_scans, COUNT(DISTINCT fa.id) as fraud_count, AVG(ts.score) as avg_trust FROM organizations o LEFT JOIN users u3 ON u3.org_id = o.id LEFT JOIN products p ON p.registered_by = u3.id LEFT JOIN scan_events se ON se.product_id = p.id LEFT JOIN fraud_alerts fa ON fa.product_id = p.id LEFT JOIN trust_scores ts ON ts.product_id = p.id WHERE o.id = ? GROUP BY o.name, o.slug ORDER BY fraud_count DESC LIMIT 15`,
-                              [orgId]
+                              `WITH org_products AS (SELECT p.id FROM products p JOIN users u ON p.registered_by = u.id WHERE u.org_id = ?), scan_agg AS (SELECT COUNT(se.id) as scan_count, COUNT(CASE WHEN se.result IN ('suspicious','failed') THEN 1 END) as bad_scans FROM scan_events se WHERE se.product_id IN (SELECT id FROM org_products)), fraud_agg AS (SELECT COUNT(id) as fraud_count FROM fraud_alerts WHERE product_id IN (SELECT id FROM org_products)), trust_agg AS (SELECT AVG(score) as avg_trust FROM trust_scores WHERE product_id IN (SELECT id FROM org_products)) SELECT o.name, o.slug, COALESCE(sa.scan_count,0) as scan_count, COALESCE(sa.bad_scans,0) as bad_scans, COALESCE(fa.fraud_count,0) as fraud_count, ta.avg_trust FROM organizations o, scan_agg sa, fraud_agg fa, trust_agg ta WHERE o.id = ? LIMIT 1`,
+                              [orgId, orgId]
                           )
                           .catch(() => [])
                     : db
