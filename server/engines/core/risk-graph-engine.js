@@ -9,17 +9,46 @@ const { v4: uuidv4 } = require('uuid');
 
 const BEHAVIOR_PATTERNS = {
     high_risk: [
-        { name: 'rapid_volume_spike', description: 'Shipment/credit volume > 3σ from 30-day mean', severity: 'high', score: 15 },
-        { name: 'circular_routing', description: 'Origin → A → B → Origin pattern within 7 days', severity: 'critical', score: 25 },
-        { name: 'phantom_partner', description: 'Partner with zero scan history but active in transactions', severity: 'high', score: 20 },
-        { name: 'device_cluster', description: 'Single device fingerprint across 10+ entities', severity: 'medium', score: 10 },
-        { name: 'temporal_anomaly', description: '>40% activity during off-hours (22:00-06:00)', severity: 'low', score: 8 },
-        { name: 'geographic_mismatch', description: 'Scan location inconsistent with documented route', severity: 'high', score: 18 },
-    ]
+        {
+            name: 'rapid_volume_spike',
+            description: 'Shipment/credit volume > 3σ from 30-day mean',
+            severity: 'high',
+            score: 15,
+        },
+        {
+            name: 'circular_routing',
+            description: 'Origin → A → B → Origin pattern within 7 days',
+            severity: 'critical',
+            score: 25,
+        },
+        {
+            name: 'phantom_partner',
+            description: 'Partner with zero scan history but active in transactions',
+            severity: 'high',
+            score: 20,
+        },
+        {
+            name: 'device_cluster',
+            description: 'Single device fingerprint across 10+ entities',
+            severity: 'medium',
+            score: 10,
+        },
+        {
+            name: 'temporal_anomaly',
+            description: '>40% activity during off-hours (22:00-06:00)',
+            severity: 'low',
+            score: 8,
+        },
+        {
+            name: 'geographic_mismatch',
+            description: 'Scan location inconsistent with documented route',
+            severity: 'high',
+            score: 18,
+        },
+    ],
 };
 
 class RiskGraphEngine {
-
     /**
      * Analyze behavioral risk patterns from transaction data
      */
@@ -49,7 +78,12 @@ class RiskGraphEngine {
                 const std = Math.sqrt(counts.reduce((s, c) => s + (c - mean) ** 2, 0) / counts.length);
                 const latestCount = counts[counts.length - 1];
                 if (std > 0 && latestCount > mean + 3 * std) {
-                    signals.push({ pattern: 'rapid_volume_spike', severity: 'high', score: 15, detail: `Latest day: ${latestCount} vs mean: ${mean.toFixed(1)}` });
+                    signals.push({
+                        pattern: 'rapid_volume_spike',
+                        severity: 'high',
+                        score: 15,
+                        detail: `Latest day: ${latestCount} vs mean: ${mean.toFixed(1)}`,
+                    });
                     riskScore += 15;
                 }
             }
@@ -58,13 +92,21 @@ class RiskGraphEngine {
         // Pattern 2: Circular routing
         const routeMap = {};
         shipments.forEach(s => {
-            const key = `${s.origin}-${s.destination}`;
-            const reverse = `${s.destination}-${s.origin}`;
+            const orig = s.origin || s.from_partner_id || s.from_location || null;
+            const dest = s.destination || s.to_partner_id || s.to_location || null;
+            if (!orig || !dest) return;
+            const key = `${orig}-${dest}`;
+            const reverse = `${dest}-${orig}`;
             routeMap[key] = (routeMap[key] || 0) + 1;
             if (routeMap[reverse]) {
                 const existing = signals.find(sig => sig.pattern === 'circular_routing');
                 if (!existing) {
-                    signals.push({ pattern: 'circular_routing', severity: 'critical', score: 25, detail: `Circular: ${key} ↔ ${reverse}` });
+                    signals.push({
+                        pattern: 'circular_routing',
+                        severity: 'critical',
+                        score: 25,
+                        detail: `Circular: ${orig} ↔ ${dest}`,
+                    });
                     riskScore += 25;
                 }
             }
@@ -72,26 +114,48 @@ class RiskGraphEngine {
 
         // Pattern 3: Phantom partners
         const partnerScans = {};
-        scans.forEach(s => { if (s.partner_id) partnerScans[s.partner_id] = (partnerScans[s.partner_id] || 0) + 1; });
+        scans.forEach(s => {
+            if (s.partner_id) partnerScans[s.partner_id] = (partnerScans[s.partner_id] || 0) + 1;
+        });
         const phantoms = partners.filter(p => !partnerScans[p.id] && p.status === 'active');
         if (phantoms.length > 0) {
-            signals.push({ pattern: 'phantom_partner', severity: 'high', score: 20, detail: `${phantoms.length} partner(s) with zero scan history` });
+            signals.push({
+                pattern: 'phantom_partner',
+                severity: 'high',
+                score: 20,
+                detail: `${phantoms.length} partner(s) with zero scan history`,
+            });
             riskScore += 20;
         }
 
         // Pattern 4: Geographic mismatch
-        const geoMismatches = scans.filter(s => s.expected_country && s.scan_country && s.expected_country !== s.scan_country);
+        const geoMismatches = scans.filter(
+            s => s.expected_country && s.scan_country && s.expected_country !== s.scan_country
+        );
         if (geoMismatches.length > 0) {
-            signals.push({ pattern: 'geographic_mismatch', severity: 'high', score: 18, detail: `${geoMismatches.length} scan(s) from unexpected location` });
+            signals.push({
+                pattern: 'geographic_mismatch',
+                severity: 'high',
+                score: 18,
+                detail: `${geoMismatches.length} scan(s) from unexpected location`,
+            });
             riskScore += 18;
         }
 
         // Pattern 5: Device clustering
         const deviceMap = {};
-        scans.forEach(s => { const d = s.device_id || s.fingerprint; if (d) deviceMap[d] = (deviceMap[d] || 0) + 1; });
+        scans.forEach(s => {
+            const d = s.device_id || s.fingerprint;
+            if (d) deviceMap[d] = (deviceMap[d] || 0) + 1;
+        });
         const hotDevices = Object.entries(deviceMap).filter(([_, c]) => c > 100);
         if (hotDevices.length > 0) {
-            signals.push({ pattern: 'device_cluster', severity: 'medium', score: 10, detail: `${hotDevices.length} device(s) with >100 scans` });
+            signals.push({
+                pattern: 'device_cluster',
+                severity: 'medium',
+                score: 10,
+                detail: `${hotDevices.length} device(s) with >100 scans`,
+            });
             riskScore += 10;
         }
 
@@ -101,7 +165,12 @@ class RiskGraphEngine {
             return h >= 22 || h < 6;
         });
         if (offHours.length > shipments.length * 0.4 && shipments.length > 10) {
-            signals.push({ pattern: 'temporal_anomaly', severity: 'low', score: 8, detail: `${Math.round(offHours.length / shipments.length * 100)}% off-hours activity` });
+            signals.push({
+                pattern: 'temporal_anomaly',
+                severity: 'low',
+                score: 8,
+                detail: `${Math.round((offHours.length / shipments.length) * 100)}% off-hours activity`,
+            });
             riskScore += 8;
         }
 
@@ -110,9 +179,20 @@ class RiskGraphEngine {
             risk_score: Math.min(100, riskScore),
             risk_level: riskScore >= 50 ? 'critical' : riskScore >= 30 ? 'high' : riskScore >= 15 ? 'medium' : 'low',
             signals,
-            data_points: { shipments: shipments.length, credits: credits.length, partners: partners.length, scans: scans.length, routes: routes.length },
-            recommendation: riskScore >= 50 ? 'BLOCK — Immediate investigation required' : riskScore >= 30 ? 'FLAG — Enhanced monitoring' : 'PASS',
-            analyzed_at: new Date().toISOString()
+            data_points: {
+                shipments: shipments.length,
+                credits: credits.length,
+                partners: partners.length,
+                scans: scans.length,
+                routes: routes.length,
+            },
+            recommendation:
+                riskScore >= 50
+                    ? 'BLOCK — Immediate investigation required'
+                    : riskScore >= 30
+                      ? 'FLAG — Enhanced monitoring'
+                      : 'PASS',
+            analyzed_at: new Date().toISOString(),
         };
     }
 
@@ -121,12 +201,18 @@ class RiskGraphEngine {
      */
     buildFraudGraph(entities = [], relationships = []) {
         const nodes = entities.map(e => ({
-            id: e.id || e.did, type: e.type || e.entity_type,
-            label: e.name || e.id, risk_score: e.risk_score || 0, flags: e.flags || []
+            id: e.id || e.did,
+            type: e.type || e.entity_type,
+            label: e.name || e.id,
+            risk_score: e.risk_score || 0,
+            flags: e.flags || [],
         }));
         const edges = relationships.map(r => ({
-            source: r.from, target: r.to, type: r.type || 'associated',
-            weight: r.weight || 1, suspicious: r.suspicious || false
+            source: r.from,
+            target: r.to,
+            type: r.type || 'associated',
+            weight: r.weight || 1,
+            suspicious: r.suspicious || false,
         }));
 
         const adjacency = {};
@@ -141,11 +227,16 @@ class RiskGraphEngine {
         const clusters = [];
         const dfs = (node, cluster) => {
             if (visited.has(node)) return;
-            visited.add(node); cluster.push(node);
+            visited.add(node);
+            cluster.push(node);
             (adjacency[node] || []).forEach(n => dfs(n, cluster));
         };
         Object.keys(adjacency).forEach(node => {
-            if (!visited.has(node)) { const cluster = []; dfs(node, cluster); clusters.push(cluster); }
+            if (!visited.has(node)) {
+                const cluster = [];
+                dfs(node, cluster);
+                clusters.push(cluster);
+            }
         });
 
         const suspiciousEdges = edges.filter(e => e.suspicious);
@@ -157,13 +248,13 @@ class RiskGraphEngine {
             clusters: clusters.map((c, i) => ({ cluster_id: i + 1, size: c.length, members: c })),
             suspicious_links: suspiciousEdges.length,
             high_risk_nodes: highRiskNodes.length,
-            risk_density: nodes.length > 0 ? Math.round(suspiciousEdges.length / edges.length * 100) || 0 : 0,
+            risk_density: nodes.length > 0 ? Math.round((suspiciousEdges.length / edges.length) * 100) || 0 : 0,
             topology: {
-                avg_connections: nodes.length > 0 ? Math.round(edges.length * 2 / nodes.length * 10) / 10 : 0,
+                avg_connections: nodes.length > 0 ? Math.round(((edges.length * 2) / nodes.length) * 10) / 10 : 0,
                 max_cluster_size: clusters.length > 0 ? Math.max(...clusters.map(c => c.length)) : 0,
-                isolated_nodes: nodes.filter(n => !adjacency[n.id] || adjacency[n.id].length === 0).length
+                isolated_nodes: nodes.filter(n => !adjacency[n.id] || adjacency[n.id].length === 0).length,
             },
-            analyzed_at: new Date().toISOString()
+            analyzed_at: new Date().toISOString(),
         };
     }
 
@@ -186,7 +277,13 @@ class RiskGraphEngine {
                 const arr = [...ents];
                 for (let i = 0; i < arr.length; i++)
                     for (let j = i + 1; j < arr.length; j++)
-                        links.push({ type: 'shared_device', entity_a: arr[i], entity_b: arr[j], device, risk: 'medium' });
+                        links.push({
+                            type: 'shared_device',
+                            entity_a: arr[i],
+                            entity_b: arr[j],
+                            device,
+                            risk: 'medium',
+                        });
             }
         });
 
@@ -199,13 +296,24 @@ class RiskGraphEngine {
         });
         Object.entries(routeEntities).forEach(([route, partners]) => {
             if (partners.size > 3)
-                links.push({ type: 'route_concentration', route, entities: [...partners], count: partners.size, risk: 'low' });
+                links.push({
+                    type: 'route_concentration',
+                    route,
+                    entities: [...partners],
+                    count: partners.size,
+                    risk: 'low',
+                });
         });
 
         return {
-            title: 'Hidden Link Analysis', total_links: links.length,
-            by_type: { shared_device: links.filter(l => l.type === 'shared_device').length, route_concentration: links.filter(l => l.type === 'route_concentration').length },
-            links: links.slice(0, 50), analyzed_at: new Date().toISOString()
+            title: 'Hidden Link Analysis',
+            total_links: links.length,
+            by_type: {
+                shared_device: links.filter(l => l.type === 'shared_device').length,
+                route_concentration: links.filter(l => l.type === 'route_concentration').length,
+            },
+            links: links.slice(0, 50),
+            analyzed_at: new Date().toISOString(),
         };
     }
 
@@ -224,7 +332,12 @@ class RiskGraphEngine {
         });
         const sharedDevices = Object.entries(globalDevices).filter(([_, ts]) => new Set(ts).size > 1);
         if (sharedDevices.length > 0)
-            patterns.push({ type: 'cross_org_device', severity: 'critical', count: sharedDevices.length, detail: 'Same device used across multiple orgs' });
+            patterns.push({
+                type: 'cross_org_device',
+                severity: 'critical',
+                count: sharedDevices.length,
+                detail: 'Same device used across multiple orgs',
+            });
 
         const creditFlows = {};
         orgs.forEach(t => {
@@ -238,13 +351,24 @@ class RiskGraphEngine {
             return creditFlows[`${to}→${from}`] > 0;
         });
         if (circular.length > 0)
-            patterns.push({ type: 'circular_credits', severity: 'critical', count: circular.length, detail: 'Circular credit transfers between orgs' });
+            patterns.push({
+                type: 'circular_credits',
+                severity: 'critical',
+                count: circular.length,
+                detail: 'Circular credit transfers between orgs',
+            });
 
         return {
-            title: 'Cross-Org Fraud Detection', orgs_analyzed: orgs.length,
-            patterns_found: patterns.length, patterns,
-            risk_level: patterns.some(p => p.severity === 'critical') ? 'critical' : patterns.length > 0 ? 'medium' : 'low',
-            analyzed_at: new Date().toISOString()
+            title: 'Cross-Org Fraud Detection',
+            orgs_analyzed: orgs.length,
+            patterns_found: patterns.length,
+            patterns,
+            risk_level: patterns.some(p => p.severity === 'critical')
+                ? 'critical'
+                : patterns.length > 0
+                  ? 'medium'
+                  : 'low',
+            analyzed_at: new Date().toISOString(),
         };
     }
 
@@ -259,11 +383,14 @@ class RiskGraphEngine {
         const { entity_type, entity_id, risk_score = 0, metadata = {}, org_id } = node;
         const id = node.id || uuidv4();
 
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO risk_graph_nodes (id, entity_type, entity_id, risk_score, metadata, org_id, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, NOW())
             ON CONFLICT (id) DO UPDATE SET risk_score = $4, metadata = $5, updated_at = NOW()
-        `, [id, entity_type, entity_id, risk_score, JSON.stringify(metadata), org_id]);
+        `,
+            [id, entity_type, entity_id, risk_score, JSON.stringify(metadata), org_id]
+        );
 
         return { id, entity_type, entity_id, risk_score };
     }
@@ -273,10 +400,13 @@ class RiskGraphEngine {
      */
     async upsertEdge(sourceId, targetId, relationship, weight = 1, metadata = {}, orgId = null) {
         const id = uuidv4();
-        await db.run(`
+        await db.run(
+            `
             INSERT INTO risk_graph_edges (id, source_id, target_id, relationship, weight, metadata, org_id)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `, [id, sourceId, targetId, relationship, weight, JSON.stringify(metadata), orgId]);
+        `,
+            [id, sourceId, targetId, relationship, weight, JSON.stringify(metadata), orgId]
+        );
         return { id, source_id: sourceId, target_id: targetId, relationship, weight };
     }
 
@@ -304,7 +434,8 @@ class RiskGraphEngine {
             const nextFrontier = [];
             for (const node of frontier) {
                 // Get neighbors via edges
-                const edges = await db.all(`
+                const edges = await db.all(
+                    `
                     SELECT e.target_id as neighbor, e.weight, n.entity_type, n.entity_id, n.risk_score
                     FROM risk_graph_edges e
                     JOIN risk_graph_nodes n ON n.id = e.target_id
@@ -314,7 +445,9 @@ class RiskGraphEngine {
                     FROM risk_graph_edges e
                     JOIN risk_graph_nodes n ON n.id = e.source_id
                     WHERE e.target_id = $1
-                `, [node.id]);
+                `,
+                    [node.id]
+                );
 
                 for (const edge of edges) {
                     if (visited.has(edge.neighbor)) continue;
@@ -341,8 +474,14 @@ class RiskGraphEngine {
         }
 
         return {
-            source: { id: sourceId, entity_type: source.entity_type, entity_id: source.entity_id, risk_score: sourceRisk },
-            max_hops: maxHops, decay_factor: decayFactor,
+            source: {
+                id: sourceId,
+                entity_type: source.entity_type,
+                entity_id: source.entity_id,
+                risk_score: sourceRisk,
+            },
+            max_hops: maxHops,
+            decay_factor: decayFactor,
             affected_nodes: affected.sort((a, b) => b.propagated_risk - a.propagated_risk),
             total_affected: affected.length,
             high_risk_count: affected.filter(a => a.combined_risk >= 50).length,
@@ -361,18 +500,30 @@ class RiskGraphEngine {
         const node = await db.get('SELECT * FROM risk_graph_nodes WHERE id = $1', [nodeId]);
         if (!node) return { error: 'Node not found' };
 
-        const neighbors = await db.all(`
+        const neighbors = await db.all(
+            `
             SELECT DISTINCT n.*, e.relationship, e.weight
             FROM risk_graph_edges e
             JOIN risk_graph_nodes n ON (n.id = e.target_id OR n.id = e.source_id)
             WHERE (e.source_id = $1 OR e.target_id = $1) AND n.id != $1
-        `, [nodeId]);
+        `,
+            [nodeId]
+        );
 
         return {
-            node: { id: node.id, entity_type: node.entity_type, entity_id: node.entity_id, risk_score: parseFloat(node.risk_score) },
+            node: {
+                id: node.id,
+                entity_type: node.entity_type,
+                entity_id: node.entity_id,
+                risk_score: parseFloat(node.risk_score),
+            },
             neighbors: neighbors.map(n => ({
-                id: n.id, entity_type: n.entity_type, entity_id: n.entity_id,
-                risk_score: parseFloat(n.risk_score), relationship: n.relationship, weight: parseFloat(n.weight),
+                id: n.id,
+                entity_type: n.entity_type,
+                entity_id: n.entity_id,
+                risk_score: parseFloat(n.risk_score),
+                relationship: n.relationship,
+                weight: parseFloat(n.weight),
             })),
             count: neighbors.length,
         };
@@ -382,25 +533,28 @@ class RiskGraphEngine {
      * Get unified risk score combining behavioral + graph-based analysis
      */
     async getUnifiedRiskScore(entityId, orgId) {
-        const node = await db.get(
-            'SELECT * FROM risk_graph_nodes WHERE entity_id = $1 AND org_id = $2',
-            [entityId, orgId]
-        );
+        const node = await db.get('SELECT * FROM risk_graph_nodes WHERE entity_id = $1 AND org_id = $2', [
+            entityId,
+            orgId,
+        ]);
 
         const graphRisk = node ? parseFloat(node.risk_score) : 0;
 
         // Check propagated risk from neighbors
         let propagatedRisk = 0;
         if (node) {
-            const neighbors = await db.all(`
+            const neighbors = await db.all(
+                `
                 SELECT n.risk_score, e.weight
                 FROM risk_graph_edges e
                 JOIN risk_graph_nodes n ON (n.id = CASE WHEN e.source_id = $1 THEN e.target_id ELSE e.source_id END)
                 WHERE e.source_id = $1 OR e.target_id = $1
-            `, [node.id]);
+            `,
+                [node.id]
+            );
 
             propagatedRisk = neighbors.reduce((sum, n) => {
-                return sum + (parseFloat(n.risk_score) * parseFloat(n.weight) * 0.3);
+                return sum + parseFloat(n.risk_score) * parseFloat(n.weight) * 0.3;
             }, 0);
         }
 
@@ -416,7 +570,9 @@ class RiskGraphEngine {
         };
     }
 
-    getPatterns() { return BEHAVIOR_PATTERNS; }
+    getPatterns() {
+        return BEHAVIOR_PATTERNS;
+    }
 }
 
 module.exports = new RiskGraphEngine();

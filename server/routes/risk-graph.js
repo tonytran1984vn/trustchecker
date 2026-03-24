@@ -463,17 +463,20 @@ router.get('/risk-analytics', cacheMiddleware(120), async (req, res) => {
                       .catch(() => [])
                 : db
                       .all(
-                          `
-                SELECT o.name, o.slug,
-                       (SELECT COUNT(*)::INT FROM scan_events se JOIN products p ON se.product_id = p.id WHERE p.org_id = o.id AND se.scanned_at > NOW() - INTERVAL '90 days') as scan_count,
-                       (SELECT COUNT(*)::INT FROM scan_events se JOIN products p ON se.product_id = p.id WHERE p.org_id = o.id AND se.result IN ('suspicious','failed') AND se.scanned_at > NOW() - INTERVAL '90 days') as bad_scans,
-                       (SELECT COUNT(*)::INT FROM fraud_alerts WHERE org_id = o.id) as fraud_count,
-                       (SELECT AVG(score) FROM trust_scores WHERE org_id = o.id) as avg_trust
-                FROM organizations o
-                WHERE o.status = 'active'
-                ORDER BY fraud_count DESC
-                LIMIT 15
-              `
+                          `SELECT o.name, o.slug,
+                               COUNT(DISTINCT se.id)::INT as scan_count,
+                               COUNT(DISTINCT CASE WHEN se.result IN ('suspicious','failed') THEN se.id END)::INT as bad_scans,
+                               COUNT(DISTINCT fa.id)::INT as fraud_count,
+                               AVG(ts.score) as avg_trust
+                          FROM organizations o
+                          LEFT JOIN products p ON p.org_id = o.id
+                          LEFT JOIN scan_events se ON se.product_id = p.id AND se.scanned_at > NOW() - INTERVAL '90 days'
+                          LEFT JOIN fraud_alerts fa ON fa.org_id = o.id
+                          LEFT JOIN trust_scores ts ON ts.org_id = o.id
+                          WHERE o.status = 'active'
+                          GROUP BY o.name, o.slug
+                          ORDER BY fraud_count DESC
+                          LIMIT 15`
                       )
                       .catch(() => []),
         ]);
@@ -712,7 +715,7 @@ router.get('/bundle', cacheMiddleware(120), async (req, res) => {
                           .catch(() => [])
                     : db
                           .all(
-                              `SELECT o.name, o.slug, (SELECT COUNT(*)::INT FROM scan_events se JOIN products p ON se.product_id = p.id WHERE p.org_id = o.id AND se.scanned_at > NOW() - INTERVAL '90 days') as scan_count, (SELECT COUNT(*)::INT FROM scan_events se JOIN products p ON se.product_id = p.id WHERE p.org_id = o.id AND se.result IN ('suspicious','failed') AND se.scanned_at > NOW() - INTERVAL '90 days') as bad_scans, (SELECT COUNT(*)::INT FROM fraud_alerts WHERE org_id = o.id) as fraud_count, (SELECT AVG(score) FROM trust_scores WHERE org_id = o.id) as avg_trust FROM organizations o WHERE o.status = 'active' ORDER BY fraud_count DESC LIMIT 15`
+                              `SELECT o.name, o.slug, COUNT(DISTINCT se.id)::INT as scan_count, COUNT(DISTINCT CASE WHEN se.result IN ('suspicious','failed') THEN se.id END)::INT as bad_scans, COUNT(DISTINCT fa.id)::INT as fraud_count, AVG(ts.score) as avg_trust FROM organizations o LEFT JOIN products p ON p.org_id = o.id LEFT JOIN scan_events se ON se.product_id = p.id AND se.scanned_at > NOW() - INTERVAL '90 days' LEFT JOIN fraud_alerts fa ON fa.org_id = o.id LEFT JOIN trust_scores ts ON ts.org_id = o.id WHERE o.status = 'active' GROUP BY o.name, o.slug ORDER BY fraud_count DESC LIMIT 15`
                           )
                           .catch(() => []),
             ]);
