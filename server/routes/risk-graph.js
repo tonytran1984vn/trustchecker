@@ -463,20 +463,25 @@ router.get('/risk-analytics', cacheMiddleware(120), async (req, res) => {
                       .catch(() => [])
                 : db
                       .all(
-                          `SELECT o.name, o.slug,
-                               COUNT(DISTINCT se.id)::INT as scan_count,
-                               COUNT(DISTINCT CASE WHEN se.result IN ('suspicious','failed') THEN se.id END)::INT as bad_scans,
-                               COUNT(DISTINCT fa.id)::INT as fraud_count,
-                               AVG(ts.score) as avg_trust
+                          `WITH scan_agg AS (
+                            SELECT p.org_id, COUNT(se.id) as scan_count,
+                                   COUNT(CASE WHEN se.result IN ('suspicious','failed') THEN 1 END) as bad_scans
+                            FROM scan_events se JOIN products p ON se.product_id = p.id
+                            WHERE se.scanned_at > NOW() - INTERVAL '90 days' GROUP BY p.org_id
+                          ),
+                          fraud_agg AS (SELECT org_id, COUNT(id) as fraud_count FROM fraud_alerts GROUP BY org_id),
+                          trust_agg AS (SELECT org_id, AVG(score) as avg_trust FROM trust_scores GROUP BY org_id)
+                          SELECT o.name, o.slug,
+                            COALESCE(sa.scan_count,0) as scan_count,
+                            COALESCE(sa.bad_scans,0) as bad_scans,
+                            COALESCE(fa.fraud_count,0) as fraud_count,
+                            ta.avg_trust
                           FROM organizations o
-                          LEFT JOIN products p ON p.org_id = o.id
-                          LEFT JOIN scan_events se ON se.product_id = p.id AND se.scanned_at > NOW() - INTERVAL '90 days'
-                          LEFT JOIN fraud_alerts fa ON fa.org_id = o.id
-                          LEFT JOIN trust_scores ts ON ts.org_id = o.id
+                          LEFT JOIN scan_agg sa ON sa.org_id = o.id
+                          LEFT JOIN fraud_agg fa ON fa.org_id = o.id
+                          LEFT JOIN trust_agg ta ON ta.org_id = o.id
                           WHERE o.status = 'active'
-                          GROUP BY o.name, o.slug
-                          ORDER BY fraud_count DESC
-                          LIMIT 15`
+                          ORDER BY fraud_count DESC LIMIT 15`
                       )
                       .catch(() => []),
         ]);
@@ -715,7 +720,7 @@ router.get('/bundle', cacheMiddleware(120), async (req, res) => {
                           .catch(() => [])
                     : db
                           .all(
-                              `SELECT o.name, o.slug, COUNT(DISTINCT se.id)::INT as scan_count, COUNT(DISTINCT CASE WHEN se.result IN ('suspicious','failed') THEN se.id END)::INT as bad_scans, COUNT(DISTINCT fa.id)::INT as fraud_count, AVG(ts.score) as avg_trust FROM organizations o LEFT JOIN products p ON p.org_id = o.id LEFT JOIN scan_events se ON se.product_id = p.id AND se.scanned_at > NOW() - INTERVAL '90 days' LEFT JOIN fraud_alerts fa ON fa.org_id = o.id LEFT JOIN trust_scores ts ON ts.org_id = o.id WHERE o.status = 'active' GROUP BY o.name, o.slug ORDER BY fraud_count DESC LIMIT 15`
+                              `WITH scan_agg AS (SELECT p.org_id, COUNT(se.id) as scan_count, COUNT(CASE WHEN se.result IN ('suspicious','failed') THEN 1 END) as bad_scans FROM scan_events se JOIN products p ON se.product_id = p.id WHERE se.scanned_at > NOW() - INTERVAL '90 days' GROUP BY p.org_id), fraud_agg AS (SELECT org_id, COUNT(id) as fraud_count FROM fraud_alerts GROUP BY org_id), trust_agg AS (SELECT org_id, AVG(score) as avg_trust FROM trust_scores GROUP BY org_id) SELECT o.name, o.slug, COALESCE(sa.scan_count,0) as scan_count, COALESCE(sa.bad_scans,0) as bad_scans, COALESCE(fa.fraud_count,0) as fraud_count, ta.avg_trust FROM organizations o LEFT JOIN scan_agg sa ON sa.org_id = o.id LEFT JOIN fraud_agg fa ON fa.org_id = o.id LEFT JOIN trust_agg ta ON ta.org_id = o.id WHERE o.status = 'active' ORDER BY fraud_count DESC LIMIT 15`
                           )
                           .catch(() => []),
             ]);
