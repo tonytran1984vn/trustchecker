@@ -772,6 +772,8 @@ function renderOpsSidebar() {
 
 const RISK_NAV = [
   { id: 'risk-dashboard', icon: icon('dashboard'), label: 'Dashboard' },
+  { id: 'risk-intelligence', icon: icon('brain'), label: 'Risk Intelligence' },
+  { id: 'risk-graph', icon: icon('network'), label: 'Risk Graph' },
   { id: 'risk-fraud', icon: icon('alert'), label: 'Fraud Intelligence' },
   { id: 'risk-rules-ws', icon: icon('shield'), label: 'Risk Rules' },
   { id: 'risk-cases-ws', icon: icon('scroll'), label: 'Cases & Reports' },

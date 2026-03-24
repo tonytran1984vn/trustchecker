@@ -20,6 +20,29 @@ const logger = require('../lib/logger');
 
 router.use(authMiddleware);
 
+// ─── Strict role guard: block non-risk workspace roles ─────────────────────
+const RISK_ALLOWED_ROLES = new Set([
+    'super_admin',
+    'platform_security',
+    'org_owner',
+    'company_admin',
+    'admin',
+    'risk_officer',
+    'risk_committee',
+    'security_officer',
+    'ops_manager',
+    'executive',
+    'scm_analyst',
+    'ivu_validator',
+]);
+router.use((req, res, next) => {
+    const role = req.user?.active_role || req.user?.role;
+    if (role && !RISK_ALLOWED_ROLES.has(role)) {
+        return res.status(403).json({ error: 'Access denied: risk workspace restricted' });
+    }
+    next();
+});
+
 // ─── GET /api/scm/risk/radar — Full 8-vector risk assessment ─────────────────
 // Cache 60s — queries 8 full tables
 router.get('/radar', cacheMiddleware(60), async (req, res) => {
