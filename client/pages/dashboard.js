@@ -93,7 +93,7 @@ export function renderPage() {
     <div class="card" style="margin-top:16px;background:linear-gradient(135deg,rgba(16,185,129,0.06),rgba(59,130,246,0.04));border:1px solid rgba(16,185,129,0.2)">
       <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
         <div class="card-title" style="color:#10b981">🌱 Carbon Integrity Engine</div>
-        <a href="#" onclick="event.preventDefault();window.navigate&&window.navigate('scm/carbon-credit')" style="font-size:0.72rem;color:#3b82f6;text-decoration:none;font-weight:600">Open CIE →</a>
+        <a href="#" onclick="event.preventDefault();window.navigate&&window.navigate('scans')" style="font-size:0.72rem;color:#3b82f6;text-decoration:none;font-weight:600">Verification Logs →</a>
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:4px 0">
         <div style="text-align:center">

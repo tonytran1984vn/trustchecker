@@ -63,7 +63,7 @@ function showAddProduct() {
       <div class="input-group"><label>Manufacturer</label><input class="input" id="np-mfr" placeholder="e.g. Highland Coffee Co."></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div class="input-group"><label>Batch Number</label><input class="input" id="np-batch" placeholder="e.g. BATCH-2026-001"></div>
-        <div class="input-group"><label>Origin Country</label><input class="input" id="np-origin" placeholder="e.g. Vietnam"></div>
+        <div class="input-group"><label>Origin Country (ISO 2-letter Code) *</label><input class="input" id="np-origin" placeholder="e.g. VN, US, SG"></div>
       </div>
       <div style="padding:8px 12px;background:var(--border);border-radius:8px;font-size:0.72rem;color:var(--text-muted);margin-top:8px">
         🌿 <strong>Carbon Note:</strong> Weight & Category are used to automatically calculate carbon footprint (Scope 1/2/3).

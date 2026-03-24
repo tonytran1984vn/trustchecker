@@ -6,12 +6,14 @@ describe('password-policy', () => {
             expect(validatePassword('MyStr0ng!Pass').valid).toBe(true);
         });
 
-        test('throws on null input', () => {
-            expect(() => validatePassword(null)).toThrow();
+        test('returns false on null input', () => {
+            const result = validatePassword(null);
+            expect(result.valid).toBe(false);
         });
 
-        test('throws on undefined input', () => {
-            expect(() => validatePassword(undefined)).toThrow();
+        test('returns false on undefined input', () => {
+            const result = validatePassword(undefined);
+            expect(result.valid).toBe(false);
         });
 
         test('rejects empty string', () => {

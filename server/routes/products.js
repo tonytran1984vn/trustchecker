@@ -439,31 +439,32 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
         );
 
         // Audit log
-        await db
-            .prepare(
-                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`
-            )
-            .run(
-                uuidv4(),
-                req.user.id,
-                'PRODUCT_REGISTERED',
-                'product',
-                productId,
-                JSON.stringify({ name, sku, weight_kg, quantity })
-            );
-
-        // FIX-9-AUDIT: Log product creation to audit trail
         try {
+            await db
+                .prepare(
+                    `INSERT INTO audit_log (id, actor_id, action, resource, resource_id, details) VALUES (?, ?, ?, ?, ?, ?)`
+                )
+                .run(
+                    uuidv4(),
+                    req.user.id,
+                    'PRODUCT_REGISTERED',
+                    'product',
+                    productId,
+                    JSON.stringify({ name, sku, weight_kg, quantity })
+                );
+
+            // FIX-9-AUDIT: Log product creation to audit trail
             await db.run(
-                'INSERT INTO audit_log (actor_id, actor_email, action, entity_type, entity_id, org_id, new_value, ip_address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+                'INSERT INTO audit_log (id, actor_id, actor_email, action, resource, resource_id, org_id, details, ip_address) VALUES (?,?,?,?,?,?,?,?,?)',
                 [
+                    uuidv4(),
                     req.user?.id,
                     req.user?.email,
                     'PRODUCT_CREATED',
                     'product',
                     productId,
                     req.user?.orgId || req.user?.org_id,
-                    JSON.stringify({ name, sku, manufacturer, origin_country }),
+                    JSON.stringify({ name, sku, manufacturer, origin_country, weight_kg, quantity }),
                     req.ip,
                 ]
             );
@@ -606,18 +607,22 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
         }
 
         // Audit log
-        await db
-            .prepare(
-                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`
-            )
-            .run(
-                uuidv4(),
-                req.user.id,
-                'CODES_GENERATED',
-                'product',
-                product_id,
-                JSON.stringify({ quantity, format, codes: generatedCodes.map(c => c.code) })
-            );
+        try {
+            await db
+                .prepare(
+                    `INSERT INTO audit_log (id, actor_id, action, resource, resource_id, details) VALUES (?, ?, ?, ?, ?, ?)`
+                )
+                .run(
+                    uuidv4(),
+                    req.user.id,
+                    'CODES_GENERATED',
+                    'product',
+                    product_id,
+                    JSON.stringify({ quantity, format, codes: generatedCodes.map(c => c.code) })
+                );
+        } catch (auditErr) {
+            logger.error('[Audit]', auditErr.message);
+        }
 
         eventBus.emitEvent(EVENT_TYPES.PRODUCT_REGISTERED, {
             product_id,
@@ -728,18 +733,22 @@ router.delete('/codes/:codeId', authMiddleware, requirePermission('product:delet
             .run(req.user.id, codeId);
 
         // Audit log
-        await db
-            .prepare(
-                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)`
-            )
-            .run(
-                uuidv4(),
-                req.user.id,
-                'CODE_DELETED',
-                'qr_code',
-                codeId,
-                JSON.stringify({ code: code.qr_data, product_id: code.product_id })
-            );
+        try {
+            await db
+                .prepare(
+                    `INSERT INTO audit_log (id, actor_id, action, resource, resource_id, details) VALUES (?, ?, ?, ?, ?, ?)`
+                )
+                .run(
+                    uuidv4(),
+                    req.user.id,
+                    'CODE_DELETED',
+                    'qr_code',
+                    codeId,
+                    JSON.stringify({ code: code.qr_data, product_id: code.product_id })
+                );
+        } catch (auditErr) {
+            logger.error('[Audit]', auditErr.message);
+        }
 
         res.json({
             message: 'Code deleted successfully',
