@@ -4,6 +4,7 @@
  */
 import { API } from '../../core/api.js';
 import { icon } from '../../core/icons.js';
+import { State } from '../../core/state.js';
 
 let metrics = null;
 let loading = false;
@@ -49,6 +50,12 @@ async function loadMetrics() {
 }
 
 export function renderPage() {
+    // Role guard: only super_admin / platform_security / data_gov_officer
+    const role = State?.user?.active_role || State?.user?.role || '';
+    const userType = State?.user?.user_type || '';
+    if (userType !== 'platform' && !['super_admin', 'platform_security', 'data_gov_officer'].includes(role)) {
+        return `<div class="empty-state"><div class="empty-icon">🔒</div><div class="empty-text">Platform Admin access required</div><div style="font-size:0.72rem;color:var(--text-muted);margin-top:8px">This workspace is restricted to Super Admin roles.</div></div>`;
+    }
     // Always reload if stale (>30s) or never loaded
     if (!loading && (Date.now() - lastLoad > 30000)) { loadMetrics(); }
     if (loading && !metrics) {
