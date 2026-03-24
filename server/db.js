@@ -442,7 +442,9 @@ class PrismaBackend {
      * @returns {Promise<Array<row[]>>}
      */
     async rawBatch(queries, orgId) {
+        const t0 = Date.now();
         const client = await this._pool.connect();
+        const t1 = Date.now();
         try {
             // Set RLS context
             if (!orgId) {
@@ -451,6 +453,7 @@ class PrismaBackend {
             }
             // set_config() supports parameterized queries (SET doesn't with raw pg)
             await client.query("SELECT set_config('app.current_org', $1, true)", [orgId || '']);
+            const t2 = Date.now();
 
             // Run all queries sequentially on same connection (fast: ~10ms each)
             const results = [];
@@ -461,7 +464,9 @@ class PrismaBackend {
                     continue;
                 }
                 try {
+                    const tq = Date.now();
                     const r = await client.query(sql, q.params || []);
+                    console.log(`rawBatch q${results.length}: ${Date.now() - tq}ms rows:${r.rows.length}`);
                     results.push(r.rows.map(row => this._convert(row)));
                 } catch (e) {
                     console.error('rawBatch ERR:', e.message, 'SQL:', (sql || '').slice(0, 200));
@@ -469,6 +474,9 @@ class PrismaBackend {
                     results.push([]);
                 }
             }
+            console.log(
+                `rawBatch TOTAL: connect=${t1 - t0}ms set_config=${t2 - t1}ms queries=${Date.now() - t2}ms total=${Date.now() - t0}ms`
+            );
             return results;
         } finally {
             client.release();
