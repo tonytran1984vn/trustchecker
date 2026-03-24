@@ -463,6 +463,7 @@ class PrismaBackend {
                     const r = await client.query(sql, q.params || []);
                     results.push(r.rows.map(row => this._convert(row)));
                 } catch (e) {
+                    console.error('rawBatch ERR:', e.message, 'SQL:', (sql || '').slice(0, 200));
                     logger.warn('rawBatch query error', { error: e.message, sql: (q.sql || '').slice(0, 100) });
                     results.push([]);
                 }
