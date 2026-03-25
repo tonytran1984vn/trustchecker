@@ -158,9 +158,12 @@
       }
 
       try {
-        // First try: look up as-is (the QR code stores the full URL as qr_data)
-        const fullQrData = window.location.href;
-        const resp = await fetch('/api/qr/public/check-by-code', {
+        // Detect base path from current URL (handles /trustchecker/ proxy prefix)
+        const pathParts = window.location.pathname.split('/');
+        const checkIdx = pathParts.indexOf('check');
+        const basePath = checkIdx > 1 ? pathParts.slice(0, checkIdx).join('/') : '';
+        const apiUrl = basePath + '/api/qr/public/check-by-code';
+        const resp = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ code })
