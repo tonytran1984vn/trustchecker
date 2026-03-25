@@ -6,6 +6,7 @@
 const db = require('../db');
 const { v4: uuidv4 } = require('uuid');
 const logger = require('./logger');
+const qrStorage = require('./qr-storage');
 
 const BATCH_SIZE = 500;
 const POLL_INTERVAL_MS = 5000;
@@ -35,11 +36,15 @@ async function ensureTable() {
                 error_message TEXT,
                 org_id TEXT,
                 created_by TEXT,
+                batch_id TEXT,
                 started_at TIMESTAMP,
                 completed_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
+        try {
+            await pool.query('ALTER TABLE qr_generation_jobs ADD COLUMN batch_id TEXT;');
+        } catch (_) {}
         logger.info('[QR-Worker] Table qr_generation_jobs ready');
     } catch (e) {
         if (!e.message?.includes('already exists')) {
@@ -49,12 +54,21 @@ async function ensureTable() {
 }
 
 // ── Create a new job ─────────────────────────────────────────────────────────
-async function createJob({ product_id, product_name, product_sku, quantity, org_id, created_by }) {
+async function createJob({ product_id, product_name, product_sku, quantity, org_id, created_by, batch_id }) {
     const id = uuidv4();
     await db.run(
-        `INSERT INTO qr_generation_jobs (id, product_id, product_name, product_sku, quantity, status, org_id, created_by)
-         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`,
-        [id, product_id, product_name || '', product_sku || '', quantity, org_id || null, created_by || 'system']
+        `INSERT INTO qr_generation_jobs (id, product_id, product_name, product_sku, quantity, status, org_id, created_by, batch_id)
+         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+        [
+            id,
+            product_id,
+            product_name || '',
+            product_sku || '',
+            quantity,
+            org_id || null,
+            created_by || 'system',
+            batch_id || null,
+        ]
     );
     return id;
 }
@@ -90,11 +104,27 @@ async function processBatch(job, batchStart) {
         const qrData = `${baseUrl}/check?code=${encodeURIComponent(serialCode)}`;
         const qrId = uuidv4();
 
+        // Generate and save QR image to disk
+        const imageKey = qrStorage.buildImageKey(job.org_id, batchTimestamp, qrId);
+        try {
+            await qrStorage.saveQrImage(qrData, imageKey);
+        } catch (imgErr) {
+            logger.error(`[QR-Worker] Image save failed for ${qrId}:`, imgErr.message);
+        }
+
         try {
             await db.run(
-                `INSERT INTO qr_codes (id, product_id, qr_data, org_id, generated_by, generated_at)
-                 VALUES (?, ?, ?, ?, ?, NOW())`,
-                [qrId, product_id, qrData, job.org_id || null, job.created_by || 'system']
+                `INSERT INTO qr_codes (id, product_id, qr_data, image_key, org_id, generated_by, generated_at, batch_id)
+                 VALUES (?, ?, ?, ?, ?, ?, NOW(), ?)`,
+                [
+                    qrId,
+                    product_id,
+                    qrData,
+                    imageKey,
+                    job.org_id || null,
+                    job.created_by || 'system',
+                    job.batch_id || null,
+                ]
             );
             insertedCount++;
         } catch (e) {

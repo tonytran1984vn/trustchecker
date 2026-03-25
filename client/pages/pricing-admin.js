@@ -13,51 +13,51 @@ const PLANS = [
     id: 'starter', label: 'Starter', icon: '🚀', color: '#06b6d4', gradient: 'linear-gradient(135deg,#06b6d4,#22d3ee)',
     price: { monthly: { from: 49, to: 99 }, annual_discount: '15%' },
     scans: '10,000', overage: '$0.015/scan',
-    target: 'Doanh nghiệp nhỏ, thử nghiệm',
-    features: ['1 brand / 10 SKUs', '10K scans/tháng', 'Basic dashboard', 'Email alerts', '1 user'],
+    target: 'Small business, trial',
+    features: ['1 brand / 10 SKUs', '10K scans/month', 'Basic dashboard', 'Email alerts', '1 user'],
   },
   {
     id: 'growth', label: 'Growth', icon: '⚡', color: '#8b5cf6', gradient: 'linear-gradient(135deg,#7c3aed,#a78bfa)',
     price: { monthly: { from: 199, to: 399 }, annual_discount: '15%' },
     scans: '50,000', overage: '$0.012/scan',
-    target: 'Trung bình, đang mở rộng',
-    features: ['5 brands / 100 SKUs', '50K scans/tháng', 'Risk scoring engine', 'API access', '5 users', 'Custom reports'],
+    target: 'Mid-size, scaling',
+    features: ['5 brands / 100 SKUs', '50K scans/month', 'Risk scoring engine', 'API access', '5 users', 'Custom reports'],
     popular: true,
   },
   {
     id: 'business', label: 'Business', icon: '🏢', color: '#f59e0b', gradient: 'linear-gradient(135deg,#d97706,#f59e0b)',
     price: { monthly: { from: 499, to: 999 }, annual_discount: '20%' },
     scans: '200,000', overage: '$0.008/scan',
-    target: 'Doanh nghiệp vừa, nhiều SKU',
-    features: ['Unlimited brands / 1K SKUs', '200K scans/tháng', 'Advanced risk engine', 'Multi-region support', '20 users', 'Priority support', 'Webhook integrations'],
+    target: 'Medium enterprise, many SKUs',
+    features: ['Unlimited brands / 1K SKUs', '200K scans/month', 'Advanced risk engine', 'Multi-region support', '20 users', 'Priority support', 'Webhook integrations'],
   },
   {
     id: 'enterprise', label: 'Enterprise', icon: '👑', color: '#ef4444', gradient: 'linear-gradient(135deg,#dc2626,#f97316)',
     price: { monthly: { from: 3000, to: 15000 }, annual_discount: '20–40%', custom: true },
     scans: '1M–10M+', overage: '$0.003–0.006/scan',
-    target: 'Tập đoàn lớn, dược phẩm, rượu vang, luxury, FMCG',
+    target: 'Large corporations, pharmaceuticals, wine, luxury, FMCG',
     features: ['Unlimited everything', 'Dedicated instance', 'SSO / SAML', 'Custom SLA (99.9%+)', 'Unlimited users', '24/7 dedicated CSM', 'On-premise option', 'Custom integration'],
   },
 ];
 
 const ADDONS = [
-  { id: 'carbon', name: 'Carbon Tracking & Credit Registry', icon: '🌱', price: '+$0.50/credit hoặc gói riêng', desc: 'ESG compliance, carbon footprint tracking, credit marketplace integration', color: '#22c55e' },
+  { id: 'carbon', name: 'Carbon Tracking & Credit Registry', icon: '🌱', price: '+$0.50/credit or custom package', desc: 'ESG compliance, carbon footprint tracking, credit marketplace integration', color: '#22c55e' },
   { id: 'ai_forensic', name: 'Advanced Risk Engine + AI Forensic', icon: '🧠', price: '+20–30% subscription', desc: 'Deep learning fraud detection, pattern recognition, predictive analytics', color: '#8b5cf6' },
   { id: 'nft', name: 'NFT Certificate / Blockchain Seal', icon: '⛓️', price: '+$1.50/NFT (volume discount)', desc: 'Digital product passport, on-chain verification, tamper-proof certificates', color: '#6366f1' },
-  { id: 'support', name: 'Dedicated Support + On-site Training', icon: '🎧', price: '$2,000–$5,000/tháng', desc: 'Dedicated CSM, on-site training, quarterly business reviews', color: '#f59e0b' },
+  { id: 'support', name: 'Dedicated Support + On-site Training', icon: '🎧', price: '$2,000–$5,000/month', desc: 'Dedicated CSM, on-site training, quarterly business reviews', color: '#f59e0b' },
 ];
 
 const PRO_SERVICES = [
-  { name: 'Implementation Package', price: '$15K–$30K', duration: '4–8 tuần', desc: 'Setup, configuration, data migration, user training' },
-  { name: 'SAP/ERP Integration', price: '$25K–$50K', duration: '6–12 tuần', desc: 'Custom connector, bi-directional sync, middleware setup' },
-  { name: 'Enterprise Onboarding', price: '$10K–$20K', duration: '2–4 tuần', desc: 'SSO setup, security audit, compliance mapping, role configuration' },
-  { name: 'Custom Development', price: '$80K+', duration: '12–24 tuần', desc: 'Bespoke features, white-label, API custom endpoints, advanced analytics' },
+  { name: 'Implementation Package', price: '$15K–$30K', duration: '4–8 weeks', desc: 'Setup, configuration, data migration, user training' },
+  { name: 'SAP/ERP Integration', price: '$25K–$50K', duration: '6–12 weeks', desc: 'Custom connector, bi-directional sync, middleware setup' },
+  { name: 'Enterprise Onboarding', price: '$10K–$20K', duration: '2–4 weeks', desc: 'SSO setup, security audit, compliance mapping, role configuration' },
+  { name: 'Custom Development', price: '$80K+', duration: '12–24 weeks', desc: 'Bespoke features, white-label, API custom endpoints, advanced analytics' },
 ];
 
 const MAC_TIERS = [
-  { commitment: '$50K/năm', discount: '20%', effective: '~$3,300/tháng', sla: '99.5%' },
-  { commitment: '$100K/năm', discount: '30%', effective: '~$5,800/tháng', sla: '99.9%' },
-  { commitment: '$200K/năm', discount: '40%', effective: '~$10,000/tháng', sla: '99.95% + Dedicated' },
+  { commitment: '$50K/year', discount: '20%', effective: '~$3,300/month', sla: '99.5%' },
+  { commitment: '$100K/year', discount: '30%', effective: '~$5,800/month', sla: '99.9%' },
+  { commitment: '$200K/year', discount: '40%', effective: '~$10,000/month', sla: '99.95% + Dedicated' },
 ];
 
 export function renderPage() {
@@ -137,11 +137,11 @@ export function renderPage() {
             <div class="pp-plan-price" style="background:${p.gradient};background-clip:text;-webkit-background-clip:text">
               ${p.price.custom
       ? `<div class="pp-price-range" style="color:${p.color}">Custom</div>
-                   <div class="pp-price-unit">từ $${p.price.monthly.from.toLocaleString()}–$${p.price.monthly.to.toLocaleString()}+/tháng</div>`
+                   <div class="pp-price-unit">from $${p.price.monthly.from.toLocaleString()}–$${p.price.monthly.to.toLocaleString()}+/month</div>`
       : `<div class="pp-price-range" style="color:${p.color}">$${p.price.monthly.from}–$${p.price.monthly.to}</div>
-                   <div class="pp-price-unit">/tháng</div>`
+                   <div class="pp-price-unit">/month</div>`
     }
-              <div class="pp-price-annual">Annual billing giảm ${p.price.annual_discount}</div>
+              <div class="pp-price-annual">Annual billing saves ${p.price.annual_discount}</div>
             </div>
             <div class="pp-plan-body">
               <div class="pp-scan-row"><span style="color:var(--text-muted)">Included Scans</span><strong>${p.scans}</strong></div>
@@ -156,7 +156,7 @@ export function renderPage() {
 
       <!-- ═══ ENTERPRISE ADD-ONS ═══ -->
       <div class="pp-section">
-        <div class="pp-section-title">🧩 Enterprise Add-on Modules <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-left:8px">Bán riêng, upsell cho Business & Enterprise</span></div>
+        <div class="pp-section-title">🧩 Enterprise Add-on Modules <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted);margin-left:8px">Sold separately, upsell for Business & Enterprise</span></div>
         <div class="pp-addons">
           ${ADDONS.map(a => `
             <div class="pp-addon" style="border-left:4px solid ${a.color}">
@@ -174,7 +174,7 @@ export function renderPage() {
       <!-- ═══ MAC (Minimum Annual Commitment) ═══ -->
       <div class="pp-section">
         <div class="pp-section-title">📋 Minimum Annual Commitment (MAC) — Enterprise Only</div>
-        <div style="font-size:0.72rem;color:var(--text-muted);margin:-8px 0 12px">Cam kết hàng năm → discount lớn + SLA cao hơn. Auto-renewal 12 tháng, exit clause 90 ngày.</div>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin:-8px 0 12px">Annual commitment → larger discounts + higher SLA. Auto-renewal 12 months, 90-day exit clause.</div>
         <div class="pp-mac">
           ${MAC_TIERS.map(m => `
             <div class="pp-mac-card">
@@ -207,7 +207,7 @@ export function renderPage() {
         <span style="font-size:2rem">📱</span>
         <div>
           <div style="font-size:0.85rem;font-weight:700">Public / Consumer Scan</div>
-          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">Miễn phí cho end-user — tăng nhận diện thương hiệu, drive data cho brands. Mỗi consumer scan = marketing channel + data asset cho org.</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">Free for end-users — increases brand recognition, drives data for brands. Each consumer scan = marketing channel + data asset for org.</div>
         </div>
       </div>
     </div>`;

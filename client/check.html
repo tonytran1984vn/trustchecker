@@ -158,6 +158,13 @@
       }
 
       try {
+        // Retrieve or generate a persistent device footprint for anti-spam deduplication
+        let fp = localStorage.getItem('tc_device_fp');
+        if (!fp) {
+            fp = 'TC-' + Math.random().toString(36).substring(2, 12) + '-' + Date.now().toString(36);
+            localStorage.setItem('tc_device_fp', fp);
+        }
+
         // Detect base path from current URL (handles /trustchecker/ proxy prefix)
         const pathParts = window.location.pathname.split('/');
         const checkIdx = pathParts.indexOf('check');
@@ -166,7 +173,7 @@
         const resp = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code })
+          body: JSON.stringify({ code, device_fingerprint: fp })
         });
 
         if (!resp.ok) {
@@ -224,18 +231,45 @@
           // Scan verification info
           if (data.scan_verification) {
             const sv = data.scan_verification;
-            const riskColors = { 'Thấp': '#00d264', 'Trung bình': '#ffa500', 'Cao': '#ff3366', 'Rất cao': '#ff0000' };
-            const riskColor = riskColors[sv.risk_level] || '#6b7b8d';
+            const riskColors = { 'Low': '#00d264', 'Medium': '#ffa500', 'High': '#ff3366', 'Very High': '#ff0000' };
+            const riskColor = riskColors[sv.risk_level] || riskColors['Low'] || '#6b7b8d';
+            const deviceIcons = { 'iOS': '📱', 'Android': '📱', 'Mac OS': '💻', 'Windows': '🖥️', 'Linux': '🖥️', 'Bot': '🤖', 'Unknown': '📡' };
+            const deviceIcon = deviceIcons[sv.first_device_type] || '📡';
+            // Mask IP for privacy: show first two octets
+            const maskedIP = sv.first_ip ? sv.first_ip.replace(/(\d+\.\d+)\.\d+\.\d+/, '$1.x.x') : null;
             card.innerHTML += `
-              <div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid rgba(255,255,255,0.06)">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                  <span style="font-size:0.7rem;color:#6b7b8d;text-transform:uppercase;letter-spacing:0.5px">Scan History</span>
+              <div style="margin-top:16px;padding:14px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid rgba(255,255,255,0.06)">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                  <span style="font-size:0.7rem;color:#6b7b8d;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">Scan History</span>
                   <span style="font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;background:${riskColor}22;color:${riskColor}">${sv.risk_level}</span>
                 </div>
-                <div style="font-size:0.85rem;color:#e0e6ed">
-                  Tổng lần quét: <strong>${sv.total_scans}</strong>
-                  ${sv.first_scanned_at ? '<br><span style="font-size:0.75rem;color:#6b7b8d">Lần đầu: ' + new Date(sv.first_scanned_at).toLocaleString('vi-VN') + '</span>' : ''}
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                  <div style="padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid rgba(255,255,255,0.04)">
+                    <div style="font-size:0.62rem;color:#6b7b8d;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:3px">Total Scans</div>
+                    <div style="font-size:1rem;font-weight:700;color:#e0e6ed">${sv.total_scans}</div>
+                  </div>
+                  <div style="padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid rgba(255,255,255,0.04)">
+                    <div style="font-size:0.62rem;color:#6b7b8d;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:3px">Unique Devices</div>
+                    <div style="font-size:1rem;font-weight:700;color:#e0e6ed">${sv.unique_devices || 1}</div>
+                  </div>
                 </div>
+                ${sv.first_device_type ? `
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                    <div style="padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid rgba(255,255,255,0.04)">
+                      <div style="font-size:0.62rem;color:#6b7b8d;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:3px">Device Type</div>
+                      <div style="font-size:0.82rem;font-weight:600;color:#e0e6ed">${deviceIcon} ${sv.first_device_type}</div>
+                    </div>
+                    <div style="padding:8px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid rgba(255,255,255,0.04)">
+                      <div style="font-size:0.62rem;color:#6b7b8d;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:3px">IP Address</div>
+                      <div style="font-size:0.82rem;font-weight:600;color:#e0e6ed;font-family:monospace">${maskedIP || '—'}</div>
+                    </div>
+                  </div>
+                ` : ''}
+                ${sv.first_scanned_at ? `
+                  <div style="font-size:0.72rem;color:#6b7b8d;padding-top:6px;border-top:1px solid rgba(255,255,255,0.04)">
+                    🕐 First scan: ${new Date(sv.first_scanned_at).toLocaleString('en-US')}
+                  </div>
+                ` : ''}
               </div>
             `;
           }

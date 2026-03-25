@@ -94,17 +94,35 @@ router.get('/plan', async (req, res) => {
         let plan = await db.get("SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'", [req.user.id]);
 
         if (!plan) {
-            // Create default free plan
-            const id = uuidv4();
-            const p = PLANS.free;
-            await db.run(
-                `
+            // Try to create default free plan, but handle missing table gracefully
+            try {
+                const id = uuidv4();
+                const p = PLANS.free;
+                await db.run(
+                    `
         INSERT INTO billing_plans (id, user_id, plan_name, scan_limit, api_limit, storage_mb, price_monthly)
         VALUES (?, ?, 'free', ?, ?, ?, ?)
       `,
-                [id, req.user.id, p.limits.scans, p.limits.api_calls, p.limits.storage_mb, p.price_monthly]
-            );
-            plan = await db.get('SELECT * FROM billing_plans WHERE id = ?', [id]);
+                    [id, req.user.id, p.limits.scans, p.limits.api_calls, p.limits.storage_mb, p.price_monthly]
+                );
+                plan = await db.get('SELECT * FROM billing_plans WHERE id = ?', [id]);
+            } catch (insertErr) {
+                // billing_plans table may not exist — return default plan info
+                logger.warn('[billing] billing_plans table error, returning defaults:', insertErr.message);
+                const defaultPlan = PLANS.free;
+                return res.json({
+                    plan: {
+                        plan_name: 'free',
+                        status: 'active',
+                        scan_limit: defaultPlan.limits.scans,
+                        api_limit: defaultPlan.limits.api_calls,
+                        storage_mb: defaultPlan.limits.storage_mb,
+                        price_monthly: 0,
+                    },
+                    plan_details: defaultPlan,
+                    available_plans: Object.entries(PLANS).map(([k, v]) => ({ slug: k, ...v })),
+                });
+            }
         }
 
         const planDef = PLANS[plan?.plan_name || 'free'];
@@ -114,7 +132,14 @@ router.get('/plan', async (req, res) => {
             available_plans: (await pricing.getPublicPricing()).plans,
         });
     } catch (e) {
-        safeError(res, 'Operation failed', e);
+        // Catch-all: return default free plan instead of 500
+        logger.warn('[billing] /plan error, returning defaults:', e.message);
+        const defaultPlan = PLANS.free;
+        res.json({
+            plan: { plan_name: 'free', status: 'active' },
+            plan_details: defaultPlan,
+            available_plans: Object.entries(PLANS).map(([k, v]) => ({ slug: k, ...v })),
+        });
     }
 });
 
@@ -470,9 +495,11 @@ router.get('/usage/alerts', async (req, res) => {
         const period = new Date().toISOString().substring(0, 7);
 
         const scanCount =
-            (await db.get(`SELECT COUNT(*) as c FROM scan_events WHERE to_char(scanned_at, 'YYYY-MM') = $1`, [period]))?.c || 0;
+            (await db.get(`SELECT COUNT(*) as c FROM scan_events WHERE to_char(scanned_at, 'YYYY-MM') = $1`, [period]))
+                ?.c || 0;
         const apiCount =
-            (await db.get(`SELECT COUNT(*) as c FROM audit_log WHERE to_char(created_at, 'YYYY-MM') = $1`, [period]))?.c || 0;
+            (await db.get(`SELECT COUNT(*) as c FROM audit_log WHERE to_char(created_at, 'YYYY-MM') = $1`, [period]))
+                ?.c || 0;
         const storageSize = (await db.get('SELECT COALESCE(SUM(file_size), 0) as s FROM evidence_items'))?.s || 0;
         const storageMB = storageSize / (1024 * 1024);
 

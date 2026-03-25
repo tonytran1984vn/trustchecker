@@ -10,6 +10,7 @@ try {
 } catch (_) {
     riskEngine = null;
 }
+const geoip = require('../lib/geoip');
 const express = require('express');
 const { bulkScanDetector, replayDetector } = require('../middleware/blind-spot-defense');
 
@@ -109,7 +110,7 @@ router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
         const { code, device_fingerprint } = req.body;
         if (!code) return res.status(400).json({ error: 'code is required' });
 
-        const ipAddr = req.ip || req.headers['x-forwarded-for'] || '';
+        const ipAddr = (req.headers['x-forwarded-for'] || '').split(',')[0] || req.ip || '';
         const userAgent = req.headers['user-agent'] || '';
 
         // ── Step 1: Look up QR code ──────────────────────────────────────
@@ -134,7 +135,7 @@ router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
             } catch (_) {}
             return res.status(404).json({
                 result: 'counterfeit',
-                message: '❌ MÃ QR KHÔNG HỢP LỆ — Mã này không tồn tại trong hệ thống. Đây có thể là hàng giả.',
+                message: '❌ INVALID QR CODE — This code does not exist in our system. The product may be counterfeit.',
                 fraud_score: 1.0,
                 trust_score: 0,
             });
@@ -144,7 +145,7 @@ router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
         if (qrCode.status === 'blocked') {
             return res.json({
                 result: 'blocked',
-                message: '🚫 MÃ QR ĐÃ BỊ KHÓA — Phát hiện hoạt động quét bất thường. Sản phẩm có thể là hàng giả.',
+                message: '🚫 QR CODE BLOCKED — Suspicious scan activity detected. The product may be counterfeit.',
                 fraud_score: 0.95,
                 trust_score: 0,
             });
@@ -152,7 +153,7 @@ router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
         if (qrCode.status === 'revoked') {
             return res.json({
                 result: 'revoked',
-                message: '🚫 MÃ QR ĐÃ BỊ THU HỒI — Mã này không còn hợp lệ.',
+                message: '🚫 QR CODE REVOKED — This code is no longer valid.',
                 fraud_score: 0.5,
                 trust_score: 0,
             });
@@ -164,12 +165,12 @@ router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
             [qrCode.product_id]
         );
         if (!product) {
-            return res.status(404).json({ result: 'counterfeit', message: '❌ Sản phẩm không tồn tại' });
+            return res.status(404).json({ result: 'counterfeit', message: '❌ Product does not exist' });
         }
 
         // ── Step 4: Get ALL previous scans for anti-counterfeit analysis ─
         const previousScans = await db.all(
-            `SELECT id, scanned_at, ip_address, device_fingerprint
+            `SELECT id, scanned_at, ip_address, device_fingerprint, user_agent, geo_city, geo_country
              FROM scan_events WHERE qr_code_id = $1 AND result != 'pending'
              ORDER BY scanned_at ASC LIMIT 1000`,
             [qrCode.id]
@@ -179,18 +180,32 @@ router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
         const firstScanRecord = previousScans.length > 0 ? previousScans[0] : null;
 
         // ── Step 5: Anti-flooding (dedup within 5 seconds) ───────────────
-        if (ipAddr && ipAddr !== '::1') {
-            const recentScan = await db.get(
-                `SELECT id FROM scan_events WHERE qr_code_id = $1 AND ip_address = $2
-                 AND scanned_at > NOW() - INTERVAL '5 seconds' LIMIT 1`,
-                [qrCode.id, ipAddr]
-            );
-            if (recentScan) {
+        let skipInsert = false;
+        let isSoleOwner = false;
+
+        const isRecent = await db.get(
+            `SELECT id, scanned_at FROM scan_events WHERE qr_code_id = $1 AND (ip_address = $2 OR (device_fingerprint != '' AND device_fingerprint = $3))
+             ORDER BY scanned_at DESC LIMIT 1`,
+            [qrCode.id, ipAddr, device_fingerprint || '']
+        );
+
+        if (isRecent) {
+            const msSinceLast =
+                Date.now() - new Date(isRecent.scanned_at + (isRecent.scanned_at.includes('Z') ? '' : 'Z')).getTime();
+            if (msSinceLast < 5000) {
                 return res.json({
                     result: 'duplicate',
-                    message: '⏳ Bạn vừa quét mã này. Vui lòng đợi vài giây.',
+                    message: '⏳ You just scanned this code. Please wait a few seconds.',
                 });
             }
+            // Skip making a duplicate record if scan is within 24 hours from same device/IP
+            if (msSinceLast < 24 * 60 * 60 * 1000) skipInsert = true;
+        }
+
+        if (previousScans.length > 0) {
+            isSoleOwner = previousScans.every(
+                s => s.ip_address === ipAddr || (device_fingerprint && s.device_fingerprint === device_fingerprint)
+            );
         }
 
         // ── Step 6: Multi-IP auto-block (5+ scans, 4+ unique IPs) ───────
@@ -211,7 +226,7 @@ router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
                 } catch (_) {}
                 return res.json({
                     result: 'blocked',
-                    message: `🚫 MÃ QR ĐÃ BỊ KHÓA — Phát hiện ${scanCount} lần quét từ ${uniqueIPs} địa điểm khác nhau. Rất có thể mã QR này bị sao chép.`,
+                    message: `🚫 QR CODE BLOCKED — Detected ${scanCount} scans from ${uniqueIPs} different locations. It is highly likely this code was copied to a counterfeit product.`,
                     fraud_score: 0.95,
                     trust_score: 0,
                     scan_analytics: { total_scans: scanCount, unique_locations: uniqueIPs },
@@ -222,48 +237,80 @@ router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
         // ── Step 7: Determine result ─────────────────────────────────────
         let result, message, fraudScore;
 
-        if (isFirstScan) {
+        // Get CURRENT scan info for enriched message & UI grid
+        const currentUA = (userAgent || '').toLowerCase();
+        let currentOS = /iphone|ipad|ipod/.test(currentUA)
+            ? 'iOS'
+            : /android/.test(currentUA)
+              ? 'Android'
+              : /macintosh|mac os/.test(currentUA)
+                ? 'Mac OS'
+                : /windows/.test(currentUA)
+                  ? 'Windows'
+                  : /linux/.test(currentUA)
+                    ? 'Linux'
+                    : 'Unknown';
+        if (currentOS === 'Unknown' && /bot|crawler|spider/.test(currentUA)) currentOS = 'Bot';
+
+        const currentIP = (ipAddr || '').replace(/^::ffff:/, '').replace(/(\d+\.\d+)\.\d+\.\d+/, '$1.x.x');
+        const geo = geoip.resolve(ipAddr) || {};
+        const currentGeoInfo = `IP: ${currentIP}, Region: ${geo.city || '—'}, Country: ${geo.country || '—'}`;
+
+        if (isFirstScan || isSoleOwner) {
             result = 'valid';
-            message = '✅ SẢN PHẨM CHÍNH HÃNG — Đây là lần đầu tiên mã được kiểm tra. Sản phẩm hợp lệ.';
+            message = isFirstScan
+                ? '✅ AUTHENTIC PRODUCT — This is the first time the code has been scanned. The product is authentic.'
+                : '✅ AUTHENTIC PRODUCT — You have verified this product before. The product is authentic.';
             fraudScore = 0;
         } else {
             // Repeat scan — KEY anti-counterfeit signal
             const ft = new Date(firstScanRecord.scanned_at + (firstScanRecord.scanned_at.includes('Z') ? '' : 'Z'));
-            const timeStr = `${ft.getHours().toString().padStart(2, '0')}:${ft.getMinutes().toString().padStart(2, '0')} ngày ${ft.getDate().toString().padStart(2, '0')}/${(ft.getMonth() + 1).toString().padStart(2, '0')}/${ft.getFullYear()}`;
+            const timeStr = `${ft.getHours().toString().padStart(2, '0')}:${ft.getMinutes().toString().padStart(2, '0')} on ${ft.getFullYear()}-${(ft.getMonth() + 1).toString().padStart(2, '0')}-${ft.getDate().toString().padStart(2, '0')}`;
             const uniqueIPs = new Set(previousScans.map(s => s.ip_address)).size;
 
             if (scanCount >= 3 || (firstScanRecord.ip_address && firstScanRecord.ip_address !== ipAddr)) {
                 result = 'suspicious';
                 fraudScore = Math.min(0.9, scanCount * 0.15);
-                message = `🚨 CẢNH BÁO GIẢ MẠO — Mã đã quét ${scanCount} lần (lần đầu lúc ${timeStr}), từ ${uniqueIPs} thiết bị khác nhau. CÓ KHẢ NĂNG CAO là mã QR bị sao chép dán lên hàng giả.`;
+                message = `🚨 COUNTERFEIT WARNING — This code has been scanned ${scanCount + (skipInsert ? 0 : 1)} times (first at ${timeStr}). Latest scan from ${currentOS}, ${currentGeoInfo}. HIGH PROBABILITY this QR code was cloned.`;
             } else {
                 result = 'warning';
                 fraudScore = Math.min(0.5, scanCount * 0.1);
-                message = `⚠️ MÃ ĐÃ ĐƯỢC KIỂM TRA — Lần đầu quét lúc ${timeStr}. Nếu đây không phải bạn, sản phẩm có thể không chính hãng.`;
+                message = `⚠️ PREVIOUSLY SCANNED — First scanned at ${timeStr}. Latest scan from ${currentOS}, ${currentGeoInfo}. If this wasn't you, the product may not be authentic.`;
             }
         }
 
         // ── Step 8: Record this scan event ───────────────────────────────
         const scanId = uuidv4();
-        try {
-            await db.run(
-                `INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, device_fingerprint, ip_address, user_agent, result, fraud_score, trust_score, scanned_at, response_time_ms)
-                 VALUES ($1, $2, $3, 'public_check', $4, $5, $6, $7, $8, $9, NOW(), $10)`,
-                [
-                    scanId,
-                    qrCode.id,
-                    qrCode.product_id,
-                    device_fingerprint || '',
-                    ipAddr,
-                    userAgent,
-                    result,
-                    fraudScore,
-                    product.trust_score || 100,
-                    Date.now() - startTime,
-                ]
-            );
-        } catch (e) {
-            logger.error('Failed to record public scan:', e.message);
+        if (!skipInsert) {
+            try {
+                await db.run(
+                    `INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, device_fingerprint, ip_address, user_agent, result, fraud_score, trust_score, geo_city, geo_country, scanned_at, response_time_ms)
+                     VALUES ($1, $2, $3, 'public_check', $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12)`,
+                    [
+                        scanId,
+                        qrCode.id,
+                        qrCode.product_id,
+                        device_fingerprint || '',
+                        ipAddr,
+                        userAgent,
+                        result,
+                        fraudScore,
+                        product.trust_score || 100,
+                        geo.city || null,
+                        geo.country || null,
+                        Date.now() - startTime,
+                    ]
+                );
+            } catch (e) {
+                require('../lib/logger').error('Failed to record public scan:', e.message);
+            }
+
+            // Async risk scoring
+            if (riskEngine) {
+                try {
+                    riskEngine.scoreScanEvent(scanId, db).catch(() => {});
+                } catch (_) {}
+            }
         }
 
         // ── Step 9: Check ownership claim ────────────────────────────────
@@ -275,12 +322,12 @@ router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
             if (claim) {
                 ownershipInfo = {
                     claimed: true,
-                    owner: claim.claimer_name || 'Đã đăng ký',
+                    owner: claim.claimer_name || 'Registered',
                     claimed_at: claim.claimed_at,
-                    message: '📋 Sản phẩm này đã được đăng ký sở hữu bởi người khác.',
+                    message: '📋 This product has already been claimed by someone else.',
                 };
             } else if (isFirstScan) {
-                ownershipInfo = { claimed: false, message: '📋 Bạn có thể đăng ký sở hữu sản phẩm này.' };
+                ownershipInfo = { claimed: false, message: '📋 You can claim ownership of this product.' };
             }
         } catch (_) {}
 
@@ -297,11 +344,13 @@ router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
             },
             fraud_score: fraudScore,
             scan_verification: {
-                is_first_scan: isFirstScan,
-                total_scans: scanCount + 1,
+                is_first_scan: isFirstScan || isSoleOwner,
+                total_scans: scanCount + (skipInsert ? 0 : 1),
                 first_scanned_at: firstScanRecord?.scanned_at || null,
-                risk_level:
-                    scanCount >= 5 ? 'Rất cao' : scanCount >= 3 ? 'Cao' : scanCount >= 1 ? 'Trung bình' : 'Thấp',
+                first_ip: currentIP,
+                first_device_type: currentOS,
+                unique_devices: new Set([...previousScans.map(s => s.ip_address), ipAddr]).size || 1,
+                risk_level: scanCount >= 5 ? 'Very High' : scanCount >= 3 ? 'High' : scanCount >= 1 ? 'Medium' : 'Low',
             },
             ownership: ownershipInfo,
             verified_by: 'TrustChecker',
@@ -468,7 +517,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             return res.json({
                 valid: false,
                 result: 'expired',
-                message: '⏰ MÃ QR ĐÃ HẾT HẠN — Mã này không còn hợp lệ. Liên hệ nhà sản xuất.',
+                message: '⏰ QR CODE EXPIRED — This code is no longer valid. Please contact the manufacturer.',
                 fraud_score: 0.3,
                 trust_score: 0,
                 expired_at: qrCode.expires_at,
@@ -501,7 +550,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
                 return res.json({
                     valid: true,
                     result: 'duplicate',
-                    message: 'Bạn vừa quét mã này. Vui lòng đợi vài giây rồi thử lại.',
+                    message: 'You just scanned this code. Please wait a few seconds and try again.',
                     response_time_ms: Date.now() - startTime,
                 });
             }
@@ -657,11 +706,11 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
         if (isFirstScan) {
             // ✅ First-time scan — product is authentic
             result = 'valid';
-            message = '✅ Sản phẩm bạn vừa kiểm tra là HÀNG CHÍNH HÃNG. Đây là lần đầu tiên mã được kiểm tra.';
+            message = '✅ This product is AUTHENTIC. This is the first time this code has been verified.';
             // TC21-CLAIM-PROMPT: Suggest ownership registration on first scan
             scan_warning = scan_warning || {};
             scan_warning.claim_available = true;
-            scan_warning.claim_message = '📋 Bạn có thể đăng ký sở hữu sản phẩm này để bảo vệ quyền lợi của bạn.';
+            scan_warning.claim_message = '📋 You can register ownership of this product to protect your rights.';
             scan_warning.claim_url = '/api/qr/claim';
         } else {
             // ⚠️ Repeat scan — warn user
@@ -693,7 +742,7 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
             } else {
                 result = scanCount >= 3 ? 'suspicious' : 'warning';
             }
-            message = `⚠️ Mã bạn kiểm tra đã được quét vào lúc ${hours} giờ ${minutes} phút ngày ${day} tháng ${month} năm ${year}. Lưu ý kiểm tra kĩ vì có thể không phải hàng chính hãng.`;
+            message = `⚠️ PREVIOUSLY SCANNED — First scanned at ${hours}:${minutes} on ${year}-${month}-${day}. If this wasn't you, the product may not be authentic.`;
 
             scan_warning = {
                 is_first_scan: false,
@@ -705,10 +754,10 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
                     : 'N/A',
                 risk_level:
                     scanCount >= 5
-                        ? 'Rất cao — có khả năng hàng giả'
+                        ? 'Very High — likely counterfeit'
                         : scanCount >= 3
-                          ? 'Cao — nghi ngờ hàng giả'
-                          : 'Trung bình — cần kiểm tra thêm',
+                          ? 'High — suspected counterfeit'
+                          : 'Medium — further verification needed',
                 all_scan_times: previousScans.map(s => s.scanned_at),
             };
         }
@@ -716,15 +765,15 @@ router.post('/validate', validate(schemas.qrScan), async (req, res) => {
         // Override with fraud engine results if worse
         if (fraudResult.fraudScore > 0.7) {
             result = 'suspicious';
-            message = '⚠️ NGHI NGỜ — Phát hiện nhiều dấu hiệu gian lận. ' + (isFirstScan ? '' : message);
+            message = '⚠️ SUSPICIOUS — Multiple fraud indicators detected. ' + (isFirstScan ? '' : message);
         } else if (fraudResult.fraudScore > 0.4 && isFirstScan) {
             result = 'warning';
-            message = '⚡ LƯU Ý — Một số bất thường được phát hiện, hãy xác minh thủ công';
+            message = '⚡ NOTICE — Some anomalies detected, please verify manually';
         }
 
         if (qrCode.status === 'revoked') {
             result = 'revoked';
-            message = '🚫 MÃ QR ĐÃ BỊ THU HỒI — Mã này không còn hợp lệ';
+            message = '🚫 QR CODE REVOKED — This code is no longer valid';
         }
 
         // Step 7: Update scan event
@@ -934,7 +983,7 @@ router.post('/claim', async (req, res) => {
                 claimed_by: existing.claimer_name || 'Anonymous',
                 claimed_at: existing.claimed_at,
                 message:
-                    '⚠️ Sản phẩm này đã được đăng ký sở hữu bởi người khác. Nếu bạn mua hàng chính hãng, hãy liên hệ nhà sản xuất.',
+                    '⚠️ This product has been registered by another owner. If you purchased an authentic product, please contact the manufacturer.',
             });
         }
 
@@ -978,7 +1027,7 @@ router.post('/claim', async (req, res) => {
             already_claimed: false,
             claim_id: claimId,
             product_id: qrCode.product_id,
-            message: '✅ Đăng ký sở hữu thành công! Bạn là chủ sở hữu hợp pháp của sản phẩm này.',
+            message: '✅ Ownership registered successfully! You are the verified owner of this product.',
         });
     } catch (err) {
         logger.error('Ownership claim error:', err);

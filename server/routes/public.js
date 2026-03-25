@@ -4,6 +4,7 @@ const logger = require('../lib/logger');
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const geoip = require('../lib/geoip');
 
 // GET /api/public/stats – aggregate platform statistics
 router.get('/stats', async (req, res) => {
@@ -474,7 +475,7 @@ router.post('/check', async (req, res) => {
         if (!code || code.trim().length < 3) {
             return res.status(400).json({
                 valid: false,
-                message: '❌ Vui lòng nhập mã sản phẩm hợp lệ (ít nhất 3 ký tự)',
+                message: '❌ Please enter a valid product code (at least 3 characters)',
             });
         }
 
@@ -489,7 +490,7 @@ router.post('/check', async (req, res) => {
                 valid: false,
                 result: 'not_found',
                 message:
-                    '❌ MÃ KHÔNG TỒN TẠI TRONG HỆ THỐNG — Sản phẩm này có thể là hàng giả. Vui lòng liên hệ nhà sản xuất để xác minh.',
+                    '❌ CODE NOT FOUND IN SYSTEM — This product may be counterfeit. Please contact the manufacturer for verification.',
                 code: cleanCode,
                 response_time_ms: Date.now() - startTime,
             });
@@ -500,7 +501,7 @@ router.post('/check', async (req, res) => {
 
         // Check previous scans — CORE ANTI-COUNTERFEIT LOGIC
         const previousScans = await db.all(
-            `SELECT id, scanned_at, ip_address FROM scan_events 
+            `SELECT id, scanned_at, ip_address, user_agent FROM scan_events 
              WHERE qr_code_id = ? AND result != 'pending'
              ORDER BY scanned_at ASC LIMIT 1000`,
             [qrCode.id]
@@ -512,12 +513,22 @@ router.post('/check', async (req, res) => {
         // Create scan event for this check
         const scanId = require('uuid').v4();
         const { withTransaction } = require('../middleware/transaction');
+        const realIp = (req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket.remoteAddress || req.ip || '';
+        const geo = geoip.resolve(realIp);
         await db.run(
             `
-            INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, ip_address, user_agent, result, scanned_at)
-            VALUES (?, ?, ?, 'code_check', ?, ?, 'pending', NOW())
+            INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, ip_address, user_agent, result, geo_city, geo_country, scanned_at)
+            VALUES (?, ?, ?, 'code_check', ?, ?, 'pending', ?, ?, NOW())
         `,
-            [scanId, qrCode.id, qrCode.product_id, req.ip || '', req.get('user-agent') || '']
+            [
+                scanId,
+                qrCode.id,
+                qrCode.product_id,
+                realIp,
+                req.get('user-agent') || '',
+                geo.city || null,
+                geo.country || null,
+            ]
         );
 
         // Determine result
@@ -525,12 +536,12 @@ router.post('/check', async (req, res) => {
 
         if (qrCode.status === 'revoked') {
             result = 'revoked';
-            message = '🚫 MÃ ĐÃ BỊ THU HỒI — Mã sản phẩm này không còn hợp lệ. Vui lòng kiểm tra với nhà sản xuất.';
-            risk_level = 'Rất cao';
+            message = '🚫 CODE REVOKED — This product code is no longer valid. Please check with the manufacturer.';
+            risk_level = 'Very High';
         } else if (isFirstScan) {
             result = 'valid';
-            message = '✅ Sản phẩm bạn vừa kiểm tra là HÀNG CHÍNH HÃNG. Đây là lần đầu tiên mã được kiểm tra.';
-            risk_level = 'Không có rủi ro';
+            message = '✅ This product is AUTHENTIC. This is the first time this code has been verified.';
+            risk_level = 'No Risk';
         } else {
             const firstTime = new Date(firstScanRecord.scanned_at + 'Z');
             const hours = firstTime.getHours().toString().padStart(2, '0');
@@ -540,13 +551,13 @@ router.post('/check', async (req, res) => {
             const year = firstTime.getFullYear();
 
             result = scanCount >= 3 ? 'suspicious' : 'warning';
-            message = `⚠️ Mã bạn kiểm tra đã được quét vào lúc ${hours} giờ ${minutes} phút ngày ${day} tháng ${month} năm ${year}. Lưu ý kiểm tra kĩ vì có thể không phải hàng chính hãng.`;
+            message = `⚠️ PREVIOUSLY SCANNED — First scanned at ${hours}:${minutes} on ${year}-${month}-${day}. If this wasn't you, the product may not be authentic.`;
             risk_level =
                 scanCount >= 5
-                    ? 'Rất cao — có khả năng hàng giả'
+                    ? 'Very High — likely counterfeit'
                     : scanCount >= 3
-                      ? 'Cao — nghi ngờ hàng giả'
-                      : 'Trung bình — cần kiểm tra thêm';
+                      ? 'High — suspected counterfeit'
+                      : 'Medium — further verification needed';
         }
 
         // Update scan event result
@@ -562,6 +573,18 @@ router.post('/check', async (req, res) => {
             scan_verification: {
                 is_first_scan: isFirstScan,
                 total_scans: scanCount + 1,
+                first_ip: realIp ? realIp.replace(/^::ffff:/, '') : null,
+                first_device_type: (() => {
+                    const ua = (req.get('user-agent') || '').toLowerCase();
+                    if (/iphone|ipad|ipod/.test(ua)) return 'iOS';
+                    if (/android/.test(ua)) return 'Android';
+                    if (/macintosh|mac os/.test(ua)) return 'Mac OS';
+                    if (/windows/.test(ua)) return 'Windows';
+                    if (/linux/.test(ua)) return 'Linux';
+                    if (/bot|crawler|spider/.test(ua)) return 'Bot';
+                    return 'Unknown';
+                })(),
+                unique_devices: new Set([...previousScans.map(s => s.ip_address), realIp]).size || 1,
                 risk_level,
             },
             product: product
@@ -576,7 +599,7 @@ router.post('/check', async (req, res) => {
         });
     } catch (err) {
         logger.error('Public check error:', err);
-        res.status(500).json({ error: 'Lỗi hệ thống, vui lòng thử lại' });
+        res.status(500).json({ error: 'System error, please try again' });
     }
 });
 

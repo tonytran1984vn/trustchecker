@@ -2,7 +2,10 @@
 import { State, render } from '../../core/state.js';
 import { API } from '../../core/api.js'; import { icon } from '../../core/icons.js';
 let D = {};
+let _loading = false;
 async function load() {
+    if (_loading) return;
+    _loading = true;
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [dids, vcs, types] = await Promise.all([
         API.get('/identity/did/registry').catch(() => ({})),
@@ -10,10 +13,11 @@ async function load() {
         API.get('/identity/types').catch(() => ({}))
     ]);
     D = { dids, vcs, types };
+    _loading = false;
     render();
 }
 export function renderPage() {
-    load(); return `
+    if (!D.dids) load(); return `
 <div class="sa-page">
     <div class="sa-page-title"><h1>${icon('fingerprint')} Identity & Trust Layer</h1><p style="color:var(--text-secondary);margin:4px 0 16px">Decentralized Identity (DID) + Verifiable Credentials (VC) — W3C Standard</p>
         <div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="window.idShowDID()">${icon('plus')} Create DID</button><button class="btn btn-sm" onclick="window.idShowVC()" style="background:#8b5cf6;color:#fff;border:none">${icon('shield')} Issue VC</button></div></div>

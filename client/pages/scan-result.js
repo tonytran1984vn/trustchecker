@@ -9,25 +9,25 @@ import { icon } from '../core/icons.js';
 const SCENARIOS = [
     {
         id: 'first-scan',
-        label: 'Lần đầu xác thực',
+        label: 'First Verification',
         scanCount: 1,
         ers: 0,
         firstScanTime: null,
-        geo: { city: 'Hồ Chí Minh', country: 'VN', lat: 10.776, lng: 106.700 },
+        geo: { city: 'Ho Chi Minh', country: 'VN', lat: 10.776, lng: 106.700 },
         product: { name: 'Premium Coffee Blend (Arabica)', sku: 'ACME-CFE-001', batch: 'B-2026-0895', factory: 'Factory HCM-01', production: '2026-02-15', expiry: '2028-02-15' },
     },
     {
         id: 'duplicate',
-        label: 'Lần thứ 2 (trùng mã)',
+        label: '2nd Scan (Duplicate)',
         scanCount: 2,
         ers: 35,
         firstScanTime: '14:30 – 18/02/2026',
-        geo: { city: 'Hà Nội', country: 'VN', lat: 21.028, lng: 105.834 },
+        geo: { city: 'Hanoi', country: 'VN', lat: 21.028, lng: 105.834 },
         product: { name: 'Premium Coffee Blend (Arabica)', sku: 'ACME-CFE-001', batch: 'B-2026-0895', factory: 'Factory HCM-01', production: '2026-02-15', expiry: '2028-02-15' },
     },
     {
         id: 'anomaly',
-        label: 'Bất thường (10 lần, nhiều vùng)',
+        label: 'Anomaly (10 scans, multi-region)',
         scanCount: 10,
         ers: 82,
         firstScanTime: '09:15 – 17/02/2026',
@@ -38,8 +38,8 @@ const SCENARIOS = [
 
 export function renderPage() {
     const now = new Date();
-    const timeStr = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-    const dateStr = now.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const dateStr = now.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const brandName = 'TrustChecker';
 
     return `
@@ -60,11 +60,11 @@ export function renderPage() {
             <div style="font-size:0.68rem;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;margin-bottom:0.75rem">👤 Consumer Response</div>
             <div style="background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.15);border-radius:12px;padding:1.5rem;text-align:center">
               <div style="font-size:2.5rem;margin-bottom:0.5rem"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span></div>
-              <div style="font-size:1.3rem;font-weight:800;color:#22c55e;margin-bottom:0.5rem">Sản phẩm chính hãng đã được xác thực</div>
-              <div style="font-size:0.88rem;color:var(--text-primary);margin-bottom:1rem">Mã sản phẩm này được xác thực lần đầu vào:</div>
+              <div style="font-size:1.3rem;font-weight:800;color:#22c55e;margin-bottom:0.5rem">Authentic product verified</div>
+              <div style="font-size:0.88rem;color:var(--text-primary);margin-bottom:1rem">This product code was first verified on:</div>
               <div style="font-size:1.1rem;font-weight:700;margin-bottom:0.75rem">${timeStr} – ${dateStr}</div>
-              <div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem">Hệ thống ghi nhận đây là lần xác thực đầu tiên của mã này.</div>
-              <div style="border-top:1px solid rgba(34,197,94,0.15);padding-top:0.75rem;font-size:0.78rem;color:var(--text-secondary)">Cảm ơn bạn đã tin tưởng thương hiệu <strong>${brandName}</strong>.</div>
+              <div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:1rem">The system confirms this is the first verification of this code.</div>
+              <div style="border-top:1px solid rgba(34,197,94,0.15);padding-top:0.75rem;font-size:0.78rem;color:var(--text-secondary)">Thank you for trusting <strong>${brandName}</strong>.</div>
             </div>
           </div>
 
@@ -78,7 +78,7 @@ export function renderPage() {
               <div><span class="status-icon status-pass" aria-label="Pass">✓</span> <strong>store device_hash</strong>: web-Mozilla/5.0...</div>
               <div><span class="status-icon status-pass" aria-label="Pass">✓</span> <strong>store timestamp</strong>: ${timeStr} ${dateStr}</div>
               <div><span class="status-icon status-pass" aria-label="Pass">✓</span> <strong>batch link</strong>: B-2026-0895</div>
-              <div style="color:var(--text-secondary);margin-top:0.3rem">→ Không tạo case · Không notify · Log event only</div>
+              <div style="color:var(--text-secondary);margin-top:0.3rem">→ No case created · No notification · Log event only</div>
             </div>
             ${personaImpact([
         ['CEO', '—', 'First Scan Rate += 1', 'green'],
@@ -98,13 +98,13 @@ export function renderPage() {
             <div style="font-size:0.68rem;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;margin-bottom:0.75rem">👤 Consumer Response</div>
             <div style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15);border-radius:12px;padding:1.5rem;text-align:center">
               <div style="font-size:2.5rem;margin-bottom:0.5rem"><span class="status-icon status-warn" aria-label="Warning">!</span></div>
-              <div style="font-size:1.3rem;font-weight:800;color:#f59e0b;margin-bottom:0.5rem">Cảnh báo: Mã đã được xác thực trước đó</div>
-              <div style="font-size:0.88rem;color:var(--text-primary);margin-bottom:0.75rem">Mã sản phẩm này đã được xác thực lần đầu vào:</div>
+              <div style="font-size:1.3rem;font-weight:800;color:#f59e0b;margin-bottom:0.5rem">Warning: Code previously verified</div>
+              <div style="font-size:0.88rem;color:var(--text-primary);margin-bottom:0.75rem">This product code was first verified on:</div>
               <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem">14:30 – 18/02/2026</div>
               <div style="font-size:0.85rem;color:var(--text-primary);line-height:1.6;padding:0.75rem;background:rgba(245,158,11,0.05);border-radius:8px;text-align:left">
-                Nếu bạn không phải là người đã thực hiện lần xác thực đầu tiên, vui lòng <strong>kiểm tra kỹ nguồn gốc sản phẩm</strong> trước khi sử dụng.
+                If you are not the person who performed the first verification, please <strong>carefully verify the product's origin</strong> before use.
               </div>
-              <div style="margin-top:1rem"><button class="btn btn-sm btn-outline" style="color:#f59e0b;border-color:#f59e0b">📞 Liên hệ hỗ trợ</button></div>
+              <div style="margin-top:1rem"><button class="btn btn-sm btn-outline" style="color:#f59e0b;border-color:#f59e0b">📞 Contact Support</button></div>
             </div>
           </div>
 
@@ -115,9 +115,9 @@ export function renderPage() {
               <div>⚡ <strong>increment scan_count</strong> = 2</div>
               <div>⚡ <strong>calculate ERS</strong> = 35 (Medium)</div>
               <div>⚡ <strong>create soft case</strong>: SC-2026-xxxx</div>
-              <div>⚡ <strong>geo delta</strong>: HCM → Hà Nội (1,200km, 28h gap)</div>
+              <div>⚡ <strong>geo delta</strong>: HCM → Hanoi (1,200km, 28h gap)</div>
               <div>⚡ <strong>update batch BRS</strong>: B-2026-0895</div>
-              <div style="color:#f59e0b;font-weight:600;margin-top:0.3rem">→ Soft case tạo · Ops dashboard notified</div>
+              <div style="color:#f59e0b;font-weight:600;margin-top:0.3rem">→ Soft case created · Ops dashboard notified</div>
             </div>
             ${personaImpact([
         ['CEO', '—', 'Duplicate Rate += 0.01%', 'green'],
@@ -137,14 +137,14 @@ export function renderPage() {
             <div style="font-size:0.68rem;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;margin-bottom:0.75rem">👤 Consumer Response</div>
             <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15);border-radius:12px;padding:1.5rem;text-align:center">
               <div style="font-size:2.5rem;margin-bottom:0.5rem">🚨</div>
-              <div style="font-size:1.3rem;font-weight:800;color:#ef4444;margin-bottom:0.5rem">Phát hiện hành vi xác thực bất thường</div>
-              <div style="font-size:0.88rem;color:var(--text-primary);margin-bottom:0.75rem;line-height:1.5">Mã này đã được xác thực nhiều lần tại các địa điểm khác nhau.</div>
-              <div style="font-size:0.88rem;font-weight:600;color:#ef4444;margin-bottom:1rem;padding:0.6rem;background:rgba(239,68,68,0.05);border-radius:8px"><span class="status-icon status-warn" aria-label="Warning">!</span> Sản phẩm có thể không đảm bảo tính nguyên vẹn.</div>
+              <div style="font-size:1.3rem;font-weight:800;color:#ef4444;margin-bottom:0.5rem">Abnormal verification behavior detected</div>
+              <div style="font-size:0.88rem;color:var(--text-primary);margin-bottom:0.75rem;line-height:1.5">This code has been verified multiple times at different locations.</div>
+              <div style="font-size:0.88rem;font-weight:600;color:#ef4444;margin-bottom:1rem;padding:0.6rem;background:rgba(239,68,68,0.05);border-radius:8px"><span class="status-icon status-warn" aria-label="Warning">!</span> Product integrity may be compromised.</div>
               <div style="font-size:0.85rem;color:var(--text-primary);line-height:1.5;margin-bottom:1rem">
-                Một sản phẩm chính hãng chỉ nên được xác thực lần đầu duy nhất.<br>
-                Nếu bạn nghi ngờ sản phẩm không chính hãng, vui lòng liên hệ ngay.
+                An authentic product should only be verified once.<br>
+                If you suspect the product is counterfeit, please contact us immediately.
               </div>
-              <button class="btn btn-sm btn-primary" style="background:#ef4444;border-color:#ef4444">🚨 Báo cáo sản phẩm nghi giả</button>
+              <button class="btn btn-sm btn-primary" style="background:#ef4444;border-color:#ef4444">🚨 Report Suspected Counterfeit</button>
             </div>
           </div>
 

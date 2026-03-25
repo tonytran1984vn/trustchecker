@@ -1,7 +1,7 @@
 {
   "name": "trustchecker",
   "version": "9.5.1",
-  "description": "Enterprise Digital Trust Infrastructure \u2013 Real-time QR Validation & Fraud Detection",
+  "description": "Enterprise Digital Trust Infrastructure – Real-time QR Validation & Fraud Detection",
   "main": "server/index.js",
   "scripts": {
     "dev": "node server/index.js",
@@ -30,6 +30,7 @@
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
+    "geoip-lite": "^2.0.1",
     "helmet": "^8.1.0",
     "ioredis": "^5.9.3",
     "jsonwebtoken": "^9.0.2",
@@ -69,7 +70,10 @@
       "!server/node_modules/**"
     ],
     "testTimeout": 30000,
-    "testPathIgnorePatterns": ["/node_modules/", "e2e/.*\\.spec\\.js$"],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "e2e/.*\\.spec\\.js$"
+    ],
     "globalSetup": "./tests/globalSetup.js",
     "transformIgnorePatterns": [
       "node_modules/(?!(@noble|uuid|otplib|@otplib|@scure)/)"

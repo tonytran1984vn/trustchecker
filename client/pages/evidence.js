@@ -59,7 +59,7 @@ export function renderPage() {
       <div class="stat-card"><div class="stat-value" style="color:var(--cyan)">${s.verified}</div><div class="stat-label">Verified</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--rose)">${s.tampered}</div><div class="stat-label">Tampered</div></div>
       <div class="stat-card"><div class="stat-value" style="color:var(--amber)">${s.pending || 0}</div><div class="stat-label">Pending</div></div>
-      <div class="stat-card"><div class="stat-value" style="color:var(--emerald)">${s.integrity_rate}%</div><div class="stat-label">Integrity Rate</div></div>
+      <div class="stat-card"><div class="stat-value" style="color:var(--emerald)">${s.integrity_rate ?? 0}%</div><div class="stat-label">Integrity Rate</div></div>
     </div>
 
     <div class="card">

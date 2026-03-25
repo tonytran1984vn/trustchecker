@@ -1713,7 +1713,7 @@ async function showProductDetail(id) {
           <div><span style="color:var(--text-muted)">Origin:</span> ${p.origin_country || '—'}</div>
           <div><span style="color:var(--text-muted)">Trust Score:</span> <span style="font-weight:800;color:${scoreColor(p.trust_score)}">${Math.round(p.trust_score)}</span></div>
         </div>
-        ${qr?.qr_image_base64 ? `<div style="text-align:center;margin:16px 0"><img src="${qr.qr_image_base64}" alt="Product QR code" style="width:180px;border-radius:12px;border:2px solid var(--border)"></div>` : ''}
+        ${qr?.image_key ? `<div style="text-align:center;margin:16px 0"><img src="/qr/${qr.image_key}" alt="Product QR code" style="width:180px;border-radius:12px;border:2px solid var(--border)"></div>` : (qr?.qr_image_base64 ? `<div style="text-align:center;margin:16px 0"><img src="${qr.qr_image_base64}" alt="Product QR code" style="width:180px;border-radius:12px;border:2px solid var(--border)"></div>` : '')}
         ${qr ? `<div style="font-size:0.7rem;font-family:'JetBrains Mono';color:var(--text-muted);text-align:center;word-break:break-all">${qr.qr_data}</div>` : ''}
         <button class="btn" onclick="State.modal=null;render()" style="margin-top:16px;width:100%">Close</button>
       </div>

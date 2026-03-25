@@ -15,6 +15,7 @@ const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const { eventBus, EVENT_TYPES } = require('../events');
 const { validate, schemas } = require('../middleware/validate');
 const blockchainEngine = require('../engines/infrastructure/blockchain');
+const qrStorage = require('../lib/qr-storage');
 
 const router = express.Router();
 
@@ -158,6 +159,82 @@ router.get('/:id', async (req, res) => {
         }
     }
 })();
+
+// ── Ensure image_key and batch_id columns exist ──────────────────────────────
+(async () => {
+    try {
+        await db.exec('ALTER TABLE qr_codes ADD COLUMN IF NOT EXISTS image_key TEXT');
+    } catch (_) {
+        /* exists */
+    }
+    try {
+        await db.exec('ALTER TABLE qr_codes ADD COLUMN IF NOT EXISTS batch_id TEXT');
+    } catch (_) {
+        /* exists */
+    }
+})();
+
+// ─── POST /api/products/ensure (Create or Reuse) ──────────────────────────────
+router.post('/ensure', requirePermission('product:create'), validate(schemas.createProduct), async (req, res) => {
+    try {
+        const { name, sku, description, category, manufacturer, origin_country, weight_kg, price } = req.body;
+        if (!name || !sku) {
+            return res.status(400).json({ error: 'Name and SKU are required' });
+        }
+
+        // 1. Try to find existing product by SKU (scoped by org if applicable)
+        let query = 'SELECT id, name, sku FROM products WHERE sku = ?';
+        const params = [sku];
+        // If not super_admin, only find within their org
+        if (req.user.role !== 'super_admin' && req.user.orgId) {
+            query += ' AND org_id = ?';
+            params.push(req.user.orgId);
+        }
+
+        const existing = await db.get(query, params);
+        if (existing) {
+            return res.json({
+                message: 'Product reused',
+                product_id: existing.id,
+                product: existing,
+                reused: true,
+            });
+        }
+
+        // 2. Not found -> Validate and Create
+        const qualityWarnings = validateProductQuality(req.body);
+        const productId = uuidv4();
+
+        await db.run(
+            `INSERT INTO products (id, name, sku, description, category, manufacturer, origin_country, registered_by, org_id, weight_kg, price)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                productId,
+                name,
+                sku,
+                description || '',
+                category || '',
+                manufacturer || '',
+                origin_country || '',
+                req.user.id,
+                req.user.orgId || null,
+                parseFloat(weight_kg) || 0,
+                parseFloat(price) || 0,
+            ]
+        );
+
+        res.json({
+            message: 'Product created',
+            product_id: productId,
+            product: { id: productId, name, sku },
+            reused: false,
+            warnings: qualityWarnings.length ? qualityWarnings : undefined,
+        });
+    } catch (err) {
+        logger.error('Ensure product error:', err);
+        res.status(500).json({ error: 'Failed to ensure product' });
+    }
+});
 
 // ─── POST /api/products ─────────────────────────────────────────────────────
 router.post('/', requirePermission('product:create'), validate(schemas.createProduct), async (req, res) => {
@@ -402,12 +479,10 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
         const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
         const qrData = `${baseUrl}/check?code=${encodeURIComponent(qrCode)}`;
 
-        // Generate QR code image
-        const qrImageBase64 = await QRCode.toDataURL(qrData, {
-            width: 300,
-            margin: 2,
-            color: { dark: '#0ff', light: '#0a0a1a' },
-        });
+        // Generate QR code image → save to disk
+        const batchTimestamp = Date.now();
+        const imageKey = qrStorage.buildImageKey(req.user.orgId, batchTimestamp, qrCodeId);
+        await qrStorage.saveQrImage(qrData, imageKey);
 
         // Insert product (with carbon fields)
         await db.run(
@@ -432,13 +507,13 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
             ]
         );
 
-        // Insert QR code
+        // Insert QR code with image_key (no base64 in DB)
         await db.run(
             `
-      INSERT INTO qr_codes (id, product_id, qr_data, qr_image_base64)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO qr_codes (id, product_id, qr_data, image_key, org_id)
+      VALUES (?, ?, ?, ?, ?)
     `,
-            [qrCodeId, productId, qrData, qrImageBase64]
+            [qrCodeId, productId, qrData, imageKey, req.user.orgId || null]
         );
 
         // Audit log
@@ -496,7 +571,7 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
                 weight_kg: parseFloat(weight_kg) || 0,
                 quantity: parseInt(quantity) || 1,
             },
-            qr_code: { id: qrCodeId, qr_data: qrData, qr_image_base64: qrImageBase64 },
+            qr_code: { id: qrCodeId, qr_data: qrData, image_key: imageKey },
         });
     } catch (err) {
         logger.error('Create product error:', err);
@@ -535,23 +610,86 @@ router.put('/:id', authMiddleware, requirePermission('product:update'), async (r
     }
 });
 
+// ─── GET /api/products/codes/all (Global QR List) ───────────────────────────
+router.get('/codes/all', authMiddleware, requirePermission('product:view'), async (req, res) => {
+    try {
+        const { search, batch_id, status, limit = 50, offset = 0 } = req.query;
+        let whereClause = ' WHERE 1=1';
+        const params = [];
+
+        // Org scoping
+        if (req.user.role !== 'super_admin' && req.user.orgId) {
+            whereClause += ' AND q.org_id = ?';
+            params.push(req.user.orgId);
+        }
+
+        if (search) {
+            whereClause += ' AND (q.id LIKE ? OR q.qr_data LIKE ? OR p.name LIKE ? OR p.sku LIKE ?)';
+            const qSearch = `%${search}%`;
+            params.push(qSearch, qSearch, qSearch, qSearch);
+        }
+        if (batch_id) {
+            whereClause += ' AND q.batch_id = ?';
+            params.push(batch_id);
+        }
+        if (status) {
+            if (status === 'deleted') {
+                whereClause += ' AND q.deleted_at IS NOT NULL';
+            } else if (status === 'scanned' || status === 'not_scanned') {
+                whereClause += ' AND q.deleted_at IS NULL';
+            } else {
+                whereClause += ' AND q.status = ? AND q.deleted_at IS NULL';
+                params.push(status);
+            }
+        } else {
+            whereClause += ' AND q.deleted_at IS NULL';
+        }
+
+        let havingClause = '';
+        if (status === 'scanned') {
+            havingClause = ' HAVING COUNT(se.id) > 0';
+        } else if (status === 'not_scanned') {
+            havingClause = ' HAVING COUNT(se.id) = 0';
+        }
+
+        const innerQuery = `
+            SELECT q.*, p.name as product_name, p.sku as product_sku,
+                   COUNT(se.id) as scan_count
+            FROM qr_codes q
+            LEFT JOIN products p ON q.product_id = p.id
+            LEFT JOIN scan_events se ON se.qr_code_id = q.id
+            ${whereClause}
+            GROUP BY q.id, p.name, p.sku
+            ${havingClause}
+        `;
+
+        // Count total via subquery
+        const countRes = await db.get(`SELECT COUNT(*) as total FROM (${innerQuery}) AS sub`, params);
+
+        const finalQuery = innerQuery + ' ORDER BY q.generated_at DESC LIMIT ? OFFSET ?';
+        const finalParams = [...params, parseInt(limit), parseInt(offset)];
+
+        const codes = await db.all(finalQuery, finalParams);
+        res.json({ codes, total: countRes?.total || 0 });
+    } catch (err) {
+        logger.error('Get all QR codes error:', err);
+        res.status(500).json({ error: 'Failed to fetch QR codes' });
+    }
+});
+
 // ─── POST /api/products/generate-code ────────────────────────────────────────
 // Generate unique printable verification codes for products
 router.post('/generate-code', authMiddleware, requirePermission('product:create'), async (req, res) => {
     try {
-        const { product_id, format = 'random', brand_prefix, quantity = 1 } = req.body;
-
-        if (!product_id) {
-            return res.status(400).json({ error: 'product_id là bắt buộc' });
-        }
+        const { product_id, format = 'random', brand_prefix, quantity = 1, batch_id } = req.body;
         const qty = Math.min(Math.max(1, parseInt(quantity) || 1), 100000);
         if (qty < 1) {
-            return res.status(400).json({ error: 'Số lượng phải từ 1 đến 100,000' });
+            return res.status(400).json({ error: 'Quantity must be between 1 and 100,000' });
         }
 
         const product = await db.get('SELECT * FROM products WHERE id = ?', [product_id]);
         if (!product) {
-            return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
+            return res.status(404).json({ error: 'Product not found' });
         }
 
         // ── Async path: qty > 500 → background job ──
@@ -564,11 +702,12 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
                 quantity: qty,
                 org_id: req.user.orgId || null,
                 created_by: req.user.id,
+                batch_id: batch_id || null,
             });
             return res.status(202).json({
                 async: true,
                 job_id: jobId,
-                message: `Đã tạo job xử lý ${qty.toLocaleString()} mã QR. Theo dõi tiến trình tại /api/products/jobs/${jobId}`,
+                message: `Created job to process ${qty.toLocaleString()} QR codes. Track progress at /api/products/jobs/${jobId}`,
                 quantity: qty,
                 product: { id: product.id, name: product.name, sku: product.sku },
             });
@@ -584,25 +723,25 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
             // QR encodes a verification URL so phone scanners open check page
             const qrData = `${baseUrl}/check?code=${encodeURIComponent(serialCode)}`;
 
-            // Generate QR code image
-            const qrImageBase64 = await QRCode.toDataURL(qrData, {
-                width: 300,
-                margin: 2,
-                color: { dark: '#0ff', light: '#0a0a1a' },
-            });
-
             const qrId = uuidv4();
+            const qrImageKey = qrStorage.buildImageKey(req.user.orgId, batchTimestamp, qrId);
+            try {
+                await qrStorage.saveQrImage(qrData, qrImageKey);
+            } catch (imgErr) {
+                logger.error(`[QR-Storage] Image save failed for ${qrId}:`, imgErr.message);
+            }
+
             try {
                 await db.run(
-                    `INSERT INTO qr_codes (id, product_id, qr_data, qr_image_base64, org_id, generated_by)
-                     VALUES (?, ?, ?, ?, ?, ?)`,
-                    [qrId, product_id, qrData, qrImageBase64, req.user.orgId || null, req.user.id]
+                    `INSERT INTO qr_codes (id, product_id, qr_data, image_key, org_id, generated_by, batch_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [qrId, product_id, qrData, qrImageKey, req.user.orgId || null, req.user.id, batch_id || null]
                 );
                 generatedCodes.push({
                     id: qrId,
                     code: serialCode,
                     qr_data: qrData,
-                    qr_image_base64: qrImageBase64,
+                    image_key: qrImageKey,
                     serial: i + 1,
                 });
             } catch (dupErr) {
@@ -848,13 +987,13 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
 
         const codes = await db.all(
             `
-            SELECT qc.id, qc.qr_data as code, qc.qr_image_base64, qc.status, qc.generated_at,
+            SELECT qc.id, qc.qr_data as code, qc.image_key, qc.status, qc.generated_at,
                    COUNT(se.id) as scan_count,
                    MAX(se.scanned_at) as last_scanned
             FROM qr_codes qc
             LEFT JOIN scan_events se ON se.qr_code_id = qc.id
             WHERE qc.product_id = ? AND qc.status != 'deleted'
-            GROUP BY qc.id, qc.qr_data, qc.qr_image_base64, qc.status, qc.generated_at
+            GROUP BY qc.id, qc.qr_data, qc.image_key, qc.status, qc.generated_at
             ORDER BY qc.generated_at DESC
         `,
             [req.params.id]
@@ -896,116 +1035,93 @@ router.get('/:id/codes/export', authMiddleware, async (req, res) => {
             return res.send(csvContent);
         }
 
-        // ── PDF Format (Clean text code list for printing — NO QR images) ──
+        // ── PDF Format (QR code images in grid layout for printing) ──
         if (format === 'pdf') {
             const PDFDocument = require('pdfkit');
-            const { withTransaction } = require('../middleware/transaction');
-            const { checkAbuse } = require('../middleware/abuse-detection');
-            const doc = new PDFDocument({ size: 'A4', margin: 40 });
+            const doc = new PDFDocument({ size: 'A4', margin: 30 });
             const buffers = [];
 
             doc.on('data', chunk => buffers.push(chunk));
             doc.on('end', () => {
                 const pdfData = Buffer.concat(buffers);
                 res.setHeader('Content-Type', 'application/pdf');
-                res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}_codes_${dateStr}.pdf"`);
+                res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}_QR_${dateStr}.pdf"`);
                 res.send(pdfData);
             });
 
-            const pageWidth = doc.page.width - 80; // 40px margin each side
-            const rowHeight = 18;
-            const headerHeight = 80;
-            const pageHeight = doc.page.height - 80; // 40px top + bottom
-            const codesPerPage = Math.floor((pageHeight - headerHeight) / rowHeight);
-            const totalPages = Math.ceil(codes.length / codesPerPage);
+            const pageWidth = doc.page.width - 60;
+            const pageHeight = doc.page.height - 60;
 
-            // Column widths
-            const col1W = 35; // No.
-            const col3W = 55; // Status
-            const col4W = 80; // Date
-            const col2W = pageWidth - col1W - col3W - col4W; // Code (flex)
+            // Grid layout: 3 columns × N rows
+            const cols = 3;
+            const cellW = Math.floor(pageWidth / cols);
+            const cellH = 180; // Height per QR cell
+            const qrSize = 100; // QR image size
+            const rowsPerPage = Math.floor((pageHeight - 60) / cellH); // Reserve 60 for header
+            const codesPerPage = cols * rowsPerPage;
+            const totalPages = Math.ceil(codes.length / codesPerPage);
 
             for (let page = 0; page < totalPages; page++) {
                 if (page > 0) doc.addPage();
 
                 // ── Page Header ──
-                doc.fontSize(14).font('Helvetica-Bold').text(product.name, 40, 40, { width: pageWidth });
-                doc.fontSize(8)
+                doc.fontSize(12)
+                    .font('Helvetica-Bold')
+                    .fillColor('#111')
+                    .text(product.name, 30, 30, { width: pageWidth });
+                doc.fontSize(7)
                     .font('Helvetica')
                     .fillColor('#666')
                     .text(
                         `SKU: ${product.sku}  |  Export: ${dateStr}  |  Total: ${codes.length} codes  |  Page ${page + 1}/${totalPages}`,
-                        40,
-                        58
+                        30,
+                        46
                     );
-                doc.moveTo(40, 72)
-                    .lineTo(40 + pageWidth, 72)
+                doc.moveTo(30, 58)
+                    .lineTo(30 + pageWidth, 58)
                     .stroke('#ccc');
 
-                // ── Table Header ──
-                const tableTop = headerHeight;
-                doc.fillColor('#333').fontSize(7).font('Helvetica-Bold');
-                doc.text('#', 40, tableTop, { width: col1W });
-                doc.text('CODE', 40 + col1W, tableTop, { width: col2W });
-                doc.text('STATUS', 40 + col1W + col2W, tableTop, { width: col3W });
-                doc.text('CREATED', 40 + col1W + col2W + col3W, tableTop, { width: col4W });
-                doc.moveTo(40, tableTop + 12)
-                    .lineTo(40 + pageWidth, tableTop + 12)
-                    .stroke('#ddd');
-
-                // ── Code Rows ──
+                // ── QR Grid ──
                 const startIdx = page * codesPerPage;
                 const pageCodes = codes.slice(startIdx, startIdx + codesPerPage);
 
                 for (let i = 0; i < pageCodes.length; i++) {
-                    const y = tableTop + 16 + i * rowHeight;
-                    const globalIdx = startIdx + i + 1;
+                    const col = i % cols;
+                    const row = Math.floor(i / cols);
+                    const x = 30 + col * cellW;
+                    const y = 65 + row * cellH;
 
-                    // Alternating row background
-                    if (i % 2 === 0) {
-                        doc.rect(40, y - 2, pageWidth, rowHeight)
-                            .fill('#f8f9fa')
-                            .stroke();
+                    // Cell border (light dashed for cutting guides)
+                    doc.save()
+                        .rect(x, y, cellW - 4, cellH - 4)
+                        .dash(3, { space: 3 })
+                        .stroke('#ddd')
+                        .undash()
+                        .restore();
+
+                    // Generate QR image buffer inline
+                    try {
+                        const qrBuffer = await QRCode.toBuffer(pageCodes[i].code || pageCodes[i].qr_data || '', {
+                            type: 'png',
+                            width: qrSize * 2, // 2x for sharpness
+                            margin: 1,
+                            color: { dark: '#000000', light: '#ffffff' },
+                        });
+                        const imgX = x + (cellW - 4 - qrSize) / 2;
+                        doc.image(qrBuffer, imgX, y + 6, { width: qrSize, height: qrSize });
+                    } catch (qrErr) {
+                        // Fallback: just show text
+                        doc.fontSize(7)
+                            .fillColor('#999')
+                            .text('[QR Error]', x + 10, y + 40, { width: cellW - 20, align: 'center' });
                     }
 
-                    // Row number
-                    doc.fillColor('#999')
-                        .fontSize(7)
-                        .font('Helvetica')
-                        .text(String(globalIdx), 40, y, { width: col1W });
-
-                    // Code (monospace, prominent)
-                    doc.fillColor('#111')
-                        .fontSize(8.5)
-                        .font('Courier-Bold')
-                        .text(pageCodes[i].code || '', 40 + col1W, y, { width: col2W });
-
-                    // Status
-                    const status = pageCodes[i].status || 'active';
-                    doc.fillColor(status === 'active' ? '#16a34a' : '#dc2626')
-                        .fontSize(7)
-                        .font('Helvetica')
-                        .text(status, 40 + col1W + col2W, y, { width: col3W });
-
-                    // Date
-                    const dateVal = pageCodes[i].generated_at
-                        ? new Date(pageCodes[i].generated_at).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                          })
-                        : '';
-                    doc.fillColor('#666')
-                        .fontSize(6.5)
-                        .font('Helvetica')
-                        .text(dateVal, 40 + col1W + col2W + col3W, y, { width: col4W });
+                    // Product name (centered under QR)
+                    doc.fontSize(7)
+                        .font('Helvetica-Bold')
+                        .fillColor('#333')
+                        .text(product.name, x + 4, y + qrSize + 12, { width: cellW - 12, align: 'center' });
                 }
-
-                // Bottom line
-                const bottomY = tableTop + 16 + pageCodes.length * rowHeight;
-                doc.moveTo(40, bottomY)
-                    .lineTo(40 + pageWidth, bottomY)
-                    .stroke('#ddd');
             }
 
             doc.end();

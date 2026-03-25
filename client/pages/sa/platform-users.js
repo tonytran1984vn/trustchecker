@@ -95,10 +95,10 @@ async function updateUser() {
   if (role && role !== editUser.role) body.role = role;
   if (password) body.password = password;
   if (status && status !== (editUser.status || 'active')) body.status = status;
-  if (Object.keys(body).length === 0) return window.showToast?.('Không có thay đổi', 'warning');
+  if (Object.keys(body).length === 0) return window.showToast?.('No changes', 'warning');
   try {
     await API.put(`/platform/users/${editUser.id}`, body);
-    window.showToast?.('Đã cập nhật user', 'success');
+    window.showToast?.('User updated', 'success');
     editUser = null;
     loadStarted = false;
     loadUsers();
@@ -244,7 +244,7 @@ export function renderPage() {
       ${editUser ? `
       <div class="pu-overlay" onclick="if(event.target===this)window._puEditClose()">
         <div class="pu-modal">
-          <h2>${icon('users', 18)} Chỉnh sửa: ${esc(editUser.username)}</h2>
+          <h2>${icon('users', 18)} Edit: ${esc(editUser.username)}</h2>
           <form onsubmit="event.preventDefault();window._puUpdate()">
             <div class="pu-field">
               <label class="pu-label">Role</label>
@@ -253,8 +253,8 @@ export function renderPage() {
               </select>
             </div>
             <div class="pu-field">
-              <label class="pu-label">Reset Password (để trống nếu không đổi)</label>
-              <input class="pu-input" id="pe-password" type="password" placeholder="Nhập password mới..." minlength="6">
+              <label class="pu-label">Reset Password (leave blank to keep current)</label>
+              <input class="pu-input" id="pe-password" type="password" placeholder="Enter new password..." minlength="6">
             </div>
             <div class="pu-field">
               <label class="pu-label">Status</label>

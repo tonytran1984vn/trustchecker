@@ -1,51 +1,53 @@
 /**
  * Blockchain Explorer — On-chain verification, NFT certificates, transaction history
+ * Now API-driven: fetches real seals from /qr/blockchain
  */
 import { icon } from '../core/icons.js';
 import { State, render } from '../core/state.js';
+import { API } from '../core/api.js';
+import { timeAgo, shortHash } from '../utils/helpers.js';
 
-const RECENT_TXN = [
-    { hash: '0xa3f8…d91e', block: 18492031, action: 'batch.register', batch: 'B-2026-0895', chain: 'VeChain', timestamp: '2026-02-19 17:15', gas: '0.012 VET', status: 'confirmed', confirmations: 42 },
-    { hash: '0xe7b2…f04c', block: 18492028, action: 'batch.transfer', batch: 'B-2026-0893', chain: 'VeChain', timestamp: '2026-02-19 17:10', gas: '0.008 VET', status: 'confirmed', confirmations: 45 },
-    { hash: '0xb9d4…a218', block: 18492019, action: 'nft.mint', batch: 'B-2026-0891', chain: 'Polygon', timestamp: '2026-02-19 17:05', gas: '0.003 MATIC', status: 'confirmed', confirmations: 120 },
-    { hash: '0xc1f7…e392', block: 18492015, action: 'scan.verify', batch: 'B-2026-0889', chain: 'VeChain', timestamp: '2026-02-19 17:00', gas: '0.005 VET', status: 'confirmed', confirmations: 156 },
-    { hash: '0xd2a9…b741', block: 18491998, action: 'batch.certify', batch: 'B-2026-0887', chain: 'Polygon', timestamp: '2026-02-19 16:45', gas: '0.015 MATIC', status: 'confirmed', confirmations: 287 },
-];
+// ─── Local state ────────────────────────────────────────────
+let EX = null;
+let _loading = false;
 
+async function load() {
+    if (_loading) return;
+    _loading = true;
+    try {
+        const data = await API.get('/qr/blockchain');
+        EX = data;
+    } catch (e) { EX = { error: e.message }; }
+    _loading = false;
+    render();
+}
+
+// NFT certificates — placeholder until NFT backend is built
 const NFT_CERTS = [
     { id: 'TC-NFT-2026-0895', batch: 'B-2026-0895', product: 'Premium Coffee Blend (Arabica)', chain: 'Polygon', standard: 'ERC-721', owner: 'company.eth', minted: '2026-02-19', verified: true, scans: 1247 },
     { id: 'TC-NFT-2026-0891', batch: 'B-2026-0891', product: 'Organic Tea Collection', chain: 'Polygon', standard: 'ERC-721', owner: 'company.eth', minted: '2026-02-18', verified: true, scans: 892 },
     { id: 'TC-NFT-2026-0887', batch: 'B-2026-0887', product: 'Manuka Honey (UMF 15+)', chain: 'Polygon', standard: 'ERC-721', owner: 'company.eth', minted: '2026-02-17', verified: true, scans: 2103 },
 ];
 
-const CHAIN_STATS = [
-    { chain: 'VeChain', txns: '12,847', batches: '2,341', verified: '99.8%', avgConf: '12s', cost: '$0.003/tx' },
-    { chain: 'Polygon', txns: '8,234', batches: '1,892', verified: '100%', avgConf: '2s', cost: '$0.001/tx' },
-];
-
 export function renderPage() {
+    if (!EX) { load(); return `<div class="loading"><div class="spinner"></div><span style="color:var(--text-muted)">Loading Explorer…</span></div>`; }
+    if (EX.error) return `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">Failed to load explorer: ${EX.error}</div><button class="btn btn-sm" onclick="window._explorerReload()" style="margin-top:12px">↻ Retry</button></div>`;
+
+    const stats = EX.stats || {};
+    const seals = EX.recent_seals || [];
+    const totalSeals = stats.total_seals || 0;
+    const integrityValid = stats.chain_integrity?.valid;
+    const integrityRate = integrityValid ? '100%' : ((stats.chain_integrity?.blocks_checked - (stats.chain_integrity?.errors?.length || 0)) / (stats.chain_integrity?.blocks_checked || 1) * 100).toFixed(1) + '%';
+
     return `
     <div class="sa-page">
       <div class="sa-page-title"><h1>${icon('lock', 28)} Blockchain Explorer</h1><div class="sa-title-actions"><button class="btn btn-outline btn-sm" onclick="explorerVerifyHash()">Verify Hash</button><button class="btn btn-primary btn-sm" style="margin-left:0.5rem" onclick="explorerMintNFT()">Mint NFT Certificate</button></div></div>
 
       <div class="sa-metrics-grid" style="margin-bottom:1.5rem">
-        ${m('On-chain Transactions', '21,081', 'VeChain + Polygon', 'blue', 'lock')}
-        ${m('Verified Batches', '4,233', '99.9% verification rate', 'green', 'check')}
+        ${m('On-chain Seals', totalSeals.toLocaleString(), 'Immutable audit trail', 'blue', 'lock')}
+        ${m('Chain Integrity', integrityValid ? '✓ VALID' : '✗ BROKEN', integrityRate + ' verified', integrityValid ? 'green' : 'red', 'check')}
         ${m('NFT Certificates', NFT_CERTS.length.toString(), 'ERC-721 proof-of-authenticity', 'purple', 'shield')}
-        ${m('Chain Cost (30d)', '$142', 'Avg $0.002/transaction', 'green', 'dashboard')}
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem">
-        ${CHAIN_STATS.map(cs => `
-          <div class="sa-card">
-            <h3 style="display:flex;align-items:center;gap:0.5rem">${cs.chain === 'VeChain' ? '⛓' : '🔷'} ${cs.chain}</h3>
-            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.75rem;margin-top:0.75rem">
-              ${[['Transactions', cs.txns], ['Batches', cs.batches], ['Verified', cs.verified], ['Confirmation', cs.avgConf], ['Cost', cs.cost]].map(([l, v]) =>
-        `<div style="text-align:center"><div style="font-size:1.1rem;font-weight:700">${v}</div><div style="font-size:0.68rem;color:var(--text-secondary)">${l}</div></div>`
-    ).join('')}
-            </div>
-          </div>
-        `).join('')}
+        ${m('Latest Block', '#' + (stats.latest_block ?? '—'), shortHash(stats.latest_hash), 'green', 'dashboard')}
       </div>
 
       <div class="sa-card" style="margin-bottom:1.5rem">
@@ -66,24 +68,25 @@ export function renderPage() {
       </div>
 
       <div class="sa-card">
-        <h3>📜 Recent On-Chain Transactions</h3>
-        <table class="sa-table"><thead><tr><th>Tx Hash</th><th>Block</th><th>Action</th><th>Batch</th><th>Chain</th><th>Time</th><th>Gas</th><th>Confirmations</th><th>Status</th></tr></thead><tbody>
-          ${RECENT_TXN.map(t => `<tr>
-            <td class="sa-mono" style="font-size:0.7rem;color:#6366f1">${t.hash}</td>
-            <td class="sa-mono" style="font-size:0.78rem">${t.block.toLocaleString()}</td>
-            <td><span class="sa-status-pill sa-pill-blue">${t.action}</span></td>
-            <td class="sa-mono">${t.batch}</td>
-            <td>${t.chain}</td>
-            <td class="sa-mono" style="font-size:0.72rem">${t.timestamp}</td>
-            <td class="sa-mono" style="font-size:0.72rem">${t.gas}</td>
-            <td style="text-align:center">${t.confirmations}</td>
-            <td><span class="sa-status-pill sa-pill-green">${t.status}</span></td>
+        <h3>📜 Recent On-Chain Seals</h3>
+        <p style="font-size:0.78rem;color:var(--text-secondary);margin-bottom:1rem">Real-time blockchain seal records from the TrustChecker integrity layer.</p>
+        <table class="sa-table"><thead><tr><th>Block</th><th>Event</th><th>Data Hash</th><th>Prev Hash</th><th>Merkle Root</th><th>Time</th></tr></thead><tbody>
+          ${seals.map(s => `<tr>
+            <td class="sa-mono" style="font-weight:700;color:var(--cyan)">#${s.block_index}</td>
+            <td><span class="sa-status-pill sa-pill-blue">${s.event_type}</span></td>
+            <td class="sa-mono" style="font-size:0.7rem">${shortHash(s.data_hash)}</td>
+            <td class="sa-mono" style="font-size:0.7rem">${shortHash(s.prev_hash)}</td>
+            <td class="sa-mono" style="font-size:0.7rem">${shortHash(s.merkle_root)}</td>
+            <td class="sa-mono" style="font-size:0.72rem">${timeAgo(s.sealed_at)}</td>
           </tr>`).join('')}
         </tbody></table>
       </div>
     </div>`;
 }
 function m(l, v, s, c, i) { return `<div class="sa-metric-card sa-metric-${c}"><div class="sa-metric-icon">${icon(i, 22)}</div><div class="sa-metric-body"><div class="sa-metric-value">${v}</div><div class="sa-metric-label">${l}</div><div class="sa-metric-sub">${s}</div></div></div>`; }
+
+// ─── Reload ─────────────────────────────────────────────────
+window._explorerReload = function() { EX = null; _loading = false; render(); };
 
 // ─── Modal helpers ──────────────────────────────────────────
 function showModal(html) { State.modal = html; render(); }
@@ -97,8 +100,8 @@ window.explorerVerifyHash = function() {
   showModal(
     '<div class="modal" style="max-width:480px">' +
     '<div class="modal-title">' + icon('search', 20) + ' Verify Transaction Hash</div>' +
-    '<p style="font-size:0.82rem;color:var(--text-secondary);margin:8px 0 16px">Enter a SHA-256 transaction hash to verify its on-chain status.</p>' +
-    '<div class="form-group"><input type="text" id="verify-hash-input" class="form-input" placeholder="0xa3f8…d91e" style="font-family:\'JetBrains Mono\',monospace;font-size:0.82rem"></div>' +
+    '<p style="font-size:0.82rem;color:var(--text-secondary);margin:8px 0 16px">Enter a SHA-256 data hash to verify its on-chain seal status.</p>' +
+    '<div class="form-group"><input type="text" id="verify-hash-input" class="form-input" placeholder="e.g. 2791b6e9…" style="font-family:\'JetBrains Mono\',monospace;font-size:0.82rem"></div>' +
     '<div style="display:flex;gap:8px;margin-top:16px">' +
     '<button class="btn btn-primary" style="flex:1" onclick="doVerifyHash()">🔍 Verify</button>' +
     '<button class="btn" onclick="closeExplorerModal()">Cancel</button>' +
@@ -109,20 +112,19 @@ window.explorerVerifyHash = function() {
 window.doVerifyHash = function() {
   var hash = document.getElementById('verify-hash-input');
   if (!hash || !hash.value) return;
-  var val = hash.value;
-  var found = RECENT_TXN.find(function(t) { return t.hash.indexOf(val.slice(0, 4)) !== -1; });
+  var val = hash.value.trim();
+  var seals = (EX && EX.recent_seals) || [];
+  var found = seals.find(function(s) { return s.data_hash && s.data_hash.indexOf(val.slice(0, 8)) !== -1; });
   if (found) {
     showModal(
       '<div class="modal" style="max-width:480px">' +
       '<div class="modal-title">✅ Hash Verified</div>' +
       '<div style="background:var(--surface);border-radius:8px;padding:16px;margin:12px 0">' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:0.82rem">' +
-      gridRow('Block', found.block.toLocaleString()) +
-      gridRow('Action', found.action) +
-      gridRow('Chain', found.chain) +
-      gridRow('Confirmations', String(found.confirmations)) +
-      gridRow('Batch', found.batch) +
-      '<div><span style="color:var(--text-secondary)">Status</span><br><span class="badge valid">' + found.status + '</span></div>' +
+      gridRow('Block', '#' + found.block_index) +
+      gridRow('Event', found.event_type) +
+      gridRow('Merkle Root', shortHash(found.merkle_root)) +
+      gridRow('Time', timeAgo(found.sealed_at)) +
       '</div></div>' +
       '<button class="btn" style="width:100%;margin-top:8px" onclick="closeExplorerModal()">Close</button>' +
       '</div>'
@@ -131,7 +133,7 @@ window.doVerifyHash = function() {
     showModal(
       '<div class="modal" style="max-width:400px">' +
       '<div class="modal-title">⚠️ Hash Not Found</div>' +
-      '<p style="font-size:0.82rem;color:var(--text-secondary);margin:12px 0">The hash was not found in recent transactions. It may exist on-chain but is not in the current view.</p>' +
+      '<p style="font-size:0.82rem;color:var(--text-secondary);margin:12px 0">The hash was not found in recent seals. It may exist on-chain but is not in the current view.</p>' +
       '<button class="btn" style="width:100%;margin-top:8px" onclick="closeExplorerModal()">Close</button>' +
       '</div>'
     );

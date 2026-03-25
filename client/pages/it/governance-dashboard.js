@@ -302,7 +302,7 @@ export function render() {
                     </tbody>
                 </table>
             </div>
-            <div style="text-align:center;margin-top:8px;color:#64748b;font-size:0.82rem;font-style:italic">CEO không tham gia approve — chỉ nhận Trust KPI.</div>
+            <div style="text-align:center;margin-top:8px;color:#64748b;font-size:0.82rem;font-style:italic">CEO does not participate in approvals — receives Trust KPI only.</div>
         </div>
 
         <!-- ═════ AUDITOR PATH ═════ -->
@@ -321,7 +321,7 @@ export function render() {
                     ${i < auditor.steps.length - 1 ? '<div style="margin-left:13px;border-left:2px solid #1e293b;height:8px"></div>' : ''}
                 `).join('')}
             </div>
-            <div style="text-align:center;margin-top:12px;color:#10b981;font-size:0.82rem"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Không cần trust TrustChecker — Independent verification</div>
+            <div style="text-align:center;margin-top:12px;color:#10b981;font-size:0.82rem"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> No need to trust TrustChecker — Independent verification</div>
             ` : '<div style="text-align:center;padding:20px;color:#64748b">Loading auditor path...</div>'}
         </div>
 
@@ -354,11 +354,11 @@ export function render() {
             <h3 style="margin:0 0 12px;color:#f1f5f9">${icon('alertTriangle')} Structural Rules — Audit Fail Conditions</h3>
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px">
                 ${[
-            'Không tạo quyền lực tập trung',
-            'Không cho Super Admin xem org data',
-            'Không cho Risk tự seal',
-            'Không cho Compliance sửa event',
-            'Không cho ai rewrite history'
+            'No centralized power creation',
+            'Super Admin cannot view org data',
+            'Risk cannot self-seal',
+            'Compliance cannot modify events',
+            'No one can rewrite history'
         ].map(rule => `
                     <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#0f172a;border-radius:8px;border-left:3px solid #ef4444">
                         <span style="color:#ef4444;font-size:13px">🚫</span>

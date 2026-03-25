@@ -221,11 +221,28 @@ function setupHealth(
         });
     });
 
+    // ─── QR Image Static Serving ─────────────────────────────────────
+    const express = require('express');
+    const fs = require('fs');
+    const qrStoragePath = path.join(__dirname, '..', '..', 'data', 'qr');
+    if (!fs.existsSync(qrStoragePath)) {
+        fs.mkdirSync(qrStoragePath, { recursive: true });
+    }
+    app.use(
+        '/qr',
+        express.static(qrStoragePath, {
+            maxAge: '1y',
+            immutable: true,
+            etag: true,
+            setHeaders: res => {
+                res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            },
+        })
+    );
+
     // ─── Frontend Serving ────────────────────────────────────────────
     const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
     const clientPublic = path.join(__dirname, '..', '..', 'client');
-    const express = require('express');
-    const fs = require('fs');
 
     // No-cache for HTML, JS modules, and service worker (prevent stale cache)
     app.use((req, res, next) => {
@@ -263,7 +280,7 @@ function setupHealth(
         );
     }
 
-    app.get('/check', (req, res) => {
+    app.get(['/check', '/trustchecker/check'], (req, res) => {
         const checkPage = path.join(clientPublic, 'check.html');
         if (fs.existsSync(checkPage)) {
             res.sendFile(checkPage);

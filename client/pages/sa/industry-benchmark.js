@@ -27,7 +27,7 @@ async function load() {
 
 function renderContent() {
   if (!data && !loading) { load(); }
-  if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Đang tải Benchmark data...</div></div>`;
+  if (loading && !data) return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)">Loading Benchmark data...</div></div>`;
 
   const heatmap = data?.heatmap || [];
   const patterns = data?.fraudPatterns || [];
@@ -36,7 +36,7 @@ function renderContent() {
 
   return `
     <div class="sa-page">
-      <div class="sa-page-title"><h1>${icon('globe', 28)} Industry Benchmark Engine</h1><div class="sa-title-actions"><span style="font-size:0.72rem;color:var(--text-secondary)">Cross-organization intelligence · Dữ liệu thực từ PostgreSQL</span></div></div>
+      <div class="sa-page-title"><h1>${icon('globe', 28)} Industry Benchmark Engine</h1><div class="sa-title-actions"><span style="font-size:0.72rem;color:var(--text-secondary)">Cross-organization intelligence · Live data from PostgreSQL</span></div></div>
 
       <div class="sa-metrics-row" style="margin-bottom:1.5rem">
         ${m('Active Organizations', heatmap.length.toString(), 'Across ' + new Set(heatmap.flatMap(h => h.industry.split(', '))).size + ' industries', 'blue', 'building')}
@@ -48,7 +48,7 @@ function renderContent() {
       <!-- ORG RISK HEATMAP -->
       <div class="sa-card" style="margin-bottom:1.5rem">
         <h3>🌍 Organization Risk Heatmap</h3>
-        <p style="font-size:0.72rem;color:var(--text-secondary);margin-bottom:0.75rem">So sánh rủi ro cross-organization dựa trên dữ liệu thực.</p>
+        <p style="font-size:0.72rem;color:var(--text-secondary);margin-bottom:0.75rem">Cross-organization risk comparison based on live data.</p>
         <table class="sa-table"><thead><tr><th>Organization</th><th>Industry</th><th>Scans</th><th>Dup Rate</th><th>Frauds</th><th>Avg Trust</th><th>Risk Tier</th></tr></thead><tbody>
           ${heatmap.map(t => `<tr class="${t.tier === 'High' ? 'ops-alert-row' : ''}">
             <td><strong>${t.name}</strong></td>

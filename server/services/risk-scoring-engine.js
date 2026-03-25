@@ -3828,7 +3828,7 @@ function roiDashboard(action, data) {
         after: { monthly_loss: afterLoss, reduction_pct: savePct },
         delta: { saved, saved_pct: savePct },
         total_blocked_value: _roiTracker.total_blocked_value,
-        narrative: `Giảm ${savePct}% thất thoát: từ $${beforeLoss.toLocaleString()} xuống $${afterLoss.toLocaleString()} (tiết kiệm $${saved.toLocaleString()}/tháng)`,
+        narrative: `Reduced losses by ${savePct}%: from $${beforeLoss.toLocaleString()} to $${afterLoss.toLocaleString()} (saving $${saved.toLocaleString()}/month)`,
     };
 }
 
@@ -3868,7 +3868,7 @@ function networkInsight(type, data) {
             time_window_hours,
             suspicious,
             message: suspicious
-                ? `Batch ${batch_id} xuất hiện ở ${locations.length} tỉnh trong ${time_window_hours}h — không thể là hàng thật`
+                ? `Batch ${batch_id} appeared in ${locations.length} provinces within ${time_window_hours}h — likely counterfeit`
                 : `Batch ${batch_id}: distribution normal`,
             action: suspicious ? 'flag_batch_counterfeit' : 'none',
             timestamp: Date.now(),
@@ -3947,8 +3947,8 @@ function marketIntelligence(action, data) {
         top_risk_region: hotspots[0]?.region || 'none',
         narrative:
             hotspots.length > 0
-                ? `Khu vực rủi ro cao nhất: ${hotspots[0].region} (${hotspots[0].fraud_rate}% fraud rate)`
-                : 'Chưa đủ dữ liệu',
+                ? `Highest risk region: ${hotspots[0].region} (${hotspots[0].fraud_rate}% fraud rate)`
+                : 'Insufficient data',
     };
 }
 
