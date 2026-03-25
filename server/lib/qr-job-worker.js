@@ -11,10 +11,17 @@ const BATCH_SIZE = 500;
 const POLL_INTERVAL_MS = 5000;
 let isProcessing = false;
 
-// ── Auto-create table ────────────────────────────────────────────────────────
+// ── Auto-create table (uses raw pool to bypass SQL translator's DDL skip) ────
 async function ensureTable() {
     try {
-        await db.exec(`
+        // db.exec() is a no-op and _translateSQL skips CREATE TABLE,
+        // so we use the raw pg pool directly.
+        const pool = db._pool;
+        if (!pool) {
+            logger.warn('[QR-Worker] DB pool not available yet, will retry');
+            return;
+        }
+        await pool.query(`
             CREATE TABLE IF NOT EXISTS qr_generation_jobs (
                 id TEXT PRIMARY KEY,
                 product_id TEXT NOT NULL,
@@ -33,8 +40,8 @@ async function ensureTable() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
+        logger.info('[QR-Worker] Table qr_generation_jobs ready');
     } catch (e) {
-        // Table may already exist
         if (!e.message?.includes('already exists')) {
             logger.error('[QR-Worker] Table creation error:', e.message);
         }
