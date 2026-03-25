@@ -42,7 +42,7 @@ const ROLE_VISIBILITY = {
     items: [
       'dashboard',
       'ca-nodes', 'ca-batches',
-      'products', 'scans',
+      'products', 'qr-codes', 'scans',
     ],
   },
 
@@ -99,7 +99,7 @@ const ROLE_VISIBILITY = {
     items: [
       'dashboard',
       'ca-nodes', 'ca-batches', 'ca-traceability',
-      'products', 'scans',
+      'products', 'qr-codes', 'scans',
       'fraud', 'ca-scan-analytics',
     ],
     extraItems: [
@@ -255,13 +255,13 @@ const ROLE_VISIBILITY = {
   // Default operator — minimal
   operator: {
     domains: ['command-center', 'operations'],
-    items: ['dashboard', 'products', 'scans'],
+    items: ['dashboard', 'products', 'qr-codes', 'scans'],
   },
 
   // Viewer — same as operator
   viewer: {
     domains: ['command-center', 'operations'],
-    items: ['dashboard', 'products', 'scans'],
+    items: ['dashboard', 'products', 'qr-codes', 'scans'],
   },
 };
 
@@ -303,11 +303,12 @@ const COMPANY_ADMIN_NAV = [
 
 const DOMAIN_ITEMS = {
   'command-center': [
-    { id: 'dashboard', icon: icon('dashboard'), label: 'Executive Dashboard' },
+    { id: 'dashboard', icon: icon('dashboard'), label: 'Dashboard' },
     { id: 'ca-kpi-overview', icon: icon('barChart'), label: 'KPI Overview' },
   ],
   'operations': [
     { id: 'products', icon: icon('products'), label: 'Products' },
+    { id: 'qr-codes', icon: icon('scanner'), label: 'QR Codes' },
     { id: 'ca-batches', icon: icon('clipboard'), label: 'Batch Management' },
     { id: 'ca-nodes', icon: icon('factory'), label: 'Supply Network' },
     { id: 'ca-traceability', icon: icon('search'), label: 'Traceability Map' },

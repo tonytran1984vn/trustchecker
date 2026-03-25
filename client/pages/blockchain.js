@@ -6,13 +6,14 @@ import { timeAgo, shortHash } from '../utils/helpers.js';
 
 export function renderPage() {
   const b = State.blockchain;
-  if (!b) return '<div class="loading"><div class="spinner"></div></div>';
+  if (!b) return `<div class="loading"><div class="spinner"></div><span style="color:var(--text-muted)">Loading blockchain data…</span>
+    <div style="margin-top:16px"><button class="btn btn-sm" onclick="navigate('blockchain')" style="font-size:0.78rem">↻ Retry</button></div></div>`;
 
   return `
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
       <div class="stat-card emerald">
         <div class="stat-icon">🔗</div>
-        <div class="stat-value">${b.stats?.total_seals || 0}</div>
+        <div class="stat-value">${(b.recent_seals?.length > 0 ? Math.max(...b.recent_seals.map(s => s.block_index)) + 1 : b.stats?.total_seals) || 0}</div>
         <div class="stat-label">Total Blocks</div>
       </div>
       <div class="stat-card ${b.stats?.chain_integrity?.valid ? 'emerald' : 'rose'}">

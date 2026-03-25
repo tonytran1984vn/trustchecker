@@ -27,7 +27,7 @@
   /* Text — dark on light */
   --text-primary: #1e293b;
   --text-secondary: #64748b;
-  --text-muted: #94a3b8;
+  --text-muted: #64748b;
 
   /* Borders — subtle gray */
   --border: rgba(0, 0, 0, 0.08);
@@ -138,6 +138,7 @@
 /* Light mode tables */
 [data-theme="light"] th {
   background: rgba(0, 0, 0, 0.02);
+  color: #475569;
 }
 
 [data-theme="light"] tr:nth-child(even) td {

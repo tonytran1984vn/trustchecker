@@ -94,11 +94,16 @@ router.get('/stats', async (req, res) => {
     try {
         // NODE-BP-1: Parallelize independent queries
         const { clause: orgC, params: orgP } = evidenceOrgFilter(req.orgId);
-        const [total, anchored, verified, tampered, totalSize] = await Promise.all([
+        const [total, anchored, verified, tampered, pending, totalSize] = await Promise.all([
             db.get('SELECT COUNT(*) as count FROM evidence_items WHERE 1=1' + orgC, orgP),
             db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'anchored'" + orgC, orgP),
             db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'verified'" + orgC, orgP),
             db.get("SELECT COUNT(*) as count FROM evidence_items WHERE verification_status = 'tampered'" + orgC, orgP),
+            db.get(
+                "SELECT COUNT(*) as count FROM evidence_items WHERE verification_status NOT IN ('anchored','verified','tampered')" +
+                    orgC,
+                orgP
+            ),
             db.get('SELECT COALESCE(SUM(file_size), 0) as size FROM evidence_items WHERE 1=1' + orgC, orgP),
         ]).then(rows => rows.map(r => r || { count: 0, size: 0 }));
 
@@ -107,6 +112,7 @@ router.get('/stats', async (req, res) => {
             anchored: anchored.count,
             verified: verified.count,
             tampered: tampered.count,
+            pending: pending.count,
             total_size_mb: Math.round(((totalSize.size || 0) / (1024 * 1024)) * 100) / 100,
             integrity_rate: total.count > 0 ? Math.round(((anchored.count + verified.count) / total.count) * 100) : 100,
         });
@@ -290,9 +296,10 @@ router.get('/:id/verify', async (req, res) => {
             }
             integrity = hashMatch && chainValid ? 'verified' : 'tampered';
 
-            await db
-                .prepare('UPDATE evidence_items SET verification_status = ?, verified_at = NOW() WHERE id = ?')
-                .run(integrity, 'now', req.params.id);
+            await db.run(
+                "UPDATE evidence_items SET verification_status = ?, verified_at = datetime('now') WHERE id = ?",
+                [integrity, req.params.id]
+            );
         }
 
         res.json({
@@ -301,6 +308,7 @@ router.get('/:id/verify', async (req, res) => {
             blockchain_anchored: !!seal,
             block_index: seal?.block_index,
             integrity,
+            sealed_at: seal?.sealed_at || seal?.created_at,
             verified_at: new Date().toISOString(),
         });
     } catch (e) {

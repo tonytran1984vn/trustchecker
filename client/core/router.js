@@ -30,6 +30,7 @@ const PAGE_LOADERS = {
     'dashboard': () => import('../pages/dashboard.js'),
     'scanner': () => import('../pages/scanner.js'),
     'products': () => import('../pages/products.js'),
+    'qr-codes': () => import('../pages/qr-codes.js'),
     'scans': () => import('../pages/scans.js'),
     'fraud': () => import('../pages/fraud.js'),
     'blockchain': () => import('../pages/blockchain.js'),
@@ -342,6 +343,16 @@ export function navigate(page, opts = {}) {
     const skipPush = opts.skipPush || false;
     const params = { ...opts };
     delete params.skipPush;
+
+    // v10.2: SA pages require super_admin or platform_security role
+    const SA_ALLOWED_ROLES = ['super_admin', 'platform_security'];
+    if (page.startsWith('sa-') && !SA_ALLOWED_ROLES.includes(userRole)) {
+        console.warn(`[router] Blocked access to ${page} for role ${userRole}`);
+        const _roleLandingGuard = { org_owner: 'owner-governance', executive: 'exec-overview', carbon_officer: 'carbon-workspace', ops_manager: 'ops-planning', risk_officer: 'risk-dashboard', compliance_officer: 'compliance-dashboard', developer: 'it-authentication', blockchain_operator: 'blockchain', auditor: 'compliance-dashboard', company_admin: 'dashboard', security_officer: 'ca-governance' };
+        const safePage = _roleLandingGuard[userRole] || 'dashboard';
+        navigate(safePage);
+        return;
+    }
 
     // v9.1: Block navigation to locked features
     const featureKey = PAGE_FEATURE_MAP[page];

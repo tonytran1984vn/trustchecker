@@ -10,6 +10,7 @@ async function load() {
         API.get('/identity/types').catch(() => ({}))
     ]);
     D = { dids, vcs, types };
+    render();
 }
 export function renderPage() {
     load(); return `

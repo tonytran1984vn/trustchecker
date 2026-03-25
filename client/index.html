@@ -33,8 +33,10 @@
   <script>
     (function () {
       var t = localStorage.getItem('tc_theme');
-      // Default to light mode when no preference saved
-      if (t !== 'dark') {
+      if (t === 'dark') {
+        document.documentElement.removeAttribute('data-theme');
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#06080f');
+      } else {
         document.documentElement.setAttribute('data-theme', 'light');
         document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#f0f2f5');
       }
