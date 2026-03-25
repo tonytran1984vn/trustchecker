@@ -1690,7 +1690,7 @@ async function addProduct() {
       origin_country: document.getElementById('np-origin').value
     });
     State.modal = null;
-    showToast('<span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Product registered! QR code generated.', 'success');
+    showToast('✅ Product registered! QR code generated.', 'success');
     navigate('products');
   } catch (e) {
     showToast('Failed: ' + e.message, 'error');

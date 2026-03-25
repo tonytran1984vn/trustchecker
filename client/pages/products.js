@@ -91,7 +91,7 @@ async function addProduct() {
       price: parseFloat(document.getElementById('np-price').value) || 0,
     });
     State.modal = null;
-    showToast('<span class="status-icon status-pass" aria-label="Pass">✓</span> Product registered! QR code generated. Carbon footprint calculated.', 'success');
+    showToast('✅ Product registered! QR code generated. Carbon footprint calculated.', 'success');
     navigate('products');
   } catch (e) {
     showToast('Failed: ' + e.message, 'error');
