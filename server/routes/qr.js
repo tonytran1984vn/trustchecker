@@ -91,7 +91,91 @@ router.use((req, res, next) => {
     next();
 });
 
-// All routes require authentication
+// ─── PUBLIC (no-auth) endpoints ──────────────────────────────────────────────
+// These MUST be before router.use(authMiddleware)
+const rateLimit = require('express-rate-limit');
+const publicCheckLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Public check rate limit exceeded. Sign up for higher limits.' },
+});
+
+router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
+    try {
+        const { code } = req.body;
+        if (!code) return res.status(400).json({ error: 'code is required' });
+
+        // Look up QR code: try exact match, then LIKE search, then extract product ID from TC: format
+        let qrCode = await db.get('SELECT * FROM qr_codes WHERE qr_data = $1', [code]);
+        if (!qrCode) {
+            qrCode = await db.get("SELECT * FROM qr_codes WHERE qr_data LIKE '%' || $1 || '%'", [code]);
+        }
+        if (!qrCode) {
+            const parts = code.split(':');
+            if (parts.length >= 2 && parts[0] === 'TC') {
+                const productId = parts[1];
+                const product = await db.get(
+                    'SELECT id, name, manufacturer, sku, origin_country, trust_score FROM products WHERE id = $1',
+                    [productId]
+                );
+                if (product) {
+                    return res.json({
+                        result: product.trust_score >= 70 ? 'valid' : 'warning',
+                        message:
+                            product.trust_score >= 70
+                                ? '✅ Product verified — registered in TrustChecker'
+                                : '⚠️ Product found but trust score is low',
+                        product: {
+                            name: product.name,
+                            sku: product.sku,
+                            manufacturer: product.manufacturer,
+                            origin_country: product.origin_country,
+                            trust_score: product.trust_score || 100,
+                        },
+                        fraud_score: 0,
+                        verified_by: 'TrustChecker',
+                    });
+                }
+            }
+            return res
+                .status(404)
+                .json({ result: 'counterfeit', message: '❌ QR code not recognized', error: 'Not found' });
+        }
+
+        const product = await db.get(
+            'SELECT id, name, manufacturer, sku, origin_country, trust_score FROM products WHERE id = $1',
+            [qrCode.product_id]
+        );
+        if (!product) return res.status(404).json({ result: 'counterfeit', message: '❌ Product not found' });
+
+        const scanCount = await db.get('SELECT COUNT(*) as c FROM scan_events WHERE qr_code_id = $1', [qrCode.id]);
+        const isFirstScan = (scanCount?.c || 0) === 0;
+
+        res.json({
+            result: isFirstScan ? 'valid' : scanCount.c >= 3 ? 'suspicious' : 'warning',
+            message: isFirstScan
+                ? '✅ Sản phẩm chính hãng — Đây là lần đầu tiên mã được kiểm tra.'
+                : `⚠️ Mã đã được quét ${scanCount.c} lần trước đó. Kiểm tra kĩ nguồn gốc sản phẩm.`,
+            product: {
+                name: product.name,
+                sku: product.sku,
+                manufacturer: product.manufacturer,
+                origin_country: product.origin_country,
+                trust_score: product.trust_score || 100,
+            },
+            fraud_score: isFirstScan ? 0 : Math.min(0.8, (scanCount.c || 0) * 0.15),
+            scan_count: (scanCount?.c || 0) + 1,
+            verified_by: 'TrustChecker',
+        });
+    } catch (err) {
+        require('../lib/logger').error('Public check-by-code error:', err);
+        res.status(500).json({ error: 'Verification failed' });
+    }
+});
+
+// All routes below require authentication
 router.use(authMiddleware);
 
 // ─── POST /api/qr/validate ──────────────────────────────────────────────────
@@ -1284,16 +1368,7 @@ router.post('/mobile-scan', bulkScanDetector, replayDetector, validate(schemas.q
 
 // ─── GET /api/qr/public/check/:productId — Freemium public trust check ──────
 // No auth required. Rate limited per IP. Returns limited data + signup CTA.
-const rateLimit = require('express-rate-limit');
 const { withTransaction } = require('../middleware/transaction');
-const publicCheckLimiter = rateLimit({
-    windowMs: 60_000,
-    max: 10,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: 'Public check rate limit exceeded. Sign up for higher limits.' },
-    // Default keyGenerator handles IPv6 normalization automatically in v8+
-});
 
 router.get('/public/check/:productId', publicCheckLimiter, async (req, res) => {
     try {

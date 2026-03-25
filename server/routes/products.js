@@ -397,7 +397,10 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
 
         const productId = uuidv4();
         const qrCodeId = uuidv4();
-        const qrData = `TC:${productId}:${sku}:${Date.now()}`;
+        const qrCode = `TC:${productId}:${sku}:${Date.now()}`;
+        // QR encodes a public verification URL so phone scanners can open it
+        const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+        const qrData = `${baseUrl}/check?code=${encodeURIComponent(qrCode)}`;
 
         // Generate QR code image
         const qrImageBase64 = await QRCode.toDataURL(qrData, {
