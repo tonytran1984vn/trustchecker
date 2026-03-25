@@ -220,6 +220,36 @@
               </div>
             `;
           }
+
+          // Scan verification info
+          if (data.scan_verification) {
+            const sv = data.scan_verification;
+            const riskColors = { 'Thấp': '#00d264', 'Trung bình': '#ffa500', 'Cao': '#ff3366', 'Rất cao': '#ff0000' };
+            const riskColor = riskColors[sv.risk_level] || '#6b7b8d';
+            card.innerHTML += `
+              <div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid rgba(255,255,255,0.06)">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                  <span style="font-size:0.7rem;color:#6b7b8d;text-transform:uppercase;letter-spacing:0.5px">Scan History</span>
+                  <span style="font-size:0.7rem;padding:2px 8px;border-radius:4px;font-weight:700;background:${riskColor}22;color:${riskColor}">${sv.risk_level}</span>
+                </div>
+                <div style="font-size:0.85rem;color:#e0e6ed">
+                  Tổng lần quét: <strong>${sv.total_scans}</strong>
+                  ${sv.first_scanned_at ? '<br><span style="font-size:0.75rem;color:#6b7b8d">Lần đầu: ' + new Date(sv.first_scanned_at).toLocaleString('vi-VN') + '</span>' : ''}
+                </div>
+              </div>
+            `;
+          }
+
+          // Ownership info
+          if (data.ownership) {
+            const o = data.ownership;
+            const ownerColor = o.claimed ? '#ffa500' : '#00d264';
+            card.innerHTML += `
+              <div style="margin-top:12px;padding:12px;background:${ownerColor}11;border-radius:10px;border:1px solid ${ownerColor}33">
+                <div style="font-size:0.85rem;color:${ownerColor}">${o.message}</div>
+              </div>
+            `;
+          }
         }
       } catch (e) {
         bar.className = 'status-bar error';

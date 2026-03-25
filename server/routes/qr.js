@@ -103,11 +103,16 @@ const publicCheckLimiter = rateLimit({
 });
 
 router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
+    const startTime = Date.now();
+    const logger = require('../lib/logger');
     try {
-        const { code } = req.body;
+        const { code, device_fingerprint } = req.body;
         if (!code) return res.status(400).json({ error: 'code is required' });
 
-        // Look up QR code: try exact match, then LIKE search, then extract product ID from TC: format
+        const ipAddr = req.ip || req.headers['x-forwarded-for'] || '';
+        const userAgent = req.headers['user-agent'] || '';
+
+        // ── Step 1: Look up QR code ──────────────────────────────────────
         let qrCode = await db.get('SELECT * FROM qr_codes WHERE qr_data = $1', [code]);
         if (!qrCode) {
             qrCode = await db.get("SELECT * FROM qr_codes WHERE qr_data LIKE '%' || $1 || '%'", [code]);
@@ -115,49 +120,174 @@ router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
         if (!qrCode) {
             const parts = code.split(':');
             if (parts.length >= 2 && parts[0] === 'TC') {
-                const productId = parts[1];
-                const product = await db.get(
-                    'SELECT id, name, manufacturer, sku, origin_country, trust_score FROM products WHERE id = $1',
-                    [productId]
-                );
-                if (product) {
-                    return res.json({
-                        result: product.trust_score >= 70 ? 'valid' : 'warning',
-                        message:
-                            product.trust_score >= 70
-                                ? '✅ Product verified — registered in TrustChecker'
-                                : '⚠️ Product found but trust score is low',
-                        product: {
-                            name: product.name,
-                            sku: product.sku,
-                            manufacturer: product.manufacturer,
-                            origin_country: product.origin_country,
-                            trust_score: product.trust_score || 100,
-                        },
-                        fraud_score: 0,
-                        verified_by: 'TrustChecker',
-                    });
-                }
+                qrCode = await db.get('SELECT * FROM qr_codes WHERE product_id = $1 LIMIT 1', [parts[1]]);
             }
-            return res
-                .status(404)
-                .json({ result: 'counterfeit', message: '❌ QR code not recognized', error: 'Not found' });
+        }
+        if (!qrCode) {
+            // Unknown QR — record counterfeit scan
+            try {
+                await db.run(
+                    `INSERT INTO scan_events (id, scan_type, device_fingerprint, ip_address, user_agent, result, fraud_score, scanned_at)
+                     VALUES ($1, 'public_check', $2, $3, $4, 'counterfeit', 1.0, NOW())`,
+                    [uuidv4(), device_fingerprint || '', ipAddr, userAgent]
+                );
+            } catch (_) {}
+            return res.status(404).json({
+                result: 'counterfeit',
+                message: '❌ MÃ QR KHÔNG HỢP LỆ — Mã này không tồn tại trong hệ thống. Đây có thể là hàng giả.',
+                fraud_score: 1.0,
+                trust_score: 0,
+            });
         }
 
+        // ── Step 2: Check blocked/revoked ────────────────────────────────
+        if (qrCode.status === 'blocked') {
+            return res.json({
+                result: 'blocked',
+                message: '🚫 MÃ QR ĐÃ BỊ KHÓA — Phát hiện hoạt động quét bất thường. Sản phẩm có thể là hàng giả.',
+                fraud_score: 0.95,
+                trust_score: 0,
+            });
+        }
+        if (qrCode.status === 'revoked') {
+            return res.json({
+                result: 'revoked',
+                message: '🚫 MÃ QR ĐÃ BỊ THU HỒI — Mã này không còn hợp lệ.',
+                fraud_score: 0.5,
+                trust_score: 0,
+            });
+        }
+
+        // ── Step 3: Get product ──────────────────────────────────────────
         const product = await db.get(
-            'SELECT id, name, manufacturer, sku, origin_country, trust_score FROM products WHERE id = $1',
+            'SELECT id, name, manufacturer, sku, origin_country, trust_score, status FROM products WHERE id = $1',
             [qrCode.product_id]
         );
-        if (!product) return res.status(404).json({ result: 'counterfeit', message: '❌ Product not found' });
+        if (!product) {
+            return res.status(404).json({ result: 'counterfeit', message: '❌ Sản phẩm không tồn tại' });
+        }
 
-        const scanCount = await db.get('SELECT COUNT(*) as c FROM scan_events WHERE qr_code_id = $1', [qrCode.id]);
-        const isFirstScan = (scanCount?.c || 0) === 0;
+        // ── Step 4: Get ALL previous scans for anti-counterfeit analysis ─
+        const previousScans = await db.all(
+            `SELECT id, scanned_at, ip_address, device_fingerprint
+             FROM scan_events WHERE qr_code_id = $1 AND result != 'pending'
+             ORDER BY scanned_at ASC LIMIT 1000`,
+            [qrCode.id]
+        );
+        const scanCount = previousScans.length;
+        const isFirstScan = scanCount === 0;
+        const firstScanRecord = previousScans.length > 0 ? previousScans[0] : null;
 
+        // ── Step 5: Anti-flooding (dedup within 5 seconds) ───────────────
+        if (ipAddr && ipAddr !== '::1') {
+            const recentScan = await db.get(
+                `SELECT id FROM scan_events WHERE qr_code_id = $1 AND ip_address = $2
+                 AND scanned_at > NOW() - INTERVAL '5 seconds' LIMIT 1`,
+                [qrCode.id, ipAddr]
+            );
+            if (recentScan) {
+                return res.json({
+                    result: 'duplicate',
+                    message: '⏳ Bạn vừa quét mã này. Vui lòng đợi vài giây.',
+                });
+            }
+        }
+
+        // ── Step 6: Multi-IP auto-block (5+ scans, 4+ unique IPs) ───────
+        if (scanCount >= 5) {
+            const uniqueIPs = new Set(previousScans.map(s => s.ip_address)).size;
+            if (uniqueIPs >= 4) {
+                try {
+                    await db.run("UPDATE qr_codes SET status = 'blocked' WHERE id = $1 AND status = 'active'", [
+                        qrCode.id,
+                    ]);
+                } catch (_) {}
+                try {
+                    await db.run(
+                        `INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, ip_address, device_fingerprint, user_agent, result, fraud_score, scanned_at)
+                         VALUES ($1, $2, $3, 'public_check', $4, $5, $6, 'blocked', 0.95, NOW())`,
+                        [uuidv4(), qrCode.id, qrCode.product_id, ipAddr, device_fingerprint || '', userAgent]
+                    );
+                } catch (_) {}
+                return res.json({
+                    result: 'blocked',
+                    message: `🚫 MÃ QR ĐÃ BỊ KHÓA — Phát hiện ${scanCount} lần quét từ ${uniqueIPs} địa điểm khác nhau. Rất có thể mã QR này bị sao chép.`,
+                    fraud_score: 0.95,
+                    trust_score: 0,
+                    scan_analytics: { total_scans: scanCount, unique_locations: uniqueIPs },
+                });
+            }
+        }
+
+        // ── Step 7: Determine result ─────────────────────────────────────
+        let result, message, fraudScore;
+
+        if (isFirstScan) {
+            result = 'valid';
+            message = '✅ SẢN PHẨM CHÍNH HÃNG — Đây là lần đầu tiên mã được kiểm tra. Sản phẩm hợp lệ.';
+            fraudScore = 0;
+        } else {
+            // Repeat scan — KEY anti-counterfeit signal
+            const ft = new Date(firstScanRecord.scanned_at + (firstScanRecord.scanned_at.includes('Z') ? '' : 'Z'));
+            const timeStr = `${ft.getHours().toString().padStart(2, '0')}:${ft.getMinutes().toString().padStart(2, '0')} ngày ${ft.getDate().toString().padStart(2, '0')}/${(ft.getMonth() + 1).toString().padStart(2, '0')}/${ft.getFullYear()}`;
+            const uniqueIPs = new Set(previousScans.map(s => s.ip_address)).size;
+
+            if (scanCount >= 3 || (firstScanRecord.ip_address && firstScanRecord.ip_address !== ipAddr)) {
+                result = 'suspicious';
+                fraudScore = Math.min(0.9, scanCount * 0.15);
+                message = `🚨 CẢNH BÁO GIẢ MẠO — Mã đã quét ${scanCount} lần (lần đầu lúc ${timeStr}), từ ${uniqueIPs} thiết bị khác nhau. CÓ KHẢ NĂNG CAO là mã QR bị sao chép dán lên hàng giả.`;
+            } else {
+                result = 'warning';
+                fraudScore = Math.min(0.5, scanCount * 0.1);
+                message = `⚠️ MÃ ĐÃ ĐƯỢC KIỂM TRA — Lần đầu quét lúc ${timeStr}. Nếu đây không phải bạn, sản phẩm có thể không chính hãng.`;
+            }
+        }
+
+        // ── Step 8: Record this scan event ───────────────────────────────
+        const scanId = uuidv4();
+        try {
+            await db.run(
+                `INSERT INTO scan_events (id, qr_code_id, product_id, scan_type, device_fingerprint, ip_address, user_agent, result, fraud_score, trust_score, scanned_at, response_time_ms)
+                 VALUES ($1, $2, $3, 'public_check', $4, $5, $6, $7, $8, $9, NOW(), $10)`,
+                [
+                    scanId,
+                    qrCode.id,
+                    qrCode.product_id,
+                    device_fingerprint || '',
+                    ipAddr,
+                    userAgent,
+                    result,
+                    fraudScore,
+                    product.trust_score || 100,
+                    Date.now() - startTime,
+                ]
+            );
+        } catch (e) {
+            logger.error('Failed to record public scan:', e.message);
+        }
+
+        // ── Step 9: Check ownership claim ────────────────────────────────
+        let ownershipInfo = null;
+        try {
+            const claim = await db.get('SELECT claimer_name, claimed_at FROM ownership_claims WHERE qr_code_id = $1', [
+                qrCode.id,
+            ]);
+            if (claim) {
+                ownershipInfo = {
+                    claimed: true,
+                    owner: claim.claimer_name || 'Đã đăng ký',
+                    claimed_at: claim.claimed_at,
+                    message: '📋 Sản phẩm này đã được đăng ký sở hữu bởi người khác.',
+                };
+            } else if (isFirstScan) {
+                ownershipInfo = { claimed: false, message: '📋 Bạn có thể đăng ký sở hữu sản phẩm này.' };
+            }
+        } catch (_) {}
+
+        // ── Response ─────────────────────────────────────────────────────
         res.json({
-            result: isFirstScan ? 'valid' : scanCount.c >= 3 ? 'suspicious' : 'warning',
-            message: isFirstScan
-                ? '✅ Sản phẩm chính hãng — Đây là lần đầu tiên mã được kiểm tra.'
-                : `⚠️ Mã đã được quét ${scanCount.c} lần trước đó. Kiểm tra kĩ nguồn gốc sản phẩm.`,
+            result,
+            message,
             product: {
                 name: product.name,
                 sku: product.sku,
@@ -165,9 +295,17 @@ router.post('/public/check-by-code', publicCheckLimiter, async (req, res) => {
                 origin_country: product.origin_country,
                 trust_score: product.trust_score || 100,
             },
-            fraud_score: isFirstScan ? 0 : Math.min(0.8, (scanCount.c || 0) * 0.15),
-            scan_count: (scanCount?.c || 0) + 1,
+            fraud_score: fraudScore,
+            scan_verification: {
+                is_first_scan: isFirstScan,
+                total_scans: scanCount + 1,
+                first_scanned_at: firstScanRecord?.scanned_at || null,
+                risk_level:
+                    scanCount >= 5 ? 'Rất cao' : scanCount >= 3 ? 'Cao' : scanCount >= 1 ? 'Trung bình' : 'Thấp',
+            },
+            ownership: ownershipInfo,
             verified_by: 'TrustChecker',
+            response_time_ms: Date.now() - startTime,
         });
     } catch (err) {
         require('../lib/logger').error('Public check-by-code error:', err);
