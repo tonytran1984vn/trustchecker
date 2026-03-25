@@ -544,8 +544,9 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
         if (!product_id) {
             return res.status(400).json({ error: 'product_id là bắt buộc' });
         }
-        if (quantity < 1 || quantity > 100) {
-            return res.status(400).json({ error: 'Số lượng phải từ 1 đến 100' });
+        const qty = Math.min(Math.max(1, parseInt(quantity) || 1), 500);
+        if (qty < 1) {
+            return res.status(400).json({ error: 'Số lượng phải từ 1 đến 500' });
         }
 
         const product = await db.get('SELECT * FROM products WHERE id = ?', [product_id]);
@@ -553,60 +554,40 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
             return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
         }
 
+        const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
         const generatedCodes = [];
+        const batchTimestamp = Date.now();
 
-        for (let i = 0; i < quantity; i++) {
-            let code;
-            let attempts = 0;
+        for (let i = 0; i < qty; i++) {
+            // Each QR gets a unique code: TC:productId:SKU:serialIndex:timestamp
+            const serialCode = `TC:${product_id}:${product.sku}:${String(i + 1).padStart(4, '0')}:${batchTimestamp}`;
+            // QR encodes a verification URL so phone scanners open check page
+            const qrData = `${baseUrl}/check?code=${encodeURIComponent(serialCode)}`;
 
-            // Generate unique code
-            do {
-                if (format === 'branded' && brand_prefix) {
-                    // Format: BRAND-NAME-ABC12345
-                    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-                    const nums = '0123456789';
-                    let suffix = '';
-                    for (let j = 0; j < 3; j++) suffix += chars[require('crypto').randomInt(chars.length)];
-                    for (let j = 0; j < 5; j++) suffix += nums[require('crypto').randomInt(nums.length)];
-                    code = `${brand_prefix.toUpperCase().replace(/[^A-Z0-9-]/g, '')}-${suffix}`;
-                } else {
-                    // Format: ABCDEFGH1234
-                    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-                    const nums = '0123456789';
-                    let alphapart = '';
-                    let numpart = '';
-                    for (let j = 0; j < 8; j++) alphapart += chars[require('crypto').randomInt(chars.length)];
-                    for (let j = 0; j < 4; j++) numpart += nums[require('crypto').randomInt(nums.length)];
-                    code = alphapart + numpart;
-                }
-                attempts++;
-            } while ((await db.get('SELECT id FROM qr_codes WHERE qr_data = ?', [code])) && attempts < 50);
-
-            if (attempts >= 50) {
-                return res.status(500).json({ error: 'Unable to generate unique code, please try again' });
-            }
-
-            // Generate QR code image for this code
-            const qrImageBase64 = await QRCode.toDataURL(code, {
+            // Generate QR code image
+            const qrImageBase64 = await QRCode.toDataURL(qrData, {
                 width: 300,
                 margin: 2,
                 color: { dark: '#0ff', light: '#0a0a1a' },
             });
 
             const qrId = uuidv4();
-            await db.run(
-                `
-                INSERT INTO qr_codes (id, product_id, qr_data, qr_image_base64, org_id, generated_by)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `,
-                [qrId, product_id, code, qrImageBase64, req.user.orgId || null, req.user.id]
-            );
-
-            generatedCodes.push({
-                id: qrId,
-                code: code,
-                qr_image_base64: qrImageBase64,
-            });
+            try {
+                await db.run(
+                    `INSERT INTO qr_codes (id, product_id, qr_data, qr_image_base64, org_id, generated_by)
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [qrId, product_id, qrData, qrImageBase64, req.user.orgId || null, req.user.id]
+                );
+                generatedCodes.push({
+                    id: qrId,
+                    code: serialCode,
+                    qr_data: qrData,
+                    qr_image_base64: qrImageBase64,
+                    serial: i + 1,
+                });
+            } catch (dupErr) {
+                continue; // Skip duplicates
+            }
         }
 
         // Audit log
@@ -621,7 +602,7 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
                     'CODES_GENERATED',
                     'product',
                     product_id,
-                    JSON.stringify({ quantity, format, codes: generatedCodes.map(c => c.code) })
+                    JSON.stringify({ quantity: qty, format, codes: generatedCodes.map(c => c.code) })
                 );
         } catch (auditErr) {
             logger.error('[Audit]', auditErr.message);

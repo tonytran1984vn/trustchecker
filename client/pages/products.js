@@ -123,6 +123,7 @@ async function showProductDetail(id) {
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <div style="font-weight:600;font-size:0.85rem">📱 QR Codes (${codes.length})</div>
               <div style="display:flex;gap:6px">
+                ${State.user?.role !== 'viewer' ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showGenerateQrModal('${p.id}','${p.name}','${p.sku}')" style="font-size:0.72rem" title="Tạo QR hàng loạt">🔄 Tạo QR Batch</button>` : ''}
                 <button class="btn btn-sm" onclick="exportQrCodes('${p.id}','csv')" style="font-size:0.72rem" title="Tải file CSV (Excel)">📊 CSV</button>
                 <button class="btn btn-sm" onclick="exportQrCodes('${p.id}','pdf')" style="font-size:0.72rem" title="Tải file PDF (in ấn)">📄 PDF</button>
               </div>
@@ -266,6 +267,80 @@ function exportProductsCSV() {
   }
 }
 
+// ── Generate QR Batch Modal ──
+function showGenerateQrModal(productId, productName, productSku) {
+  State.modal = `
+    <div class="modal" style="max-width:480px">
+      <div class="modal-title">🔄 Tạo QR Code Hàng Loạt</div>
+      <div style="padding:12px;background:var(--border);border-radius:8px;margin-bottom:16px">
+        <div style="font-size:0.82rem"><strong>${productName}</strong></div>
+        <div style="font-size:0.72rem;color:var(--text-muted);font-family:'JetBrains Mono'">${productSku}</div>
+      </div>
+      <div class="input-group">
+        <label>Số lượng mã QR *</label>
+        <input class="input" id="qr-batch-qty" type="number" min="1" max="500" value="10" placeholder="1 - 500">
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px">Mỗi mã QR có serial number riêng, encode verification URL để phone quét được</div>
+      </div>
+      <div id="qr-batch-progress" style="display:none;padding:12px;background:rgba(0,210,255,0.08);border-radius:8px;margin-top:12px;text-align:center">
+        <div class="spinner" style="width:24px;height:24px;margin:0 auto 8px"></div>
+        <div style="font-size:0.82rem;color:var(--accent)">Đang tạo mã QR...</div>
+      </div>
+      <div id="qr-batch-result" style="display:none"></div>
+      <div style="display:flex;gap:10px;margin-top:16px" id="qr-batch-actions">
+        <button class="btn btn-primary" id="qr-batch-btn" onclick="generateQrBatch('${productId}')" style="flex:1">🔄 Tạo Mã QR</button>
+        <button class="btn" onclick="State.modal=null;render()">Hủy</button>
+      </div>
+    </div>
+  `;
+  render();
+}
+
+async function generateQrBatch(productId) {
+  const qtyInput = document.getElementById('qr-batch-qty');
+  const quantity = parseInt(qtyInput?.value) || 10;
+  if (quantity < 1 || quantity > 500) {
+    showToast('Số lượng phải từ 1 đến 500', 'error');
+    return;
+  }
+
+  // Show progress
+  const btn = document.getElementById('qr-batch-btn');
+  const progress = document.getElementById('qr-batch-progress');
+  const result = document.getElementById('qr-batch-result');
+  if (btn) btn.disabled = true;
+  if (btn) btn.textContent = '⏳ Đang tạo...';
+  if (progress) progress.style.display = 'block';
+
+  try {
+    const res = await API.post('/products/generate-code', { product_id: productId, quantity });
+    const codes = res.codes || [];
+
+    if (progress) progress.style.display = 'none';
+    if (result) {
+      result.style.display = 'block';
+      result.innerHTML = `
+        <div style="padding:16px;background:rgba(0,210,100,0.1);border-radius:8px;border:1px solid rgba(0,210,100,0.2)">
+          <div style="font-size:1rem;font-weight:800;color:#00d264;margin-bottom:8px">✅ Đã tạo ${codes.length} mã QR!</div>
+          <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:12px">
+            Serial: #0001 → #${String(codes.length).padStart(4, '0')}<br>
+            Mỗi mã encode URL → phone quét mở trang xác minh
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" onclick="exportQrCodes('${productId}','csv')" style="flex:1">📊 Tải CSV</button>
+            <button class="btn btn-sm" onclick="exportQrCodes('${productId}','pdf')" style="flex:1">📄 Tải PDF</button>
+          </div>
+        </div>
+      `;
+    }
+    if (btn) { btn.textContent = '✅ Hoàn tất'; btn.disabled = true; }
+    showToast(`✅ Đã tạo ${codes.length} mã QR cho sản phẩm!`, 'success');
+  } catch (e) {
+    if (progress) progress.style.display = 'none';
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Tạo Mã QR'; }
+    showToast('❌ ' + (e.message || 'Tạo mã thất bại'), 'error');
+  }
+}
+
 // Window exports
 window.showAddProduct = showAddProduct;
 window.addProduct = addProduct;
@@ -275,4 +350,6 @@ window.deleteQrCode = deleteQrCode;
 window.showDeletionHistory = showDeletionHistory;
 window.exportQrCodes = exportQrCodes;
 window.exportProductsCSV = exportProductsCSV;
+window.showGenerateQrModal = showGenerateQrModal;
+window.generateQrBatch = generateQrBatch;
 
