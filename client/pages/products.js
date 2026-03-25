@@ -270,7 +270,7 @@ function exportProductsCSV() {
 // ── Generate QR Batch Modal ──
 function showGenerateQrModal(productId, productName, productSku) {
   State.modal = `
-    <div class="modal" style="max-width:480px">
+    <div class="modal" style="max-width:500px">
       <div class="modal-title">🔄 Tạo QR Code Hàng Loạt</div>
       <div style="padding:12px;background:var(--border);border-radius:8px;margin-bottom:16px">
         <div style="font-size:0.82rem"><strong>${productName}</strong></div>
@@ -278,17 +278,16 @@ function showGenerateQrModal(productId, productName, productSku) {
       </div>
       <div class="input-group">
         <label>Số lượng mã QR *</label>
-        <input class="input" id="qr-batch-qty" type="number" min="1" max="500" value="10" placeholder="1 - 500">
-        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px">Mỗi mã QR có serial number riêng, encode verification URL để phone quét được</div>
+        <input class="input" id="qr-batch-qty" type="number" min="1" max="100000" value="10" placeholder="1 - 100,000">
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px">
+          ≤ 500: tạo ngay &nbsp;|&nbsp; > 500: xử lý nền (background job)
+        </div>
       </div>
-      <div id="qr-batch-progress" style="display:none;padding:12px;background:rgba(0,210,255,0.08);border-radius:8px;margin-top:12px;text-align:center">
-        <div class="spinner" style="width:24px;height:24px;margin:0 auto 8px"></div>
-        <div style="font-size:0.82rem;color:var(--accent)">Đang tạo mã QR...</div>
-      </div>
+      <div id="qr-batch-progress" style="display:none"></div>
       <div id="qr-batch-result" style="display:none"></div>
       <div style="display:flex;gap:10px;margin-top:16px" id="qr-batch-actions">
         <button class="btn btn-primary" id="qr-batch-btn" onclick="generateQrBatch('${productId}')" style="flex:1">🔄 Tạo Mã QR</button>
-        <button class="btn" onclick="State.modal=null;render()">Hủy</button>
+        <button class="btn" onclick="if(window._qrPollTimer)clearInterval(window._qrPollTimer);State.modal=null;render()">Hủy</button>
       </div>
     </div>
   `;
@@ -298,23 +297,82 @@ function showGenerateQrModal(productId, productName, productSku) {
 async function generateQrBatch(productId) {
   const qtyInput = document.getElementById('qr-batch-qty');
   const quantity = parseInt(qtyInput?.value) || 10;
-  if (quantity < 1 || quantity > 500) {
-    showToast('Số lượng phải từ 1 đến 500', 'error');
+  if (quantity < 1 || quantity > 100000) {
+    showToast('Số lượng phải từ 1 đến 100,000', 'error');
     return;
   }
 
-  // Show progress
   const btn = document.getElementById('qr-batch-btn');
   const progress = document.getElementById('qr-batch-progress');
   const result = document.getElementById('qr-batch-result');
-  if (btn) btn.disabled = true;
-  if (btn) btn.textContent = '⏳ Đang tạo...';
-  if (progress) progress.style.display = 'block';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang tạo...'; }
 
   try {
     const res = await API.post('/products/generate-code', { product_id: productId, quantity });
-    const codes = res.codes || [];
 
+    // ── Async path: background job ──
+    if (res.async && res.job_id) {
+      if (progress) {
+        progress.style.display = 'block';
+        progress.innerHTML = `
+          <div style="padding:16px;background:rgba(0,210,255,0.08);border-radius:8px;margin-top:12px">
+            <div style="font-size:0.85rem;font-weight:700;color:var(--accent);margin-bottom:8px">
+              ⚙️ Đang xử lý ${quantity.toLocaleString()} mã QR...
+            </div>
+            <div style="background:rgba(255,255,255,0.1);border-radius:4px;height:20px;overflow:hidden;margin-bottom:8px">
+              <div id="qr-progress-bar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#00d264);transition:width 0.5s;border-radius:4px"></div>
+            </div>
+            <div id="qr-progress-text" style="font-size:0.75rem;color:var(--text-muted)">Đang chờ worker xử lý...</div>
+          </div>
+        `;
+      }
+      if (btn) btn.style.display = 'none';
+
+      // Poll every 2 seconds
+      window._qrPollTimer = setInterval(async () => {
+        try {
+          const status = await API.get(`/products/jobs/${res.job_id}`);
+          const job = status.job;
+          const bar = document.getElementById('qr-progress-bar');
+          const text = document.getElementById('qr-progress-text');
+
+          if (bar) bar.style.width = `${job.progress || 0}%`;
+          if (text) text.textContent = `${Math.round(job.progress || 0)}% — ${(job.generated_count || 0).toLocaleString()} / ${quantity.toLocaleString()} mã đã tạo`;
+
+          if (job.status === 'completed') {
+            clearInterval(window._qrPollTimer);
+            if (progress) progress.style.display = 'none';
+            if (result) {
+              result.style.display = 'block';
+              result.innerHTML = `
+                <div style="padding:16px;background:rgba(0,210,100,0.1);border-radius:8px;border:1px solid rgba(0,210,100,0.2)">
+                  <div style="font-size:1rem;font-weight:800;color:#00d264;margin-bottom:8px">✅ Đã tạo ${(job.generated_count || quantity).toLocaleString()} mã QR!</div>
+                  <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:12px">
+                    Serial: #00001 → #${String(job.generated_count || quantity).padStart(5, '0')}<br>
+                    Mỗi mã encode URL → phone quét mở trang xác minh
+                  </div>
+                  <div style="display:flex;gap:8px">
+                    <button class="btn btn-sm" onclick="exportQrCodes('${productId}','csv')" style="flex:1">📊 Tải CSV</button>
+                    <button class="btn btn-sm" onclick="exportQrCodes('${productId}','pdf')" style="flex:1">📄 Tải PDF</button>
+                  </div>
+                </div>
+              `;
+            }
+            showToast(`✅ Đã tạo ${(job.generated_count || quantity).toLocaleString()} mã QR!`, 'success');
+          } else if (job.status === 'failed') {
+            clearInterval(window._qrPollTimer);
+            if (progress) progress.style.display = 'none';
+            showToast(`❌ Job thất bại: ${job.error_message || 'Unknown error'}`, 'error');
+            if (btn) { btn.style.display = ''; btn.disabled = false; btn.textContent = '🔄 Thử Lại'; }
+          }
+        } catch (_) {}
+      }, 2000);
+
+      return;
+    }
+
+    // ── Sync path: ≤ 500 codes ──
+    const codes = res.codes || [];
     if (progress) progress.style.display = 'none';
     if (result) {
       result.style.display = 'block';
@@ -333,7 +391,7 @@ async function generateQrBatch(productId) {
       `;
     }
     if (btn) { btn.textContent = '✅ Hoàn tất'; btn.disabled = true; }
-    showToast(`✅ Đã tạo ${codes.length} mã QR cho sản phẩm!`, 'success');
+    showToast(`✅ Đã tạo ${codes.length} mã QR!`, 'success');
   } catch (e) {
     if (progress) progress.style.display = 'none';
     if (btn) { btn.disabled = false; btn.textContent = '🔄 Tạo Mã QR'; }

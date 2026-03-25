@@ -544,14 +544,34 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
         if (!product_id) {
             return res.status(400).json({ error: 'product_id là bắt buộc' });
         }
-        const qty = Math.min(Math.max(1, parseInt(quantity) || 1), 500);
+        const qty = Math.min(Math.max(1, parseInt(quantity) || 1), 100000);
         if (qty < 1) {
-            return res.status(400).json({ error: 'Số lượng phải từ 1 đến 500' });
+            return res.status(400).json({ error: 'Số lượng phải từ 1 đến 100,000' });
         }
 
         const product = await db.get('SELECT * FROM products WHERE id = ?', [product_id]);
         if (!product) {
             return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
+        }
+
+        // ── Async path: qty > 500 → background job ──
+        if (qty > 500) {
+            const qrJobWorker = require('../lib/qr-job-worker');
+            const jobId = await qrJobWorker.createJob({
+                product_id,
+                product_name: product.name,
+                product_sku: product.sku,
+                quantity: qty,
+                org_id: req.user.orgId || null,
+                created_by: req.user.id,
+            });
+            return res.status(202).json({
+                async: true,
+                job_id: jobId,
+                message: `Đã tạo job xử lý ${qty.toLocaleString()} mã QR. Theo dõi tiến trình tại /api/products/jobs/${jobId}`,
+                quantity: qty,
+                product: { id: product.id, name: product.name, sku: product.sku },
+            });
         }
 
         const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
@@ -625,6 +645,45 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
     } catch (err) {
         logger.error('Generate code error:', err);
         res.status(500).json({ error: 'Failed to generate codes' });
+    }
+});
+
+// ─── GET /api/products/jobs — List QR generation jobs ────────────────────────
+router.get('/jobs', authMiddleware, async (req, res) => {
+    try {
+        const qrJobWorker = require('../lib/qr-job-worker');
+        const jobs = await qrJobWorker.listJobs(req.user.orgId || null, 20);
+        res.json({ jobs });
+    } catch (err) {
+        logger.error('List jobs error:', err);
+        res.status(500).json({ error: 'Failed to list jobs' });
+    }
+});
+
+// ─── GET /api/products/jobs/:jobId — Poll job progress ───────────────────────
+router.get('/jobs/:jobId', authMiddleware, async (req, res) => {
+    try {
+        const qrJobWorker = require('../lib/qr-job-worker');
+        const job = await qrJobWorker.getJob(req.params.jobId);
+        if (!job) return res.status(404).json({ error: 'Job not found' });
+        res.json({ job });
+    } catch (err) {
+        logger.error('Get job error:', err);
+        res.status(500).json({ error: 'Failed to get job' });
+    }
+});
+
+// ─── POST /api/products/jobs/:jobId/cancel — Cancel a pending job ────────────
+router.post('/jobs/:jobId/cancel', authMiddleware, async (req, res) => {
+    try {
+        const job = await db.get('SELECT * FROM qr_generation_jobs WHERE id = ?', [req.params.jobId]);
+        if (!job) return res.status(404).json({ error: 'Job not found' });
+        if (job.status !== 'pending') return res.status(409).json({ error: 'Can only cancel pending jobs' });
+        await db.run("UPDATE qr_generation_jobs SET status = 'cancelled' WHERE id = ?", [req.params.jobId]);
+        res.json({ message: 'Job cancelled' });
+    } catch (err) {
+        logger.error('Cancel job error:', err);
+        res.status(500).json({ error: 'Failed to cancel job' });
     }
 });
 
