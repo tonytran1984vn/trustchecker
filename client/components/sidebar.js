@@ -140,7 +140,7 @@ const ROLE_VISIBILITY = {
 
   // Auditor → Internal Audit (CIE v2.1 — forensic access)
   auditor: {
-    domains: ['command-center', 'risk-protection', 'corporate-governance'],
+    domains: ['command-center', 'risk-protection', 'corporate-governance', 'operations'],
     items: [
       'dashboard',
       'fraud',

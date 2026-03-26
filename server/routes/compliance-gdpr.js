@@ -488,7 +488,7 @@ router.post('/gdpr/consent', async (req, res) => {
 });
 
 // ─── GET /report — Compliance report ────────────────────────
-router.get('/report', requirePermission('compliance:manage'), async (req, res) => {
+router.get('/report', requirePermission('compliance:view'), async (req, res) => {
     try {
         const orgId = req.user.orgId;
         const totalUsers = (await db.get('SELECT COUNT(*) as c FROM users WHERE org_id = $1', [orgId]))?.c || 0;
