@@ -55,7 +55,7 @@ export function renderPage() {
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:2rem">
         ${metricCard(icon('products', 22, ACCENT), 'Total Batches', batchCount, `${activeBatches} active`, ACCENT)}
         ${metricCard(icon('network', 22, '#ef4444'), 'In Transit', transitBatches, `${totalShipments} total shipments`, '#ef4444')}
-        ${metricCard(icon('clock', 22, '#6366f1'), 'Pending Transfers', pendingShipments, pendingShipments > 3 ? '↗ Above average' : 'Normal', '#6366f1')}
+        ${metricCard(icon('truck', 22, '#6366f1'), 'Pending Transfers', pendingShipments, pendingShipments > 3 ? '↗ Above average' : 'Normal', '#6366f1')}
         ${metricCard(icon('alertTriangle', 22, '#ef4444'), 'Open Incidents', openIncidents, openIncidents > 0 ? 'Requires attention' : 'All clear ✓', openIncidents > 0 ? '#ef4444' : '#22c55e')}
         ${metricCard(icon('search', 22, '#0ea5e9'), 'Scan Events', scanCount, `${anomalyCount} anomalies`, '#0ea5e9')}
       </div>
