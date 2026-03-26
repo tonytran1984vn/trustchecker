@@ -33,8 +33,9 @@ export function renderPage() {
         </div>
         <div class="mini-chart-row">
           ${(f.forecast || []).slice(0, 14).map((v, i) => {
-    const h = Math.max(5, Math.min(60, v / 2));
-    return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px"><div style="width:20px;height:${h}px;background:var(--cyan);border-radius:4px" title="Period ${i + 1}: ${v.toFixed(1)}"></div><span style="font-size:0.6rem;color:var(--text-muted)">${i + 1}</span></div>`;
+    const nv = Number(v) || 0;
+    const h = Math.max(5, Math.min(60, nv / 2));
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px"><div style="width:20px;height:${h}px;background:var(--cyan);border-radius:4px" title="Period ${i + 1}: ${nv.toFixed(1)}"></div><span style="font-size:0.6rem;color:var(--text-muted)">${i + 1}</span></div>`;
   }).join('')}
         </div>
       </div>

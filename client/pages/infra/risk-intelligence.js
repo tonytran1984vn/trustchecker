@@ -24,7 +24,7 @@ async function load() {
 }
 function renderContent() {
     const role = State.user?.role || '';
-    const riskRoles = ['risk_officer', 'risk_committee', 'executive', 'admin', 'superadmin'];
+    const riskRoles = ['risk_officer', 'risk_committee', 'executive', 'admin', 'super_admin', 'ivu_validator', 'company_admin', 'org_owner'];
     if (!riskRoles.includes(role)) {
         return `<div class="sa-page"><div style="text-align:center;padding:60px;color:var(--text-muted)"><h3>Access Denied</h3><p>Risk Intelligence workspace is restricted to authorized risk and executive roles.</p></div></div>`;
     }

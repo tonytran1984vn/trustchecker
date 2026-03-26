@@ -27,7 +27,7 @@ export function renderPage() {
               <span style="font-weight:700;color:${color}">${v.score}</span>
             </div>
             <div style="background:var(--bg-secondary);border-radius:4px;height:6px;overflow:hidden"><div style="width:${v.score}%;height:100%;background:${color};border-radius:4px"></div></div>
-            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:8px">${Object.entries(v.details || {}).slice(0, 3).map(([k, val]) => `${k}: ${val}`).join(' • ')}</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:8px">${Object.entries(v.details || {}).slice(0, 3).map(([k, val]) => { const fv = typeof val === 'object' ? JSON.stringify(val).length > 40 ? Object.keys(val).length + ' items' : JSON.stringify(val) : typeof val === 'number' ? (val % 1 !== 0 ? val.toFixed(2) : val) : val; return `${k}: ${fv}`; }).join(' • ')}</div>
           </div>`;
   }).join('')}
       </div>
