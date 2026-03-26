@@ -27,8 +27,8 @@ export function renderPage() {
       </div>
       <div style="padding:16px">
         <div style="display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap">
-          <div><span style="color:var(--text-muted);font-size:0.8rem">MAE</span><br><strong>${f.model_fit?.MAE?.toFixed(2) || '—'}</strong></div>
-          <div><span style="color:var(--text-muted);font-size:0.8rem">MAPE</span><br><strong>${f.model_fit?.MAPE?.toFixed(1) || '—'}%</strong></div>
+          <div><span style="color:var(--text-muted);font-size:0.8rem">MAE</span><br><strong>${f.model_fit?.MAE != null ? Number(f.model_fit.MAE).toFixed(2) : '—'}</strong></div>
+          <div><span style="color:var(--text-muted);font-size:0.8rem">MAPE</span><br><strong>${f.model_fit?.MAPE != null ? Number(f.model_fit.MAPE).toFixed(1) : '—'}%</strong></div>
           <div><span style="color:var(--text-muted);font-size:0.8rem">Season Length</span><br><strong>${f.season_length || '—'}</strong></div>
         </div>
         <div class="mini-chart-row">

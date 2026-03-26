@@ -13,7 +13,7 @@ export function renderPage() {
       <div class="stat-card" style="border-color:${threatColor}"><div class="stat-icon">🎯</div><div class="stat-value" style="color:${threatColor}">${r.overall_threat_index || 0}</div><div class="stat-label">Threat Index</div><div class="stat-change" style="color:${threatColor}">⬤ ${(r.threat_level || 'unknown').toUpperCase()}</div></div>
       <div class="stat-card rose"><div class="stat-icon">🚨</div><div class="stat-value">${d.alerts?.total_active || 0}</div><div class="stat-label">Active Alerts</div></div>
       <div class="stat-card amber"><div class="stat-icon">🔥</div><div class="stat-value">${(d.heatmap?.regions || []).filter(r => r.risk_level === 'hot').length}</div><div class="stat-label">Hot Zones</div></div>
-      <div class="stat-card cyan"><div class="stat-icon">📊</div><div class="stat-value">8</div><div class="stat-label">Risk Vectors</div></div>
+      <div class="stat-card cyan"><div class="stat-icon">📊</div><div class="stat-value">${Object.keys(r.vectors || {}).length || 8}</div><div class="stat-label">Risk Vectors</div></div>
     </div>
     <div class="card" style="margin-top:20px">
       <div class="card-header"><div class="card-title">🎯 8-Vector Risk Assessment</div></div>
@@ -24,9 +24,9 @@ export function renderPage() {
     return `<div style="padding:16px;background:var(--bg-tertiary);border-radius:12px;border-left:4px solid ${color}">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <span style="font-weight:600">${icon} ${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
-              <span style="font-weight:700;color:${color}">${v.score}</span>
+              <span style="font-weight:700;color:${color}">${v.score || 0}</span>
             </div>
-            <div style="background:var(--bg-secondary);border-radius:4px;height:6px;overflow:hidden"><div style="width:${v.score}%;height:100%;background:${color};border-radius:4px"></div></div>
+            <div style="background:var(--bg-secondary);border-radius:4px;height:6px;overflow:hidden"><div style="width:${v.score || 0}%;height:100%;background:${color};border-radius:4px"></div></div>
             <div style="font-size:0.72rem;color:var(--text-muted);margin-top:8px">${Object.entries(v.details || {}).slice(0, 3).map(([k, val]) => { const fv = typeof val === 'object' ? JSON.stringify(val).length > 40 ? Object.keys(val).length + ' items' : JSON.stringify(val) : typeof val === 'number' ? (val % 1 !== 0 ? val.toFixed(2) : val) : val; return `${k}: ${fv}`; }).join(' • ')}</div>
           </div>`;
   }).join('')}
@@ -35,7 +35,7 @@ export function renderPage() {
     <div class="card" style="margin-top:20px">
       <div class="card-header"><div class="card-title">🗺️ Regional Risk Heatmap</div></div>
       <table class="data-table"><thead><tr><th>Region</th><th>Heat Score</th><th>Level</th><th>Partners</th><th>Leak Alerts</th></tr></thead><tbody>
-        ${(d.heatmap?.regions || []).map(r => `<tr><td style="font-weight:600">${r.region}</td><td><span style="color:${r.risk_level === 'hot' ? 'var(--rose)' : r.risk_level === 'warm' ? 'var(--amber)' : 'var(--emerald)'};font-weight:700">${r.heat_score}</span></td><td><span class="badge ${r.risk_level === 'hot' ? 'badge-red' : r.risk_level === 'warm' ? 'badge-amber' : 'badge-green'}">${r.risk_level}</span></td><td>${r.partners}</td><td>${r.leak_alerts}</td></tr>`).join('')}
+        ${(d.heatmap?.regions || []).map(r => `<tr><td style="font-weight:600">${r.region || 'Unknown'}</td><td><span style="color:${r.risk_level === 'hot' ? 'var(--rose)' : r.risk_level === 'warm' ? 'var(--amber)' : 'var(--emerald)'};font-weight:700">${r.heat_score || 0}</span></td><td><span class="badge ${r.risk_level === 'hot' ? 'badge-red' : r.risk_level === 'warm' ? 'badge-amber' : 'badge-green'}">${r.risk_level || 'Safe'}</span></td><td>${r.partners || 0}</td><td>${r.leak_alerts || 0}</td></tr>`).join('')}
       </tbody></table>
     </div>
     <div class="card" style="margin-top:20px">
