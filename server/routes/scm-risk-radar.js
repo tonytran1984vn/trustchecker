@@ -29,6 +29,7 @@ const RISK_ALLOWED_ROLES = new Set([
     'admin',
     'risk_officer',
     'risk_committee',
+    'compliance_officer',
     'security_officer',
     'ops_manager',
     'executive',

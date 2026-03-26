@@ -11,9 +11,21 @@ const db = require('../db');
 router.use(authMiddleware);
 
 // ─── GET /verify-chain — Verify audit log hash chain integrity ──────────────
-// Only org admins (or platform admins) can verify
-router.get('/verify-chain', requireOrgAdmin(), async (req, res) => {
+// Only org admins, compliance officers, and platform admins can verify
+router.get('/verify-chain', async (req, res) => {
     try {
+        const allowed = [
+            'admin',
+            'company_admin',
+            'org_owner',
+            'executive',
+            'security_officer',
+            'compliance_officer',
+            'super_admin',
+        ];
+        if (!req.user || (!allowed.includes(req.user.role) && req.user.user_type !== 'platform')) {
+            return res.status(403).json({ error: 'Audit verification access required' });
+        }
         const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
         const result = await verifyChain(limit);
 
