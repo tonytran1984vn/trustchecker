@@ -10,6 +10,7 @@
 import { renderWorkspace } from '../../components/workspace.js';
 import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
+import { State } from '../../core/state.js';
 // Tab 1: eager
 import { renderPage as renderDashboard } from './governance-dashboard.js';
 
@@ -68,12 +69,12 @@ export function renderPage() {
         icon: icon('shield', 24),
         tabs: [
             { id: 'dashboard', label: 'Dashboard', icon: icon('grid', 14), render: renderDashboard },
-            { id: 'users', label: 'Users', icon: icon('users', 14), render: lazy(() => import('../admin-users.js')) },
-            { id: 'roles', label: 'Roles & Access', icon: icon('shield', 14), render: lazy(() => import('../role-manager.js')) },
+            State.user?.role !== 'security_officer' ? { id: 'users', label: 'Users', icon: icon('users', 14), render: lazy(() => import('../admin-users.js')) } : null,
+            State.user?.role !== 'security_officer' ? { id: 'roles', label: 'Roles & Access', icon: icon('shield', 14), render: lazy(() => import('../role-manager.js')) } : null,
             { id: 'approvals', label: 'Approvals', icon: icon('check', 14), render: lazy(() => import('./approval-queue.js')) },
             { id: 'access-logs', label: 'Access Logs', icon: icon('scroll', 14), render: lazy(() => import('./access-logs.js')) },
             { id: 'carbon-passport', label: 'Carbon Passport', icon: icon('tag', 14), render: lazy(() => import('../scm/carbon-credit.js')) },
             { id: 'green-finance', label: 'Green Finance', icon: icon('globe', 14), render: lazy(() => import('../infra/green-finance.js')) },
-        ],
+        ].filter(Boolean),
     });
 }
