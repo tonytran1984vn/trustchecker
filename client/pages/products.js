@@ -432,8 +432,7 @@ window.showAddProduct = showAddProduct;
 window.addProduct = addProduct;
 window.showProductDetail = showProductDetail;
 window.searchProducts = searchProducts;
-window.deleteQrCode = deleteQrCode;
-window.showDeletionHistory = showDeletionHistory;
+
 window.exportQrCodes = exportQrCodes;
 window.exportProductsCSV = exportProductsCSV;
 window.showGenerateQrModal = showGenerateQrModal;
