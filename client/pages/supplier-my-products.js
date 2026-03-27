@@ -6,40 +6,40 @@ export function renderPage() {
     return `
     <style>
       .smp-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-      .smp-header h1 { margin: 0; font-size: 1.5rem; color: #f8fafc; font-weight: 700; }
-      .smp-header p { margin: 4px 0 0 0; color: #94a3b8; font-size: 0.9rem; }
+      .smp-header h1 { margin: 0; font-size: 1.5rem; color: var(--text, #1e293b); font-weight: 700; }
+      .smp-header p { margin: 4px 0 0 0; color: var(--text-muted, #64748b); font-size: 0.9rem; }
       .smp-btn-add { background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(16,185,129,0.2); transition: all 0.2s; }
       .smp-btn-add:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(16,185,129,0.3); }
       
-      .smp-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+      .smp-card { background: var(--card, #ffffff); border: 1px solid var(--border, #e2e8f0); border-radius: 16px; padding: 24px; }
       
       .smp-table { width: 100%; border-collapse: collapse; margin-top: 16px; text-align: left; }
-      .smp-table th { padding: 12px 16px; border-bottom: 1px solid var(--border); color: #64748b; font-size: 0.75rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
-      .smp-table td { padding: 16px; border-bottom: 1px solid var(--border); color: #e2e8f0; font-size: 0.9rem; }
-      .smp-table tr:hover td { background: rgba(255,255,255,0.02); }
+      .smp-table th { padding: 12px 16px; border-bottom: 1px solid var(--border, #e2e8f0); color: var(--text-muted, #64748b); font-size: 0.75rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
+      .smp-table td { padding: 16px; border-bottom: 1px solid var(--border, #e2e8f0); color: var(--text, #1e293b); font-size: 0.9rem; }
+      .smp-table tr:hover td { background: var(--hover, rgba(0,0,0,0.02)); }
       
-      .smp-sku { font-family: monospace; color: #94a3b8; background: rgba(148,163,184,0.1); padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; }
-      .smp-cat { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(99,102,241,0.1); color: #818cf8; text-transform: capitalize; }
+      .smp-sku { font-family: monospace; color: var(--text-muted, #64748b); background: var(--bg-muted, #f1f5f9); padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; }
+      .smp-cat { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(99,102,241,0.1); color: #4f46e5; text-transform: capitalize; }
       .smp-price { font-weight: 600; color: #10b981; }
       
-      .smp-btn-edit { background: rgba(59,130,246,0.1); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+      .smp-btn-edit { background: rgba(59,130,246,0.1); color: #2563eb; border: 1px solid rgba(59,130,246,0.3); padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
       .smp-btn-edit:hover { background: rgba(59,130,246,0.2); }
 
       /* Modal Styles */
-      .smp-modal-underlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15,23,42,0.8); backdrop-filter: blur(4px); z-index: 999; display: none; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
+      .smp-modal-underlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15,23,42,0.4); backdrop-filter: blur(4px); z-index: 999; display: none; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
       .smp-modal-underlay.visible { display: flex; opacity: 1; }
-      .smp-modal { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 32px; width: 100%; max-width: 500px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); transform: translateY(20px); transition: transform 0.2s; }
+      .smp-modal { background: var(--card, #ffffff); border: 1px solid var(--border, #e2e8f0); border-radius: 16px; padding: 32px; width: 100%; max-width: 500px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); transform: translateY(20px); transition: transform 0.2s; }
       .smp-modal-underlay.visible .smp-modal { transform: translateY(0); }
       
-      .smp-modal-header { font-size: 1.25rem; font-weight: 700; color: white; margin-bottom: 24px; }
+      .smp-modal-header { font-size: 1.25rem; font-weight: 700; color: var(--text, #1e293b); margin-bottom: 24px; }
       .smp-form-group { margin-bottom: 16px; }
-      .smp-form-group label { display: block; font-size: 0.8rem; color: #94a3b8; font-weight: 600; margin-bottom: 6px; }
-      .smp-form-group input, .smp-form-group select { width: 100%; padding: 10px 14px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: white; font-size: 0.9rem; font-family: inherit; }
+      .smp-form-group label { display: block; font-size: 0.8rem; color: var(--text-muted, #64748b); font-weight: 600; margin-bottom: 6px; }
+      .smp-form-group input, .smp-form-group select { width: 100%; padding: 10px 14px; background: var(--bg-element, #ffffff); border: 1px solid var(--border, #cbd5e1); border-radius: 8px; color: var(--text, #1e293b); font-size: 0.9rem; font-family: inherit; }
       .smp-form-group input:focus, .smp-form-group select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
       
       .smp-modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 28px; }
-      .smp-btn-cancel { background: transparent; color: #94a3b8; border: 1px solid #334155; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
-      .smp-btn-cancel:hover { background: rgba(255,255,255,0.05); color: white; }
+      .smp-btn-cancel { background: transparent; color: var(--text-muted, #64748b); border: 1px solid var(--border, #cbd5e1); padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+      .smp-btn-cancel:hover { background: var(--hover, #f1f5f9); color: var(--text, #1e293b); }
       .smp-btn-save { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; }
       .smp-btn-save:hover { background: #2563eb; }
     </style>
