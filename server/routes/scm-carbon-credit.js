@@ -379,18 +379,23 @@ router.get('/balance', async (req, res) => {
         let scope3TCO2e = 0;
         let posCount = 0;
         if (orgId) {
-            const pos = await db.client.networkPurchaseOrder.findMany({
-                where: { buyerOrgId: orgId, status: 'fulfilled' },
-            });
-            posCount = pos.length;
-            for (const po of pos) {
-                const product = await db.client.productCatalog.findUnique({
-                    where: { id: po.productId },
+            try {
+                const pos = await db.client.networkPurchaseOrder.findMany({
+                    where: { buyerOrgId: orgId, status: 'fulfilled' },
                 });
-                if (product) {
-                    // Convert unit carbon (kg) to Tonnes (tCO2e) and multiply by PO quantity
-                    scope3TCO2e += (product.unitCarbonKgCO2e * po.quantity) / 1000.0;
+                posCount = pos.length;
+                for (const po of pos) {
+                    const product = await db.client.productCatalog.findUnique({
+                        where: { id: po.productId },
+                    });
+                    if (product) {
+                        // Convert unit carbon (kg) to Tonnes (tCO2e) and multiply by PO quantity
+                        scope3TCO2e += ((product.unitCarbonKgCO2e || 0) * po.quantity) / 1000.0;
+                    }
                 }
+            } catch (scope3Err) {
+                logger.warn('Scope 3 carbon calculation unavailable:', scope3Err.message);
+                // Gracefully degrade — scope 1/2 data still returned
             }
         }
 
