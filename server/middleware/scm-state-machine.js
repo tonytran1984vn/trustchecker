@@ -82,15 +82,29 @@ function computeSignature(eventData) {
     return keyVersion + ':' + nonce + ':' + sig;
 }
 
+// L-3 FIX: Actually recompute HMAC to verify signature integrity
 function verifySignature(eventData, storedSignature) {
     if (!storedSignature) return { valid: false, reason: 'no_signature' };
     const parts = storedSignature.split(':');
     if (parts.length !== 3) return { valid: false, reason: 'invalid_format' };
-    const [keyVersion, nonce, sig] = parts;
+    const [keyVersion, nonce, storedSig] = parts;
     const secret = process.env.QR_SECRET || process.env.JWT_SECRET || 'tc-default-key';
-    const payload = JSON.stringify({ ...eventData, nonce, key_version: keyVersion, signed_at: eventData.signed_at });
-    // Note: We can't fully re-verify without the exact timestamp, but we can verify format and key
-    return { valid: true, key_version: keyVersion, has_nonce: !!nonce, signature_length: sig.length };
+
+    // Recompute HMAC with known nonce and key_version
+    const payload = JSON.stringify({
+        ...eventData,
+        nonce,
+        key_version: keyVersion,
+        signed_at: eventData.signed_at,
+    });
+    const computedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+
+    // Constant-time comparison to prevent timing attacks
+    const valid =
+        storedSig.length === computedSig.length &&
+        crypto.timingSafeEqual(Buffer.from(storedSig), Buffer.from(computedSig));
+
+    return { valid, key_version: keyVersion, has_nonce: !!nonce };
 }
 
 // Legacy signature function (replaced by ACTOR_BOUND_SIGN)

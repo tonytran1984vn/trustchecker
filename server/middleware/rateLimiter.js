@@ -1,16 +1,46 @@
 /**
- * Rate Limiter Middleware
- * In-memory sliding window rate limiter with per-route and per-user limits
+ * Rate Limiter Middleware (Audit M-4 — Redis-backed)
+ *
+ * Hybrid rate limiter:
+ *  - Redis sliding window (shared across PM2 workers) — primary
+ *  - In-memory fallback when Redis is unavailable
+ *
+ * Per-route and per-user limits with trust-based org scaling.
  */
+const logger = require('../lib/logger');
 
 class RateLimiter {
     constructor() {
-        this.windows = new Map(); // key → [timestamps]
+        this.windows = new Map(); // key → [timestamps] (in-memory fallback)
         this.blocked = new Map(); // key → unblock_time
 
-        // Cleanup every 5 minutes
+        // Cleanup every 5 minutes (in-memory fallback)
         this._cleanupTimer = setInterval(() => this.cleanup(), 300000);
         if (this._cleanupTimer.unref) this._cleanupTimer.unref();
+
+        // Lazy-load Redis to avoid circular deps at module load
+        this._redis = null;
+        this._redisAvailable = null; // null = not checked, true/false = checked
+    }
+
+    async _getRedis() {
+        if (this._redisAvailable === false) return null;
+        if (this._redis) return this._redis;
+        try {
+            const { checkRateLimit, getRedisClient } = require('../redis');
+            const client = getRedisClient();
+            await client.ping();
+            this._redis = { checkRateLimit };
+            this._redisAvailable = true;
+            return this._redis;
+        } catch (e) {
+            this._redisAvailable = false;
+            // Retry Redis availability every 60s
+            setTimeout(() => {
+                this._redisAvailable = null;
+            }, 60000).unref();
+            return null;
+        }
     }
 
     /**
@@ -28,10 +58,38 @@ class RateLimiter {
         const message = options.message || 'Too many requests, please try again later';
         const self = this;
 
-        return (req, res, next) => {
+        return async (req, res, next) => {
             // Bypass rate limiting in test environment
             if (process.env.NODE_ENV === 'test') return next();
             const key = self._getKey(req, keyGen);
+
+            // M-4 FIX: Try Redis first (shared across PM2 workers)
+            try {
+                const redis = await self._getRedis();
+                if (redis) {
+                    const windowSec = Math.ceil(windowMs / 1000);
+                    const result = await redis.checkRateLimit(key, max, windowSec);
+                    res.set('X-RateLimit-Limit', max);
+                    res.set('X-RateLimit-Remaining', result.remaining);
+                    res.set('X-RateLimit-Reset', result.resetAt.toISOString());
+
+                    if (!result.allowed) {
+                        const retryAfter = Math.ceil((result.resetAt.getTime() - Date.now()) / 1000);
+                        res.set('Retry-After', Math.max(1, retryAfter));
+                        return res.status(429).json({
+                            error: message,
+                            retry_after_seconds: Math.max(1, retryAfter),
+                            limit: max,
+                            window_ms: windowMs,
+                        });
+                    }
+                    return next();
+                }
+            } catch (e) {
+                // Redis failed — fall through to in-memory
+            }
+
+            // Fallback: in-memory sliding window
             const now = Date.now();
 
             // Check if blocked
@@ -116,6 +174,7 @@ class RateLimiter {
         return {
             active_windows: this.windows.size,
             active_blocks: this.blocked.size,
+            redis_available: this._redisAvailable,
         };
     }
 
@@ -123,6 +182,7 @@ class RateLimiter {
      * Create org-level middleware with trust-based limits.
      * Queries org_quotas for trust_multiplier → effective = base × multiplier.
      * Burst hard cap: absolute max 300/min regardless of trust.
+     * M-4 FIX: Uses Redis when available for cross-worker consistency.
      */
     orgLimit(options = {}) {
         const baseMax = options.max || 200;
@@ -158,8 +218,51 @@ class RateLimiter {
                     /* fallback to base */
                 }
 
-                // Use standard sliding window with computed max
                 const key = `org:${orgId}`;
+
+                // M-4 FIX: Try Redis first
+                try {
+                    const redis = await self._getRedis();
+                    if (redis) {
+                        const windowSec = Math.ceil(windowMs / 1000);
+                        const result = await redis.checkRateLimit(key, effectiveMax, windowSec);
+                        res.set('X-RateLimit-Limit', effectiveMax);
+                        res.set('X-RateLimit-Remaining', result.remaining);
+
+                        if (!result.allowed) {
+                            const retryAfter = Math.ceil((result.resetAt.getTime() - Date.now()) / 1000);
+                            res.set('Retry-After', Math.max(1, retryAfter));
+
+                            // Log metric (best-effort)
+                            try {
+                                const { v4: mid } = require('uuid');
+                                await db.run(
+                                    'INSERT INTO system_metrics (id, metric_type, org_id, endpoint, details) VALUES ($1, $2, $3, $4, $5)',
+                                    [
+                                        mid(),
+                                        'rate_limit_triggered',
+                                        orgId,
+                                        req.path,
+                                        JSON.stringify({ effective_max: effectiveMax, source: 'redis' }),
+                                    ]
+                                );
+                            } catch (e) {
+                                /* best-effort */
+                            }
+
+                            return res.status(429).json({
+                                error: 'Organization rate limit exceeded',
+                                limit: effectiveMax,
+                                retry_after_seconds: Math.max(1, retryAfter),
+                            });
+                        }
+                        return next();
+                    }
+                } catch (e) {
+                    // Redis failed — fall through to in-memory
+                }
+
+                // Fallback: in-memory sliding window with computed max
                 const now = Date.now();
 
                 const blockedUntil = self.blocked.get(key);
@@ -179,7 +282,7 @@ class RateLimiter {
                                 'rate_limit_triggered',
                                 orgId,
                                 req.path,
-                                JSON.stringify({ effective_max: effectiveMax }),
+                                JSON.stringify({ effective_max: effectiveMax, source: 'memory' }),
                             ]
                         );
                     } catch (e) {

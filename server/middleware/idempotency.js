@@ -1,7 +1,12 @@
 /**
- * Idempotency Middleware (Phase 4.3 — Hardened v2)
+ * Idempotency Middleware (Phase 4.3 — Hardened v3)
  *
  * Invariant: 1 (org + endpoint + key) → 1 effect + 1 response
+ *
+ * FIX v3 (Audit M-1):
+ *   - Stale IN_PROGRESS rows auto-cleaned after STALE_CLAIM_MINUTES (5 min)
+ *   - Prevents 24h retry block when res.json cache update fails
+ *   - Periodic cleanup of expired keys to prevent table bloat
  *
  * FIX v2:
  *   - PK changed from (key) → (key, org_id, endpoint) — no cross-tenant collision
@@ -18,6 +23,7 @@ const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 
 const TTL_HOURS = 24;
+const STALE_CLAIM_MINUTES = 5; // M-1 FIX: auto-release claimed-but-unfulfilled keys
 
 function hashPayload(body) {
     const payload = JSON.stringify(body || {});
@@ -46,7 +52,7 @@ function idempotency(endpoint) {
         try {
             // 1. Check for existing key (uses composite PK: key + org_id + endpoint)
             const existing = await db.get(
-                `SELECT response, status_code, request_hash, expires_at FROM idempotency_keys
+                `SELECT response, status_code, request_hash, expires_at, created_at FROM idempotency_keys
                  WHERE key = $1 AND org_id = $2 AND endpoint = $3`,
                 [key, orgId, endpoint]
             );
@@ -54,36 +60,52 @@ function idempotency(endpoint) {
             if (existing) {
                 // Check if still being processed (response is null)
                 if (existing.response === null || existing.response === '{}') {
-                    // Another request claimed this key but hasn't finished yet
-                    return res.status(409).json({
-                        error: 'IDEMPOTENCY_IN_PROGRESS',
-                        message: 'Another request with this idempotency key is still being processed.',
+                    // M-1 FIX: Auto-release stale claims (>5 min old with no response)
+                    const claimAge = Date.now() - new Date(existing.created_at).getTime();
+                    if (claimAge > STALE_CLAIM_MINUTES * 60 * 1000) {
+                        // Stale claim — delete it so the request can be retried
+                        await db.run(`DELETE FROM idempotency_keys WHERE key = $1 AND org_id = $2 AND endpoint = $3`, [
+                            key,
+                            orgId,
+                            endpoint,
+                        ]);
+                        await logMetric('idempotency_stale_claim_released', orgId, endpoint, {
+                            key,
+                            age_ms: claimAge,
+                        });
+                        // Fall through to claim the key again below
+                    } else {
+                        // Genuinely in progress — reject
+                        return res.status(409).json({
+                            error: 'IDEMPOTENCY_IN_PROGRESS',
+                            message: 'Another request with this idempotency key is still being processed.',
+                        });
+                    }
+                } else {
+                    // Expired key → reject clearly (NOT reprocess)
+                    if (new Date(existing.expires_at) <= new Date()) {
+                        await logMetric('idempotency_expired_reject', orgId, endpoint, { key });
+                        return res.status(410).json({
+                            error: 'IDEMPOTENCY_KEY_EXPIRED',
+                            retryable: false,
+                            message: 'This idempotency key has expired. Use a new key.',
+                        });
+                    }
+
+                    // Same hash → return cached response (byte-level identical)
+                    if (existing.request_hash === requestHash) {
+                        await logMetric('idempotency_hit', orgId, endpoint, { key });
+                        return res.status(existing.status_code).json(existing.response);
+                    }
+
+                    // Different hash → REJECT (payload mismatch)
+                    await logMetric('idempotency_hash_mismatch', orgId, endpoint, { key });
+                    return res.status(422).json({
+                        error: 'IDEMPOTENCY_PAYLOAD_MISMATCH',
+                        message:
+                            'Same idempotency key used with different request body. Use a new key for different requests.',
                     });
                 }
-
-                // Expired key → reject clearly (NOT reprocess)
-                if (new Date(existing.expires_at) <= new Date()) {
-                    await logMetric('idempotency_expired_reject', orgId, endpoint, { key });
-                    return res.status(410).json({
-                        error: 'IDEMPOTENCY_KEY_EXPIRED',
-                        retryable: false,
-                        message: 'This idempotency key has expired. Use a new key.',
-                    });
-                }
-
-                // Same hash → return cached response (byte-level identical)
-                if (existing.request_hash === requestHash) {
-                    await logMetric('idempotency_hit', orgId, endpoint, { key });
-                    return res.status(existing.status_code).json(existing.response);
-                }
-
-                // Different hash → REJECT (payload mismatch)
-                await logMetric('idempotency_hash_mismatch', orgId, endpoint, { key });
-                return res.status(422).json({
-                    error: 'IDEMPOTENCY_PAYLOAD_MISMATCH',
-                    message:
-                        'Same idempotency key used with different request body. Use a new key for different requests.',
-                });
             }
 
             // 2. CLAIM the key atomically (INSERT ... ON CONFLICT DO NOTHING RETURNING)
@@ -116,6 +138,15 @@ function idempotency(endpoint) {
                     );
                 } catch (e) {
                     logger.warn('[Idempotency] Failed to update cache:', e.message);
+                    // M-1 FIX: Clean up the stale claim so retries aren't blocked
+                    try {
+                        await db.run(
+                            `DELETE FROM idempotency_keys WHERE key = $1 AND org_id = $2 AND endpoint = $3 AND response IS NULL`,
+                            [key, orgId, endpoint]
+                        );
+                    } catch (_) {
+                        /* best-effort */
+                    }
                 }
                 return originalJson(body);
             };
@@ -127,5 +158,22 @@ function idempotency(endpoint) {
         }
     };
 }
+
+// M-1 FIX: Periodic cleanup of expired keys + stale claims (prevents table bloat)
+// Run every 30 minutes
+const _cleanupTimer = setInterval(
+    async () => {
+        try {
+            await db.run(`DELETE FROM idempotency_keys WHERE expires_at < NOW()`);
+            await db.run(
+                `DELETE FROM idempotency_keys WHERE response IS NULL AND created_at < NOW() - INTERVAL '${STALE_CLAIM_MINUTES} minutes'`
+            );
+        } catch (e) {
+            /* best-effort cleanup */
+        }
+    },
+    30 * 60 * 1000
+);
+if (_cleanupTimer.unref) _cleanupTimer.unref();
 
 module.exports = { idempotency };

@@ -9,6 +9,7 @@ function setupRoutes(app) {
     // Public routes (no auth)
     const publicRoutes = require('../routes/public');
     const apiDocsRoutes = require('../routes/api-docs');
+    const complianceEvidenceRoutes = require('../routes/compliance-evidence'); // M-5 FIX: moved from after module.exports
     // A-11: Deep health check
     try {
         app.use('/healthz', require('../routes/health'));
@@ -225,4 +226,3 @@ function setupRoutes(app) {
 }
 
 module.exports = { setupRoutes };
-const complianceEvidenceRoutes = require('../routes/compliance-evidence');

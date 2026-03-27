@@ -196,6 +196,10 @@ class PrismaBackend {
 
     _convert(row) {
         if (!row) return null;
+        // L-1 FIX: Only auto-convert known-safe aggregate columns (COUNT, SUM, etc.)
+        // Avoids corrupting numeric SKUs, phone numbers, or long IDs
+        const SAFE_NUMERIC_COLUMNS =
+            /^(cnt|count|total|sum|avg|min|max|score|rate|version|quantity|remaining|defects|active_count|fulfilled|cancelled|critical|high|low|total_orders|total_checks|failed_checks|total_defects)$/i;
         const out = {};
         for (const [k, v] of Object.entries(row)) {
             if (typeof v === 'bigint') {
@@ -208,9 +212,9 @@ class PrismaBackend {
                 !isNaN(v) &&
                 !isNaN(parseFloat(v)) &&
                 /^-?\d+(\.\d+)?$/.test(v) &&
-                v.length < 16
+                (v.length < 10 || SAFE_NUMERIC_COLUMNS.test(k))
             ) {
-                // Auto-convert pure numeric strings from PG (COUNT, SUM, NUMERIC columns)
+                // Auto-convert aggregate/metric columns from PG (COUNT, SUM, NUMERIC)
                 out[k] = Number(v);
             } else {
                 out[k] = v;
