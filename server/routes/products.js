@@ -50,10 +50,13 @@ router.get('/', async (req, res) => {
         let query = 'SELECT * FROM products WHERE 1=1';
         const params = [];
 
+        // BUG-03 FIX: Normalize org_id (snake_case from DB) vs orgId (camelCase from JWT)
+        const orgId = req.user.orgId || req.user.org_id;
+
         // Org scoping: non-super_admin only sees their org's products
-        if (req.user.role !== 'super_admin' && req.user.orgId) {
+        if (req.user.role !== 'super_admin' && orgId) {
             query += ' AND org_id = ?';
-            params.push(req.user.orgId);
+            params.push(orgId);
         }
 
         if (search) {
@@ -73,11 +76,11 @@ router.get('/', async (req, res) => {
         params.push(Number(limit), Math.max(Number(offset) || 0, 0));
 
         const products = await db.all(query, params);
-        /* ATK-03 FIX */ const totalQ =
-            req.user.role !== 'super_admin' && req.user.orgId
+        /* ATK-03 + BUG-03 FIX */ const totalQ =
+            req.user.role !== 'super_admin' && orgId
                 ? 'SELECT COUNT(*) as count FROM products WHERE org_id = ?'
                 : 'SELECT COUNT(*) as count FROM products';
-        const totalP = req.user.role !== 'super_admin' && req.user.orgId ? [req.user.orgId] : [];
+        const totalP = req.user.role !== 'super_admin' && orgId ? [orgId] : [];
         const total = await db.get(totalQ, totalP);
 
         res.json({ products, total: total.count });
