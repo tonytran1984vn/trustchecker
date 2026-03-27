@@ -122,44 +122,51 @@ export async function initPage() {
     setTimeout(smpLoadData, 50);
 }
 
-window.smpLoadData = async function() {
-    const tbody = document.getElementById('smpProductsTbody');
-    if (!tbody) return;
+    window.smpLoadData = async function() {
+        const tbody = document.getElementById('smpProductsTbody');
+        if (!tbody) return;
 
-    try {
-        const res = await API.get('/supplier-portal/my/products');
-        const products = res.products || [];
+        try {
+            const res = await API.get('/supplier-portal/my/products');
+            const products = res.products || [];
 
-        if (products.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 50px; color:#94a3b8;"><div style="font-size:3rem;margin-bottom:12px;opacity:0.3">📦</div>You haven\'t added any products to your catalog yet.</td></tr>';
-            return;
+            if (products.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 50px; color:#94a3b8;"><div style="font-size:3rem;margin-bottom:12px;opacity:0.3">📦</div>You haven\\'t added any products to your catalog yet.</td></tr>';
+                return;
+            }
+
+            // Store for editing
+            window._smpCache = {};
+            products.forEach(p => window._smpCache[p.id] = p);
+
+            let html = '';
+            products.forEach(p => {
+                html += `
+                    <tr>
+                        <td>
+                            <div style="font-weight:700; color:var(--text, #1e293b); font-size: 0.95rem; margin-bottom:4px;">${p.name}</div>
+                            <div style="display:flex; gap: 6px; align-items:center;">
+                                <span style="font-size: 0.65rem; background: #fef08a; color: #854d0e; padding: 2px 6px; border-radius: 4px; font-weight: 600;">🏷 My Sell Offer</span>
+                                <span style="font-size: 0.65rem; background: #dcfce7; color: #166534; padding: 2px 6px; border-radius: 4px; font-weight: 600; border: 1px solid rgba(22,101,52,0.2);">✓ Network Synced</span>
+                            </div>
+                        </td>
+                        <td><span class="smp-sku">${p.sku}</span></td>
+                        <td><span class="smp-cat">${(p.category || 'misc').replace(/_/g, ' ')}</span></td>
+                        <td>${p.origin_country || '-'}</td>
+                        <td><span class="smp-price">$${Number(p.price || 0).toFixed(2)}</span></td>
+                        <td style="text-align:right">
+                            <button class="smp-btn-edit" onclick="smpEditProduct('${p.id}')">Edit</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        } catch (err) {
+            console.error('[Supplier Portal] Data load error:', err);
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 30px; color:#ef4444; font-weight:600;">Failed to load products. Please check your connection.</td></tr>';
+            showToast('Error loading products', 'error');
         }
-
-        // Store for editing
-        window._smpCache = {};
-        products.forEach(p => window._smpCache[p.id] = p);
-
-        let html = '';
-        products.forEach(p => {
-            html += `
-                <tr>
-                    <td style="font-weight:600; color:#f8fafc;">${p.name}</td>
-                    <td><span class="smp-sku">${p.sku}</span></td>
-                    <td><span class="smp-cat">${(p.category || 'misc').replace('_', ' ')}</span></td>
-                    <td>${p.origin_country || '-'}</td>
-                    <td><span class="smp-price">$${Number(p.price || 0).toFixed(2)}</span></td>
-                    <td style="text-align:right">
-                        <button class="smp-btn-edit" onclick="smpEditProduct('${p.id}')">Edit</button>
-                    </td>
-                </tr>
-            `;
-        });
-        tbody.innerHTML = html;
-    } catch (err) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 30px; color:#ef4444;">Failed to load products.</td></tr>';
-        showToast('Error loading products', 'error');
-    }
-};
+    };
 
 window.smpOpenModal = function() {
     document.getElementById('smpForm').reset();
