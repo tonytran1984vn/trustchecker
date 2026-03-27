@@ -44,54 +44,52 @@ router.post('/compute', requirePermission('settings:update'), async (req, res) =
         const results = [];
 
         for (const partner of partners) {
-            // 1. PO Fulfillment metrics
-            const poStats = await db.get(
-                `SELECT
-                    COUNT(*)::int as total_orders,
-                    COUNT(*) FILTER (WHERE status IN ('fulfilled','completed','delivered'))::int as fulfilled,
-                    COUNT(*) FILTER (WHERE status = 'cancelled')::int as cancelled,
-                    AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 86400)::numeric(5,1) as avg_days
-                 FROM purchase_orders
-                 WHERE org_id = $1 AND (supplier = $2 OR supplier_org_id = $2)`,
-                [orgId, partner.id]
-            );
-
-            // 2. Quality check metrics (FIX: scoped to partner via supplier filter)
-            const qcStats = await db.get(
-                `SELECT
-                    COUNT(*)::int as total_checks,
-                    COUNT(*) FILTER (WHERE result = 'fail')::int as failed_checks,
-                    COALESCE(SUM(defects_found), 0)::int as total_defects,
-                    COALESCE(AVG(score), 100)::numeric(5,1) as avg_quality_score
-                 FROM quality_checks
-                 WHERE org_id = $1 AND (supplier_id = $2 OR supplier = $3)`,
+            // L-4 FIX: Batch 3 read queries into single CTE query (was N+1 → 5 queries per partner)
+            const metrics = await db.get(
+                `WITH po AS (
+                    SELECT
+                        COUNT(*)::int as total_orders,
+                        COUNT(*) FILTER (WHERE status IN ('fulfilled','completed','delivered'))::int as fulfilled,
+                        COUNT(*) FILTER (WHERE status = 'cancelled')::int as cancelled,
+                        AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 86400)::numeric(5,1) as avg_days
+                    FROM purchase_orders
+                    WHERE org_id = $1 AND (supplier = $2 OR supplier_org_id = $2)
+                ), qc AS (
+                    SELECT
+                        COUNT(*)::int as total_checks,
+                        COUNT(*) FILTER (WHERE result = 'fail')::int as failed_checks,
+                        COALESCE(SUM(defects_found), 0)::int as total_defects,
+                        COALESCE(AVG(score), 100)::numeric(5,1) as avg_quality_score
+                    FROM quality_checks
+                    WHERE org_id = $1 AND (supplier_id = $2 OR supplier = $3)
+                ), inc AS (
+                    SELECT
+                        COUNT(*) FILTER (WHERE severity = 'critical')::int as critical,
+                        COUNT(*) FILTER (WHERE severity = 'high')::int as high,
+                        COUNT(*) FILTER (WHERE severity IN ('medium','low'))::int as low
+                    FROM ops_incidents_v2
+                    WHERE org_id = $1 AND module LIKE '%supplier%'
+                      AND (entity_id = $2 OR related_entity_id = $2)
+                )
+                SELECT
+                    po.total_orders, po.fulfilled, po.cancelled, po.avg_days,
+                    qc.total_checks, qc.failed_checks, qc.total_defects, qc.avg_quality_score,
+                    inc.critical, inc.high, inc.low
+                FROM po, qc, inc`,
                 [orgId, partner.id, partner.name]
             );
 
-            // 3. Incident count (severity-weighted) — FIX H-2: scoped to partner
-            const incidents = await db.get(
-                `SELECT
-                    COUNT(*) FILTER (WHERE severity = 'critical')::int as critical,
-                    COUNT(*) FILTER (WHERE severity = 'high')::int as high,
-                    COUNT(*) FILTER (WHERE severity IN ('medium','low'))::int as low
-                 FROM ops_incidents_v2
-                 WHERE org_id = $1 AND module LIKE '%supplier%'
-                   AND (entity_id = $2 OR related_entity_id = $2)`,
-                [orgId, partner.id]
-            );
-
             // 4. Compute composite score (0-100)
-            const totalOrders = poStats?.total_orders || 0;
-            const fulfilled = poStats?.fulfilled || 0;
+            const totalOrders = metrics?.total_orders || 0;
+            const fulfilled = metrics?.fulfilled || 0;
             const fulfillmentRate = totalOrders > 0 ? fulfilled / totalOrders : 0.5;
-            const defectRate = qcStats?.total_checks > 0 ? qcStats.failed_checks / qcStats.total_checks : 0;
-            const incidentPenalty =
-                (incidents?.critical || 0) * 15 + (incidents?.high || 0) * 8 + (incidents?.low || 0) * 2;
+            const defectRate = metrics?.total_checks > 0 ? metrics.failed_checks / metrics.total_checks : 0;
+            const incidentPenalty = (metrics?.critical || 0) * 15 + (metrics?.high || 0) * 8 + (metrics?.low || 0) * 2;
 
             // Weighted formula:
             // 40% fulfillment rate + 30% quality score + 20% delivery speed + 10% incident-free bonus
-            const qualityComponent = (qcStats?.avg_quality_score || 50) / 100;
-            const deliveryComponent = Math.max(0, 1 - Math.max(0, (poStats?.avg_days || 14) - 7) / 30);
+            const qualityComponent = (metrics?.avg_quality_score || 50) / 100;
+            const deliveryComponent = Math.max(0, 1 - Math.max(0, (metrics?.avg_days || 14) - 7) / 30);
             const incidentComponent = Math.max(0, 1 - incidentPenalty / 100);
 
             let computedScore =
@@ -114,9 +112,9 @@ router.post('/compute', requirePermission('settings:update'), async (req, res) =
                     partner.id,
                     fulfilled,
                     totalOrders,
-                    poStats?.avg_days || 0,
+                    metrics?.avg_days || 0,
                     defectRate,
-                    incidents?.critical || 0,
+                    metrics?.critical || 0,
                     computedScore,
                 ]
             );
@@ -178,7 +176,7 @@ router.post('/compute', requirePermission('settings:update'), async (req, res) =
                 score: computedScore,
                 metrics: {
                     fulfillment_rate: Math.round(fulfillmentRate * 100),
-                    quality_score: qcStats?.avg_quality_score || 50,
+                    quality_score: metrics?.avg_quality_score || 50,
                     total_orders: totalOrders,
                     defect_rate: Math.round(defectRate * 10000) / 100,
                     incident_penalty: incidentPenalty,
@@ -258,72 +256,101 @@ function similarity(a, b) {
 /**
  * GET /api/scm/trust-engine/duplicates
  * Detect potential duplicate suppliers by fuzzy name match.
+ * M-3 FIX: Uses pg_trgm similarity() in SQL self-join (indexed) instead of O(n²) in-memory.
  */
 router.get('/duplicates', requirePermission('settings:update'), async (req, res) => {
     try {
         const orgId = req.user?.orgId || req.user?.org_id;
         const threshold = parseFloat(req.query.threshold) || 0.6;
 
-        // FIX: Added LIMIT 3000 to prevent O(n²) timeout at scale
-        const partners = await db.all(
-            'SELECT id, name, normalized_name, country, type, status, trust_score FROM partners WHERE org_id = $1 ORDER BY name LIMIT 3000',
-            [orgId]
-        );
+        let duplicates = [];
 
-        const duplicates = [];
-        const checked = new Set();
+        try {
+            // pg_trgm SQL self-join — leverages GIN index on partners.normalized_name
+            const rows = await db.all(
+                `SELECT
+                    a.id as a_id, a.name as a_name, a.country as a_country, a.status as a_status,
+                    b.id as b_id, b.name as b_name, b.country as b_country, b.status as b_status,
+                    similarity(COALESCE(a.normalized_name, LOWER(a.name)), COALESCE(b.normalized_name, LOWER(b.name))) as sim,
+                    CASE WHEN COALESCE(a.normalized_name, LOWER(a.name)) = COALESCE(b.normalized_name, LOWER(b.name))
+                         THEN 'exact' ELSE 'fuzzy' END as match_type
+                 FROM partners a
+                 JOIN partners b ON a.id < b.id AND a.org_id = b.org_id
+                 WHERE a.org_id = $1
+                   AND similarity(COALESCE(a.normalized_name, LOWER(a.name)), COALESCE(b.normalized_name, LOWER(b.name))) >= $2
+                 ORDER BY sim DESC
+                 LIMIT 100`,
+                [orgId, threshold]
+            );
 
-        for (let i = 0; i < partners.length; i++) {
-            for (let j = i + 1; j < partners.length; j++) {
-                const key = `${partners[i].id}:${partners[j].id}`;
-                if (checked.has(key)) continue;
-                checked.add(key);
+            duplicates = rows.map(r => {
+                const sim = parseFloat(r.sim) || 0;
+                const countryBoost = r.a_country === r.b_country ? 0.15 : 0;
+                return {
+                    partner_a: { id: r.a_id, name: r.a_name, country: r.a_country, status: r.a_status },
+                    partner_b: { id: r.b_id, name: r.b_name, country: r.b_country, status: r.b_status },
+                    match_type: r.match_type,
+                    confidence: Math.min(1.0, Math.round((sim + countryBoost) * 100) / 100),
+                };
+            });
+        } catch (trgmErr) {
+            // Fallback: in-memory O(n²) if pg_trgm unavailable
+            logger.warn('[trust-engine] pg_trgm fallback for duplicates:', trgmErr.message);
+            const partners = await db.all(
+                'SELECT id, name, normalized_name, country, type, status, trust_score FROM partners WHERE org_id = $1 ORDER BY name LIMIT 3000',
+                [orgId]
+            );
 
-                const normA = partners[i].normalized_name || normalizeName(partners[i].name);
-                const normB = partners[j].normalized_name || normalizeName(partners[j].name);
+            const checked = new Set();
+            for (let i = 0; i < partners.length; i++) {
+                for (let j = i + 1; j < partners.length; j++) {
+                    const key = `${partners[i].id}:${partners[j].id}`;
+                    if (checked.has(key)) continue;
+                    checked.add(key);
 
-                // Exact normalized match
-                if (normA === normB) {
-                    duplicates.push({
-                        partner_a: {
-                            id: partners[i].id,
-                            name: partners[i].name,
-                            country: partners[i].country,
-                            status: partners[i].status,
-                        },
-                        partner_b: {
-                            id: partners[j].id,
-                            name: partners[j].name,
-                            country: partners[j].country,
-                            status: partners[j].status,
-                        },
-                        match_type: 'exact',
-                        confidence: 1.0,
-                    });
-                    continue;
-                }
+                    const normA = partners[i].normalized_name || normalizeName(partners[i].name);
+                    const normB = partners[j].normalized_name || normalizeName(partners[j].name);
 
-                // Fuzzy Jaccard similarity
-                const sim = similarity(normA, normB);
-                if (sim >= threshold) {
-                    // Boost confidence if same country
-                    const countryBoost = partners[i].country === partners[j].country ? 0.15 : 0;
-                    duplicates.push({
-                        partner_a: {
-                            id: partners[i].id,
-                            name: partners[i].name,
-                            country: partners[i].country,
-                            status: partners[i].status,
-                        },
-                        partner_b: {
-                            id: partners[j].id,
-                            name: partners[j].name,
-                            country: partners[j].country,
-                            status: partners[j].status,
-                        },
-                        match_type: 'fuzzy',
-                        confidence: Math.min(1.0, Math.round((sim + countryBoost) * 100) / 100),
-                    });
+                    if (normA === normB) {
+                        duplicates.push({
+                            partner_a: {
+                                id: partners[i].id,
+                                name: partners[i].name,
+                                country: partners[i].country,
+                                status: partners[i].status,
+                            },
+                            partner_b: {
+                                id: partners[j].id,
+                                name: partners[j].name,
+                                country: partners[j].country,
+                                status: partners[j].status,
+                            },
+                            match_type: 'exact',
+                            confidence: 1.0,
+                        });
+                        continue;
+                    }
+
+                    const sim = similarity(normA, normB);
+                    if (sim >= threshold) {
+                        const countryBoost = partners[i].country === partners[j].country ? 0.15 : 0;
+                        duplicates.push({
+                            partner_a: {
+                                id: partners[i].id,
+                                name: partners[i].name,
+                                country: partners[i].country,
+                                status: partners[i].status,
+                            },
+                            partner_b: {
+                                id: partners[j].id,
+                                name: partners[j].name,
+                                country: partners[j].country,
+                                status: partners[j].status,
+                            },
+                            match_type: 'fuzzy',
+                            confidence: Math.min(1.0, Math.round((sim + countryBoost) * 100) / 100),
+                        });
+                    }
                 }
             }
         }

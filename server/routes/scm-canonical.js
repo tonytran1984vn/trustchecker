@@ -95,27 +95,42 @@ router.post('/', requirePermission('product:create'), async (req, res) => {
 });
 
 // ═══ GET / — List canonical products ═════════════════════════════════
+// L-2 FIX: Scoped to org visibility — only show canonical products the org has mapped to
 
 router.get('/', async (req, res) => {
     try {
+        const orgId = req.user?.orgId || req.user?.org_id;
+        const isPlatform = req.user?.user_type === 'platform';
         const { category, search, status } = req.query;
-        let query = 'SELECT * FROM canonical_products WHERE 1=1';
+
+        let query;
         const params = [];
 
+        if (isPlatform) {
+            // Platform admin: global view
+            query = 'SELECT * FROM canonical_products WHERE 1=1';
+        } else {
+            // Org user: only see canonical products they have mapped to, OR global products with no mapping
+            query = `SELECT DISTINCT cp.* FROM canonical_products cp
+                     LEFT JOIN product_mappings pm ON pm.canonical_product_id = cp.id AND pm.org_id = $1
+                     WHERE (pm.org_id = $1 OR NOT EXISTS (SELECT 1 FROM product_mappings pm2 WHERE pm2.canonical_product_id = cp.id))`;
+            params.push(orgId);
+        }
+
         if (status) {
-            query += ` AND status = $${params.length + 1}`;
+            query += ` AND cp.status = $${params.length + 1}`;
             params.push(status);
         }
         if (category) {
-            query += ` AND category = $${params.length + 1}`;
+            query += ` AND cp.category = $${params.length + 1}`;
             params.push(category);
         }
         if (search) {
-            query += ` AND name ILIKE $${params.length + 1}`;
+            query += ` AND cp.name ILIKE $${params.length + 1}`;
             params.push(`%${search}%`);
         }
 
-        query += ' ORDER BY created_at DESC LIMIT 200';
+        query += ' ORDER BY cp.created_at DESC LIMIT 200';
         const products = await db.all(query, params);
         res.json({ products, total: products.length });
     } catch (err) {
@@ -162,27 +177,53 @@ router.post('/match', requirePermission('product:create'), async (req, res) => {
             }
         }
 
-        // 2. Fuzzy name + brand matching (CAPPED at 5000 to prevent OOM)
-        const canonicals = await db.all(
-            'SELECT id, name, brand, category, attributes FROM canonical_products WHERE status = $1 LIMIT 5000',
-            ['active']
-        );
-
-        const candidates = [];
+        // 2. Fuzzy name + brand matching — M-2 FIX: pg_trgm DB-side similarity (indexed)
         const normInput = normalizeName(product_name);
         const inputHash = attributeHash(product_name, product_brand, product_attributes);
+        const candidates = [];
 
-        for (const cp of canonicals) {
-            const nameSim = similarity(normInput, normalizeName(cp.name));
-            const brandBoost =
-                product_brand && cp.brand && normalizeName(product_brand) === normalizeName(cp.brand) ? 0.2 : 0;
-            const cpHash = attributeHash(cp.name, cp.brand, cp.attributes);
-            const hashBoost = inputHash === cpHash ? 0.15 : 0; // Hash = boost, NOT auto-merge
+        try {
+            // Use pg_trgm similarity() — leverages GIN index on canonical_products.name
+            const trgmMatches = await db.all(
+                `SELECT id, name, brand, category, attributes,
+                        similarity(LOWER(name), $1) as name_sim
+                 FROM canonical_products
+                 WHERE status = 'active'
+                   AND similarity(LOWER(name), $1) > 0.3
+                 ORDER BY name_sim DESC
+                 LIMIT 20`,
+                [normInput]
+            );
 
-            const confidence = Math.min(1.0, Math.round((nameSim + brandBoost + hashBoost) * 1000) / 1000);
+            for (const cp of trgmMatches) {
+                const nameSim = parseFloat(cp.name_sim) || 0;
+                const brandBoost =
+                    product_brand && cp.brand && normalizeName(product_brand) === normalizeName(cp.brand) ? 0.2 : 0;
+                const cpHash = attributeHash(cp.name, cp.brand, cp.attributes);
+                const hashBoost = inputHash === cpHash ? 0.15 : 0;
 
-            if (confidence >= 0.5) {
-                candidates.push({ canonical: cp, confidence });
+                const confidence = Math.min(1.0, Math.round((nameSim + brandBoost + hashBoost) * 1000) / 1000);
+                if (confidence >= 0.5) {
+                    candidates.push({ canonical: cp, confidence });
+                }
+            }
+        } catch (trgmErr) {
+            // Fallback: in-memory matching if pg_trgm unavailable
+            logger.warn('[canonical] pg_trgm fallback:', trgmErr.message);
+            const canonicals = await db.all(
+                'SELECT id, name, brand, category, attributes FROM canonical_products WHERE status = $1 LIMIT 5000',
+                ['active']
+            );
+            for (const cp of canonicals) {
+                const nameSim = similarity(normInput, normalizeName(cp.name));
+                const brandBoost =
+                    product_brand && cp.brand && normalizeName(product_brand) === normalizeName(cp.brand) ? 0.2 : 0;
+                const cpHash = attributeHash(cp.name, cp.brand, cp.attributes);
+                const hashBoost = inputHash === cpHash ? 0.15 : 0;
+                const confidence = Math.min(1.0, Math.round((nameSim + brandBoost + hashBoost) * 1000) / 1000);
+                if (confidence >= 0.5) {
+                    candidates.push({ canonical: cp, confidence });
+                }
             }
         }
 
