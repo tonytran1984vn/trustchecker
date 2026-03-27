@@ -1940,6 +1940,19 @@ async function seed() {
 
     // ── 3. Seed Default Org ──────────────────────────────────────────────
     console.log('🏢 Seeding default org...');
+
+    // Fetch existing org to avoid FK constraint errors on TEST_USERS
+    const existingOrg = await db.get('SELECT id FROM organizations WHERE slug = ?', [DEFAULT_ORG.slug]);
+    if (existingOrg) {
+        DEFAULT_ORG.id = existingOrg.id;
+        // Update statically generated arrays to use the existing ID
+        for (const u of TEST_USERS) {
+            if (u.user_type === 'org') {
+                u.org_id = DEFAULT_ORG.id;
+            }
+        }
+    }
+
     await db.run(
         `INSERT OR IGNORE INTO organizations (id, name, slug, plan, feature_flags, status) VALUES (?, ?, ?, ?, ?, ?)`,
         [DEFAULT_ORG.id, DEFAULT_ORG.name, DEFAULT_ORG.slug, DEFAULT_ORG.plan, DEFAULT_ORG.feature_flags, 'active']
