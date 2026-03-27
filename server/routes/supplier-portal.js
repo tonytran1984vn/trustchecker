@@ -134,7 +134,7 @@ router.put('/my/assessment', authMiddleware, async function (req, res) {
 router.get('/my/products', authMiddleware, requirePermission('product:view'), async function (req, res) {
     try {
         const orgId = req.user.orgId || req.user.org_id;
-        const { search, limit = 50, offset = 0 } = req.query;
+        const { search, view = 'all', limit = 50, offset = 0 } = req.query;
 
         let whereExtra = '';
         const params = [orgId];
@@ -146,37 +146,82 @@ router.get('/my/products', authMiddleware, requirePermission('product:view'), as
         }
 
         let products;
+        let counts = { all: 0, selling: 0, purchasing: 0, inventory: 0 };
+
         try {
-            // Enriched query with sync status from dual-write tables
+            // ── View filter via org_product_roles materialized view ──
+            let viewJoin = '';
+            let viewWhere = '';
+            if (view === 'selling') {
+                viewJoin = ' JOIN org_product_roles opr ON opr.product_definition_id = p.id AND opr.org_id = p.org_id';
+                viewWhere = ' AND opr.has_outbound = true';
+            } else if (view === 'purchasing') {
+                viewJoin = ' JOIN org_product_roles opr ON opr.product_definition_id = p.id AND opr.org_id = p.org_id';
+                viewWhere = ' AND opr.has_inbound = true';
+            } else if (view === 'inventory') {
+                viewJoin = ' JOIN org_product_roles opr ON opr.product_definition_id = p.id AND opr.org_id = p.org_id';
+                viewWhere = ' AND opr.has_inventory = true';
+            }
+
+            // Main query with role data + sync status
             const query = `
                 SELECT p.*,
+                       COALESCE(opr2.has_outbound, false) AS has_outbound,
+                       COALESCE(opr2.has_inbound, false) AS has_inbound,
+                       COALESCE(opr2.has_inventory, false) AS has_inventory,
                        CASE
                            WHEN dwf.id IS NOT NULL THEN 'failed'
                            WHEN pd.id IS NOT NULL AND pc.id IS NOT NULL THEN 'synced'
                            ELSE 'pending'
                        END AS sync_status
                 FROM products p
+                ${viewJoin}
+                LEFT JOIN org_product_roles opr2 ON opr2.product_definition_id = p.id AND opr2.org_id = p.org_id
                 LEFT JOIN product_definitions pd ON pd.id = p.id
                 LEFT JOIN product_catalogs pc ON pc.product_definition_id = p.id AND pc.org_id = p.org_id
                 LEFT JOIN dual_write_failures dwf ON dwf.idempotency_key = p.id AND dwf.write_type = 'product'
-                WHERE p.org_id = $1${whereExtra}
+                WHERE p.org_id = $1${whereExtra}${viewWhere}
                 ORDER BY p.created_at DESC
                 LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
             const richParams = [...params, limit, offset];
             products = await db.all(query, richParams);
+
+            // Tab counts (single efficient query)
+            const countRow = await db.get(
+                `
+                SELECT
+                    COUNT(DISTINCT p.id) AS total,
+                    COUNT(DISTINCT CASE WHEN opr.has_outbound THEN p.id END) AS selling,
+                    COUNT(DISTINCT CASE WHEN opr.has_inbound THEN p.id END) AS purchasing,
+                    COUNT(DISTINCT CASE WHEN opr.has_inventory THEN p.id END) AS inventory
+                FROM products p
+                LEFT JOIN org_product_roles opr ON opr.product_definition_id = p.id AND opr.org_id = p.org_id
+                WHERE p.org_id = $1`,
+                [orgId]
+            );
+            counts = {
+                all: parseInt(countRow.total) || 0,
+                selling: parseInt(countRow.selling) || 0,
+                purchasing: parseInt(countRow.purchasing) || 0,
+                inventory: parseInt(countRow.inventory) || 0,
+            };
         } catch (joinErr) {
-            // Fallback: if dual-write tables don't exist yet, use simple query
-            console.warn('[supplier-portal] Sync tables missing, using fallback:', joinErr.message);
+            // Fallback: if materialized view or dual-write tables don't exist
+            console.warn('[supplier-portal] Role/sync tables missing, using fallback:', joinErr.message);
             const fallbackParams = [...params];
-            let fallback = `SELECT *, 'pending' AS sync_status FROM products WHERE org_id = $1${whereExtra.replace(/p\./g, '')}`;
+            let fallback = `SELECT *, 'pending' AS sync_status, false AS has_outbound, false AS has_inbound, false AS has_inventory FROM products WHERE org_id = $1${whereExtra.replace(/p\./g, '')}`;
             fallback += ` ORDER BY created_at DESC LIMIT $${fallbackParams.length + 1} OFFSET $${fallbackParams.length + 2}`;
             fallbackParams.push(limit, offset);
             products = await db.all(fallback, fallbackParams);
+
+            const totalRow = await db.get('SELECT COUNT(*) as count FROM products WHERE org_id = $1', [orgId]);
+            counts.all = parseInt(totalRow.count) || 0;
         }
 
-        const total = await db.get('SELECT COUNT(*) as count FROM products WHERE org_id = $1', [orgId]);
+        // Total for current view (for pagination)
+        const total = view === 'all' ? counts.all : counts[view] || counts.all;
 
-        res.json({ products, total: total.count });
+        res.json({ products, total, counts });
     } catch (err) {
         console.error('[supplier-portal] GET /my/products error:', err.message);
         res.status(500).json({ error: 'Failed to load supplier products' });
