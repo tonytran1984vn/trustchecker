@@ -422,6 +422,16 @@ export function renderPage() {
         if (State.page === page) render();
     }).catch(err => {
         console.error(`[router] Failed to load page module: ${page}`, err);
+        const app = document.getElementById('app');
+        if (app) {
+            app.innerHTML = `<div style="padding: 40px; text-align: center; color: #ef4444; font-family: monospace;">
+                <h2>Module Load Error</h2>
+                <p>Failed to load ${page}.js</p>
+                <div style="background: #fee2e2; padding: 16px; border-radius: 8px; text-align: left; overflow: auto;">
+                    ${err.message || String(err)}<br><br>${err.stack || ''}
+                </div>
+            </div>`;
+        }
     });
 
     // Return skeleton while loading

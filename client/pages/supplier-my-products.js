@@ -131,7 +131,7 @@ export async function initPage() {
             const products = res.products || [];
 
             if (products.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 50px; color:#94a3b8;"><div style="font-size:3rem;margin-bottom:12px;opacity:0.3">📦</div>You haven\\'t added any products to your catalog yet.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 50px; color:#94a3b8;"><div style="font-size:3rem;margin-bottom:12px;opacity:0.3">📦</div>You have not added any products to your catalog yet.</td></tr>';
                 return;
             }
 
