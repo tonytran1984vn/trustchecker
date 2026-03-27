@@ -244,7 +244,18 @@ router.put('/:id', requirePermission('product:update'), async (req, res) => {
                 ]
             );
 
-            // 6. Also update the root offering record (for backward compat)
+            // 6. RUNTIME INVARIANT: exactly 1 active version (valid_to IS NULL) per offering
+            const activeCount = await db.get(
+                'SELECT COUNT(*)::int as cnt FROM supplier_offering_versions WHERE offering_id = $1 AND valid_to IS NULL',
+                [id]
+            );
+            if (activeCount?.cnt !== 1) {
+                await db.run('ROLLBACK', []);
+                logger.error(`[offerings] INVARIANT VIOLATION: ${activeCount?.cnt} active versions for ${id}`);
+                return res.status(500).json({ error: 'Version invariant violated — rollback' });
+            }
+
+            // 7. Also update the root offering record (for backward compat)
             await db.run(
                 `UPDATE supplier_offerings SET
                     price = COALESCE($1, price), currency = COALESCE($2, currency),
