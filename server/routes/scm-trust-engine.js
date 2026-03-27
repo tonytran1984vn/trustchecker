@@ -131,9 +131,9 @@ router.post('/compute', requirePermission('settings:update'), async (req, res) =
 
             // 7. Log to score history
             await db.run(
-                `INSERT INTO supplier_score_history (id, partner_id, org_id, score, score_type, created_at)
-                 VALUES ($1, $2, $3, $4, 'computed_trust', NOW())`,
-                [uuidv4(), partner.id, orgId, computedScore]
+                `INSERT INTO supplier_score_history (id, supplier_name, org_id, score, created_at)
+                 VALUES ($1, $2, $3, $4, NOW())`,
+                [uuidv4(), partner.name, orgId, computedScore]
             );
 
             results.push({
@@ -180,10 +180,10 @@ router.get('/metrics/:partnerId', async (req, res) => {
         const metrics = await db.get('SELECT * FROM supplier_trust_metrics WHERE org_id = $1', [partnerId]);
 
         const history = await db.all(
-            `SELECT score, score_type, created_at FROM supplier_score_history
-             WHERE partner_id = $1 AND org_id = $2
+            `SELECT score, created_at FROM supplier_score_history
+             WHERE supplier_name = $1 AND org_id = $2
              ORDER BY created_at DESC LIMIT 30`,
-            [partnerId, orgId]
+            [partner.name, orgId]
         );
 
         res.json({ partner, metrics: metrics || {}, history });
