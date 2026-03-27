@@ -54,6 +54,7 @@ function setupRoutes(app) {
     const scmCarbonRoutes = require('../routes/scm-carbon');
     const scmCarbonCreditRoutes = require('../routes/scm-carbon-credit');
     const scmCatalogRoutes = require('../routes/scm-catalog');
+    const scmOfferingsRoutes = require('../routes/scm-offerings');
     const scmNetworkPosRoutes = require('../routes/scm-network-pos');
     // ARCHIVED: const scmDigitalTwinRoutes = require('../routes/scm-digital-twin');
     const scmSupplyRoutes = require('../routes/scm-supply-routes');
@@ -135,6 +136,7 @@ function setupRoutes(app) {
         ['/scm/carbon', scmCarbonRoutes],
         ['/scm/carbon-credit', scmCarbonCreditRoutes],
         ['/scm/catalog', scmCatalogRoutes],
+        ['/scm/offerings', scmOfferingsRoutes],
         ['/scm/network/pos', scmNetworkPosRoutes],
         // ARCHIVED: ['/scm/twin', scmDigitalTwinRoutes],
         ['/scm/supply', scmSupplyRoutes],
