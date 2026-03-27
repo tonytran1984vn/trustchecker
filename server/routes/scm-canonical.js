@@ -230,13 +230,19 @@ router.post('/match', requirePermission('product:create'), async (req, res) => {
         // Sort by confidence desc
         candidates.sort((a, b) => b.confidence - a.confidence);
 
-        // Insert candidates + auto-approve if > 0.9
+        // Insert candidates + auto-approve if > 0.9 (H-5 FIX: Only auto-map the FIRST one to avoid UNIQUE constraint clashes / state corruption)
         const insertedCandidates = [];
+        let hasAutoMapped = false;
+
         for (const c of candidates.slice(0, 5)) {
             // Top 5 candidates max
             const candidateId = uuidv4();
             let status = 'pending';
-            if (c.confidence > 0.9) status = 'approved';
+
+            if (c.confidence > 0.9 && !hasAutoMapped) {
+                status = 'approved';
+                hasAutoMapped = true;
+            }
 
             await db.run(
                 `INSERT INTO product_match_candidates (id, supplier_product_id, org_id, canonical_product_id, confidence, match_method, status)

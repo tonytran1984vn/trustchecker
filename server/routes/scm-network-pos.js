@@ -89,6 +89,8 @@ router.post('/:id/fulfill', async (req, res) => {
             return res.status(403).json({ error: 'Unauthorized to fulfill this PO' });
         }
 
+        // H-4 FIX: Sync PO Fulfillment with Inventory
+        // 1. Mark PO as fulfilled
         const updated = await db.client.networkPurchaseOrder.update({
             where: { id },
             data: {
@@ -96,6 +98,33 @@ router.post('/:id/fulfill', async (req, res) => {
                 fulfilledAt: new Date(),
             },
         });
+
+        // 2. Add inventory to Buyer
+        await db
+            .run(
+                `INSERT INTO inventory (id, product_id, location, quantity, org_id, version)
+             VALUES ($1, $2, 'Network Receive', $3, $4, 1)`,
+                [uuidv4(), po.productId, po.quantity, po.buyerOrgId]
+            )
+            .catch(async e => {
+                // If conflict (e.g. UK uniqueness on product+location+org fails), update it
+                await db.run(
+                    `UPDATE inventory SET quantity = quantity + $1, version = version + 1, updated_at = NOW()
+                 WHERE product_id = $2 AND org_id = $3 AND location = 'Network Receive'`,
+                    [po.quantity, po.productId, po.buyerOrgId]
+                );
+            });
+
+        // 3. Deduct inventory from Supplier (pick the location with highest stock)
+        await db.run(
+            `UPDATE inventory SET quantity = GREATEST(0, quantity - $1), version = version + 1, updated_at = NOW()
+             WHERE id = (
+                 SELECT id FROM inventory 
+                 WHERE product_id = $2 AND org_id = $3 
+                 ORDER BY quantity DESC LIMIT 1
+             )`,
+            [po.quantity, po.productId, po.supplierOrgId]
+        );
 
         res.json({ success: true, po: updated });
     } catch (e) {

@@ -44,16 +44,24 @@ router.post('/compute', requirePermission('settings:update'), async (req, res) =
         const results = [];
 
         for (const partner of partners) {
-            // L-4 FIX: Batch 3 read queries into single CTE query (was N+1 → 5 queries per partner)
+            // C-4 FIX: Integrated network_purchase_orders (Marketplace orders) into Trust Engine metrics.
+            // Previously, network marketplace transactions did not count towards trust loops, undermining the platform's core premise.
             const metrics = await db.get(
-                `WITH po AS (
+                `WITH combined_po AS (
+                    SELECT status, created_at, updated_at
+                    FROM purchase_orders
+                    WHERE org_id = $1 AND (supplier = $2 OR supplier_org_id = $2 OR supplier = $3)
+                    UNION ALL
+                    SELECT status, created_at, COALESCE(fulfilled_at, created_at) as updated_at
+                    FROM network_purchase_orders
+                    WHERE buyer_org_id = $1 AND supplier_org_id IN ($2, (SELECT network_org_id FROM partners WHERE id = $2 AND org_id = $1 LIMIT 1))
+                ), po AS (
                     SELECT
                         COUNT(*)::int as total_orders,
                         COUNT(*) FILTER (WHERE status IN ('fulfilled','completed','delivered'))::int as fulfilled,
                         COUNT(*) FILTER (WHERE status = 'cancelled')::int as cancelled,
                         AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 86400)::numeric(5,1) as avg_days
-                    FROM purchase_orders
-                    WHERE org_id = $1 AND (supplier = $2 OR supplier_org_id = $2)
+                    FROM combined_po
                 ), qc AS (
                     SELECT
                         COUNT(*)::int as total_checks,
@@ -419,6 +427,12 @@ router.post('/merge', requirePermission('settings:update'), async (req, res) => 
                 secondary_id,
                 orgId,
             ]);
+
+            // FIX H-6: Prevent orphaned inventory data leak by transferring stock
+            await tx.run(
+                'UPDATE inventory SET partner_id = $1, version = version + 1 WHERE partner_id = $2 AND org_id = $3',
+                [primary_id, secondary_id, orgId]
+            );
 
             // Mark secondary as merged/inactive
             await tx.run(

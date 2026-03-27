@@ -74,10 +74,10 @@ router.post('/adjust', authMiddleware, requirePermission('inventory:create'), as
             if (existing) return res.status(existing.status_code).json(existing.response);
         }
 
-        // Find or create inventory record
+        // Find or create inventory record (C-3 FIX: Scoped to org_id to prevent data leak)
         const inv = await db.get(
-            `SELECT * FROM inventory WHERE product_id = $1 AND COALESCE(partner_id, '') = $2 AND COALESCE(location, '') = $3`,
-            [product_id, partner_id || '', location || '']
+            `SELECT * FROM inventory WHERE product_id = $1 AND COALESCE(partner_id, '') = $2 AND COALESCE(location, '') = $3 AND org_id = $4`,
+            [product_id, partner_id || '', location || '', orgId || '']
         );
 
         let result;
@@ -87,16 +87,17 @@ router.post('/adjust', authMiddleware, requirePermission('inventory:create'), as
             const currentVersion = inv.version || 1;
 
             // E1: Optimistic locking — update only if version matches
+            // C-3 FIX: Added org_id scope to UPDATE to strictly enforce multi-tenancy
             const updated = await db.run(
                 `UPDATE inventory SET quantity = $1, version = $2, updated_at = NOW()
-                 WHERE id = $3 AND version = $4`,
-                [newQty, currentVersion + 1, inv.id, currentVersion]
+                 WHERE id = $3 AND version = $4 AND org_id = $5`,
+                [newQty, currentVersion + 1, inv.id, currentVersion, orgId || '']
             );
 
-            // If no rows updated, version conflict
+            // If no rows updated, version conflict OR unauthorized org_id mismatch (fails safe)
             if (updated && updated.changes === 0) {
                 return res.status(409).json({
-                    error: 'Concurrent modification detected. Please retry.',
+                    error: 'Concurrent modification detected or unauthorized access. Please retry.',
                     currentVersion: currentVersion,
                 });
             }
