@@ -52,38 +52,98 @@ router.get('/', async (req, res) => {
     }
 });
 
-// ─── POST /api/scm/inventory/adjust – Stock adjustment ───────────────────────
+// ─── POST /api/scm/inventory/adjust – Stock adjustment (E1+E4+F2) ────────────
+// Optimistic locking via version column prevents lost updates.
+// All changes logged to inventory_ledger for audit trail.
 router.post('/adjust', authMiddleware, requirePermission('inventory:create'), async (req, res) => {
     try {
-        const { product_id, batch_id, partner_id, location, quantity_change, reason } = req.body;
+        const { product_id, batch_id, partner_id, location, quantity_change, reason, source } = req.body;
+        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const actorId = req.user?.id || null;
+
         if (!product_id || quantity_change === undefined)
             return res.status(400).json({ error: 'product_id and quantity_change required' });
 
-        // Find or create inventory record
-        let inv = await db
-            .prepare(
-                "SELECT * FROM inventory WHERE product_id = ? AND COALESCE(partner_id, '') = ? AND COALESCE(location, '') = ?"
-            )
-            .get(product_id, partner_id || '', location || '');
+        // Idempotency check via header
+        const idemKey = req.headers['idempotency-key'];
+        if (idemKey) {
+            const existing = await db.get(
+                `SELECT response, status_code FROM idempotency_keys WHERE key = $1 AND org_id = $2 AND expires_at > NOW()`,
+                [idemKey, orgId || 'unknown']
+            );
+            if (existing) return res.status(existing.status_code).json(existing.response);
+        }
 
+        // Find or create inventory record
+        const inv = await db.get(
+            `SELECT * FROM inventory WHERE product_id = $1 AND COALESCE(partner_id, '') = $2 AND COALESCE(location, '') = $3`,
+            [product_id, partner_id || '', location || '']
+        );
+
+        let result;
         if (inv) {
-            const newQty = Math.max(0, inv.quantity + quantity_change);
-            await db.prepare('UPDATE inventory SET quantity = ?, updated_at = NOW() WHERE id = ?').run(newQty, inv.id);
-            inv.quantity = newQty;
+            const oldQty = inv.quantity;
+            const newQty = Math.max(0, oldQty + quantity_change);
+            const currentVersion = inv.version || 1;
+
+            // E1: Optimistic locking — update only if version matches
+            const updated = await db.run(
+                `UPDATE inventory SET quantity = $1, version = $2, updated_at = NOW()
+                 WHERE id = $3 AND version = $4`,
+                [newQty, currentVersion + 1, inv.id, currentVersion]
+            );
+
+            // If no rows updated, version conflict
+            if (updated && updated.changes === 0) {
+                return res.status(409).json({
+                    error: 'Concurrent modification detected. Please retry.',
+                    currentVersion: currentVersion,
+                });
+            }
+
+            // E4: Log to ledger
+            await db.run(
+                `INSERT INTO inventory_ledger (inventory_id, org_id, quantity_before, quantity_after, change, reason, source, actor_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                [inv.id, orgId || '', oldQty, newQty, quantity_change, reason || '', source || 'manual', actorId]
+            );
+
+            result = { id: inv.id, product_id, quantity: newQty, version: currentVersion + 1 };
         } else {
             const id = uuidv4();
             const qty = Math.max(0, quantity_change);
             await db.run(
-                `
-        INSERT INTO inventory (id, product_id, batch_id, partner_id, location, quantity)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `,
-                [id, product_id, batch_id || null, partner_id || null, location || '', qty]
+                `INSERT INTO inventory (id, product_id, batch_id, partner_id, location, quantity, org_id, version)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, 1)`,
+                [id, product_id, batch_id || null, partner_id || null, location || '', qty, orgId]
             );
-            inv = { id, product_id, quantity: qty };
+
+            // E4: Log creation to ledger
+            await db.run(
+                `INSERT INTO inventory_ledger (inventory_id, org_id, quantity_before, quantity_after, change, reason, source, actor_id)
+                 VALUES ($1, $2, 0, $3, $4, $5, $6, $7)`,
+                [id, orgId || '', qty, quantity_change, reason || 'initial stock', source || 'manual', actorId]
+            );
+
+            result = { id, product_id, quantity: qty, version: 1 };
         }
 
-        res.json({ message: 'Stock adjusted', inventory: inv });
+        const responseBody = { message: 'Stock adjusted', inventory: result };
+
+        // Cache idempotency response
+        if (idemKey) {
+            try {
+                await db.run(
+                    `INSERT INTO idempotency_keys (key, org_id, endpoint, response, status_code)
+                     VALUES ($1, $2, 'inventory:adjust', $3, 200) ON CONFLICT (key) DO NOTHING`,
+                    [idemKey, orgId || 'unknown', JSON.stringify(responseBody)]
+                );
+            } catch (e) {
+                /* non-blocking */
+            }
+        }
+
+        res.json(responseBody);
     } catch (err) {
         logger.error('Inventory adjust error:', err);
         res.status(500).json({ error: 'Failed to adjust stock' });

@@ -15,6 +15,7 @@ const { v4: uuidv4 } = require('uuid');
 const { eventBus, EVENT_TYPES } = require('../events');
 const { dualWriteProduct, dualWriteQR } = require('../lib/dual-write');
 const qrStorage = require('../lib/qr-storage');
+const { idempotency } = require('../middleware/idempotency');
 
 // Public: view published supplier profile
 router.get('/:slug', async function (req, res) {
@@ -228,80 +229,84 @@ router.get('/my/products', authMiddleware, requirePermission('product:view'), as
     }
 });
 
-router.post('/my/products', authMiddleware, requirePermission('product:create'), async function (req, res) {
-    try {
-        const orgId = req.user.orgId || req.user.org_id;
-        const { name, sku, description, category, manufacturer, origin_country, price, product_type } = req.body;
-
-        if (!name || !sku) return res.status(400).json({ error: 'Name and SKU required' });
-
-        // BUG-12 FIX: Validate SKU format (matching products.js validation)
-        if (!/^[A-Za-z0-9\-_]{3,50}$/.test(sku)) {
-            return res
-                .status(400)
-                .json({ error: 'SKU must be 3-50 characters, only letters, numbers, hyphens, and underscores' });
-        }
-
-        // BUG-08 FIX: Validate product_type
-        const validTypes = ['sell', 'buy', 'both'];
-        const pType = validTypes.includes(product_type) ? product_type : 'sell';
-
-        const existing = await db.get('SELECT id FROM products WHERE sku = $1 AND org_id = $2', [sku, orgId]);
-        if (existing) return res.status(409).json({ error: 'SKU already used in your catalog' });
-
-        const productId = uuidv4();
-        // BUG-04 FIX: Catch global SKU unique constraint violation
+router.post(
+    '/my/products',
+    authMiddleware,
+    requirePermission('product:create'),
+    idempotency('supplier-portal:create-product'),
+    async function (req, res) {
         try {
-            await db.run(
-                `INSERT INTO products (id, name, sku, description, category, manufacturer, origin_country, registered_by, org_id, price)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-                [
-                    productId,
-                    name,
-                    sku,
-                    description || '',
-                    category || '',
-                    manufacturer || '',
-                    origin_country || '',
-                    req.user.id,
-                    orgId,
-                    parseFloat(price) || 0,
-                ]
-            );
-        } catch (insertErr) {
-            // Handle global unique constraint violation on SKU
-            if (insertErr.code === '23505' || (insertErr.message && insertErr.message.includes('unique'))) {
+            const orgId = req.user.orgId || req.user.org_id;
+            const { name, sku, description, category, manufacturer, origin_country, price, product_type } = req.body;
+
+            if (!name || !sku) return res.status(400).json({ error: 'Name and SKU required' });
+
+            // BUG-12 FIX: Validate SKU format (matching products.js validation)
+            if (!/^[A-Za-z0-9\-_]{3,50}$/.test(sku)) {
                 return res
-                    .status(409)
-                    .json({
+                    .status(400)
+                    .json({ error: 'SKU must be 3-50 characters, only letters, numbers, hyphens, and underscores' });
+            }
+
+            // BUG-08 FIX: Validate product_type
+            const validTypes = ['sell', 'buy', 'both'];
+            const pType = validTypes.includes(product_type) ? product_type : 'sell';
+
+            const existing = await db.get('SELECT id FROM products WHERE sku = $1 AND org_id = $2', [sku, orgId]);
+            if (existing) return res.status(409).json({ error: 'SKU already used in your catalog' });
+
+            const productId = uuidv4();
+            // BUG-04 FIX: Catch global SKU unique constraint violation
+            try {
+                await db.run(
+                    `INSERT INTO products (id, name, sku, description, category, manufacturer, origin_country, registered_by, org_id, price)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                    [
+                        productId,
+                        name,
+                        sku,
+                        description || '',
+                        category || '',
+                        manufacturer || '',
+                        origin_country || '',
+                        req.user.id,
+                        orgId,
+                        parseFloat(price) || 0,
+                    ]
+                );
+            } catch (insertErr) {
+                // Handle global unique constraint violation on SKU
+                if (insertErr.code === '23505' || (insertErr.message && insertErr.message.includes('unique'))) {
+                    return res.status(409).json({
                         error: 'This SKU is already registered in the network. Please use a different SKU or contact the existing product owner.',
                     });
+                }
+                throw insertErr;
             }
-            throw insertErr;
-        }
 
-        // Phase 1: Dual-write to product_definitions + catalogs
-        try {
-            await dualWriteProduct({
-                id: productId,
-                name,
-                orgId,
-                sku,
-                category: category || '',
-                description: description || '',
-                origin_country: origin_country || '',
-                manufacturer: manufacturer || '',
-            });
-        } catch (e) {
-            console.error('[DualWrite] create supplier product:', e.message);
-        }
+            // Phase 1: Dual-write to product_definitions + catalogs
+            try {
+                await dualWriteProduct({
+                    id: productId,
+                    name,
+                    orgId,
+                    sku,
+                    category: category || '',
+                    description: description || '',
+                    origin_country: origin_country || '',
+                    manufacturer: manufacturer || '',
+                });
+            } catch (e) {
+                console.error('[DualWrite] create supplier product:', e.message);
+            }
 
-        res.status(201).json({ product: { id: productId, name, sku, category, product_type: pType } });
-    } catch (err) {
-        console.error('[supplier-portal] POST /my/products error:', err.message);
-        res.status(500).json({ error: 'Failed to create product' });
+            res.status(201).json({ product: { id: productId, name, sku, category, product_type: pType } });
+        } catch (err) {
+            console.error('[supplier-portal] POST /my/products error:', err.message);
+            res.status(500).json({ error: 'Failed to create product' });
+        }
     }
-});
+);
 
 router.put('/my/products/:id', authMiddleware, requirePermission('product:update'), async function (req, res) {
     try {

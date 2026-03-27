@@ -291,15 +291,18 @@ router.get('/graph', async function (req, res) {
         const orgId = req.orgId;
 
         // Get org's partners as nodes
+        // B4 FIX: Scope partners to this org only (was leaking all partners)
         const partners = await db.all(
             `SELECT id, name, type, country, trust_score, risk_level, status
-             FROM partners ORDER BY trust_score DESC LIMIT 500`
+             FROM partners WHERE org_id = $1 ORDER BY trust_score DESC LIMIT 500`,
+            [orgId]
         );
 
-        // Get graph edges
+        // Get graph edges scoped to org
         const edges = await db.all(
             `SELECT id, from_node_id, from_node_type, to_node_id, to_node_type, relationship, weight, risk_score
-             FROM supply_chain_graph LIMIT 1000`
+             FROM supply_chain_graph WHERE org_id = $1 LIMIT 1000`,
+            [orgId]
         );
 
         // Build nodes: org + partners
@@ -351,15 +354,19 @@ router.get('/graph', async function (req, res) {
     }
 });
 
-// GET /shared-scores — Cross-org trust scores
+// GET /shared-scores — Cross-org trust scores (scoped to network partners)
 router.get('/shared-scores', async function (req, res) {
     try {
+        // B3 FIX: Only return scores for partners within this org's network
+        const orgId = req.orgId;
         const scores = await db.all(
             `SELECT id as partner_id, name as partner_name, trust_score, risk_level, country, type as partner_type,
                     50.0 as public_trust_score, '' as profile_slug, true as is_published, 0 as network_connections,
                     5.0 as avg_community_rating, 0 as total_ratings, 'Bronze' as badge_level, status as kyc_status, compliance_score, delivery_score
              FROM partners
-             ORDER BY trust_score DESC LIMIT 200`
+             WHERE org_id = $1
+             ORDER BY trust_score DESC LIMIT 200`,
+            [orgId]
         );
         res.json({ scores, total: scores.length });
     } catch (err) {

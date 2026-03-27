@@ -24,15 +24,33 @@ router.get('/', async (req, res) => {
     }
 });
 
-// ─── GET /api/scm/catalog/supplier-products — List products provided by suppliers ──
+// ─── GET /api/scm/catalog/supplier-products — List products from CONNECTED suppliers only ──
+// B1 FIX: Previously returned ALL non-self catalog entries (full catalog leak).
+// Now scoped to only orgs linked via partners.network_org_id or supplier_invitations.
 router.get('/supplier-products', async (req, res) => {
     try {
         const orgId = req.orgId || req.user?.orgId || req.user?.org_id;
 
-        // Fetch products NOT owned by current org
+        // Only show products from orgs connected to this org via partners or accepted invitations
+        const connectedOrgs = await db.all(
+            `SELECT DISTINCT network_org_id AS connected_org_id FROM partners
+             WHERE org_id = $1 AND network_org_id IS NOT NULL
+             UNION
+             SELECT DISTINCT accepted_org_id FROM supplier_invitations
+             WHERE org_id = $1 AND status = 'accepted' AND accepted_org_id IS NOT NULL`,
+            [orgId]
+        );
+
+        const connectedOrgIds = connectedOrgs.map(r => r.connected_org_id).filter(Boolean);
+
+        if (connectedOrgIds.length === 0) {
+            return res.json({ products: [] });
+        }
+
+        // Fetch products only from connected supplier orgs
         const products = await db.client.productCatalog.findMany({
             where: {
-                orgId: { not: orgId },
+                orgId: { in: connectedOrgIds },
             },
         });
 
@@ -54,16 +72,25 @@ router.get('/supplier-products', async (req, res) => {
 });
 
 // ─── GET /api/scm/catalog/:id/bom — Get BOM for a specific product ────────
+// B2 FIX: Verify parent product ownership before returning BOM
 router.get('/:id/bom', async (req, res) => {
     try {
         const { id } = req.params;
+        const orgId = req.orgId || req.user?.orgId || req.user?.org_id;
 
-        // Fetch product BOM components including the details of the component product
+        // Verify the requesting org owns the parent product
+        const parent = await db.client.productCatalog.findFirst({
+            where: { id, orgId },
+        });
+        if (!parent) {
+            return res.status(404).json({ error: 'Product not found or not owned by your organization' });
+        }
+
+        // Fetch product BOM components
         const rawBom = await db.client.productBom.findMany({
             where: { parentProductId: id },
         });
 
-        // We need to fetch the component details because Prisma might not have the relation configured explicitly if we didn't define it.
         const bomItems = await Promise.all(
             rawBom.map(async b => {
                 const component = await db.client.productCatalog.findUnique({
