@@ -145,23 +145,35 @@ router.get('/my/products', authMiddleware, requirePermission('product:view'), as
             params.push(s, s);
         }
 
-        const query = `
-            SELECT p.*,
-                   CASE
-                       WHEN dwf.id IS NOT NULL THEN 'failed'
-                       WHEN pd.id IS NOT NULL AND pc.id IS NOT NULL THEN 'synced'
-                       ELSE 'pending'
-                   END AS sync_status
-            FROM products p
-            LEFT JOIN product_definitions pd ON pd.id = p.id
-            LEFT JOIN product_catalogs pc ON pc.product_definition_id = p.id AND pc.org_id = p.org_id
-            LEFT JOIN dual_write_failures dwf ON dwf.idempotency_key = p.id AND dwf.write_type = 'product'
-            WHERE p.org_id = $1${whereExtra}
-            ORDER BY p.created_at DESC
-            LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
-        params.push(limit, offset);
+        let products;
+        try {
+            // Enriched query with sync status from dual-write tables
+            const query = `
+                SELECT p.*,
+                       CASE
+                           WHEN dwf.id IS NOT NULL THEN 'failed'
+                           WHEN pd.id IS NOT NULL AND pc.id IS NOT NULL THEN 'synced'
+                           ELSE 'pending'
+                       END AS sync_status
+                FROM products p
+                LEFT JOIN product_definitions pd ON pd.id = p.id
+                LEFT JOIN product_catalogs pc ON pc.product_definition_id = p.id AND pc.org_id = p.org_id
+                LEFT JOIN dual_write_failures dwf ON dwf.idempotency_key = p.id AND dwf.write_type = 'product'
+                WHERE p.org_id = $1${whereExtra}
+                ORDER BY p.created_at DESC
+                LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+            const richParams = [...params, limit, offset];
+            products = await db.all(query, richParams);
+        } catch (joinErr) {
+            // Fallback: if dual-write tables don't exist yet, use simple query
+            console.warn('[supplier-portal] Sync tables missing, using fallback:', joinErr.message);
+            const fallbackParams = [...params];
+            let fallback = `SELECT *, 'pending' AS sync_status FROM products WHERE org_id = $1${whereExtra.replace(/p\./g, '')}`;
+            fallback += ` ORDER BY created_at DESC LIMIT $${fallbackParams.length + 1} OFFSET $${fallbackParams.length + 2}`;
+            fallbackParams.push(limit, offset);
+            products = await db.all(fallback, fallbackParams);
+        }
 
-        const products = await db.all(query, params);
         const total = await db.get('SELECT COUNT(*) as count FROM products WHERE org_id = $1', [orgId]);
 
         res.json({ products, total: total.count });
