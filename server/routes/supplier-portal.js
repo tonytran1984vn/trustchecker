@@ -219,7 +219,7 @@ router.get('/my/products', authMiddleware, requirePermission('product:view'), as
         }
 
         // Total for current view (for pagination)
-        const total = view === 'all' ? counts.all : counts[view] || counts.all;
+        const total = view === 'all' ? counts.all : counts[view] != null ? counts[view] : counts.all;
 
         res.json({ products, total, counts });
     } catch (err) {
