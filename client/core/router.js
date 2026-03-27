@@ -47,7 +47,9 @@ const PAGE_LOADERS = {
     'scm-risk-radar': () => import('../pages/scm/risk-radar.js'),
     'scm-carbon': () => import('../pages/scm/carbon.js'),
     "scm-network": () => import("../pages/scm/network.js"),
+    "scm-supplier-products": () => import("../pages/scm/supplier-products.js"),
     "supplier-dashboard": () => import("../pages/supplier-dashboard.js"),
+    "supplier-my-products": () => import("../pages/supplier-my-products.js"),
     'scm-carbon-credit': () => import('../pages/scm/carbon-credit.js'),
     'identity': () => import('../pages/infra/identity.js'),
     'risk-graph': () => import('../pages/infra/risk-graph.js'),
@@ -635,6 +637,9 @@ export async function loadPageData(page) {
         } else if (page === "supplier-dashboard") {
             const [profile, scoreData, improvements] = await Promise.all([API.get("/supplier-portal/my/profile").catch(() => ({})), API.get("/supplier-portal/my/scores").catch(() => []), API.get("/supplier-portal/my/improvements").catch(() => ({ suggestions: [] }))]);
             State.supplierProfile = profile; State.supplierScores = scoreData; State.supplierImprovements = improvements;
+            render();
+        } else if (page === "supplier-my-products") {
+            // Self-loading implementation inside the page module initPage
             render();
         } else if (page === 'sustainability') {
             const [stats, scores] = await Promise.all([API.get('/sustainability/stats'), API.get('/sustainability/leaderboard')]);

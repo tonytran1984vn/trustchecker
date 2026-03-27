@@ -59,6 +59,7 @@ const ROLE_VISIBILITY = {
       { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
       { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
+      { id: 'scm-supplier-products', domain: 'operations', icon: icon('box'), label: 'Supplier Catalog' },
     ],
   },
 
@@ -133,6 +134,7 @@ const ROLE_VISIBILITY = {
       { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
       { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
+      { id: 'scm-supplier-products', domain: 'operations', icon: icon('box'), label: 'Supplier Catalog' },
       { id: 'green-finance', domain: 'corporate-governance', icon: icon('globe'), label: 'Green Finance Layer' },
       { id: 'carbon-registry', domain: 'corporate-governance', icon: icon('scroll'), label: 'Carbon Registry' },
     ],
@@ -152,6 +154,7 @@ const ROLE_VISIBILITY = {
       { id: 'compliance-regtech', domain: 'risk-protection', icon: icon('globe'), label: 'RegTech' },
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
       { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
+      { id: 'scm-supplier-products', domain: 'operations', icon: icon('box'), label: 'Supplier Catalog' },
     ],
   },
 
@@ -162,6 +165,7 @@ const ROLE_VISIBILITY = {
     extraItems: [
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
       { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
+      { id: 'scm-supplier-products', domain: 'operations', icon: icon('box'), label: 'Supplier Catalog' },
       { id: 'governance', domain: 'corporate-governance', icon: icon('shield'), label: 'Governance' },
     ],
   },
@@ -174,6 +178,7 @@ const ROLE_VISIBILITY = {
       { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
       { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
+      { id: 'scm-supplier-products', domain: 'operations', icon: icon('box'), label: 'Supplier Catalog' },
     ],
   },
 
@@ -184,15 +189,18 @@ const ROLE_VISIBILITY = {
     extraItems: [
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
       { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
+      { id: 'scm-supplier-products', domain: 'operations', icon: icon('box'), label: 'Supplier Catalog' },
       { id: 'governance', domain: 'corporate-governance', icon: icon('shield'), label: 'Governance' },
     ],
   },
 
   // Supplier Contributor (CIE v2.5 — scoped external input)
   supplier_contributor: {
-    domains: ['command-center', 'corporate-governance'],
+    domains: ['command-center', 'operations', 'corporate-governance'],
     items: ['dashboard'],
     extraItems: [
+      { id: 'supplier-dashboard', domain: 'command-center', icon: icon('star'), label: 'My Profile' },
+      { id: 'supplier-my-products', domain: 'operations', icon: icon('products'), label: 'My Products' },
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
       { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
     ],
@@ -206,6 +214,7 @@ const ROLE_VISIBILITY = {
       { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
       { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
+      { id: 'scm-supplier-products', domain: 'operations', icon: icon('box'), label: 'Supplier Catalog' },
       { id: 'green-finance', domain: 'corporate-governance', icon: icon('globe'), label: 'Green Finance Layer' },
     ],
   },
@@ -217,6 +226,7 @@ const ROLE_VISIBILITY = {
     extraItems: [
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
       { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
+      { id: 'scm-supplier-products', domain: 'operations', icon: icon('box'), label: 'Supplier Catalog' },
     ],
   },
 
@@ -227,6 +237,7 @@ const ROLE_VISIBILITY = {
     extraItems: [
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
       { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
+      { id: 'scm-supplier-products', domain: 'operations', icon: icon('box'), label: 'Supplier Catalog' },
     ],
   },
 
@@ -237,6 +248,7 @@ const ROLE_VISIBILITY = {
     extraItems: [
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
       { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
+      { id: 'scm-supplier-products', domain: 'operations', icon: icon('box'), label: 'Supplier Catalog' },
     ],
   },
 
@@ -247,6 +259,7 @@ const ROLE_VISIBILITY = {
     extraItems: [
       { id: 'scm-carbon-credit', domain: 'corporate-governance', icon: icon('tag'), label: 'Carbon Passport' },
       { id: 'scm-network', domain: 'operations', icon: icon('globe'), label: 'Trust Network' },
+      { id: 'scm-supplier-products', domain: 'operations', icon: icon('box'), label: 'Supplier Catalog' },
       { id: 'scm-carbon', domain: 'corporate-governance', icon: icon('globe'), label: 'Carbon Accounting' },
       { id: 'green-finance', domain: 'corporate-governance', icon: icon('globe'), label: 'Green Finance Layer' },
     ],
@@ -293,6 +306,8 @@ const COMPANY_ADMIN_NAV = [
   { id: 'ca-settings', icon: icon('settings'), label: 'Settings' },
   { id: 'ca-notifications', icon: icon('bell'), label: 'Notifications' },
   { id: 'scm-network', icon: icon('globe'), label: 'Trust Network' },
+  { id: 'scm-supplier-products', icon: icon('box'), label: 'Supplier Catalog' },
+  { id: 'scm-supplier-products', icon: icon('box'), label: 'Supplier Catalog' },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -315,6 +330,8 @@ const DOMAIN_ITEMS = {
     { id: 'scans', icon: icon('check'), label: 'Verification Logs' },
     { id: 'scm-carbon', icon: icon('globe'), label: 'Carbon Accounting' },
     { id: 'scm-network', icon: icon('globe'), label: 'Trust Network' },
+  { id: 'scm-supplier-products', icon: icon('box'), label: 'Supplier Catalog' },
+  { id: 'scm-supplier-products', icon: icon('box'), label: 'Supplier Catalog' },
   ],
   'risk-protection': [
     { id: 'fraud', icon: icon('alert'), label: 'Fraud Monitoring' },
@@ -344,6 +361,8 @@ const DOMAIN_ITEMS = {
     { id: 'settings', icon: icon('lock'), label: 'Security' },
     { id: 'ca-notifications', icon: icon('bell'), label: 'Notifications' },
   { id: 'scm-network', icon: icon('globe'), label: 'Trust Network' },
+  { id: 'scm-supplier-products', icon: icon('box'), label: 'Supplier Catalog' },
+  { id: 'scm-supplier-products', icon: icon('box'), label: 'Supplier Catalog' },
     { id: 'ca-integrations', icon: icon('plug'), label: 'API & Integrations' },
     { id: 'billing', icon: icon('creditCard'), label: 'Billing & Quota' },
   ],
@@ -553,7 +572,11 @@ function getRoleConfig() {
 function isDomainVisible(domain) {
   const config = getRoleConfig();
   if (config === null) return true;
-  return config.domains.includes(domain);
+  if (config.domains.includes(domain)) return true;
+  if (config.extraItems) {
+    return config.extraItems.some(e => e.domain === domain);
+  }
+  return false;
 }
 
 function isItemVisible(itemId) {
