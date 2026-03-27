@@ -639,7 +639,8 @@ export async function loadPageData(page) {
             State.supplierProfile = profile; State.supplierScores = scoreData; State.supplierImprovements = improvements;
             render();
         } else if (page === "supplier-my-products") {
-            // Self-loading implementation inside the page module initPage
+            // Self-loading implementation inside the page module
+            if (window.smpLoadData) setTimeout(window.smpLoadData, 100);
             render();
         } else if (page === 'sustainability') {
             const [stats, scores] = await Promise.all([API.get('/sustainability/stats'), API.get('/sustainability/leaderboard')]);

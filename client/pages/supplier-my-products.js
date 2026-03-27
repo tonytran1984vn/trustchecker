@@ -119,7 +119,7 @@ export function renderPage() {
 }
 
 export async function initPage() {
-    await smpLoadData();
+    setTimeout(smpLoadData, 50);
 }
 
 window.smpLoadData = async function() {
