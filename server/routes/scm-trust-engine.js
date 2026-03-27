@@ -68,15 +68,16 @@ router.post('/compute', requirePermission('settings:update'), async (req, res) =
                 [orgId, partner.id, partner.name]
             );
 
-            // 3. Incident count (severity-weighted)
+            // 3. Incident count (severity-weighted) — FIX H-2: scoped to partner
             const incidents = await db.get(
                 `SELECT
                     COUNT(*) FILTER (WHERE severity = 'critical')::int as critical,
                     COUNT(*) FILTER (WHERE severity = 'high')::int as high,
                     COUNT(*) FILTER (WHERE severity IN ('medium','low'))::int as low
                  FROM ops_incidents_v2
-                 WHERE org_id = $1 AND module LIKE '%supplier%'`,
-                [orgId]
+                 WHERE org_id = $1 AND module LIKE '%supplier%'
+                   AND (entity_id = $2 OR related_entity_id = $2)`,
+                [orgId, partner.id]
             );
 
             // 4. Compute composite score (0-100)
@@ -385,9 +386,11 @@ router.post('/merge', requirePermission('settings:update'), async (req, res) => 
                 secondary_id,
                 orgId,
             ]);
-            await tx.run('UPDATE partner_locations SET partner_id = $1 WHERE partner_id = $2', [
+            // FIX H-3: scope to org_id to prevent cross-tenant reassignment
+            await tx.run('UPDATE partner_locations SET partner_id = $1 WHERE partner_id = $2 AND org_id = $3', [
                 primary_id,
                 secondary_id,
+                orgId,
             ]);
 
             // Mark secondary as merged/inactive

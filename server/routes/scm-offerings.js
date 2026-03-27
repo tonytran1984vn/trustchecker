@@ -321,7 +321,8 @@ router.put('/:id', requirePermission('product:update'), async (req, res) => {
     }
 });
 
-// ─── DELETE /api/scm/offerings/:id — Soft-deactivate ────────────────────────
+// ─── DELETE /api/scm/offerings/:id — Soft-deactivate (TRANSACTION-SAFE) ─────
+// FIX H-1: Close active version atomically to maintain version table invariant
 router.delete('/:id', requirePermission('product:update'), async (req, res) => {
     try {
         const orgId = req.user?.orgId || req.user?.org_id;
@@ -335,10 +336,17 @@ router.delete('/:id', requirePermission('product:update'), async (req, res) => {
             return res.status(404).json({ error: 'Offering not found or unauthorized' });
         }
 
-        await db.run(
-            `UPDATE supplier_offerings SET status = 'discontinued', updated_at = NOW() WHERE id = $1 AND org_id = $2`,
-            [id, orgId]
-        );
+        // Atomic: discontinue offering + close active version
+        await db.withTransaction(async tx => {
+            await tx.run(
+                `UPDATE supplier_offerings SET status = 'discontinued', updated_at = NOW() WHERE id = $1 AND org_id = $2`,
+                [id, orgId]
+            );
+            await tx.run(
+                `UPDATE supplier_offering_versions SET valid_to = NOW() WHERE offering_id = $1 AND valid_to IS NULL`,
+                [id]
+            );
+        });
 
         res.json({ message: 'Offering discontinued', id, sku: offering.sku });
     } catch (err) {

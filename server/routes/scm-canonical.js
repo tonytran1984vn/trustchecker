@@ -377,10 +377,10 @@ router.post('/reconcile', requirePermission('settings:update'), async (req, res)
 
 async function _createMapping(supplierProductId, orgId, canonicalProductId, confidence, decidedBy) {
     await db.withTransaction(async tx => {
-        // Lock existing active mapping (FOR UPDATE on same connection)
+        // Lock existing active mapping — scoped to org_id to prevent cross-tenant contention
         const existing = await tx.get(
-            'SELECT id FROM product_mappings WHERE supplier_product_id = $1 AND is_active = true FOR UPDATE',
-            [supplierProductId]
+            'SELECT id FROM product_mappings WHERE supplier_product_id = $1 AND org_id = $2 AND is_active = true FOR UPDATE',
+            [supplierProductId, orgId]
         );
 
         if (existing) {

@@ -12,6 +12,7 @@
 
 const db = require('../db');
 const { getUserScopes } = require('../auth/scope-engine');
+const { updateContext } = require('../lib/request-context');
 
 /**
  * Org Guard Middleware
@@ -50,11 +51,11 @@ function orgGuard(options = {}) {
                     }
                     req.orgId = org.id;
                     req.org = org;
-                    db.setOrgContext(org.id); // RLS context
+                    updateContext({ orgId: org.id }); // RLS context (AsyncLocalStorage)
                 }
                 req.scopes = []; // Platform users have no scope restrictions
                 // Platform users without org_id → RLS sees all rows (empty context)
-                if (!req.orgId) db.setOrgContext('');
+                if (!req.orgId) updateContext({ orgId: '' });
                 return next();
             }
             if (strict && !req.query.org_id) {
@@ -72,7 +73,7 @@ function orgGuard(options = {}) {
         }
 
         // Set RLS context early so JOIN on organizations works
-        db.setOrgContext(orgId);
+        updateContext({ orgId });
 
         // Load membership (enterprise IAM)
         const membership = await db.get(
@@ -99,7 +100,7 @@ function orgGuard(options = {}) {
             req.membership = membership;
 
             // RLS context — set for PostgreSQL Row Level Security
-            db.setOrgContext(membership.org_id);
+            updateContext({ orgId: membership.org_id });
 
             // Load resource scopes
             if (loadScopes) {
@@ -120,7 +121,7 @@ function orgGuard(options = {}) {
             req.org = org;
             req.membership = null; // No membership — legacy mode
             req.scopes = []; // No scopes — org-wide access
-            db.setOrgContext(org.id); // RLS context
+            updateContext({ orgId: org.id }); // RLS context (AsyncLocalStorage)
         }
         next();
     };
