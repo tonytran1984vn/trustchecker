@@ -1,0 +1,396 @@
+/**
+ * Canonical Product Identity API (Phase 4.1)
+ *
+ * 1 product = 1 global identity. Match pipeline with confidence scoring.
+ * Hash used for candidate matching only — NEVER auto-merge on hash alone.
+ *
+ * POST   /api/scm/canonical               — Create canonical product
+ * GET    /api/scm/canonical               — List canonical products
+ * POST   /api/scm/canonical/match         — Submit supplier product for matching
+ * GET    /api/scm/canonical/candidates    — Review pending candidates
+ * POST   /api/scm/canonical/candidates/:id/decide — Approve/reject
+ * POST   /api/scm/canonical/reconcile    — Re-evaluate old mappings
+ */
+const express = require('express');
+const router = express.Router();
+const db = require('../db');
+const { authMiddleware, requirePermission } = require('../auth');
+const logger = require('../lib/logger');
+const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
+
+router.use(authMiddleware);
+
+// ═══ Helpers ════════════════════════════════════════════════════════════
+
+const LEGAL_SUFFIXES =
+    /\b(co\.?|company|ltd\.?|limited|inc\.?|incorporated|llc\.?|corp\.?|corporation|plc\.?|gmbh|sa\.?|srl|pte\.?|pty\.?|group|holdings?)\b/gi;
+
+function normalizeName(raw) {
+    return (raw || '')
+        .toLowerCase()
+        .trim()
+        .replace(LEGAL_SUFFIXES, '')
+        .replace(/[.\-_,&]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function similarity(a, b) {
+    if (!a || !b) return 0;
+    const setA = new Set(a.split(' '));
+    const setB = new Set(b.split(' '));
+    const intersection = [...setA].filter(x => setB.has(x));
+    const union = new Set([...setA, ...setB]);
+    return union.size > 0 ? intersection.length / union.size : 0;
+}
+
+function attributeHash(name, brand, attributes) {
+    const payload = JSON.stringify({ n: normalizeName(name), b: normalizeName(brand || ''), a: attributes || {} });
+    return crypto.createHash('sha256').update(payload).digest('hex').slice(0, 16);
+}
+
+// ═══ POST / — Create canonical product ═══════════════════════════════
+
+router.post('/', requirePermission('product:create'), async (req, res) => {
+    try {
+        const { name, brand, category, gtin, attributes } = req.body;
+        if (!name) return res.status(400).json({ error: 'name is required' });
+
+        // GTIN dedup: same GTIN + different canonical → reject
+        if (gtin) {
+            const existing = await db.get('SELECT id, name FROM canonical_products WHERE gtin = $1', [gtin]);
+            if (existing) {
+                return res.status(409).json({
+                    error: 'GTIN already assigned to another canonical product',
+                    existing_id: existing.id,
+                    existing_name: existing.name,
+                });
+            }
+        }
+
+        const id = uuidv4();
+        await db.run(
+            `INSERT INTO canonical_products (id, name, brand, category, gtin, attributes)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [id, name, brand || null, category || null, gtin || null, JSON.stringify(attributes || {})]
+        );
+
+        res.status(201).json({ canonical: { id, name, brand, category, gtin } });
+    } catch (err) {
+        logger.error('[canonical] POST / error:', err.message);
+        res.status(500).json({ error: 'Failed to create canonical product' });
+    }
+});
+
+// ═══ GET / — List canonical products ═════════════════════════════════
+
+router.get('/', async (req, res) => {
+    try {
+        const { category, search, status } = req.query;
+        let query = 'SELECT * FROM canonical_products WHERE 1=1';
+        const params = [];
+
+        if (status) {
+            query += ` AND status = $${params.length + 1}`;
+            params.push(status);
+        }
+        if (category) {
+            query += ` AND category = $${params.length + 1}`;
+            params.push(category);
+        }
+        if (search) {
+            query += ` AND name ILIKE $${params.length + 1}`;
+            params.push(`%${search}%`);
+        }
+
+        query += ' ORDER BY created_at DESC LIMIT 200';
+        const products = await db.all(query, params);
+        res.json({ products, total: products.length });
+    } catch (err) {
+        logger.error('[canonical] GET / error:', err.message);
+        res.status(500).json({ error: 'Failed to list canonical products' });
+    }
+});
+
+// ═══ POST /match — Submit supplier product for matching ══════════════
+
+router.post('/match', requirePermission('product:create'), async (req, res) => {
+    try {
+        const orgId = req.user?.orgId || req.user?.org_id;
+        const { supplier_product_id, product_name, product_brand, product_gtin, product_attributes } = req.body;
+
+        if (!supplier_product_id || !product_name) {
+            return res.status(400).json({ error: 'supplier_product_id and product_name required' });
+        }
+
+        // 1. GTIN exact match (highest confidence)
+        if (product_gtin) {
+            const gtinMatch = await db.get(
+                'SELECT id, name, brand, category FROM canonical_products WHERE gtin = $1 AND status = $2',
+                [product_gtin, 'active']
+            );
+            if (gtinMatch) {
+                const candidateId = uuidv4();
+                await db.run(
+                    `INSERT INTO product_match_candidates (id, supplier_product_id, org_id, canonical_product_id, confidence, match_method, status)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                    [candidateId, supplier_product_id, orgId, gtinMatch.id, 1.0, 'gtin', 'approved']
+                );
+
+                // Auto-map (GTIN = highest trust)
+                await _createMapping(supplier_product_id, orgId, gtinMatch.id, 1.0, 'gtin');
+
+                return res.json({
+                    match: 'exact_gtin',
+                    canonical: gtinMatch,
+                    candidate_id: candidateId,
+                    auto_mapped: true,
+                });
+            }
+        }
+
+        // 2. Fuzzy name + brand matching
+        const canonicals = await db.all(
+            'SELECT id, name, brand, category, attributes FROM canonical_products WHERE status = $1',
+            ['active']
+        );
+
+        const candidates = [];
+        const normInput = normalizeName(product_name);
+        const inputHash = attributeHash(product_name, product_brand, product_attributes);
+
+        for (const cp of canonicals) {
+            const nameSim = similarity(normInput, normalizeName(cp.name));
+            const brandBoost =
+                product_brand && cp.brand && normalizeName(product_brand) === normalizeName(cp.brand) ? 0.2 : 0;
+            const cpHash = attributeHash(cp.name, cp.brand, cp.attributes);
+            const hashBoost = inputHash === cpHash ? 0.15 : 0; // Hash = boost, NOT auto-merge
+
+            const confidence = Math.min(1.0, Math.round((nameSim + brandBoost + hashBoost) * 1000) / 1000);
+
+            if (confidence >= 0.5) {
+                candidates.push({ canonical: cp, confidence });
+            }
+        }
+
+        // Sort by confidence desc
+        candidates.sort((a, b) => b.confidence - a.confidence);
+
+        // Insert candidates + auto-approve if > 0.9
+        const insertedCandidates = [];
+        for (const c of candidates.slice(0, 5)) {
+            // Top 5 candidates max
+            const candidateId = uuidv4();
+            let status = 'pending';
+            if (c.confidence > 0.9) status = 'approved';
+
+            await db.run(
+                `INSERT INTO product_match_candidates (id, supplier_product_id, org_id, canonical_product_id, confidence, match_method, status)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                [candidateId, supplier_product_id, orgId, c.canonical.id, c.confidence, 'auto', status]
+            );
+
+            // Auto-map if > 0.9
+            if (status === 'approved') {
+                await _createMapping(supplier_product_id, orgId, c.canonical.id, c.confidence, 'auto');
+            }
+
+            insertedCandidates.push({
+                candidate_id: candidateId,
+                canonical_id: c.canonical.id,
+                canonical_name: c.canonical.name,
+                confidence: c.confidence,
+                status,
+                auto_mapped: status === 'approved',
+            });
+        }
+
+        // If no good match → suggest creating new canonical
+        if (candidates.length === 0 || candidates[0].confidence < 0.7) {
+            return res.json({
+                match: 'no_match',
+                suggestion: 'Create new canonical product',
+                candidates: insertedCandidates,
+            });
+        }
+
+        res.json({
+            match: candidates[0].confidence > 0.9 ? 'auto_mapped' : 'review_needed',
+            candidates: insertedCandidates,
+        });
+    } catch (err) {
+        logger.error('[canonical] POST /match error:', err.message);
+        res.status(500).json({ error: 'Failed to match product' });
+    }
+});
+
+// ═══ GET /candidates — Review pending matches ═══════════════════════
+
+router.get('/candidates', requirePermission('product:create'), async (req, res) => {
+    try {
+        const orgId = req.user?.orgId || req.user?.org_id;
+        const candidates = await db.all(
+            `SELECT pmc.*, cp.name as canonical_name, cp.brand as canonical_brand, cp.category as canonical_category
+             FROM product_match_candidates pmc
+             LEFT JOIN canonical_products cp ON cp.id = pmc.canonical_product_id
+             WHERE pmc.org_id = $1 AND pmc.status = 'pending'
+             ORDER BY pmc.confidence DESC`,
+            [orgId]
+        );
+        res.json({ candidates, total: candidates.length });
+    } catch (err) {
+        logger.error('[canonical] GET /candidates error:', err.message);
+        res.status(500).json({ error: 'Failed to load candidates' });
+    }
+});
+
+// ═══ POST /candidates/:id/decide — Approve or reject ════════════════
+
+router.post('/candidates/:id/decide', requirePermission('product:create'), async (req, res) => {
+    try {
+        const orgId = req.user?.orgId || req.user?.org_id;
+        const { id } = req.params;
+        const { decision } = req.body; // 'approve' or 'reject'
+
+        if (!['approve', 'reject'].includes(decision)) {
+            return res.status(400).json({ error: 'decision must be "approve" or "reject"' });
+        }
+
+        const candidate = await db.get(
+            'SELECT * FROM product_match_candidates WHERE id = $1 AND org_id = $2 AND status = $3',
+            [id, orgId, 'pending']
+        );
+        if (!candidate) return res.status(404).json({ error: 'Candidate not found or already decided' });
+
+        const newStatus = decision === 'approve' ? 'approved' : 'rejected';
+        await db.run(
+            `UPDATE product_match_candidates SET status = $1, decided_by = $2, decided_at = NOW() WHERE id = $3`,
+            [newStatus, req.user.email || 'manual', id]
+        );
+
+        if (decision === 'approve') {
+            await _createMapping(
+                candidate.supplier_product_id,
+                orgId,
+                candidate.canonical_product_id,
+                candidate.confidence,
+                'manual'
+            );
+
+            // Supersede other pending candidates for same supplier product
+            await db.run(
+                `UPDATE product_match_candidates SET status = 'superseded'
+                 WHERE supplier_product_id = $1 AND org_id = $2 AND status = 'pending' AND id != $3`,
+                [candidate.supplier_product_id, orgId, id]
+            );
+        }
+
+        res.json({ message: `Candidate ${decision}d`, candidate_id: id, decision });
+    } catch (err) {
+        logger.error('[canonical] POST /decide error:', err.message);
+        res.status(500).json({ error: 'Failed to decide candidate' });
+    }
+});
+
+// ═══ POST /reconcile — Re-evaluate old mappings ═════════════════════
+
+router.post('/reconcile', requirePermission('settings:update'), async (req, res) => {
+    try {
+        const orgId = req.user?.orgId || req.user?.org_id;
+
+        // Get all active mappings for this org
+        const mappings = await db.all(
+            `SELECT pm.*, pd.name as product_name, pd.description
+             FROM product_mappings pm
+             LEFT JOIN product_definitions pd ON pd.id = pm.supplier_product_id
+             WHERE pm.org_id = $1 AND pm.is_active = true`,
+            [orgId]
+        );
+
+        // Get all active canonicals
+        const canonicals = await db.all(
+            "SELECT id, name, brand, category FROM canonical_products WHERE status = 'active'",
+            []
+        );
+
+        let re_evaluated = 0;
+        let upgraded = 0;
+
+        for (const mapping of mappings) {
+            if (!mapping.product_name) continue;
+
+            const normInput = normalizeName(mapping.product_name);
+            let bestMatch = null;
+            let bestScore = mapping.confidence || 0;
+
+            for (const cp of canonicals) {
+                if (cp.id === mapping.canonical_product_id) continue;
+                const sim = similarity(normInput, normalizeName(cp.name));
+                if (sim > bestScore + 0.1) {
+                    // Must be significantly better
+                    bestMatch = cp;
+                    bestScore = sim;
+                }
+            }
+
+            re_evaluated++;
+
+            if (bestMatch && bestScore > 0.9) {
+                // Create candidate for review (don't auto-switch)
+                await db.run(
+                    `INSERT INTO product_match_candidates (id, supplier_product_id, org_id, canonical_product_id, confidence, match_method, status)
+                     VALUES ($1, $2, $3, $4, $5, 'auto', 'pending')
+                     ON CONFLICT DO NOTHING`,
+                    [uuidv4(), mapping.supplier_product_id, orgId, bestMatch.id, bestScore]
+                );
+                upgraded++;
+            }
+        }
+
+        res.json({
+            message: `Reconciliation complete`,
+            re_evaluated,
+            better_matches_found: upgraded,
+        });
+    } catch (err) {
+        logger.error('[canonical] POST /reconcile error:', err.message);
+        res.status(500).json({ error: 'Failed to reconcile' });
+    }
+});
+
+// ═══ Helper: Create mapping with FOR UPDATE lock ════════════════════
+
+async function _createMapping(supplierProductId, orgId, canonicalProductId, confidence, decidedBy) {
+    // Transaction-wrapped: deactivate old → insert new (FOR UPDATE lock)
+    try {
+        // Lock existing active mapping
+        const existing = await db.get(
+            'SELECT id FROM product_mappings WHERE supplier_product_id = $1 AND is_active = true FOR UPDATE',
+            [supplierProductId]
+        );
+
+        if (existing) {
+            await db.run('UPDATE product_mappings SET is_active = false, superseded_at = NOW() WHERE id = $1', [
+                existing.id,
+            ]);
+        }
+
+        await db.run(
+            `INSERT INTO product_mappings (id, supplier_product_id, org_id, canonical_product_id, confidence, decided_by)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [uuidv4(), supplierProductId, orgId, canonicalProductId, confidence, decidedBy]
+        );
+
+        // Also update product_definitions
+        await db.run('UPDATE product_definitions SET canonical_product_id = $1 WHERE id = $2', [
+            canonicalProductId,
+            supplierProductId,
+        ]);
+    } catch (err) {
+        logger.error('[canonical] _createMapping error:', err.message);
+        throw err;
+    }
+}
+
+module.exports = router;

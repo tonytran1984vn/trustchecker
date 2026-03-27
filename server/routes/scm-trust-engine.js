@@ -122,12 +122,49 @@ router.post('/compute', requirePermission('settings:update'), async (req, res) =
                 ]
             );
 
-            // 6. Sync back to partners.trust_score
-            await db.run('UPDATE partners SET trust_score = $1, composite_score = $1 WHERE id = $2 AND org_id = $3', [
-                computedScore,
-                partner.id,
-                orgId,
-            ]);
+            // 6. Sync back to partners.trust_score + trust state machine
+            // State machine: score < 30 → probation, < 15 → restricted
+            // Recovery: score above threshold + cooldown expired → promote
+            let newState = 'active';
+            let stateReason = null;
+            const currentPartnerState = await db.get(
+                'SELECT trust_state, trust_cooldown_until FROM partners WHERE id = $1 AND org_id = $2',
+                [partner.id, orgId]
+            );
+            const currentState = currentPartnerState?.trust_state || 'active';
+            const cooldownUntil = currentPartnerState?.trust_cooldown_until;
+            const cooldownExpired = !cooldownUntil || new Date(cooldownUntil) <= new Date();
+
+            if (computedScore < 15) {
+                newState = 'restricted';
+                stateReason = `Score ${computedScore} below restricted threshold (15)`;
+            } else if (computedScore < 30) {
+                newState = 'probation';
+                stateReason = `Score ${computedScore} below probation threshold (30)`;
+            } else if (currentState === 'probation' && computedScore >= 30 && cooldownExpired) {
+                newState = 'active';
+                stateReason = `Score recovered to ${computedScore}, cooldown expired`;
+            } else if (currentState === 'restricted' && computedScore >= 30 && cooldownExpired) {
+                newState = 'probation'; // Step up, not jump to active
+                stateReason = `Score recovered to ${computedScore}, promoted to probation`;
+            } else if (currentState !== 'banned') {
+                newState = currentState; // Keep current state
+            }
+
+            // Set cooldown when entering probation/restricted (7 day cooldown)
+            const cooldownClause =
+                newState !== currentState && ['probation', 'restricted'].includes(newState)
+                    ? ", trust_cooldown_until = NOW() + INTERVAL '7 days'"
+                    : '';
+
+            await db.run(
+                `UPDATE partners SET trust_score = $1, composite_score = $1,
+                    trust_state = $2, trust_state_changed_at = CASE WHEN trust_state != $2 THEN NOW() ELSE trust_state_changed_at END,
+                    trust_state_reason = COALESCE($3, trust_state_reason)
+                    ${cooldownClause}
+                 WHERE id = $4 AND org_id = $5`,
+                [computedScore, newState, stateReason, partner.id, orgId]
+            );
 
             // 7. Log to score history
             await db.run(
@@ -407,7 +444,14 @@ router.post('/offboard/:partnerId', requirePermission('settings:update'), async 
         );
         actions.push(`Discontinued ${offResult?.changes || 0} offerings`);
 
-        // 2. Cancel pending POs (optional)
+        // 2. Close all active offering versions
+        await db.run(
+            'UPDATE supplier_offering_versions SET valid_to = NOW() WHERE offering_id IN (SELECT id FROM supplier_offerings WHERE org_id = $1) AND valid_to IS NULL',
+            [partnerId]
+        );
+        actions.push('Closed all active offering versions');
+
+        // 3. Cancel pending POs (optional)
         if (cancel_open_pos) {
             const poResult = await db.run(
                 "UPDATE purchase_orders SET status = 'cancelled', updated_at = NOW() WHERE (supplier = $1 OR supplier_org_id = $1) AND org_id = $2 AND status IN ('pending_approval','approved','in_progress')",
@@ -416,21 +460,50 @@ router.post('/offboard/:partnerId', requirePermission('settings:update'), async 
             actions.push(`Cancelled ${poResult?.changes || 0} open POs`);
         }
 
-        // 3. Revoke network invitations
+        // 4. Deactivate product mappings
+        await db.run(
+            'UPDATE product_mappings SET is_active = false, superseded_at = NOW() WHERE org_id = $1 AND is_active = true',
+            [partnerId]
+        );
+        actions.push('Deactivated product mappings');
+
+        // 5. Revoke network invitations
         const invResult = await db.run(
             "UPDATE supplier_invitations SET status = 'revoked', updated_at = NOW() WHERE (accepted_org_id = $1 OR org_id = $1) AND status = 'accepted'",
             [partnerId]
         );
         actions.push(`Revoked ${invResult?.changes || 0} invitations`);
 
-        // 4. Set partner status
-        await db.run(
-            "UPDATE partners SET status = 'offboarded', notes = CONCAT(COALESCE(notes,''), ' [Offboarded: ' || $1 || ']'), updated_at = NOW() WHERE id = $2 AND org_id = $3",
-            [reason || 'No reason provided', partnerId, orgId]
+        // 6. Crypto-shredding: delete encryption key
+        const keyRow = await db.get(
+            'SELECT encryption_key FROM supplier_encryption_keys WHERE org_id = $1 AND status = $2',
+            [partnerId, 'active']
         );
-        actions.push('Partner status → offboarded');
+        if (keyRow) {
+            await db.run(
+                "UPDATE supplier_encryption_keys SET encryption_key = 'SHREDDED', status = 'shredded', shredded_at = NOW(), shredded_by = $1 WHERE org_id = $2",
+                [req.user.email || 'system', partnerId]
+            );
 
-        // 5. Audit trail
+            // 7. Verify: attempt decrypt → must fail
+            const verifyRow = await db.get(
+                'SELECT encryption_key, status FROM supplier_encryption_keys WHERE org_id = $1',
+                [partnerId]
+            );
+            const shredVerified = verifyRow?.status === 'shredded' && verifyRow?.encryption_key === 'SHREDDED';
+            actions.push(`Crypto-shred: ${shredVerified ? 'VERIFIED' : 'WARNING: verify failed'}`);
+        } else {
+            actions.push('No encryption key found (skipped crypto-shred)');
+        }
+
+        // 8. Set partner status
+        await db.run(
+            "UPDATE partners SET status = 'offboarded', trust_state = 'banned', trust_state_reason = $1, trust_state_changed_at = NOW(), updated_at = NOW() WHERE id = $2 AND org_id = $3",
+            [reason || 'Offboarded', partnerId, orgId]
+        );
+        actions.push('Partner status → offboarded, trust_state → banned');
+
+        // 9. Audit trail
         await appendAuditEntry({
             actor_id: req.user.id,
             action: 'SUPPLIER_OFFBOARDED',
@@ -440,6 +513,7 @@ router.post('/offboard/:partnerId', requirePermission('settings:update'), async 
                 partner_name: partner.name,
                 reason: reason || 'Not specified',
                 actions,
+                crypto_shredded: !!keyRow,
                 offboarded_by: req.user.email,
             },
             ip: req.ip || '',

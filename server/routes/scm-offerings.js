@@ -138,24 +138,37 @@ router.post('/', requirePermission('product:create'), idempotency('offerings:cre
         }
 
         const id = uuidv4();
+        const parsedPrice = parseFloat(price) || 0;
+        const parsedCurrency = currency || 'USD';
+        const parsedMoq = parseInt(moq) || 1;
+        const parsedLead = lead_time_days ? parseInt(lead_time_days) : null;
+        const parsedStock = parseInt(stock_available) || 0;
+
         await db.run(
             `INSERT INTO supplier_offerings (id, org_id, product_def_id, sku, price, currency, moq, lead_time_days, stock_available)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [id, orgId, product_def_id, sku, parsedPrice, parsedCurrency, parsedMoq, parsedLead, parsedStock]
+        );
+
+        // Auto-create v1 in version history
+        const versionId = uuidv4();
+        await db.run(
+            `INSERT INTO supplier_offering_versions (id, offering_id, price, currency, moq, lead_time_days, stock_snapshot, version, valid_from, created_by)
+             VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, 1, NOW(), $8)`,
             [
+                versionId,
                 id,
-                orgId,
-                product_def_id,
-                sku,
-                parseFloat(price) || 0,
-                currency || 'USD',
-                parseInt(moq) || 1,
-                lead_time_days ? parseInt(lead_time_days) : null,
-                parseInt(stock_available) || 0,
+                parsedPrice,
+                parsedCurrency,
+                parsedMoq,
+                parsedLead,
+                parsedStock,
+                req.user?.email || 'system',
             ]
         );
 
         res.status(201).json({
-            offering: { id, org_id: orgId, product_def_id, sku, product_name: productDef.name },
+            offering: { id, org_id: orgId, product_def_id, sku, product_name: productDef.name, version_id: versionId },
         });
     } catch (err) {
         logger.error('[offerings] POST / error:', err.message);
@@ -163,45 +176,112 @@ router.post('/', requirePermission('product:create'), idempotency('offerings:cre
     }
 });
 
-// ─── PUT /api/scm/offerings/:id — Update offering (optimistic locking) ──────
+// ─── PUT /api/scm/offerings/:id — Immutable version rotation ────────────────
+// Invariant: 1 offering → exactly 1 active version. No gap, no overlap.
+// Flow: BEGIN → lock root FOR UPDATE → SELECT now() → close old → insert new → COMMIT
+// On conflict: exponential backoff (100ms, 200ms, 400ms), max 3 retries.
 router.put('/:id', requirePermission('product:update'), async (req, res) => {
-    try {
-        const orgId = req.user?.orgId || req.user?.org_id;
-        const { id } = req.params;
-        const { price, currency, moq, lead_time_days, stock_available, status, expected_version } = req.body;
+    const MAX_RETRIES = 3;
+    const BASE_DELAY_MS = 100;
 
-        // Ownership check
-        const offering = await db.get('SELECT * FROM supplier_offerings WHERE id = $1 AND org_id = $2', [id, orgId]);
-        if (!offering) {
-            return res.status(404).json({ error: 'Offering not found or unauthorized' });
-        }
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            const orgId = req.user?.orgId || req.user?.org_id;
+            const { id } = req.params;
+            const { price, currency, moq, lead_time_days, stock_available, status } = req.body;
 
-        // Optimistic locking
-        if (expected_version && offering.version !== expected_version) {
-            return res.status(409).json({
-                error: 'Version conflict. Reload and try again.',
-                currentVersion: offering.version,
+            // Atomic transaction: lock root → close old version → insert new
+            const result = await db.run('BEGIN', []);
+
+            // 1. Lock root offering (prevents concurrent version creation)
+            const offering = await db.get('SELECT * FROM supplier_offerings WHERE id = $1 AND org_id = $2 FOR UPDATE', [
+                id,
+                orgId,
+            ]);
+            if (!offering) {
+                await db.run('ROLLBACK', []);
+                return res.status(404).json({ error: 'Offering not found or unauthorized' });
+            }
+
+            // 2. Shared timestamp (guarantees old.valid_to == new.valid_from)
+            const tsResult = await db.get('SELECT NOW() as ts', []);
+            const ts = tsResult.ts;
+
+            // 3. Get current active version
+            const currentVersion = await db.get(
+                'SELECT * FROM supplier_offering_versions WHERE offering_id = $1 AND valid_to IS NULL',
+                [id]
+            );
+            const nextVersionNum = (currentVersion?.version || 0) + 1;
+
+            // 4. Close old version (if exists)
+            if (currentVersion) {
+                await db.run('UPDATE supplier_offering_versions SET valid_to = $1 WHERE id = $2', [
+                    ts,
+                    currentVersion.id,
+                ]);
+            }
+
+            // 5. Insert new version
+            const versionId = uuidv4();
+            await db.run(
+                `INSERT INTO supplier_offering_versions
+                 (id, offering_id, price, currency, moq, lead_time_days, stock_snapshot, version, valid_from, created_by)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                [
+                    versionId,
+                    id,
+                    parseFloat(price) || currentVersion?.price || offering.price || 0,
+                    currency || currentVersion?.currency || offering.currency || 'USD',
+                    parseInt(moq) || currentVersion?.moq || offering.moq || 1,
+                    lead_time_days != null
+                        ? parseInt(lead_time_days)
+                        : currentVersion?.lead_time_days || offering.lead_time_days,
+                    parseInt(stock_available) || currentVersion?.stock_snapshot || offering.stock_available || 0,
+                    nextVersionNum,
+                    ts,
+                    req.user?.email || 'system',
+                ]
+            );
+
+            // 6. Also update the root offering record (for backward compat)
+            await db.run(
+                `UPDATE supplier_offerings SET
+                    price = COALESCE($1, price), currency = COALESCE($2, currency),
+                    moq = COALESCE($3, moq), lead_time_days = COALESCE($4, lead_time_days),
+                    stock_available = COALESCE($5, stock_available), status = COALESCE($6, status),
+                    version = $7, updated_at = $8
+                 WHERE id = $9 AND org_id = $10`,
+                [price, currency, moq, lead_time_days, stock_available, status, nextVersionNum, ts, id, orgId]
+            );
+
+            await db.run('COMMIT', []);
+
+            return res.json({
+                message: 'Offering updated (new version created)',
+                id,
+                version_id: versionId,
+                version: nextVersionNum,
+                valid_from: ts,
             });
+        } catch (err) {
+            try {
+                await db.run('ROLLBACK', []);
+            } catch (e) {
+                /* already rolled back */
+            }
+
+            // Retry on constraint violation (concurrent version conflict)
+            if (err.code === '23P01' && attempt < MAX_RETRIES) {
+                const delay = BASE_DELAY_MS * Math.pow(2, attempt);
+                logger.warn(`[offerings] Version conflict on attempt ${attempt + 1}, retrying in ${delay}ms`);
+                await new Promise(r => setTimeout(r, delay));
+                continue;
+            }
+
+            logger.error('[offerings] PUT /:id error:', err.message);
+            return res.status(500).json({ error: 'Failed to update offering' });
         }
-
-        await db.run(
-            `UPDATE supplier_offerings SET
-                price = COALESCE($1, price),
-                currency = COALESCE($2, currency),
-                moq = COALESCE($3, moq),
-                lead_time_days = COALESCE($4, lead_time_days),
-                stock_available = COALESCE($5, stock_available),
-                status = COALESCE($6, status),
-                version = version + 1,
-                updated_at = NOW()
-             WHERE id = $7 AND org_id = $8`,
-            [price, currency, moq, lead_time_days, stock_available, status, id, orgId]
-        );
-
-        res.json({ message: 'Offering updated', id, newVersion: offering.version + 1 });
-    } catch (err) {
-        logger.error('[offerings] PUT /:id error:', err.message);
-        res.status(500).json({ error: 'Failed to update offering' });
     }
 });
 
