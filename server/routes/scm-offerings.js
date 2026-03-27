@@ -106,7 +106,8 @@ router.get('/marketplace', async (req, res) => {
     }
 });
 
-// ─── POST /api/scm/offerings — Create offering ──────────────────────────────
+// ─── POST /api/scm/offerings — Create offering (TRANSACTION-SAFE) ──────────
+// Invariant: offering + v1 version created atomically on same connection.
 router.post('/', requirePermission('product:create'), idempotency('offerings:create'), async (req, res) => {
     try {
         const orgId = req.user?.orgId || req.user?.org_id;
@@ -116,25 +117,10 @@ router.post('/', requirePermission('product:create'), idempotency('offerings:cre
             return res.status(400).json({ error: 'product_def_id and sku are required' });
         }
 
-        // Validate product_definition exists
+        // Validate product_definition exists (outside tx — read-only)
         const productDef = await db.get('SELECT id, name FROM product_definitions WHERE id = $1', [product_def_id]);
         if (!productDef) {
             return res.status(404).json({ error: 'Product definition not found' });
-        }
-
-        // Check for existing offering (same org + product)
-        const existing = await db.get('SELECT id FROM supplier_offerings WHERE org_id = $1 AND product_def_id = $2', [
-            orgId,
-            product_def_id,
-        ]);
-        if (existing) {
-            return res.status(409).json({ error: 'You already have an offering for this product. Use PUT to update.' });
-        }
-
-        // Validate SKU uniqueness within org
-        const skuCheck = await db.get('SELECT id FROM supplier_offerings WHERE org_id = $1 AND sku = $2', [orgId, sku]);
-        if (skuCheck) {
-            return res.status(409).json({ error: 'SKU already used in your offerings' });
         }
 
         const id = uuidv4();
@@ -144,41 +130,76 @@ router.post('/', requirePermission('product:create'), idempotency('offerings:cre
         const parsedLead = lead_time_days ? parseInt(lead_time_days) : null;
         const parsedStock = parseInt(stock_available) || 0;
 
-        await db.run(
-            `INSERT INTO supplier_offerings (id, org_id, product_def_id, sku, price, currency, moq, lead_time_days, stock_available)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-            [id, orgId, product_def_id, sku, parsedPrice, parsedCurrency, parsedMoq, parsedLead, parsedStock]
-        );
+        const result = await db.withTransaction(async tx => {
+            // Check for existing offering (inside tx for consistency)
+            const existing = await tx.get(
+                'SELECT id FROM supplier_offerings WHERE org_id = $1 AND product_def_id = $2',
+                [orgId, product_def_id]
+            );
+            if (existing) {
+                return {
+                    status: 409,
+                    body: { error: 'You already have an offering for this product. Use PUT to update.' },
+                };
+            }
 
-        // Auto-create v1 in version history
-        const versionId = uuidv4();
-        await db.run(
-            `INSERT INTO supplier_offering_versions (id, offering_id, price, currency, moq, lead_time_days, stock_snapshot, version, valid_from, created_by)
-             VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, 1, NOW(), $8)`,
-            [
-                versionId,
-                id,
-                parsedPrice,
-                parsedCurrency,
-                parsedMoq,
-                parsedLead,
-                parsedStock,
-                req.user?.email || 'system',
-            ]
-        );
+            // Validate SKU uniqueness within org
+            const skuCheck = await tx.get('SELECT id FROM supplier_offerings WHERE org_id = $1 AND sku = $2', [
+                orgId,
+                sku,
+            ]);
+            if (skuCheck) {
+                return { status: 409, body: { error: 'SKU already used in your offerings' } };
+            }
 
-        res.status(201).json({
-            offering: { id, org_id: orgId, product_def_id, sku, product_name: productDef.name, version_id: versionId },
+            // Insert offering + v1 atomically
+            await tx.run(
+                `INSERT INTO supplier_offerings (id, org_id, product_def_id, sku, price, currency, moq, lead_time_days, stock_available)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                [id, orgId, product_def_id, sku, parsedPrice, parsedCurrency, parsedMoq, parsedLead, parsedStock]
+            );
+
+            const versionId = uuidv4();
+            await tx.run(
+                `INSERT INTO supplier_offering_versions (id, offering_id, price, currency, moq, lead_time_days, stock_snapshot, version, valid_from, created_by)
+                 VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, 1, NOW(), $8)`,
+                [
+                    versionId,
+                    id,
+                    parsedPrice,
+                    parsedCurrency,
+                    parsedMoq,
+                    parsedLead,
+                    parsedStock,
+                    req.user?.email || 'system',
+                ]
+            );
+
+            return {
+                status: 201,
+                body: {
+                    offering: {
+                        id,
+                        org_id: orgId,
+                        product_def_id,
+                        sku,
+                        product_name: productDef.name,
+                        version_id: versionId,
+                    },
+                },
+            };
         });
+
+        return res.status(result.status).json(result.body);
     } catch (err) {
         logger.error('[offerings] POST / error:', err.message);
         res.status(500).json({ error: 'Failed to create offering' });
     }
 });
 
-// ─── PUT /api/scm/offerings/:id — Immutable version rotation ────────────────
+// ─── PUT /api/scm/offerings/:id — Immutable version rotation (TRANSACTION-SAFE) ──
 // Invariant: 1 offering → exactly 1 active version. No gap, no overlap.
-// Flow: BEGIN → lock root FOR UPDATE → SELECT now() → close old → insert new → COMMIT
+// Flow: withTransaction(tx => lock root FOR UPDATE → SELECT now() → close old → insert new → verify)
 // On conflict: exponential backoff (100ms, 200ms, 400ms), max 3 retries.
 router.put('/:id', requirePermission('product:update'), async (req, res) => {
     const MAX_RETRIES = 3;
@@ -190,104 +211,108 @@ router.put('/:id', requirePermission('product:update'), async (req, res) => {
             const { id } = req.params;
             const { price, currency, moq, lead_time_days, stock_available, status } = req.body;
 
-            // Atomic transaction: lock root → close old version → insert new
-            const result = await db.run('BEGIN', []);
+            const result = await db.withTransaction(async tx => {
+                // 1. Lock root offering (prevents concurrent version creation)
+                const offering = await tx.get(
+                    'SELECT * FROM supplier_offerings WHERE id = $1 AND org_id = $2 FOR UPDATE',
+                    [id, orgId]
+                );
+                if (!offering) {
+                    return { status: 404, body: { error: 'Offering not found or unauthorized' } };
+                }
 
-            // 1. Lock root offering (prevents concurrent version creation)
-            const offering = await db.get('SELECT * FROM supplier_offerings WHERE id = $1 AND org_id = $2 FOR UPDATE', [
-                id,
-                orgId,
-            ]);
-            if (!offering) {
-                await db.run('ROLLBACK', []);
-                return res.status(404).json({ error: 'Offering not found or unauthorized' });
-            }
+                // 2. Shared timestamp (guarantees old.valid_to == new.valid_from)
+                const tsResult = await tx.get('SELECT NOW() as ts', []);
+                const ts = tsResult.ts;
 
-            // 2. Shared timestamp (guarantees old.valid_to == new.valid_from)
-            const tsResult = await db.get('SELECT NOW() as ts', []);
-            const ts = tsResult.ts;
+                // 3. Get current active version
+                const currentVersion = await tx.get(
+                    'SELECT * FROM supplier_offering_versions WHERE offering_id = $1 AND valid_to IS NULL',
+                    [id]
+                );
+                const nextVersionNum = (currentVersion?.version || 0) + 1;
 
-            // 3. Get current active version
-            const currentVersion = await db.get(
-                'SELECT * FROM supplier_offering_versions WHERE offering_id = $1 AND valid_to IS NULL',
-                [id]
-            );
-            const nextVersionNum = (currentVersion?.version || 0) + 1;
+                // 4. Close old version (if exists)
+                if (currentVersion) {
+                    await tx.run('UPDATE supplier_offering_versions SET valid_to = $1 WHERE id = $2', [
+                        ts,
+                        currentVersion.id,
+                    ]);
+                }
 
-            // 4. Close old version (if exists)
-            if (currentVersion) {
-                await db.run('UPDATE supplier_offering_versions SET valid_to = $1 WHERE id = $2', [
-                    ts,
-                    currentVersion.id,
-                ]);
-            }
+                // 5. Insert new version
+                const versionId = uuidv4();
+                await tx.run(
+                    `INSERT INTO supplier_offering_versions
+                     (id, offering_id, price, currency, moq, lead_time_days, stock_snapshot, version, valid_from, created_by)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                    [
+                        versionId,
+                        id,
+                        parseFloat(price) || currentVersion?.price || offering.price || 0,
+                        currency || currentVersion?.currency || offering.currency || 'USD',
+                        parseInt(moq) || currentVersion?.moq || offering.moq || 1,
+                        lead_time_days != null
+                            ? parseInt(lead_time_days)
+                            : currentVersion?.lead_time_days || offering.lead_time_days,
+                        parseInt(stock_available) || currentVersion?.stock_snapshot || offering.stock_available || 0,
+                        nextVersionNum,
+                        ts,
+                        req.user?.email || 'system',
+                    ]
+                );
 
-            // 5. Insert new version
-            const versionId = uuidv4();
-            await db.run(
-                `INSERT INTO supplier_offering_versions
-                 (id, offering_id, price, currency, moq, lead_time_days, stock_snapshot, version, valid_from, created_by)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-                [
-                    versionId,
-                    id,
-                    parseFloat(price) || currentVersion?.price || offering.price || 0,
-                    currency || currentVersion?.currency || offering.currency || 'USD',
-                    parseInt(moq) || currentVersion?.moq || offering.moq || 1,
-                    lead_time_days != null
-                        ? parseInt(lead_time_days)
-                        : currentVersion?.lead_time_days || offering.lead_time_days,
-                    parseInt(stock_available) || currentVersion?.stock_snapshot || offering.stock_available || 0,
-                    nextVersionNum,
-                    ts,
-                    req.user?.email || 'system',
-                ]
-            );
+                // 6. RUNTIME INVARIANT: exactly 1 active version (valid_to IS NULL)
+                const activeCount = await tx.get(
+                    'SELECT COUNT(*)::int as cnt FROM supplier_offering_versions WHERE offering_id = $1 AND valid_to IS NULL',
+                    [id]
+                );
+                if (activeCount?.cnt !== 1) {
+                    // Throw to trigger auto-ROLLBACK
+                    throw Object.assign(
+                        new Error(`INVARIANT VIOLATION: ${activeCount?.cnt} active versions for ${id}`),
+                        { isInvariant: true }
+                    );
+                }
 
-            // 6. RUNTIME INVARIANT: exactly 1 active version (valid_to IS NULL) per offering
-            const activeCount = await db.get(
-                'SELECT COUNT(*)::int as cnt FROM supplier_offering_versions WHERE offering_id = $1 AND valid_to IS NULL',
-                [id]
-            );
-            if (activeCount?.cnt !== 1) {
-                await db.run('ROLLBACK', []);
-                logger.error(`[offerings] INVARIANT VIOLATION: ${activeCount?.cnt} active versions for ${id}`);
-                return res.status(500).json({ error: 'Version invariant violated — rollback' });
-            }
+                // 7. Update root offering record (backward compat)
+                await tx.run(
+                    `UPDATE supplier_offerings SET
+                        price = COALESCE($1, price), currency = COALESCE($2, currency),
+                        moq = COALESCE($3, moq), lead_time_days = COALESCE($4, lead_time_days),
+                        stock_available = COALESCE($5, stock_available), status = COALESCE($6, status),
+                        version = $7, updated_at = $8
+                     WHERE id = $9 AND org_id = $10`,
+                    [price, currency, moq, lead_time_days, stock_available, status, nextVersionNum, ts, id, orgId]
+                );
 
-            // 7. Also update the root offering record (for backward compat)
-            await db.run(
-                `UPDATE supplier_offerings SET
-                    price = COALESCE($1, price), currency = COALESCE($2, currency),
-                    moq = COALESCE($3, moq), lead_time_days = COALESCE($4, lead_time_days),
-                    stock_available = COALESCE($5, stock_available), status = COALESCE($6, status),
-                    version = $7, updated_at = $8
-                 WHERE id = $9 AND org_id = $10`,
-                [price, currency, moq, lead_time_days, stock_available, status, nextVersionNum, ts, id, orgId]
-            );
-
-            await db.run('COMMIT', []);
-
-            return res.json({
-                message: 'Offering updated (new version created)',
-                id,
-                version_id: versionId,
-                version: nextVersionNum,
-                valid_from: ts,
+                return {
+                    status: 200,
+                    body: {
+                        message: 'Offering updated (new version created)',
+                        id,
+                        version_id: versionId,
+                        version: nextVersionNum,
+                        valid_from: ts,
+                    },
+                };
             });
-        } catch (err) {
-            try {
-                await db.run('ROLLBACK', []);
-            } catch (e) {
-                /* already rolled back */
-            }
 
-            // Retry on constraint violation (concurrent version conflict)
+            return res.status(result.status).json(result.body);
+        } catch (err) {
+            // withTransaction auto-rolled back already
+
+            // Retry on EXCLUSION constraint violation (concurrent version conflict)
             if (err.code === '23P01' && attempt < MAX_RETRIES) {
                 const delay = BASE_DELAY_MS * Math.pow(2, attempt);
                 logger.warn(`[offerings] Version conflict on attempt ${attempt + 1}, retrying in ${delay}ms`);
                 await new Promise(r => setTimeout(r, delay));
                 continue;
+            }
+
+            if (err.isInvariant) {
+                logger.error(`[offerings] ${err.message}`);
+                return res.status(500).json({ error: 'Version invariant violated — rolled back' });
             }
 
             logger.error('[offerings] PUT /:id error:', err.message);

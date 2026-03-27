@@ -1,12 +1,16 @@
 /**
- * Idempotency Middleware (Phase 4.3 — Hardened)
+ * Idempotency Middleware (Phase 4.3 — Hardened v2)
  *
  * Invariant: 1 (org + endpoint + key) → 1 effect + 1 response
- * - SHA-256 payload hash → stored as request_hash
- * - Same key + same hash → return cached response (byte-level identical)
- * - Same key + different hash → 422 reject
- * - Expired key (>24h) → IDEMPOTENCY_KEY_EXPIRED (retryable: false)
- * - TTL: 24 hours
+ *
+ * FIX v2:
+ *   - PK changed from (key) → (key, org_id, endpoint) — no cross-tenant collision
+ *   - Claim-before-execute: INSERT placeholder BEFORE calling next()
+ *   - TOCTOU race eliminated: ON CONFLICT prevents double-claim
+ *   - Same key + same hash → return cached response (byte-level identical)
+ *   - Same key + different hash → 422 reject
+ *   - Expired key (>24h) → IDEMPOTENCY_KEY_EXPIRED (retryable: false)
+ *   - TTL: 24 hours
  */
 const db = require('../db');
 const logger = require('../lib/logger');
@@ -40,7 +44,7 @@ function idempotency(endpoint) {
         const requestHash = hashPayload(req.body);
 
         try {
-            // Check for existing key (including expired)
+            // 1. Check for existing key (uses composite PK: key + org_id + endpoint)
             const existing = await db.get(
                 `SELECT response, status_code, request_hash, expires_at FROM idempotency_keys
                  WHERE key = $1 AND org_id = $2 AND endpoint = $3`,
@@ -48,6 +52,15 @@ function idempotency(endpoint) {
             );
 
             if (existing) {
+                // Check if still being processed (response is null)
+                if (existing.response === null || existing.response === '{}') {
+                    // Another request claimed this key but hasn't finished yet
+                    return res.status(409).json({
+                        error: 'IDEMPOTENCY_IN_PROGRESS',
+                        message: 'Another request with this idempotency key is still being processed.',
+                    });
+                }
+
                 // Expired key → reject clearly (NOT reprocess)
                 if (new Date(existing.expires_at) <= new Date()) {
                     await logMetric('idempotency_expired_reject', orgId, endpoint, { key });
@@ -73,18 +86,36 @@ function idempotency(endpoint) {
                 });
             }
 
-            // No existing key → process request, capture response
+            // 2. CLAIM the key atomically (INSERT ... ON CONFLICT DO NOTHING RETURNING)
+            //    This eliminates the TOCTOU race: only ONE request can claim a key.
+            //    Response is NULL initially — updated after business logic completes.
+            const claimed = await db.get(
+                `INSERT INTO idempotency_keys (key, org_id, endpoint, request_hash, response, status_code, expires_at)
+                 VALUES ($1, $2, $3, $4, NULL, 0, NOW() + INTERVAL '${TTL_HOURS} hours')
+                 ON CONFLICT (key, org_id, endpoint) DO NOTHING
+                 RETURNING key`,
+                [key, orgId, endpoint, requestHash]
+            );
+
+            if (!claimed) {
+                // Another request claimed this key between our SELECT and INSERT
+                return res.status(409).json({
+                    error: 'IDEMPOTENCY_IN_PROGRESS',
+                    message: 'Duplicate request detected. Please retry shortly.',
+                });
+            }
+
+            // 3. Monkey-patch res.json to UPDATE the cached response after execution
             const originalJson = res.json.bind(res);
             res.json = async function (body) {
                 try {
                     await db.run(
-                        `INSERT INTO idempotency_keys (key, org_id, endpoint, request_hash, response, status_code, expires_at)
-                         VALUES ($1, $2, $3, $4, $5, $6, NOW() + INTERVAL '${TTL_HOURS} hours')
-                         ON CONFLICT (key) DO NOTHING`,
-                        [key, orgId, endpoint, requestHash, JSON.stringify(body), res.statusCode || 200]
+                        `UPDATE idempotency_keys SET response = $1, status_code = $2
+                         WHERE key = $3 AND org_id = $4 AND endpoint = $5`,
+                        [JSON.stringify(body), res.statusCode || 200, key, orgId, endpoint]
                     );
                 } catch (e) {
-                    logger.warn('[Idempotency] Failed to cache:', e.message);
+                    logger.warn('[Idempotency] Failed to update cache:', e.message);
                 }
                 return originalJson(body);
             };

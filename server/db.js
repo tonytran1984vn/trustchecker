@@ -375,6 +375,80 @@ class PrismaBackend {
         return this;
     }
 
+    /**
+     * Execute a function within a REAL database transaction.
+     * Holds a SINGLE connection for the entire BEGIN→COMMIT/ROLLBACK scope.
+     *
+     * CRITICAL: db.get()/db.run()/db.all() each acquire separate connections,
+     * making BEGIN/COMMIT/FOR UPDATE non-functional. This method fixes that.
+     *
+     * @param {Function} fn - async (tx) => result. tx has get/all/run methods.
+     * @returns {Promise<any>} - The return value of fn
+     * @throws {Error} - Auto-ROLLBACK on any error, then re-throws
+     *
+     * Usage:
+     *   const result = await db.withTransaction(async (tx) => {
+     *       const row = await tx.get('SELECT ... FOR UPDATE', [id]);
+     *       await tx.run('UPDATE ...', [val]);
+     *       return { status: 200, body: row };
+     *   });
+     */
+    async withTransaction(fn) {
+        const client = await this._pool.connect();
+        let released = false;
+        const self = this;
+
+        try {
+            // Set RLS context (same as _withRLS)
+            const ctx = safeGetContext();
+            const orgId = ctx.orgId || '';
+            if (orgId) {
+                await client.query('SET app.current_org = $1', [orgId]);
+            } else {
+                await client.query("SET app.current_org = ''");
+            }
+
+            await client.query('BEGIN');
+
+            // Transaction-scoped DB interface — all queries on SAME connection
+            const tx = {
+                async get(sql, params = []) {
+                    const t = self._translateSQL(sql);
+                    if (!t) return null;
+                    const result = await client.query(t, params);
+                    return result.rows.length > 0 ? self._convert(result.rows[0]) : null;
+                },
+                async all(sql, params = []) {
+                    const t = self._translateSQL(sql);
+                    if (!t) return [];
+                    const result = await client.query(t, params);
+                    return result.rows.map(r => self._convert(r));
+                },
+                async run(sql, params = []) {
+                    const t = self._translateSQL(sql);
+                    if (!t) return;
+                    await client.query(t, params);
+                },
+            };
+
+            const result = await fn(tx);
+            await client.query('COMMIT');
+            return result;
+        } catch (e) {
+            try {
+                await client.query('ROLLBACK');
+            } catch (_) {
+                /* already rolled back */
+            }
+            throw e;
+        } finally {
+            if (!released) {
+                client.release();
+                released = true;
+            }
+        }
+    }
+
     prepare(sql) {
         const self = this;
         const t = this._translateSQL(sql);

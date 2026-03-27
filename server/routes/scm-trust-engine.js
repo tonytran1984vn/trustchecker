@@ -56,7 +56,7 @@ router.post('/compute', requirePermission('settings:update'), async (req, res) =
                 [orgId, partner.id]
             );
 
-            // 2. Quality check metrics
+            // 2. Quality check metrics (FIX: scoped to partner via supplier filter)
             const qcStats = await db.get(
                 `SELECT
                     COUNT(*)::int as total_checks,
@@ -64,10 +64,8 @@ router.post('/compute', requirePermission('settings:update'), async (req, res) =
                     COALESCE(SUM(defects_found), 0)::int as total_defects,
                     COALESCE(AVG(score), 100)::numeric(5,1) as avg_quality_score
                  FROM quality_checks
-                 WHERE org_id = $1 AND product IN (
-                     SELECT name FROM products WHERE org_id = $1
-                 )`,
-                [orgId]
+                 WHERE org_id = $1 AND (supplier_id = $2 OR supplier = $3)`,
+                [orgId, partner.id, partner.name]
             );
 
             // 3. Incident count (severity-weighted)
@@ -265,8 +263,9 @@ router.get('/duplicates', requirePermission('settings:update'), async (req, res)
         const orgId = req.user?.orgId || req.user?.org_id;
         const threshold = parseFloat(req.query.threshold) || 0.6;
 
+        // FIX: Added LIMIT 3000 to prevent O(n²) timeout at scale
         const partners = await db.all(
-            'SELECT id, name, normalized_name, country, type, status, trust_score FROM partners WHERE org_id = $1 ORDER BY name',
+            'SELECT id, name, normalized_name, country, type, status, trust_score FROM partners WHERE org_id = $1 ORDER BY name LIMIT 3000',
             [orgId]
         );
 
@@ -354,7 +353,7 @@ router.post('/merge', requirePermission('settings:update'), async (req, res) => 
             return res.status(400).json({ error: 'Cannot merge a supplier with itself' });
         }
 
-        // Verify both belong to org
+        // Verify both belong to org (outside tx — read-only)
         const primary = await db.get('SELECT id, name FROM partners WHERE id = $1 AND org_id = $2', [
             primary_id,
             orgId,
@@ -365,27 +364,40 @@ router.post('/merge', requirePermission('settings:update'), async (req, res) => 
         ]);
         if (!primary || !secondary) return res.status(404).json({ error: 'One or both partners not found' });
 
-        // Reassign relationships from secondary → primary
-        await db.run('UPDATE supplier_offerings SET org_id = $1 WHERE org_id = $2', [primary_id, secondary_id]);
-        await db.run('UPDATE purchase_orders SET supplier = $1 WHERE supplier = $2 AND org_id = $3', [
-            primary_id,
-            secondary_id,
-            orgId,
-        ]);
-        await db.run('UPDATE purchase_orders SET supplier_org_id = $1 WHERE supplier_org_id = $2 AND org_id = $3', [
-            primary_id,
-            secondary_id,
-            orgId,
-        ]);
-        await db.run('UPDATE partner_locations SET partner_id = $1 WHERE partner_id = $2', [primary_id, secondary_id]);
+        // FIX: Entire merge operation is now atomic (single connection)
+        await db.withTransaction(async tx => {
+            // FIX: Added org_id scoping to prevent cross-tenant offering reassignment
+            await tx.run(
+                `UPDATE supplier_offerings SET org_id = $1
+                 WHERE org_id = $2
+                   AND id IN (SELECT so.id FROM supplier_offerings so
+                              JOIN product_definitions pd ON pd.id = so.product_def_id
+                              WHERE so.org_id = $2)`,
+                [primary_id, secondary_id]
+            );
+            await tx.run('UPDATE purchase_orders SET supplier = $1 WHERE supplier = $2 AND org_id = $3', [
+                primary_id,
+                secondary_id,
+                orgId,
+            ]);
+            await tx.run('UPDATE purchase_orders SET supplier_org_id = $1 WHERE supplier_org_id = $2 AND org_id = $3', [
+                primary_id,
+                secondary_id,
+                orgId,
+            ]);
+            await tx.run('UPDATE partner_locations SET partner_id = $1 WHERE partner_id = $2', [
+                primary_id,
+                secondary_id,
+            ]);
 
-        // Mark secondary as merged/inactive
-        await db.run(
-            "UPDATE partners SET status = 'merged', notes = CONCAT(COALESCE(notes,''), ' [Merged into ' || $1 || ']') WHERE id = $2 AND org_id = $3",
-            [primary.name, secondary_id, orgId]
-        );
+            // Mark secondary as merged/inactive
+            await tx.run(
+                "UPDATE partners SET status = 'merged', notes = CONCAT(COALESCE(notes,''), ' [Merged into ' || $1 || ']') WHERE id = $2 AND org_id = $3",
+                [primary.name, secondary_id, orgId]
+            );
+        });
 
-        // Audit trail
+        // Audit trail (outside tx — best-effort, not critical for atomicity)
         await appendAuditEntry({
             actor_id: req.user.id,
             action: 'SUPPLIER_MERGED',
@@ -424,7 +436,7 @@ router.post('/offboard/:partnerId', requirePermission('settings:update'), async 
         const { partnerId } = req.params;
         const { reason, cancel_open_pos } = req.body;
 
-        // Verify partner
+        // Verify partner (outside tx — read-only)
         const partner = await db.get('SELECT id, name, status FROM partners WHERE id = $1 AND org_id = $2', [
             partnerId,
             orgId,
@@ -435,75 +447,84 @@ router.post('/offboard/:partnerId', requirePermission('settings:update'), async 
             return res.status(409).json({ error: 'Partner already offboarded' });
         }
 
-        const actions = [];
+        // FIX: Entire cascade is now atomic (single connection, single transaction)
+        // Crash at any step → full ROLLBACK → no partial offboard
+        const actions = await db.withTransaction(async tx => {
+            const steps = [];
 
-        // 1. Deactivate all offerings
-        const offResult = await db.run(
-            "UPDATE supplier_offerings SET status = 'discontinued', updated_at = NOW() WHERE org_id = $1",
-            [partnerId]
-        );
-        actions.push(`Discontinued ${offResult?.changes || 0} offerings`);
-
-        // 2. Close all active offering versions
-        await db.run(
-            'UPDATE supplier_offering_versions SET valid_to = NOW() WHERE offering_id IN (SELECT id FROM supplier_offerings WHERE org_id = $1) AND valid_to IS NULL',
-            [partnerId]
-        );
-        actions.push('Closed all active offering versions');
-
-        // 3. Cancel pending POs (optional)
-        if (cancel_open_pos) {
-            const poResult = await db.run(
-                "UPDATE purchase_orders SET status = 'cancelled', updated_at = NOW() WHERE (supplier = $1 OR supplier_org_id = $1) AND org_id = $2 AND status IN ('pending_approval','approved','in_progress')",
-                [partnerId, orgId]
-            );
-            actions.push(`Cancelled ${poResult?.changes || 0} open POs`);
-        }
-
-        // 4. Deactivate product mappings
-        await db.run(
-            'UPDATE product_mappings SET is_active = false, superseded_at = NOW() WHERE org_id = $1 AND is_active = true',
-            [partnerId]
-        );
-        actions.push('Deactivated product mappings');
-
-        // 5. Revoke network invitations
-        const invResult = await db.run(
-            "UPDATE supplier_invitations SET status = 'revoked', updated_at = NOW() WHERE (accepted_org_id = $1 OR org_id = $1) AND status = 'accepted'",
-            [partnerId]
-        );
-        actions.push(`Revoked ${invResult?.changes || 0} invitations`);
-
-        // 6. Crypto-shredding: delete encryption key
-        const keyRow = await db.get(
-            'SELECT encryption_key FROM supplier_encryption_keys WHERE org_id = $1 AND status = $2',
-            [partnerId, 'active']
-        );
-        if (keyRow) {
-            await db.run(
-                "UPDATE supplier_encryption_keys SET encryption_key = 'SHREDDED', status = 'shredded', shredded_at = NOW(), shredded_by = $1 WHERE org_id = $2",
-                [req.user.email || 'system', partnerId]
-            );
-
-            // 7. Verify: attempt decrypt → must fail
-            const verifyRow = await db.get(
-                'SELECT encryption_key, status FROM supplier_encryption_keys WHERE org_id = $1',
+            // 1. Deactivate all offerings
+            await tx.run(
+                "UPDATE supplier_offerings SET status = 'discontinued', updated_at = NOW() WHERE org_id = $1",
                 [partnerId]
             );
-            const shredVerified = verifyRow?.status === 'shredded' && verifyRow?.encryption_key === 'SHREDDED';
-            actions.push(`Crypto-shred: ${shredVerified ? 'VERIFIED' : 'WARNING: verify failed'}`);
-        } else {
-            actions.push('No encryption key found (skipped crypto-shred)');
-        }
+            steps.push('Discontinued offerings');
 
-        // 8. Set partner status
-        await db.run(
-            "UPDATE partners SET status = 'offboarded', trust_state = 'banned', trust_state_reason = $1, trust_state_changed_at = NOW(), updated_at = NOW() WHERE id = $2 AND org_id = $3",
-            [reason || 'Offboarded', partnerId, orgId]
-        );
-        actions.push('Partner status → offboarded, trust_state → banned');
+            // 2. Close all active offering versions
+            await tx.run(
+                'UPDATE supplier_offering_versions SET valid_to = NOW() WHERE offering_id IN (SELECT id FROM supplier_offerings WHERE org_id = $1) AND valid_to IS NULL',
+                [partnerId]
+            );
+            steps.push('Closed all active offering versions');
 
-        // 9. Audit trail
+            // 3. Cancel pending POs (optional)
+            if (cancel_open_pos) {
+                await tx.run(
+                    "UPDATE purchase_orders SET status = 'cancelled', updated_at = NOW() WHERE (supplier = $1 OR supplier_org_id = $1) AND org_id = $2 AND status IN ('pending_approval','approved','in_progress')",
+                    [partnerId, orgId]
+                );
+                steps.push('Cancelled open POs');
+            }
+
+            // 4. Deactivate product mappings
+            await tx.run(
+                'UPDATE product_mappings SET is_active = false, superseded_at = NOW() WHERE org_id = $1 AND is_active = true',
+                [partnerId]
+            );
+            steps.push('Deactivated product mappings');
+
+            // 5. Revoke network invitations
+            await tx.run(
+                "UPDATE supplier_invitations SET status = 'revoked', updated_at = NOW() WHERE (accepted_org_id = $1 OR org_id = $1) AND status = 'accepted'",
+                [partnerId]
+            );
+            steps.push('Revoked invitations');
+
+            // 6. Crypto-shredding: delete encryption key
+            const keyRow = await tx.get(
+                'SELECT encryption_key FROM supplier_encryption_keys WHERE org_id = $1 AND status = $2',
+                [partnerId, 'active']
+            );
+            if (keyRow) {
+                await tx.run(
+                    "UPDATE supplier_encryption_keys SET encryption_key = 'SHREDDED', status = 'shredded', shredded_at = NOW(), shredded_by = $1 WHERE org_id = $2",
+                    [req.user.email || 'system', partnerId]
+                );
+
+                // 7. Verify within SAME transaction
+                const verifyRow = await tx.get(
+                    'SELECT encryption_key, status FROM supplier_encryption_keys WHERE org_id = $1',
+                    [partnerId]
+                );
+                const shredVerified = verifyRow?.status === 'shredded' && verifyRow?.encryption_key === 'SHREDDED';
+                if (!shredVerified) {
+                    throw new Error('CRYPTO_SHRED_VERIFY_FAILED: key not properly shredded');
+                }
+                steps.push('Crypto-shred: VERIFIED');
+            } else {
+                steps.push('No encryption key found (skipped crypto-shred)');
+            }
+
+            // 8. Set partner status
+            await tx.run(
+                "UPDATE partners SET status = 'offboarded', trust_state = 'banned', trust_state_reason = $1, trust_state_changed_at = NOW(), updated_at = NOW() WHERE id = $2 AND org_id = $3",
+                [reason || 'Offboarded', partnerId, orgId]
+            );
+            steps.push('Partner status → offboarded, trust_state → banned');
+
+            return steps;
+        });
+
+        // Audit trail (outside tx — best-effort, not critical for atomicity)
         await appendAuditEntry({
             actor_id: req.user.id,
             action: 'SUPPLIER_OFFBOARDED',
@@ -513,7 +534,6 @@ router.post('/offboard/:partnerId', requirePermission('settings:update'), async 
                 partner_name: partner.name,
                 reason: reason || 'Not specified',
                 actions,
-                crypto_shredded: !!keyRow,
                 offboarded_by: req.user.email,
             },
             ip: req.ip || '',

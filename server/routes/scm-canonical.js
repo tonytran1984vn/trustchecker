@@ -50,31 +50,42 @@ function attributeHash(name, brand, attributes) {
     return crypto.createHash('sha256').update(payload).digest('hex').slice(0, 16);
 }
 
-// ═══ POST / — Create canonical product ═══════════════════════════════
+// ═══ POST / — Create canonical product (ATOMIC GTIN DEDUP) ═══════════
 
 router.post('/', requirePermission('product:create'), async (req, res) => {
     try {
         const { name, brand, category, gtin, attributes } = req.body;
         if (!name) return res.status(400).json({ error: 'name is required' });
 
-        // GTIN dedup: same GTIN + different canonical → reject
+        const id = uuidv4();
+
+        // Atomic insert — ON CONFLICT handles concurrent GTIN race
         if (gtin) {
-            const existing = await db.get('SELECT id, name FROM canonical_products WHERE gtin = $1', [gtin]);
-            if (existing) {
+            const inserted = await db.get(
+                `INSERT INTO canonical_products (id, name, brand, category, gtin, attributes)
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 ON CONFLICT (gtin) WHERE gtin IS NOT NULL DO NOTHING
+                 RETURNING id`,
+                [id, name, brand || null, category || null, gtin, JSON.stringify(attributes || {})]
+            );
+
+            if (!inserted) {
+                // GTIN already exists — return proper 409
+                const existing = await db.get('SELECT id, name FROM canonical_products WHERE gtin = $1', [gtin]);
                 return res.status(409).json({
                     error: 'GTIN already assigned to another canonical product',
-                    existing_id: existing.id,
-                    existing_name: existing.name,
+                    existing_id: existing?.id,
+                    existing_name: existing?.name,
                 });
             }
+        } else {
+            // No GTIN — simple insert
+            await db.run(
+                `INSERT INTO canonical_products (id, name, brand, category, gtin, attributes)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [id, name, brand || null, category || null, null, JSON.stringify(attributes || {})]
+            );
         }
-
-        const id = uuidv4();
-        await db.run(
-            `INSERT INTO canonical_products (id, name, brand, category, gtin, attributes)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
-            [id, name, brand || null, category || null, gtin || null, JSON.stringify(attributes || {})]
-        );
 
         res.status(201).json({ canonical: { id, name, brand, category, gtin } });
     } catch (err) {
@@ -114,6 +125,7 @@ router.get('/', async (req, res) => {
 });
 
 // ═══ POST /match — Submit supplier product for matching ══════════════
+// FIX: Added LIMIT 5000 to prevent OOM at scale. TODO: migrate to pg_trgm.
 
 router.post('/match', requirePermission('product:create'), async (req, res) => {
     try {
@@ -138,7 +150,7 @@ router.post('/match', requirePermission('product:create'), async (req, res) => {
                     [candidateId, supplier_product_id, orgId, gtinMatch.id, 1.0, 'gtin', 'approved']
                 );
 
-                // Auto-map (GTIN = highest trust)
+                // Auto-map (GTIN = highest trust) — uses withTransaction internally
                 await _createMapping(supplier_product_id, orgId, gtinMatch.id, 1.0, 'gtin');
 
                 return res.json({
@@ -150,9 +162,9 @@ router.post('/match', requirePermission('product:create'), async (req, res) => {
             }
         }
 
-        // 2. Fuzzy name + brand matching
+        // 2. Fuzzy name + brand matching (CAPPED at 5000 to prevent OOM)
         const canonicals = await db.all(
-            'SELECT id, name, brand, category, attributes FROM canonical_products WHERE status = $1',
+            'SELECT id, name, brand, category, attributes FROM canonical_products WHERE status = $1 LIMIT 5000',
             ['active']
         );
 
@@ -191,7 +203,7 @@ router.post('/match', requirePermission('product:create'), async (req, res) => {
                 [candidateId, supplier_product_id, orgId, c.canonical.id, c.confidence, 'auto', status]
             );
 
-            // Auto-map if > 0.9
+            // Auto-map if > 0.9 — uses withTransaction internally
             if (status === 'approved') {
                 await _createMapping(supplier_product_id, orgId, c.canonical.id, c.confidence, 'auto');
             }
@@ -308,9 +320,9 @@ router.post('/reconcile', requirePermission('settings:update'), async (req, res)
             [orgId]
         );
 
-        // Get all active canonicals
+        // Get active canonicals (CAPPED to prevent OOM)
         const canonicals = await db.all(
-            "SELECT id, name, brand, category FROM canonical_products WHERE status = 'active'",
+            "SELECT id, name, brand, category FROM canonical_products WHERE status = 'active' LIMIT 5000",
             []
         );
 
@@ -359,38 +371,36 @@ router.post('/reconcile', requirePermission('settings:update'), async (req, res)
     }
 });
 
-// ═══ Helper: Create mapping with FOR UPDATE lock ════════════════════
+// ═══ Helper: Create mapping with REAL TRANSACTION ═══════════════════
+// FIX: Uses db.withTransaction() — FOR UPDATE now holds lock on same connection.
+// DB partial unique index uq_product_mappings_active prevents duplicates as safety net.
 
 async function _createMapping(supplierProductId, orgId, canonicalProductId, confidence, decidedBy) {
-    // Transaction-wrapped: deactivate old → insert new (FOR UPDATE lock)
-    try {
-        // Lock existing active mapping
-        const existing = await db.get(
+    await db.withTransaction(async tx => {
+        // Lock existing active mapping (FOR UPDATE on same connection)
+        const existing = await tx.get(
             'SELECT id FROM product_mappings WHERE supplier_product_id = $1 AND is_active = true FOR UPDATE',
             [supplierProductId]
         );
 
         if (existing) {
-            await db.run('UPDATE product_mappings SET is_active = false, superseded_at = NOW() WHERE id = $1', [
+            await tx.run('UPDATE product_mappings SET is_active = false, superseded_at = NOW() WHERE id = $1', [
                 existing.id,
             ]);
         }
 
-        await db.run(
+        await tx.run(
             `INSERT INTO product_mappings (id, supplier_product_id, org_id, canonical_product_id, confidence, decided_by)
              VALUES ($1, $2, $3, $4, $5, $6)`,
             [uuidv4(), supplierProductId, orgId, canonicalProductId, confidence, decidedBy]
         );
 
         // Also update product_definitions
-        await db.run('UPDATE product_definitions SET canonical_product_id = $1 WHERE id = $2', [
+        await tx.run('UPDATE product_definitions SET canonical_product_id = $1 WHERE id = $2', [
             canonicalProductId,
             supplierProductId,
         ]);
-    } catch (err) {
-        logger.error('[canonical] _createMapping error:', err.message);
-        throw err;
-    }
+    });
 }
 
 module.exports = router;
