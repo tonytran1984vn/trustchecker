@@ -9,7 +9,8 @@ import { scoreColor } from '../utils/helpers.js';
 
 export function renderPage() {
   const profile = State.supplierProfile?.profile || null;
-  const scores = State.supplierScores || [];
+  const rawScores = State.supplierScores || [];
+  const scores = Array.isArray(rawScores) ? rawScores : (rawScores.scores || []);
   const improvements = State.supplierImprovements?.suggestions || [];
   const latestScore = scores[0] || {};
 

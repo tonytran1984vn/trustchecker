@@ -33,7 +33,7 @@ async function load() {
 }
 
 function timeAgo(d) {
-  if (!d) return '—';
+  if (!d) return 'N/A';
   const diff = Date.now() - new Date(d).getTime();
   const m = Math.floor(diff / 60000), h = Math.floor(m / 60), dd = Math.floor(h / 24);
   if (m < 60) return m + 'm ago'; if (h < 24) return h + 'h ago'; return dd + 'd ago';
@@ -64,10 +64,10 @@ function renderContent() {
         ${routes.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted)">No routes defined</div>' : routes.map(r => `
           <div style="padding:0.75rem;border-bottom:1px solid var(--border)">
             <div style="display:flex;justify-content:space-between;align-items:center">
-              <div><span class="sa-code" style="color:#6366f1;font-weight:600">${r.id?.substring(0, 8) || '—'}</span> <strong>${r.name || (r.origin + ' → ' + r.destination)}</strong></div>
+              <div><span class="sa-code" style="color:#6366f1;font-weight:600">${r.id?.substring(0, 8) || 'N/A'}</span> <strong>${r.name || (r.origin + ' → ' + r.destination)}</strong></div>
               <span class="sa-status-pill sa-pill-${r.status === 'active' ? 'green' : 'orange'}">${r.status || 'active'}</span>
             </div>
-            <div style="font-size:0.72rem;color:var(--text-secondary);margin-top:0.3rem">${r.origin || '—'} → ${r.destination || '—'}</div>
+            <div style="font-size:0.72rem;color:var(--text-secondary);margin-top:0.3rem">${r.origin || 'N/A'} → ${r.destination || 'N/A'}</div>
           </div>
         `).join('')}
       </div>
@@ -79,8 +79,8 @@ function renderContent() {
           ${rules.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted)">No rules</div>' : `
           <table class="sa-table"><thead><tr><th>Rule</th><th>Condition</th><th>Status</th></tr></thead><tbody>
             ${rules.map(c => `<tr>
-              <td><strong>${c.rule_name || c.name || '—'}</strong></td>
-              <td style="font-size:0.72rem">${c.condition || c.description || '—'}</td>
+              <td><strong>${c.rule_name || c.name || 'N/A'}</strong></td>
+              <td style="font-size:0.72rem">${c.condition || c.description || 'N/A'}</td>
               <td><span class="sa-status-pill sa-pill-${c.is_active !== false ? 'green' : 'red'}">${c.is_active !== false ? 'active' : 'disabled'}</span></td>
             </tr>`).join('')}
           </tbody></table>`}
@@ -91,8 +91,8 @@ function renderContent() {
           ${breaches.length === 0 ? '<div style="text-align:center;padding:30px;color:var(--text-muted)">No breaches — clean</div>' : `
           <table class="sa-table"><thead><tr><th>Route</th><th>Location</th><th>Severity</th><th>Time</th></tr></thead><tbody>
             ${breaches.slice(0, 10).map(b => `<tr class="ops-alert-row">
-              <td>${b.route_name || b.route_id?.substring(0, 8) || '—'}</td>
-              <td style="color:#ef4444"><strong>${b.detected_location || b.location || '—'}</strong></td>
+              <td>${b.route_name || b.route_id?.substring(0, 8) || 'N/A'}</td>
+              <td style="color:#ef4444"><strong>${b.detected_location || b.location || 'N/A'}</strong></td>
               <td><span class="sa-status-pill sa-pill-${b.severity === 'critical' ? 'red' : 'orange'}">${b.severity || 'high'}</span></td>
               <td style="font-size:0.72rem">${timeAgo(b.created_at)}</td>
             </tr>`).join('')}

@@ -44,7 +44,25 @@ class ScoreValidationEngine {
      * Get accuracy metrics for an org
      */
     async getAccuracyMetrics(orgId) {
-        const result = await db.all('SELECT * FROM score_accuracy_summary WHERE org_id = $1', [orgId]);
+        // Compute aggregation directly since we don't use the SQL view in PostgreSQL
+        const result = await db.all(
+            `
+            SELECT 
+                entity_type,
+                COUNT(*) as total_validations,
+                SUM(CASE WHEN validation_status = 'validated' THEN 1 ELSE 0 END) as validated_count,
+                AVG(accuracy_delta) as avg_accuracy_delta,
+                SUM(CASE WHEN validation_status = 'validated' AND accuracy_delta < 0.2 THEN 1 ELSE 0 END) as true_positives,
+                SUM(CASE WHEN validation_status = 'validated' AND accuracy_delta >= 0.2 THEN 1 ELSE 0 END) as false_positives,
+                0 as false_negatives,
+                0 as true_negatives
+            FROM score_validations
+            WHERE org_id = $1
+            GROUP BY entity_type
+        `,
+            [orgId]
+        );
+
         const metrics = result;
 
         // Calculate precision, recall, F1 per entity type

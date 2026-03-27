@@ -53,7 +53,7 @@ const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
 app.use(
     cors({
         origin: (origin, callback) => {
-            if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+            if (!origin || ALLOWED_ORIGINS.includes('*') || ALLOWED_ORIGINS.includes(origin)) {
                 callback(null, true);
             } else {
                 callback(new Error('Not allowed by CORS'));
@@ -237,6 +237,24 @@ async function boot() {
     const { replicaManager } = require('./data/read-replica');
     const queryStore = new QueryStore(db, redis?.getRedisClient?.() || null);
 
+    // 4b. Early health endpoints (registered BEFORE middleware to bypass auth chain)
+    app.get('/api/health/dual-write', (req, res) => {
+        const ip = req.ip || req.connection?.remoteAddress || '';
+        if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip)) {
+            return res.status(403).json({ error: 'Localhost only' });
+        }
+        const worker = app.locals.dualWriteWorker;
+        if (!worker) {
+            return res.json({ status: 'not_started', message: 'Dual-write worker not initialized yet' });
+        }
+        try {
+            const stats = worker.getStats();
+            res.json({ status: 'ok', ...stats });
+        } catch (e) {
+            res.status(500).json({ status: 'error', error: e.message });
+        }
+    });
+
     // 5. Apply middleware chain (WAF → security → observability → versioning → metering → org)
     const { setupMiddleware } = require('./boot/middleware');
     const { waf, apiGateway, metrics, slo } = setupMiddleware(app, redis);
@@ -274,11 +292,22 @@ async function boot() {
     scheduler.start();
     partitionManager.startScheduler();
 
-    // 9. Start QR generation background worker
+    // 9a. Start QR generation background worker
     const qrJobWorker = require('./lib/qr-job-worker');
     qrJobWorker.start();
 
-    // 9. Start server
+    // 9b. Start dual-write retry worker (Phase 1 migration)
+    // Health endpoint is registered in boot/health.js (before SPA catch-all)
+    try {
+        const dualWriteWorker = require('./lib/dual-write-worker');
+        dualWriteWorker.start();
+        app.locals.dualWriteWorker = dualWriteWorker;
+        console.log('✅ Dual-write retry worker started');
+    } catch (e) {
+        console.warn('⚠️  Dual-write worker skipped:', e.message);
+    }
+
+    // 10. Start server
     const PORT = process.env.PORT || 4000;
     server.listen(PORT, '0.0.0.0', () => {
         const dbLabel = 'PostgreSQL (Prisma)';

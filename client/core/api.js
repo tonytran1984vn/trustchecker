@@ -95,12 +95,11 @@ const apiCache = {
 
 export const API = {
     base: (() => {
-        // Detect reverse-proxy prefix (e.g. /trustchecker/) from current path
-        const path = window.location.pathname;
-        const segments = path.split('/').filter(Boolean);
-        // If the app is served from a sub-path (e.g. /trustchecker/), use it as prefix
-        // Static assets like .js, .css, .html are leaf paths — strip them
-        const prefix = segments.length > 0 && !segments[0].includes('.') ? '/' + segments[0] : '';
+        // Detect reverse-proxy prefix using the <base> tag injected in index.html, or fallback to checking /trustchecker
+        let prefix = '';
+        if (window.location.pathname.startsWith('/trustchecker')) {
+            prefix = '/trustchecker';
+        }
         return window.location.origin + prefix + '/api';
     })(),
     token: (() => {

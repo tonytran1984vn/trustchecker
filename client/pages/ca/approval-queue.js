@@ -25,8 +25,10 @@ async function _load() {
     _approvals = res?.approvals || (Array.isArray(res) ? res : []);
   } catch (e) { _approvals = []; }
   _loading = false;
-  const el = document.getElementById('approval-queue-root');
-  if (el) el.innerHTML = _render();
+  setTimeout(() => {
+    const el = document.getElementById('approval-queue-root');
+    if (el) el.innerHTML = _render();
+  }, 50);
 }
 
 function _render() {

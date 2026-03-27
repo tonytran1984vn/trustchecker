@@ -160,7 +160,7 @@ export function renderPage() {
                 </td>
                 <td style="font-weight:600;color:var(--text-primary);font-size:0.82rem">${c.product_name || '\u2014'}</td>
                 <td><span style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;padding:3px 8px;background:var(--bg-input);border-radius:4px;color:var(--text-secondary)">${c.product_sku || '\u2014'}</span></td>
-                <td>${c.batch_id ? `<span style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;padding:3px 8px;background:var(--bg-input);border-radius:4px;color:var(--text-secondary)">${c.batch_id}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+                <td>${c.batch_id ? `<span style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;padding:3px 8px;background:var(--bg-input);border-radius:4px;color:var(--text-secondary)">${c.batch_id}</span>` : '<span style="color:var(--text-muted)">N/A</span>'}</td>
                 <td>
                   ${_filterStatus === 'deleted'
                     ? '<span class="badge suspicious">Deleted</span>'

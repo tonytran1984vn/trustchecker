@@ -89,7 +89,11 @@ export async function doLogin() {
     await Promise.all([loadFeatureFlags(), loadBranding()]);
 
     connectWS();
-    navigate('dashboard');
+    if (['supplier', 'supplier_contributor'].includes(res.user?.role)) {
+      navigate('supplier-dashboard');
+    } else {
+      navigate('dashboard');
+    }
     showToast('✅ Welcome back, ' + escapeHTML(res.user.email), 'success');
   } catch (e) {
     errEl.style.display = 'block';
@@ -114,7 +118,11 @@ export async function doMfaVerify() {
     await Promise.all([loadFeatureFlags(), loadBranding()]);
 
     connectWS();
-    navigate('dashboard');
+    if (['supplier', 'supplier_contributor'].includes(res.user?.role)) {
+      navigate('supplier-dashboard');
+    } else {
+      navigate('dashboard');
+    }
     showToast('✅ Welcome back, ' + escapeHTML(res.user.email) + ' (MFA verified)', 'success');
   } catch (e) {
     errEl.style.display = 'block';

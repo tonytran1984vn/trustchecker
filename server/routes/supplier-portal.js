@@ -135,16 +135,30 @@ router.get('/my/products', authMiddleware, requirePermission('product:view'), as
     try {
         const orgId = req.user.orgId || req.user.org_id;
         const { search, limit = 50, offset = 0 } = req.query;
-        let query = 'SELECT * FROM products WHERE org_id = $1';
+
+        let whereExtra = '';
         const params = [orgId];
 
         if (search) {
-            query += ' AND (name ILIKE $2 OR sku ILIKE $3)';
+            whereExtra = ' AND (p.name ILIKE $2 OR p.sku ILIKE $3)';
             const s = `%${search}%`;
             params.push(s, s);
         }
 
-        query += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+        const query = `
+            SELECT p.*,
+                   CASE
+                       WHEN dwf.id IS NOT NULL THEN 'failed'
+                       WHEN pd.id IS NOT NULL AND pc.id IS NOT NULL THEN 'synced'
+                       ELSE 'pending'
+                   END AS sync_status
+            FROM products p
+            LEFT JOIN product_definitions pd ON pd.id = p.id
+            LEFT JOIN product_catalogs pc ON pc.product_definition_id = p.id AND pc.org_id = p.org_id
+            LEFT JOIN dual_write_failures dwf ON dwf.idempotency_key = p.id AND dwf.write_type = 'product'
+            WHERE p.org_id = $1${whereExtra}
+            ORDER BY p.created_at DESC
+            LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
         params.push(limit, offset);
 
         const products = await db.all(query, params);
@@ -152,6 +166,7 @@ router.get('/my/products', authMiddleware, requirePermission('product:view'), as
 
         res.json({ products, total: total.count });
     } catch (err) {
+        console.error('[supplier-portal] GET /my/products error:', err.message);
         res.status(500).json({ error: 'Failed to load supplier products' });
     }
 });

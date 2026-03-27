@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server/index.js",
     "start": "NODE_ENV=production node server/index.js",
-    "seed": "node server/seed.js",
+    "seed": "node -r dotenv/config server/seed.js",
     "test": "jest --forceExit --detectOpenHandles --coverage",
     "build:client": "cd client && npm run build",
     "db:generate": "prisma generate",

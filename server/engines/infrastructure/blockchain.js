@@ -118,24 +118,25 @@ class BlockchainEngine {
         return nonce;
     }
 
-    /** Verify integrity of the blockchain chain */
+    /** Verify integrity of the blockchain chain (latest N blocks) */
     async verifyChain(limit = 100, orgId) {
         const orgF = orgId ? ' WHERE org_id = ?' : '';
         const orgP = orgId ? [orgId] : [];
         const seals = await db.all(
             `
-      SELECT * FROM blockchain_seals${orgF} ORDER BY block_index ASC LIMIT ?
+      SELECT * FROM blockchain_seals${orgF} ORDER BY block_index DESC LIMIT ?
     `,
             [...orgP, limit]
         );
 
         const results = { valid: true, blocks_checked: seals.length, errors: [] };
 
+        // seals[0] is the newest block, seals[1] is the previous block
         for (let i = 1; i < seals.length; i++) {
-            if (seals[i].prev_hash !== seals[i - 1].data_hash) {
+            if (seals[i - 1].prev_hash !== seals[i].data_hash) {
                 results.valid = false;
                 results.errors.push({
-                    block_index: seals[i].block_index,
+                    block_index: seals[i - 1].block_index,
                     error: 'Chain break: prev_hash does not match previous block data_hash',
                 });
             }

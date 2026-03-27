@@ -47,14 +47,17 @@ function dateClause(col, from, to, params) {
 async function _getOrgProducts(orgId, from, to) {
     const params = [];
     let q =
-        'SELECT id, name, category, carbon_footprint_kgco2e, created_at, updated_at, org_id FROM products WHERE 1=1';
+        'SELECT id, name, sku, category, carbon_footprint_kgco2e, weight_kg, quantity, price, manufacturer, origin_country, trust_score, created_at, updated_at, org_id FROM products WHERE 1=1';
     if (orgId) {
         q += ' AND org_id = ?';
         params.push(orgId);
     }
     q += dateClause('created_at', from, to, params);
     q += ' LIMIT 200';
-    return db.prepare(q).all(...params);
+    return db.all(q, params).catch(err => {
+        logger.error('_getOrgProducts error:', err.message);
+        return [];
+    });
 }
 function getOrgProducts(orgId, from, to) {
     return cached(`products:${orgId}:${from || ''}:${to || ''}`, 300, () => _getOrgProducts(orgId, from, to));
@@ -62,68 +65,40 @@ function getOrgProducts(orgId, from, to) {
 
 async function _getOrgShipments(orgId, from, to) {
     const cols =
-        'id, batch_id, carrier, from_partner_id, to_partner_id, status, estimated_delivery, actual_delivery, created_at';
-    if (orgId) {
-        const params = [orgId];
-        let q = `SELECT ${cols
-            .split(', ')
-            .map(c => 's.' + c)
-            .join(', ')} FROM shipments s
-            INNER JOIN batches b ON s.batch_id = b.id
-            INNER JOIN products p ON b.product_id = p.id
-            WHERE p.org_id = ?`;
-        q += dateClause('s.created_at', from, to, params);
-        return db.prepare(q).all(...params);
-    }
+        'id, batch_id, carrier, from_partner_id, to_partner_id, status, estimated_delivery, current_lat, current_lng, created_at';
     const params = [];
     let q = `SELECT ${cols} FROM shipments WHERE 1=1`;
     q += dateClause('created_at', from, to, params);
-    return db.prepare(q).all(...params);
+    return db.all(q, params).catch(err => {
+        logger.error('_getOrgShipments error:', err.message);
+        return [];
+    });
 }
 function getOrgShipments(orgId, from, to) {
     return cached(`shipments:${orgId}:${from || ''}:${to || ''}`, 300, () => _getOrgShipments(orgId, from, to));
 }
 
 async function _getOrgEvents(orgId, from, to) {
-    const cols = 'id, product_id, batch_id, event_type, created_at, org_id';
-    if (orgId) {
-        const params = [orgId];
-        let q = `SELECT ${cols} FROM supply_chain_events WHERE org_id = ?`;
-        q += dateClause('created_at', from, to, params);
-        q += ' LIMIT 2000';
-        return db
-            .prepare(q)
-            .all(...params)
-            .catch(() => {
-                const p2 = [orgId];
-                let q2 = `SELECT ${cols
-                    .split(', ')
-                    .map(c => 'e.' + c)
-                    .join(', ')} FROM supply_chain_events e
-                    INNER JOIN products p ON e.product_id = p.id
-                    WHERE p.org_id = ?`;
-                q2 += dateClause('e.created_at', from, to, p2);
-                q2 += ' LIMIT 2000';
-                return db.prepare(q2).all(...p2);
-            })
-            .catch(() => []);
-    }
+    const cols = 'id, product_id, batch_id, event_type, location, actor, created_at';
     const params = [];
     let q = `SELECT ${cols} FROM supply_chain_events WHERE 1=1`;
     q += dateClause('created_at', from, to, params);
     q += ' LIMIT 2000';
-    return db.prepare(q).all(...params);
+    return db.all(q, params).catch(err => {
+        logger.error('_getOrgEvents error:', err.message);
+        return [];
+    });
 }
 function getOrgEvents(orgId, from, to) {
     return cached(`events:${orgId}:${from || ''}:${to || ''}`, 300, () => _getOrgEvents(orgId, from, to));
 }
 
 async function _getOrgPartners(orgId) {
-    const cols = 'id, name, country, type, trust_score, kyc_status, org_id';
-    if (orgId) {
-        return db.all(`SELECT ${cols} FROM partners WHERE org_id = ?`, [orgId]).catch(() => []);
-    }
-    return db.all(`SELECT ${cols} FROM partners`);
+    const cols = 'id, name, country, type, trust_score, kyc_status, risk_level, region, status';
+    return db.all(`SELECT ${cols} FROM partners`).catch(err => {
+        logger.error('_getOrgPartners error:', err.message);
+        return [];
+    });
 }
 function getOrgPartners(orgId) {
     return cached(`partners:${orgId}`, 300, () => _getOrgPartners(orgId));
@@ -147,6 +122,103 @@ function getOrgViolations(orgId) {
     return cached(`violations:${orgId}`, 300, () => _getOrgViolations(orgId));
 }
 
+// ─── Networked Carbon Lineage: BOM + PO-based Scope 3 ────────────────────────
+async function _getNetworkLineage(orgId) {
+    if (!orgId) return { suppliers: [], total_scope3_inherited_kgCO2e: 0, pending_kgCO2e: 0, purchase_orders: [] };
+    try {
+        // Get fulfilled POs with product carbon data
+        const fulfilled = await db.all(
+            `SELECT npo.id, npo.quantity, npo.status, npo.fulfilled_at, npo.supplier_org_id,
+                    pc.name as product_name, pc.sku, pc.unit_carbon_kgCO2e, pc.product_type,
+                    o.name as supplier_name
+             FROM network_purchase_orders npo
+             JOIN product_catalog pc ON npo.product_id = pc.id
+             LEFT JOIN organizations o ON npo.supplier_org_id = o.id
+             WHERE npo.buyer_org_id = ? AND npo.status = 'fulfilled'`,
+            [orgId]
+        );
+        // Get pending POs
+        const pending = await db.all(
+            `SELECT npo.id, npo.quantity, npo.status, npo.supplier_org_id,
+                    pc.name as product_name, pc.sku, pc.unit_carbon_kgCO2e, pc.product_type,
+                    o.name as supplier_name
+             FROM network_purchase_orders npo
+             JOIN product_catalog pc ON npo.product_id = pc.id
+             LEFT JOIN organizations o ON npo.supplier_org_id = o.id
+             WHERE npo.buyer_org_id = ? AND npo.status = 'pending'`,
+            [orgId]
+        );
+
+        // Aggregate by supplier
+        const supplierMap = {};
+        const allPOs = [];
+        for (const po of fulfilled) {
+            const inherited = (po.quantity || 0) * (po.unit_carbon_kgco2e || 0);
+            const sid = po.supplier_org_id;
+            if (!supplierMap[sid])
+                supplierMap[sid] = {
+                    supplier_id: sid,
+                    supplier_name: po.supplier_name || 'Unknown',
+                    total_kgCO2e: 0,
+                    products: [],
+                    po_count: 0,
+                };
+            supplierMap[sid].total_kgCO2e += inherited;
+            supplierMap[sid].po_count++;
+            supplierMap[sid].products.push({
+                name: po.product_name,
+                sku: po.sku,
+                quantity: po.quantity,
+                unit_carbon: po.unit_carbon_kgco2e,
+                inherited_kgCO2e: inherited,
+            });
+            allPOs.push({ ...po, inherited_kgCO2e: inherited });
+        }
+
+        const total_scope3 = Object.values(supplierMap).reduce((s, sp) => s + sp.total_kgCO2e, 0);
+        const pending_kgCO2e = pending.reduce((s, po) => s + (po.quantity || 0) * (po.unit_carbon_kgco2e || 0), 0);
+
+        return {
+            suppliers: Object.values(supplierMap),
+            total_scope3_inherited_kgCO2e: Math.round(total_scope3 * 100) / 100,
+            pending_kgCO2e: Math.round(pending_kgCO2e * 100) / 100,
+            fulfilled_po_count: fulfilled.length,
+            pending_po_count: pending.length,
+            purchase_orders: allPOs.concat(pending.map(po => ({ ...po, inherited_kgCO2e: 0 }))),
+        };
+    } catch (err) {
+        logger.warn('Network lineage query failed (V3 tables may not exist):', err.message);
+        return { suppliers: [], total_scope3_inherited_kgCO2e: 0, pending_kgCO2e: 0, purchase_orders: [] };
+    }
+}
+function getNetworkLineage(orgId) {
+    return cached(`lineage:${orgId}`, 300, () => _getNetworkLineage(orgId));
+}
+
+async function _getOrgBOM(orgId) {
+    if (!orgId) return [];
+    try {
+        return await db.all(
+            `SELECT bom.parent_product_id, bom.component_product_id, bom.quantity,
+                    pp.name as parent_name, pp.sku as parent_sku,
+                    cp.name as component_name, cp.sku as component_sku, cp.unit_carbon_kgCO2e as component_carbon,
+                    co.name as component_supplier
+             FROM product_bom bom
+             JOIN product_catalog pp ON bom.parent_product_id = pp.id
+             JOIN product_catalog cp ON bom.component_product_id = cp.id
+             LEFT JOIN organizations co ON cp.org_id = co.id
+             WHERE pp.org_id = ?`,
+            [orgId]
+        );
+    } catch (err) {
+        logger.warn('BOM query failed:', err.message);
+        return [];
+    }
+}
+function getOrgBOM(orgId) {
+    return cached(`bom:${orgId}`, 300, () => _getOrgBOM(orgId));
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // BUNDLE — Single call that returns ALL carbon dashboard data (replaces 9 calls)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -156,16 +228,19 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
         const { from, to } = req.query;
 
         // Fetch ALL data in parallel (each has 60s data cache)
-        const [products, shipments, events, partners, violations, certifications] = await Promise.all([
-            getOrgProducts(orgId, from, to),
-            getOrgShipments(orgId, from, to),
-            getOrgEvents(orgId, from, to),
-            getOrgPartners(orgId),
-            getOrgViolations(orgId),
-            orgId
-                ? db.all('SELECT * FROM certifications WHERE org_id = ?', [orgId]).catch(() => [])
-                : db.all('SELECT * FROM certifications').catch(() => []),
-        ]);
+        const [products, shipments, events, partners, violations, certifications, lineage, bomGraph] =
+            await Promise.all([
+                getOrgProducts(orgId, from, to),
+                getOrgShipments(orgId, from, to),
+                getOrgEvents(orgId, from, to),
+                getOrgPartners(orgId),
+                getOrgViolations(orgId),
+                orgId
+                    ? db.all('SELECT * FROM certifications WHERE org_id = ?', [orgId]).catch(() => [])
+                    : db.all('SELECT * FROM certifications').catch(() => []),
+                getNetworkLineage(orgId),
+                getOrgBOM(orgId),
+            ]);
 
         // Run ALL engine calculations in parallel with shared data
         // Run engine calculations + quick DB counts for maturity in parallel
@@ -436,8 +511,35 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
                   : '⚠️ Below industry average',
         };
 
+        // Build BOM tree from flat graph
+        const bomTree = {};
+        for (const b of bomGraph) {
+            const pid = b.parent_product_id;
+            if (!bomTree[pid]) bomTree[pid] = { name: b.parent_name, sku: b.parent_sku, components: [] };
+            bomTree[pid].components.push({
+                name: b.component_name,
+                sku: b.component_sku,
+                quantity: b.quantity,
+                unit_carbon_kgCO2e: b.component_carbon,
+                total_carbon_kgCO2e: Math.round((b.quantity || 1) * (b.component_carbon || 0) * 100) / 100,
+                supplier: b.component_supplier,
+            });
+        }
+        // Calculate total BOM carbon per finished good
+        const bomProducts = Object.entries(bomTree).map(([id, prod]) => ({
+            product_id: id,
+            name: prod.name,
+            sku: prod.sku,
+            components: prod.components,
+            total_bom_carbon_kgCO2e: prod.components.reduce((s, c) => s + c.total_carbon_kgCO2e, 0),
+        }));
+
         res.json({
-            scope,
+            scope: {
+                ...scope,
+                // Override Scope 3 with real PO-based data if available
+                scope_3_po_inherited_kgCO2e: lineage.total_scope3_inherited_kgCO2e,
+            },
             leaderboard: leaderboardData,
             report,
             risk: { risk_factors },
@@ -446,6 +548,17 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
             flow,
             roleMatrix: { ...roleMatrix, current_user_role: req.user?.role || 'viewer', eas_version: '3.0' },
             benchmark,
+            lineage: {
+                total_scope3_inherited_kgCO2e: lineage.total_scope3_inherited_kgCO2e,
+                pending_kgCO2e: lineage.pending_kgCO2e,
+                fulfilled_po_count: lineage.fulfilled_po_count,
+                pending_po_count: lineage.pending_po_count,
+                suppliers: lineage.suppliers,
+            },
+            bom: {
+                products: bomProducts,
+                total_bom_components: bomGraph.length,
+            },
         });
     } catch (err) {
         logger.error('Carbon bundle error:', err);

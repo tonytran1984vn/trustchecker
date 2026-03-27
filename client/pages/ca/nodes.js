@@ -69,7 +69,7 @@ async function load() {
           nodeMap[nodeName] = {
             name: nodeName,
             type: guessType(node.type || nodeName),
-            location: node.location || node.city || '—',
+            location: node.location || node.city || 'N/A',
             status: r.status || 'active',
             products: 0,
             routeName: r.name,
@@ -117,7 +117,7 @@ function guessType(name) {
 }
 
 function timeAgo(d) {
-  if (!d) return '—';
+  if (!d) return 'N/A';
   const diff = Date.now() - new Date(d).getTime();
   const m = Math.floor(diff / 60000), h = Math.floor(m / 60), dd = Math.floor(h / 24);
   if (m < 2) return 'Just now'; if (m < 60) return m + ' min ago'; if (h < 24) return h + 'h ago'; return dd + 'd ago';
@@ -165,7 +165,7 @@ function renderContent() {
                 <td><strong>${typeIcon(n.type)} ${n.name}</strong></td>
                 <td><span class="sa-plan-badge sa-plan-${n.type === 'Factory' ? 'enterprise' : n.type === 'Warehouse' ? 'pro' : n.type === 'Distributor' ? 'core' : n.type === 'Farm' ? 'core' : 'free'}">${n.type}</span></td>
                 <td>${n.location}</td>
-                <td style="color:var(--text-secondary);font-size:0.78rem">${n.routeName || '—'}</td>
+                <td style="color:var(--text-secondary);font-size:0.78rem">${n.routeName || 'N/A'}</td>
                 <td class="sa-code">${(n.products || 0).toLocaleString()}</td>
                 <td><span class="sa-status-pill sa-pill-${n.status === 'active' ? 'green' : n.status === 'warning' ? 'orange' : 'red'}">${n.status}</span></td>
                 <td style="color:var(--text-secondary)">${timeAgo(n.lastSync)}</td>

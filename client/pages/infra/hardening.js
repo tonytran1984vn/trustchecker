@@ -31,6 +31,7 @@ async function load() {
 const sc = (v, g, y) => v >= g ? '#10b981' : v >= y ? '#f59e0b' : '#ef4444';
 function renderContent() {
     const m = D.model; const d = D.drift; const s = D.sys; const sa = D.sa;
+    const isSA = ['super_admin', 'platform_security'].includes(State.user?.active_role || State.user?.role);
     if (!m?.version_id && !sa?.forbidden_actions) return `<div class="sa-page"><div class="sa-page-title"><h1>${icon('shield')} L3→L4 Hardening Dashboard</h1><p style="color:#94a3b8;margin:4px 0 10px">Risk Model Governance · Super Admin Constraints · Real Observability</p></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${'<div class="infra-skeleton" style="min-height:120px"></div>'.repeat(4)}</div></div>`;
     return `
 <div class="sa-page">
@@ -53,7 +54,7 @@ function renderContent() {
         </div>
     </div>
 
-    <!-- Section: Super Admin Constraints -->
+    ${isSA ? `<!-- Section: Super Admin Constraints -->
     <h2 style="color:#f1f5f9;margin:0 0 8px;font-size:14px;border-bottom:1px solid #334155;padding-bottom:4px">② Super Admin Constraints</h2>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
         <div class="sa-card"><h3 style="margin:0 0 6px;color:#f1f5f9;font-size:0.82rem">🚫 Forbidden Actions (NEVER)</h3>
@@ -62,10 +63,10 @@ function renderContent() {
         <div class="sa-card"><h3 style="margin:0 0 6px;color:#f1f5f9;font-size:0.82rem"><span class="status-icon status-warn" aria-label="Warning">!</span> Restricted Actions (Rate-Limited + Dual-Approval)</h3>
             ${Object.keys(sa?.restricted_actions || {}).length > 0 ? Object.entries(sa.restricted_actions).map(([k, v]) => `<div style="display:flex;justify-content:space-between;padding:2px 4px;border-bottom:1px solid #1e293b"><span style="color:#94a3b8;font-size:0.72rem">${k.replace(/_/g, ' ')}</span><span style="color:${v.daily_limit === 0 ? '#ef4444' : '#f59e0b'};font-size:0.68rem">${v.daily_limit === 0 ? 'FORBIDDEN' : v.daily_limit + '/day'}</span><span style="color:#3b82f6;font-size:0.68rem">${v.requires || 'self'}</span></div>`).join('') : '<div style="text-align:center;padding:16px;color:#64748b;font-size:0.78rem">🔒 Access restricted to Super Admin</div>'}
         </div>
-    </div>
+    </div>` : ''}
 
     <!-- Section: Observability (Real Metrics) -->
-    <h2 style="color:#f1f5f9;margin:0 0 8px;font-size:14px;border-bottom:1px solid #334155;padding-bottom:4px">③ Observability (Real Metrics)</h2>
+    <h2 style="color:#f1f5f9;margin:0 0 8px;font-size:14px;border-bottom:1px solid #334155;padding-bottom:4px">${isSA ? '③' : '②'} Observability (Real Metrics)</h2>
     <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px">
         ${[{ l: 'Heap Used', v: (s?.memory?.heap_used_mb || 0) + 'MB', c: sc(100 - s?.memory?.heap_usage_pct, 50, 20), i: '💾' }, { l: 'Heap %', v: (s?.memory?.heap_usage_pct || 0) + '%', c: sc(100 - s?.memory?.heap_usage_pct, 50, 20), i: '📊' }, { l: 'CPU Cores', v: s?.cpu?.cores || 0, c: '#3b82f6', i: '⚙️' }, { l: 'P95 Response', v: (s?.requests?.p95_ms || 0) + 'ms', c: sc(3000 - s?.requests?.p95_ms, 1500, 0), i: '⏱️' }, { l: 'Error Rate', v: (s?.requests?.error_rate_pct || 0) + '%', c: sc(5 - s?.requests?.error_rate_pct, 4, 0), i: '<span class="status-icon status-warn" aria-label="Warning">!</span>' }, { l: 'Uptime', v: s?.process?.uptime_human || '—', c: '#10b981', i: '<span class="status-dot green"></span>' }].map(k => `<div class="sa-card" style="text-align:center;padding:10px"><div style="font-size:14px">${k.i}</div><div style="font-size:14px;font-weight:700;color:${k.c}">${k.v}</div><div style="color:#94a3b8;font-size:8px">${k.l}</div></div>`).join('')}
     </div>

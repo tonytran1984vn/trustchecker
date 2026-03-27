@@ -12,6 +12,7 @@ try {
 }
 const geoip = require('../lib/geoip');
 const express = require('express');
+const logger = require('../lib/logger');
 const { bulkScanDetector, replayDetector } = require('../middleware/blind-spot-defense');
 
 // TC-21-REUSE-CHECK: Detect QR code reuse pattern
@@ -1242,7 +1243,8 @@ router.get('/dashboard-stats', async (req, res) => {
                 .get(...orgP),
             db
                 .prepare(
-                    `SELECT COUNT(*) as count FROM fraud_alerts WHERE status = 'open'` + (oid ? ' AND org_id = ?' : '')
+                    `SELECT COUNT(f.id) as count FROM fraud_alerts f LEFT JOIN products p ON f.product_id = p.id WHERE f.status = 'open'` +
+                        (oid ? ' AND p.org_id = ?' : '')
                 )
                 .get(...orgP),
             db
@@ -1251,7 +1253,7 @@ router.get('/dashboard-stats', async (req, res) => {
                         (oid ? ' AND org_id = ?' : '')
                 )
                 .get(...orgP),
-            db.prepare('SELECT COUNT(*) as count FROM blockchain_seals' + orgF).get(...orgP),
+            db.prepare('SELECT COUNT(*) as count FROM blockchain_seals').get(),
         ]);
 
         const [scansByResult, alertsBySeverity, recentActivity, scanTrend] = await Promise.all([
@@ -1264,9 +1266,9 @@ router.get('/dashboard-stats', async (req, res) => {
                 .all(...orgP),
             db
                 .prepare(
-                    `SELECT severity, COUNT(*) as count FROM fraud_alerts WHERE status = 'open'` +
-                        (oid ? ' AND org_id = ?' : '') +
-                        ' GROUP BY severity'
+                    `SELECT f.severity, COUNT(*) as count FROM fraud_alerts f LEFT JOIN products p ON f.product_id = p.id WHERE f.status = 'open'` +
+                        (oid ? ' AND p.org_id = ?' : '') +
+                        ' GROUP BY f.severity'
                 )
                 .all(...orgP),
             db
@@ -1298,11 +1300,14 @@ router.get('/dashboard-stats', async (req, res) => {
             // Anomalies = open fraud alerts
             cieAnomalies = openAlerts.count;
             // Sealed CIPs = distinct carbon passport entries (products with carbon data)
-            const sealedRes = orgId
-                ? await db.get('SELECT COUNT(*) as c FROM products WHERE org_id = ? AND carbon_footprint_kgco2e > 0', [
-                      orgId,
-                  ])
-                : await db.get('SELECT COUNT(*) as c FROM products WHERE carbon_footprint_kgco2e > 0');
+            const qOrg = orgId ? ' AND p.org_id = ?' : '';
+            const pOrg = orgId ? [orgId] : [];
+            const sealedRes = await db.get(
+                `SELECT COUNT(DISTINCT p.id) as c FROM products p 
+                 JOIN sustainability_scores s ON p.id = s.product_id 
+                 WHERE s.carbon_footprint > 0 ${qOrg}`,
+                pOrg
+            );
             cieSealedCIPs = sealedRes?.c || 0;
             // Anchored proofs = blockchain seals
             cieAnchoredProofs = totalSeals.count;

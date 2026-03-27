@@ -1,14 +1,14 @@
 /**
  * L-RGF Engine — Logistics Risk Governance Flow v1.0
- * 
+ *
  * Audit-Grade governance engine implementing the 8-step flow:
- * 
+ *
  *   [1] Event Ingestion (SCM) → [2] Route Validation → [3] Risk Scoring (ERS)
  *   → [4] Decision Engine → [5] Case Workflow (3-Line) → [6] Evidence Freeze
  *   → [7] Blockchain Anchor → [8] Board Exposure Report
- * 
+ *
  * Standards: COSO ERM, Three Lines Model, SR 11-7, ISO 27001
- * 
+ *
  * Core Principles:
  *   - Data Flow ≠ Authority Flow
  *   - Event Trigger ≠ Decision Right
@@ -26,11 +26,11 @@ const MODEL_REGISTRY = {
     current_version: 'ERS-v1.0.0',
     weight_hash: null, // Computed at init
     weights: {
-        velocity_anomaly: 0.20,
+        velocity_anomaly: 0.2,
         geo_risk: 0.15,
         device_mismatch: 0.15,
         historical_batch: 0.15,
-        distributor_trust: 0.20,
+        distributor_trust: 0.2,
         duplicate_cluster: 0.15,
     },
     decay_factor: 0.95, // Per-day score decay
@@ -47,10 +47,10 @@ MODEL_REGISTRY.weight_hash = crypto
 
 // ─── THRESHOLD CONFIG ────────────────────────────────────────────────────────
 const THRESHOLD_CONFIG = {
-    LOG: 30,           // ERS 0-30 → Log only
-    OPS_REVIEW: 60,    // ERS 31-60 → Ops Review
+    LOG: 30, // ERS 0-30 → Log only
+    OPS_REVIEW: 60, // ERS 31-60 → Ops Review
     RISK_ESCALATION: 80, // ERS 61-80 → Risk Escalation
-    LOCK_CEO: 100,     // ERS 81-100 → Lock + CEO Notification
+    LOCK_CEO: 100, // ERS 81-100 → Lock + CEO Notification
 };
 
 // ─── CONTROL TYPE CLASSIFICATION ─────────────────────────────────────────────
@@ -73,9 +73,7 @@ function ingestEvent(eventData, sourceMetadata = {}) {
     // Idempotency check
     const idempotencyKey = eventData.idempotency_key || null;
     if (idempotencyKey) {
-        const existing = db.prepare(
-            'SELECT id FROM lrgf_events WHERE idempotency_key = ?'
-        ).get(idempotencyKey);
+        const existing = db.prepare('SELECT id FROM lrgf_events WHERE idempotency_key = ?').get(idempotencyKey);
         if (existing) {
             return { duplicate: true, existing_event_id: existing.id };
         }
@@ -108,18 +106,31 @@ function ingestEvent(eventData, sourceMetadata = {}) {
     };
 
     // Immutable audit log
-    db.run(`
+    db.run(
+        `
         INSERT INTO lrgf_events (
             id, event_type, source, org_id, idempotency_key,
             event_hash, device_fingerprint, geo_lat, geo_lng,
             ip_address, user_agent, payload, created_at, integrity_status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-        record.id, record.event_type, record.source, record.org_id,
-        record.idempotency_key, record.event_hash, record.device_fingerprint,
-        record.geo_lat, record.geo_lng, record.ip_address, record.user_agent,
-        record.payload, record.created_at, record.integrity_status
-    ]);
+    `,
+        [
+            record.id,
+            record.event_type,
+            record.source,
+            record.org_id,
+            record.idempotency_key,
+            record.event_hash,
+            record.device_fingerprint,
+            record.geo_lat,
+            record.geo_lng,
+            record.ip_address,
+            record.user_agent,
+            record.payload,
+            record.created_at,
+            record.integrity_status,
+        ]
+    );
 
     return {
         event_id: eventId,
@@ -141,9 +152,7 @@ function validateRoute(eventId, routeData) {
 
     // Geo-fence check
     if (routeData.geo_lat && routeData.geo_lng && routeData.expected_zone) {
-        const inZone = checkGeoFence(
-            routeData.geo_lat, routeData.geo_lng, routeData.expected_zone
-        );
+        const inZone = checkGeoFence(routeData.geo_lat, routeData.geo_lng, routeData.expected_zone);
         if (!inZone) {
             violations.push({
                 type: 'GEO_FENCE_VIOLATION',
@@ -155,8 +164,10 @@ function validateRoute(eventId, routeData) {
 
     // Reverse flow detection
     if (routeData.from_node && routeData.to_node && routeData.expected_direction) {
-        if (routeData.from_node === routeData.expected_direction.to &&
-            routeData.to_node === routeData.expected_direction.from) {
+        if (
+            routeData.from_node === routeData.expected_direction.to &&
+            routeData.to_node === routeData.expected_direction.from
+        ) {
             violations.push({
                 type: 'REVERSE_FLOW',
                 severity: 'critical',
@@ -167,9 +178,10 @@ function validateRoute(eventId, routeData) {
 
     // Route deviation threshold
     if (routeData.actual_duration && routeData.expected_duration) {
-        const deviation = Math.abs(routeData.actual_duration - routeData.expected_duration) /
-            routeData.expected_duration;
-        if (deviation > 0.3) { // >30% deviation
+        const deviation =
+            Math.abs(routeData.actual_duration - routeData.expected_duration) / routeData.expected_duration;
+        if (deviation > 0.3) {
+            // >30% deviation
             violations.push({
                 type: 'ROUTE_DEVIATION',
                 severity: deviation > 0.5 ? 'high' : 'medium',
@@ -179,10 +191,13 @@ function validateRoute(eventId, routeData) {
     }
 
     // Log validation result
-    db.run(`
+    db.run(
+        `
         INSERT INTO lrgf_validations (id, event_id, violation_count, violations, validated_at)
         VALUES (?, ?, ?, ?, NOW())
-    `, [uuidv4(), eventId, violations.length, JSON.stringify(violations)]);
+    `,
+        [uuidv4(), eventId, violations.length, JSON.stringify(violations)]
+    );
 
     return {
         event_id: eventId,
@@ -235,16 +250,23 @@ function scoreRisk(eventId, factors) {
 
     // Audit artifact: score record with model version
     const scoreId = uuidv4();
-    db.run(`
+    db.run(
+        `
         INSERT INTO lrgf_risk_scores (
             id, event_id, ers_score, model_version, weight_hash,
             factor_contributions, drift_index, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
-    `, [
-        scoreId, eventId, ers, MODEL_REGISTRY.current_version,
-        MODEL_REGISTRY.weight_hash, JSON.stringify(contributions),
-        driftIndex
-    ]);
+    `,
+        [
+            scoreId,
+            eventId,
+            ers,
+            MODEL_REGISTRY.current_version,
+            MODEL_REGISTRY.weight_hash,
+            JSON.stringify(contributions),
+            driftIndex,
+        ]
+    );
 
     return {
         score_id: scoreId,
@@ -289,16 +311,16 @@ function decide(scoreResult) {
     const decisionId = uuidv4();
     const slaDeadline = sla ? new Date(Date.now() + parseSLA(sla)).toISOString() : null;
 
-    db.run(`
+    db.run(
+        `
         INSERT INTO lrgf_decisions (
             id, score_id, event_id, ers_score, action, sla,
             sla_deadline, escalation_level, override_applied,
             decided_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())
-    `, [
-        decisionId, scoreResult.score_id, scoreResult.event_id,
-        ers, action, sla, slaDeadline, escalation_level
-    ]);
+    `,
+        [decisionId, scoreResult.score_id, scoreResult.event_id, ers, action, sla, slaDeadline, escalation_level]
+    );
 
     return {
         decision_id: decisionId,
@@ -337,23 +359,34 @@ function overrideDecision(decisionId, overrideData, approvers) {
     const overrideId = uuidv4();
 
     // Immutable override record
-    db.run(`
+    db.run(
+        `
         INSERT INTO lrgf_overrides (
             id, decision_id, override_type, justification,
             new_action, approver_1_id, approver_1_role,
             approver_2_id, approver_2_role, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-    `, [
-        overrideId, decisionId, overrideData.type || 'manual',
-        overrideData.justification, overrideData.new_action,
-        approvers[0].id, approvers[0].role,
-        approvers[1].id, approvers[1].role
-    ]);
+    `,
+        [
+            overrideId,
+            decisionId,
+            overrideData.type || 'manual',
+            overrideData.justification,
+            overrideData.new_action,
+            approvers[0].id,
+            approvers[0].role,
+            approvers[1].id,
+            approvers[1].role,
+        ]
+    );
 
     // Update decision
-    db.run(`
+    db.run(
+        `
         UPDATE lrgf_decisions SET override_applied = 1, action = ? WHERE id = ?
-    `, [overrideData.new_action, decisionId]);
+    `,
+        [overrideData.new_action, decisionId]
+    );
 
     return {
         override_id: overrideId,
@@ -401,19 +434,27 @@ function assignCase(decision) {
     // Check if Line 3 should be triggered
     const line3Trigger = checkLine3Trigger(decision);
 
-    db.run(`
+    db.run(
+        `
         INSERT INTO lrgf_cases (
             id, decision_id, event_id, assigned_line, assigned_role,
             permissions, restrictions, sla, sla_deadline,
             line3_triggered, status, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', NOW())
-    `, [
-        caseId, decision.decision_id, decision.event_id,
-        assignedLine, assignedRole,
-        JSON.stringify(permissions), JSON.stringify(restrictions),
-        decision.sla, decision.sla_deadline,
-        line3Trigger ? 1 : 0
-    ]);
+    `,
+        [
+            caseId,
+            decision.decision_id,
+            decision.event_id,
+            assignedLine,
+            assignedRole,
+            JSON.stringify(permissions),
+            JSON.stringify(restrictions),
+            decision.sla,
+            decision.sla_deadline,
+            line3Trigger ? 1 : 0,
+        ]
+    );
 
     return {
         case_id: caseId,
@@ -442,9 +483,12 @@ function checkLine3Trigger(decision) {
     if (decision.ers >= 90) return true;
 
     // Drift > 0.5
-    const drift = db.get(`
+    const drift = db.get(
+        `
         SELECT drift_index FROM lrgf_risk_scores WHERE event_id = ?
-    `, [decision.event_id]);
+    `,
+        [decision.event_id]
+    );
     if (drift?.drift_index > 0.5) return true;
 
     return false;
@@ -478,9 +522,7 @@ function freezeEvidence(caseId) {
     };
 
     // Hash chain: link to previous evidence hash
-    const prevHash = db.prepare(
-        'SELECT evidence_hash FROM lrgf_evidence_chain ORDER BY created_at DESC LIMIT 1'
-    ).get();
+    const prevHash = db.prepare('SELECT evidence_hash FROM lrgf_evidence_chain ORDER BY created_at DESC LIMIT 1').get();
 
     const chainInput = JSON.stringify({
         prev_hash: prevHash?.evidence_hash || '0'.repeat(64),
@@ -497,17 +539,22 @@ function freezeEvidence(caseId) {
     };
 
     const chainId = uuidv4();
-    db.run(`
+    db.run(
+        `
         INSERT INTO lrgf_evidence_chain (
             id, case_id, evidence_hash, prev_hash, evidence_package,
             timestamp_authority, frozen, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, 1, NOW())
-    `, [
-        chainId, caseId, evidenceHash,
-        prevHash?.evidence_hash || '0'.repeat(64),
-        JSON.stringify(evidencePackage),
-        JSON.stringify(timestamp)
-    ]);
+    `,
+        [
+            chainId,
+            caseId,
+            evidenceHash,
+            prevHash?.evidence_hash || '0'.repeat(64),
+            JSON.stringify(evidencePackage),
+            JSON.stringify(timestamp),
+        ]
+    );
 
     // Lock case — no modification allowed
     db.run('UPDATE lrgf_cases SET status = ? WHERE id = ?', ['frozen', caseId]);
@@ -530,7 +577,9 @@ function freezeEvidence(caseId) {
         evidence_hash: evidenceHash,
         prev_hash: prevHash?.evidence_hash || '0'.repeat(64),
         timestamp_authority: timestamp,
-        graph_snapshot: graphSnapshot ? { snapshot_id: graphSnapshot.snapshot_id, integrity: graphSnapshot.integrity } : null,
+        graph_snapshot: graphSnapshot
+            ? { snapshot_id: graphSnapshot.snapshot_id, integrity: graphSnapshot.integrity }
+            : null,
         frozen: true,
         control: { type: CONTROL_TYPES.PREVENTIVE, owner: 'System', cryptographic: true },
     };
@@ -558,26 +607,22 @@ function anchorBlockchain(evidenceResult, triggerReason) {
     const anchorData = {
         case_hash: evidenceResult.evidence_hash,
         model_version_hash: MODEL_REGISTRY.weight_hash,
-        decision_record_hash: crypto.createHash('sha256')
-            .update(evidenceResult.case_id)
-            .digest('hex').substring(0, 16),
+        decision_record_hash: crypto.createHash('sha256').update(evidenceResult.case_id).digest('hex').substring(0, 16),
         trigger: triggerReason,
         // NO PII — only hashes
     };
 
-    const anchorHash = crypto.createHash('sha256')
-        .update(JSON.stringify(anchorData))
-        .digest('hex');
+    const anchorHash = crypto.createHash('sha256').update(JSON.stringify(anchorData)).digest('hex');
 
-    db.run(`
+    db.run(
+        `
         INSERT INTO lrgf_blockchain_anchors (
             id, evidence_chain_id, anchor_hash, anchor_data,
             trigger_reason, anchored_at
         ) VALUES (?, ?, ?, ?, ?, NOW())
-    `, [
-        anchorId, evidenceResult.chain_id, anchorHash,
-        JSON.stringify(anchorData), triggerReason
-    ]);
+    `,
+        [anchorId, evidenceResult.chain_id, anchorHash, JSON.stringify(anchorData), triggerReason]
+    );
 
     return {
         anchor_id: anchorId,
@@ -597,37 +642,44 @@ function reportExposure(orgId) {
     const period = '30 days';
 
     const metrics = {
-        anomaly_rate: db.get(`
+        anomaly_rate:
+            db.get(`
             SELECT COUNT(*) as c FROM lrgf_decisions
             WHERE action != 'LOG' AND decided_at > NOW() - CAST(period || ' days' AS INTERVAL)
         `)?.c || 0,
 
-        total_events: db.get(`
+        total_events:
+            db.get(`
             SELECT COUNT(*) as c FROM lrgf_events
             WHERE created_at > NOW() - CAST(period || ' days' AS INTERVAL)
         `)?.c || 0,
 
-        lock_count: db.get(`
+        lock_count:
+            db.get(`
             SELECT COUNT(*) as c FROM lrgf_decisions
             WHERE action = 'LOCK_CEO_NOTIFY' AND decided_at > NOW() - CAST(period || ' days' AS INTERVAL)
         `)?.c || 0,
 
-        override_count: db.get(`
+        override_count:
+            db.get(`
             SELECT COUNT(*) as c FROM lrgf_overrides
             WHERE created_at > NOW() - CAST(period || ' days' AS INTERVAL)
         `)?.c || 0,
 
-        avg_drift: db.get(`
+        avg_drift:
+            db.get(`
             SELECT AVG(drift_index) as avg FROM lrgf_risk_scores
             WHERE created_at > NOW() - CAST(period || ' days' AS INTERVAL)
         `)?.avg || 0,
 
-        frozen_cases: db.get(`
+        frozen_cases:
+            db.get(`
             SELECT COUNT(*) as c FROM lrgf_cases
             WHERE status = 'frozen' AND created_at > NOW() - CAST(period || ' days' AS INTERVAL)
         `)?.c || 0,
 
-        sla_breaches: db.get(`
+        sla_breaches:
+            db.get(`
             SELECT COUNT(*) as c FROM lrgf_cases
             WHERE sla_deadline < NOW() AND status = 'open'
         `)?.c || 0,
@@ -670,7 +722,7 @@ function processEvent(eventData, sourceMetadata = {}, riskFactors = {}) {
     const score = scoreRisk(ingestion.event_id, {
         ...riskFactors,
         // Boost score if route violations found
-        velocity_anomaly: (riskFactors.velocity_anomaly || 0) + (validation.violations.length * 0.1),
+        velocity_anomaly: (riskFactors.velocity_anomaly || 0) + validation.violations.length * 0.1,
     });
 
     // Step 4: Decision
@@ -732,8 +784,7 @@ function processEvent(eventData, sourceMetadata = {}, riskFactors = {}) {
 function checkGeoFence(lat, lng, zone) {
     // Simple bounding box check (production would use PostGIS)
     if (!zone || !zone.min_lat) return true;
-    return lat >= zone.min_lat && lat <= zone.max_lat &&
-        lng >= zone.min_lng && lng <= zone.max_lng;
+    return lat >= zone.min_lat && lat <= zone.max_lat && lng >= zone.min_lng && lng <= zone.max_lng;
 }
 
 function parseSLA(sla) {
@@ -748,116 +799,7 @@ function parseSLA(sla) {
 // DB SCHEMA INITIALIZATION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function initSchema() {
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS lrgf_events (
-            id TEXT PRIMARY KEY,
-            event_type TEXT NOT NULL,
-            source TEXT NOT NULL,
-            org_id TEXT,
-            idempotency_key TEXT UNIQUE,
-            event_hash TEXT NOT NULL,
-            device_fingerprint TEXT,
-            geo_lat REAL,
-            geo_lng REAL,
-            ip_address TEXT,
-            user_agent TEXT,
-            payload TEXT,
-            created_at TEXT NOT NULL,
-            integrity_status TEXT DEFAULT 'verified'
-        );
-
-        CREATE TABLE IF NOT EXISTS lrgf_validations (
-            id TEXT PRIMARY KEY,
-            event_id TEXT NOT NULL,
-            violation_count INTEGER DEFAULT 0,
-            violations TEXT,
-            validated_at TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS lrgf_risk_scores (
-            id TEXT PRIMARY KEY,
-            event_id TEXT NOT NULL,
-            ers_score INTEGER NOT NULL,
-            model_version TEXT NOT NULL,
-            weight_hash TEXT NOT NULL,
-            factor_contributions TEXT,
-            drift_index REAL DEFAULT 0,
-            created_at TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS lrgf_decisions (
-            id TEXT PRIMARY KEY,
-            score_id TEXT,
-            event_id TEXT NOT NULL,
-            ers_score INTEGER,
-            action TEXT NOT NULL,
-            sla TEXT,
-            sla_deadline TEXT,
-            escalation_level INTEGER DEFAULT 0,
-            override_applied INTEGER DEFAULT 0,
-            decided_at TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS lrgf_overrides (
-            id TEXT PRIMARY KEY,
-            decision_id TEXT NOT NULL,
-            override_type TEXT DEFAULT 'manual',
-            justification TEXT NOT NULL,
-            new_action TEXT NOT NULL,
-            approver_1_id TEXT NOT NULL,
-            approver_1_role TEXT NOT NULL,
-            approver_2_id TEXT NOT NULL,
-            approver_2_role TEXT NOT NULL,
-            created_at TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS lrgf_cases (
-            id TEXT PRIMARY KEY,
-            decision_id TEXT NOT NULL,
-            event_id TEXT NOT NULL,
-            assigned_line INTEGER NOT NULL,
-            assigned_role TEXT NOT NULL,
-            permissions TEXT,
-            restrictions TEXT,
-            sla TEXT,
-            sla_deadline TEXT,
-            line3_triggered INTEGER DEFAULT 0,
-            status TEXT DEFAULT 'open',
-            created_at TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS lrgf_evidence_chain (
-            id TEXT PRIMARY KEY,
-            case_id TEXT NOT NULL,
-            evidence_hash TEXT NOT NULL,
-            prev_hash TEXT NOT NULL,
-            evidence_package TEXT,
-            timestamp_authority TEXT,
-            frozen INTEGER DEFAULT 0,
-            created_at TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS lrgf_blockchain_anchors (
-            id TEXT PRIMARY KEY,
-            evidence_chain_id TEXT NOT NULL,
-            anchor_hash TEXT NOT NULL,
-            anchor_data TEXT,
-            trigger_reason TEXT NOT NULL,
-            anchored_at TEXT
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_lrgf_events_org ON lrgf_events(org_id);
-        CREATE INDEX IF NOT EXISTS idx_lrgf_events_hash ON lrgf_events(event_hash);
-        CREATE INDEX IF NOT EXISTS idx_lrgf_events_idempotency ON lrgf_events(idempotency_key);
-        CREATE INDEX IF NOT EXISTS idx_lrgf_scores_event ON lrgf_risk_scores(event_id);
-        CREATE INDEX IF NOT EXISTS idx_lrgf_decisions_event ON lrgf_decisions(event_id);
-        CREATE INDEX IF NOT EXISTS idx_lrgf_cases_status ON lrgf_cases(status);
-    `);
-}
-
-// Initialize on load
-try { initSchema(); } catch (e) { /* Schema may already exist */ }
+// DB Schema natively managed by Prisma (lrgf_events to lrgf_blockchain_anchors)
 
 module.exports = {
     // Full flow
@@ -876,6 +818,4 @@ module.exports = {
     MODEL_REGISTRY,
     THRESHOLD_CONFIG,
     CONTROL_TYPES,
-    // Schema
-    initSchema,
 };

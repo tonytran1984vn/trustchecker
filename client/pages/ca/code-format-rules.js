@@ -229,11 +229,11 @@ function renderRulesTab(rules) {
     <table class="sa-table"><thead><tr><th>Name</th><th>Prefix</th><th>Length</th><th>Charset</th><th>Check Digit</th><th>Example</th><th>Codes</th><th>Status</th><th>Actions</th></tr></thead><tbody>
       ${rules.map(r => `<tr>
         <td><strong>${r.name}</strong>${r.description ? `<div style="font-size:0.68rem;color:var(--text-secondary)">${r.description.substring(0, 50)}</div>` : ''}</td>
-        <td class="sa-code" style="font-size:0.72rem">${r.prefix || '—'}</td>
-        <td style="text-align:center">${r.code_length}</td>
-        <td style="font-size:0.72rem">${r.charset}</td>
-        <td style="font-size:0.72rem">${r.check_digit_algo}</td>
-        <td class="sa-code" style="font-size:0.68rem;max-width:180px;overflow:hidden;text-overflow:ellipsis">${r.example || '—'}</td>
+        <td class="sa-code" style="font-size:0.72rem">${r.prefix || 'N/A'}</td>
+        <td style="text-align:center">${r.code_length || 'N/A'}</td>
+        <td style="font-size:0.72rem">${r.charset || 'N/A'}</td>
+        <td style="font-size:0.72rem">${r.check_digit_algo || 'N/A'}</td>
+        <td class="sa-code" style="font-size:0.68rem;max-width:180px;overflow:hidden;text-overflow:ellipsis">${r.example || 'N/A'}</td>
         <td style="text-align:center;font-weight:600">${(r.codes_generated || 0).toLocaleString()}</td>
         <td><span class="sa-status-pill sa-pill-${r.status === 'active' ? 'green' : 'orange'}">${r.status}</span></td>
         <td style="white-space:nowrap">
@@ -323,12 +323,12 @@ function renderAuditTab(audit) {
     const changeStr = Object.entries(changes).map(([k, v]) => {
       if (v && typeof v === 'object' && v.from !== undefined) return `${k}: ${v.from} → ${v.to}`;
       return `${k}: ${JSON.stringify(v)}`;
-    }).join(', ') || '—';
+    }).join(', ') || 'N/A';
     return `<tr>
-          <td style="font-size:0.72rem;white-space:nowrap">${a.created_at ? new Date(a.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+          <td style="font-size:0.72rem;white-space:nowrap">${a.created_at ? new Date(a.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}</td>
           <td><span class="sa-status-pill sa-pill-${a.action === 'created' ? 'green' : a.action === 'deleted' ? 'red' : 'orange'}">${a.action}</span></td>
-          <td><strong>${a.rule_name || a.rule_id?.substring(0, 8) || '—'}</strong></td>
-          <td style="font-size:0.78rem">${a.actor_name || '—'}</td>
+          <td><strong>${a.rule_name || a.rule_id?.substring(0, 8) || 'N/A'}</strong></td>
+          <td style="font-size:0.78rem">${a.actor_name || 'N/A'}</td>
           <td style="font-size:0.72rem;max-width:250px;overflow:hidden;text-overflow:ellipsis">${changeStr}</td>
         </tr>`;
   }).join('')}
@@ -353,10 +353,10 @@ function renderStatsTab(rules, stats) {
     <table class="sa-table"><thead><tr><th>Rule</th><th>Prefix</th><th>Status</th><th>Codes Generated</th><th>Created</th></tr></thead><tbody>
       ${rules.map(r => `<tr>
         <td><strong>${r.name}</strong></td>
-        <td class="sa-code">${r.prefix || '—'}</td>
+        <td class="sa-code">${r.prefix || 'N/A'}</td>
         <td><span class="sa-status-pill sa-pill-${r.status === 'active' ? 'green' : 'orange'}">${r.status}</span></td>
         <td style="text-align:center;font-weight:600">${(r.codes_generated || r.usage_count || 0).toLocaleString()}</td>
-        <td style="font-size:0.78rem;color:var(--text-secondary)">${r.created_at ? new Date(r.created_at).toLocaleDateString('en-US') : '—'}</td>
+        <td style="font-size:0.78rem;color:var(--text-secondary)">${r.created_at ? new Date(r.created_at).toLocaleDateString('en-US') : 'N/A'}</td>
       </tr>`).join('')}
     </tbody></table>` : '<div style="text-align:center;padding:30px;color:var(--text-muted)">Create some rules to see statistics.</div>'}
   </div>`;

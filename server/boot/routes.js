@@ -53,6 +53,8 @@ function setupRoutes(app) {
     const scmRiskRadarRoutes = require('../routes/scm-risk-radar');
     const scmCarbonRoutes = require('../routes/scm-carbon');
     const scmCarbonCreditRoutes = require('../routes/scm-carbon-credit');
+    const scmCatalogRoutes = require('../routes/scm-catalog');
+    const scmNetworkPosRoutes = require('../routes/scm-network-pos');
     // ARCHIVED: const scmDigitalTwinRoutes = require('../routes/scm-digital-twin');
     const scmSupplyRoutes = require('../routes/scm-supply-routes');
     const scmRiskModelRoutes = require('../routes/scm-risk-model');
@@ -61,6 +63,7 @@ function setupRoutes(app) {
     const scmMlEngineRoutes = require('../routes/scm-ml-engine');
     const scmCodeGovRoutes = require('../routes/scm-code-governance');
     const scmIntegrityRoutes = require('../routes/scm-integrity');
+    const scmTraceRoutes = require('../routes/scm-trace');
     const platformRoutes = require('../routes/platform');
     const orgAdminRoutes = require('../routes/org-admin');
     const identityRoutes = require('../routes/identity');
@@ -131,6 +134,8 @@ function setupRoutes(app) {
         ['/scm/risk', scmRiskRadarRoutes],
         ['/scm/carbon', scmCarbonRoutes],
         ['/scm/carbon-credit', scmCarbonCreditRoutes],
+        ['/scm/catalog', scmCatalogRoutes],
+        ['/scm/network/pos', scmNetworkPosRoutes],
         // ARCHIVED: ['/scm/twin', scmDigitalTwinRoutes],
         ['/scm/supply', scmSupplyRoutes],
         ['/scm/risk-model', scmRiskModelRoutes],
@@ -139,6 +144,7 @@ function setupRoutes(app) {
         ['/scm/ml', scmMlEngineRoutes],
         ['/scm/code-gov', scmCodeGovRoutes],
         ['/scm/integrity', scmIntegrityRoutes],
+        ['/scm/trace', scmTraceRoutes],
         ['/platform', platformRoutes],
         ['/org-admin', orgAdminRoutes],
         ['/identity', identityRoutes],

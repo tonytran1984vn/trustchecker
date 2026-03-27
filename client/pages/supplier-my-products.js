@@ -2,7 +2,27 @@ import { API } from '../core/api.js';
 import { State } from '../core/state.js';
 import { showToast } from '../components/toast.js';
 
+// ── Permission helpers ──────────────────────────────────────────
+const WRITABLE_ROLES = ['supplier_contributor', 'company_admin', 'admin', 'org_owner', 'super_admin'];
+
+function canWrite() {
+    const role = State.user?.active_role || State.user?.role || '';
+    return WRITABLE_ROLES.includes(role);
+}
+
+function syncBadge(status) {
+    if (status === 'synced') return '<span style="font-size: 0.65rem; background: #dcfce7; color: #166534; padding: 2px 6px; border-radius: 4px; font-weight: 600; border: 1px solid rgba(22,101,52,0.2);">✓ Network Synced</span>';
+    if (status === 'failed') return '<span style="font-size: 0.65rem; background: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-weight: 600; border: 1px solid rgba(153,27,27,0.2);">✗ Sync Failed</span>';
+    return '<span style="font-size: 0.65rem; background: #fef9c3; color: #854d0e; padding: 2px 6px; border-radius: 4px; font-weight: 600; border: 1px solid rgba(133,77,14,0.2);">⏳ Sync Pending</span>';
+}
+
 export function renderPage() {
+    const addBtn = canWrite() ? `
+        <button class="smp-btn-add" onclick="smpOpenModal()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Add Product
+        </button>` : '';
+
     return `
     <style>
       .smp-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
@@ -42,6 +62,8 @@ export function renderPage() {
       .smp-btn-cancel:hover { background: var(--hover, #f1f5f9); color: var(--text, #1e293b); }
       .smp-btn-save { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; }
       .smp-btn-save:hover { background: #2563eb; }
+
+      .smp-readonly-notice { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15); border-radius: 8px; color: var(--text-muted, #64748b); font-size: 0.82rem; }
     </style>
 
     <div class="smp-header">
@@ -49,11 +71,10 @@ export function renderPage() {
             <h1>My Products</h1>
             <p>Manage your product catalog and supply offerings.</p>
         </div>
-        <button class="smp-btn-add" onclick="smpOpenModal()">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            Add Product
-        </button>
+        ${addBtn}
     </div>
+
+    ${!canWrite() ? '<div class="smp-readonly-notice">🔒 You have read-only access to this catalog. Contact an admin to request edit permissions.</div>' : ''}
 
     <div class="smp-card">
         <div style="overflow-x:auto;">
@@ -65,11 +86,11 @@ export function renderPage() {
                         <th>Category</th>
                         <th>Origin</th>
                         <th>Unit Price ($)</th>
-                        <th style="text-align:right">Actions</th>
+                        ${canWrite() ? '<th style="text-align:right">Actions</th>' : ''}
                     </tr>
                 </thead>
                 <tbody id="smpProductsTbody">
-                    <tr><td colspan="6" style="text-align:center; padding: 40px; color:#64748b;">Loading your products...</td></tr>
+                    <tr><td colspan="${canWrite() ? 6 : 5}" style="text-align:center; padding: 40px; color:#64748b;">Loading your products...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -125,13 +146,15 @@ export async function initPage() {
     window.smpLoadData = async function() {
         const tbody = document.getElementById('smpProductsTbody');
         if (!tbody) return;
+        const writable = canWrite();
+        const cols = writable ? 6 : 5;
 
         try {
             const res = await API.get('/supplier-portal/my/products');
             const products = res.products || [];
 
             if (products.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 50px; color:#94a3b8;"><div style="font-size:3rem;margin-bottom:12px;opacity:0.3">📦</div>You have not added any products to your catalog yet.</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center; padding: 50px; color:#94a3b8;"><div style="font-size:3rem;margin-bottom:12px;opacity:0.3">📦</div>You have not added any products to your catalog yet.</td></tr>`;
                 return;
             }
 
@@ -141,29 +164,30 @@ export async function initPage() {
 
             let html = '';
             products.forEach(p => {
+                const badge = syncBadge(p.sync_status || 'pending');
                 html += `
                     <tr>
                         <td>
                             <div style="font-weight:700; color:var(--text, #1e293b); font-size: 0.95rem; margin-bottom:4px;">${p.name}</div>
                             <div style="display:flex; gap: 6px; align-items:center;">
                                 <span style="font-size: 0.65rem; background: #fef08a; color: #854d0e; padding: 2px 6px; border-radius: 4px; font-weight: 600;">🏷 My Sell Offer</span>
-                                <span style="font-size: 0.65rem; background: #dcfce7; color: #166534; padding: 2px 6px; border-radius: 4px; font-weight: 600; border: 1px solid rgba(22,101,52,0.2);">✓ Network Synced</span>
+                                ${badge}
                             </div>
                         </td>
                         <td><span class="smp-sku">${p.sku}</span></td>
                         <td><span class="smp-cat">${(p.category || 'misc').replace(/_/g, ' ')}</span></td>
                         <td>${p.origin_country || '-'}</td>
                         <td><span class="smp-price">$${Number(p.price || 0).toFixed(2)}</span></td>
-                        <td style="text-align:right">
+                        ${writable ? `<td style="text-align:right">
                             <button class="smp-btn-edit" onclick="smpEditProduct('${p.id}')">Edit</button>
-                        </td>
+                        </td>` : ''}
                     </tr>
                 `;
             });
             tbody.innerHTML = html;
         } catch (err) {
             console.error('[Supplier Portal] Data load error:', err);
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 30px; color:#ef4444; font-weight:600;">Failed to load products. Please check your connection.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center; padding: 30px; color:#ef4444; font-weight:600;">Failed to load products. Please check your connection.</td></tr>`;
             showToast('Error loading products', 'error');
         }
     };
@@ -187,7 +211,7 @@ window.smpEditProduct = function(id) {
     document.getElementById('smpId').value = p.id;
     document.getElementById('smpName').value = p.name || '';
     document.getElementById('smpSku').value = p.sku || '';
-    document.getElementById('smpSku').disabled = true; // SKU usually shouldn't change
+    document.getElementById('smpSku').disabled = true; // SKU usually should not change
     document.getElementById('smpCat').value = p.category || 'raw_material';
     document.getElementById('smpCountry').value = p.origin_country || '';
     document.getElementById('smpPrice').value = p.price || '';

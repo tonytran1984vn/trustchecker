@@ -24,12 +24,12 @@ export function renderPage() {
       ${records.length === 0 ? '<p style="color:var(--text-secondary);text-align:center;padding:2rem">No compliance records. Records are created when compliance checks run against products and entities.</p>' : `
       <table class="sa-table"><thead><tr><th>Framework</th><th>Entity</th><th>Requirement</th><th>Evidence</th><th>Status</th><th>Next Review</th></tr></thead>
       <tbody>${records.map(r => `<tr${r.status === 'non_compliant' || r.status === 'violation' ? ' style="background:rgba(239,68,68,0.04)"' : ''}>
-        <td><span class="sa-code" style="font-size:0.72rem;font-weight:600">${r.framework || '—'}</span></td>
-        <td style="font-size:0.75rem">${r.entity_type || '—'} <span style="color:var(--text-secondary);font-size:0.7rem">${r.entity_id?.slice(0, 8) || ''}</span></td>
-        <td style="font-size:0.75rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.requirement || '—'}</td>
-        <td style="font-size:0.72rem;color:var(--text-secondary)">${(() => { try { const e = typeof r.evidence === 'string' ? JSON.parse(r.evidence) : r.evidence; if (!e || (typeof e === 'object' && Object.keys(e).length === 0)) return '—'; return (e.checks || e.status || e.result || JSON.stringify(e)).toString().slice(0, 40); } catch { return (r.evidence || '—').toString().slice(0, 30); } })()}</td>
-        <td><span class="sa-status-pill sa-pill-${r.status === 'compliant' ? 'green' : r.status === 'non_compliant' || r.status === 'violation' ? 'red' : 'orange'}">${r.status || '—'}</span></td>
-        <td style="font-size:0.7rem;color:var(--text-secondary)">${r.next_review ? new Date(r.next_review).toLocaleDateString() : '—'}</td>
+        <td><span class="sa-code" style="font-size:0.72rem;font-weight:600">${r.framework || 'N/A'}</span></td>
+        <td style="font-size:0.75rem">${r.entity_type || 'N/A'} <span style="color:var(--text-secondary);font-size:0.7rem">${r.entity_id?.slice(0, 8) || ''}</span></td>
+        <td style="font-size:0.75rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.requirement || 'N/A'}</td>
+        <td style="font-size:0.72rem;color:var(--text-secondary)">${(() => { try { const e = typeof r.evidence === 'string' ? JSON.parse(r.evidence) : r.evidence; if (!e || (typeof e === 'object' && Object.keys(e).length === 0)) return 'N/A'; return (e.checks || e.status || e.result || JSON.stringify(e)).toString().slice(0, 40); } catch { return (r.evidence || 'N/A').toString().slice(0, 30); } })()}</td>
+        <td><span class="sa-status-pill sa-pill-${r.status === 'compliant' ? 'green' : r.status === 'non_compliant' || r.status === 'violation' ? 'red' : 'orange'}">${r.status || 'N/A'}</span></td>
+        <td style="font-size:0.7rem;color:var(--text-secondary)">${r.next_review ? new Date(r.next_review).toLocaleDateString() : 'N/A'}</td>
       </tr>`).join('')}</tbody></table>`}
     </div>
   </div>`;

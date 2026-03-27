@@ -32,7 +32,7 @@ if (!cache._loading && (!cache._loadedAt || Date.now() - cache._loadedAt > 30000
     const phase2 = new Promise(resolve => {
         setTimeout(() => {
             Promise.allSettled([
-                API.get('/admin/users').catch(() => ({ users: [] })),
+                State.user?.role === 'security_officer' ? Promise.resolve({ users: [] }) : API.get('/admin/users').catch(() => ({ users: [] })),
                 API.get('/org-admin/roles').catch(() => []),
                 API.get('/org-admin/users').catch(() => []),
                 API.get('/org-admin/permissions').catch(() => []),

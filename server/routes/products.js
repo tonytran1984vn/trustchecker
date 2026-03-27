@@ -1,4 +1,5 @@
 const logger = require('../lib/logger');
+const { dualWriteProduct, dualWriteQR } = require('../lib/dual-write');
 // [MIGRATED] Use req.services.product for new logic
 const { cacheInvalidate } = require('../middleware/cache-invalidate');
 
@@ -148,31 +149,7 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// ─── Ensure carbon columns exist ────────────────────────────────────────────
-(async () => {
-    const carbonCols = ['weight_kg', 'quantity', 'price'];
-    for (const col of carbonCols) {
-        try {
-            await db.exec(`ALTER TABLE products ADD COLUMN ${_safeId(col)} REAL DEFAULT 0`);
-        } catch (_) {
-            /* already exists */
-        }
-    }
-})();
-
-// ── Ensure image_key and batch_id columns exist ──────────────────────────────
-(async () => {
-    try {
-        await db.exec('ALTER TABLE qr_codes ADD COLUMN IF NOT EXISTS image_key TEXT');
-    } catch (_) {
-        /* exists */
-    }
-    try {
-        await db.exec('ALTER TABLE qr_codes ADD COLUMN IF NOT EXISTS batch_id TEXT');
-    } catch (_) {
-        /* exists */
-    }
-})();
+// DB schema properties natively defined in Prisma
 
 // ─── POST /api/products/ensure (Create or Reuse) ──────────────────────────────
 router.post('/ensure', requirePermission('product:create'), validate(schemas.createProduct), async (req, res) => {
@@ -222,6 +199,18 @@ router.post('/ensure', requirePermission('product:create'), validate(schemas.cre
                 parseFloat(price) || 0,
             ]
         );
+
+        // ── Phase 1: Dual-write to product_definitions + product_catalogs ──
+        dualWriteProduct({
+            id: productId,
+            name,
+            orgId: req.user.orgId,
+            sku,
+            category: category || '',
+            description: description || '',
+            origin_country: origin_country || '',
+            manufacturer: manufacturer || '',
+        }).catch(e => logger.error('[DualWrite] ensure product:', e.message));
 
         res.json({
             message: 'Product created',
@@ -516,6 +505,21 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
             [qrCodeId, productId, qrData, imageKey, req.user.orgId || null]
         );
 
+        // ── Phase 1: Dual-write product + QR to new schema ──
+        dualWriteProduct({
+            id: productId,
+            name,
+            orgId: req.user.orgId,
+            sku,
+            category: category || '',
+            description: description || '',
+            origin_country: origin_country || '',
+            manufacturer: manufacturer || '',
+        }).catch(e => logger.error('[DualWrite] create product:', e.message));
+        dualWriteQR({ qrId: qrCodeId, serialNumber: `TC:${productId}:${sku}:0001:${Date.now()}` }).catch(e =>
+            logger.error('[DualWrite] create QR:', e.message)
+        );
+
         // Audit log
         try {
             await db
@@ -737,6 +741,12 @@ router.post('/generate-code', authMiddleware, requirePermission('product:create'
                      VALUES (?, ?, ?, ?, ?, ?, ?)`,
                     [qrId, product_id, qrData, qrImageKey, req.user.orgId || null, req.user.id, batch_id || null]
                 );
+
+                // ── Phase 1: Dual-write QR serial_number + qr_state ──
+                dualWriteQR({ qrId, serialNumber: serialCode }).catch(e =>
+                    logger.error('[DualWrite] generate-code QR:', e.message)
+                );
+
                 generatedCodes.push({
                     id: qrId,
                     code: serialCode,

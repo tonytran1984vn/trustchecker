@@ -1,4 +1,5 @@
 const logger = require('../lib/logger');
+const { dualWriteBatch } = require('../lib/dual-write');
 // [MIGRATED] Use /api/v1/supply-chain instead
 /**
  * SCM Tracking & Traceability Routes (FR-INTEG-002 + FR-SCM-001)
@@ -361,6 +362,11 @@ router.post('/batches', authMiddleware, requireRole('operator', 'admin', 'compan
         );
 
         res.status(201).json({ id, batch_number, blockchain_seal: seal });
+
+        // ── Phase 1: Dual-write batch to new schema columns ──
+        dualWriteBatch({ batchId: id, productId: product_id, orgId: orgId }).catch(e =>
+            logger.error('[DualWrite] batch create:', e.message)
+        );
     } catch (err) {
         logger.error('Create batch error:', err);
         res.status(500).json({ error: 'Failed to create batch' });

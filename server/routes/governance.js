@@ -11,14 +11,7 @@ const { v4: uuidv4 } = require('uuid');
 const { withTransaction } = require('../middleware/transaction');
 router.use(authMiddleware);
 
-const init = async () => {
-    try {
-        await db.exec(`
-    CREATE TABLE IF NOT EXISTS governance_proposals (id TEXT PRIMARY KEY, proposal_id TEXT UNIQUE NOT NULL, type TEXT, title TEXT, description TEXT, proposed_by TEXT, status TEXT DEFAULT 'open', voting TEXT DEFAULT '{}', evidence TEXT DEFAULT '[]', hash TEXT, created_at DATETIME DEFAULT (NOW()));
-`);
-    } catch (e) {}
-};
-init();
+// DB schema is natively managed by Prisma (governance_proposals)
 
 // POST /proposals — Create governance proposal
 router.post('/proposals', requirePermission('admin:manage'), async (req, res) => {

@@ -21,77 +21,7 @@ const logger = require('../lib/logger');
 router.use(authMiddleware);
 
 // ─── Ensure tables ──────────────────────────────────────────────────────────
-const init = async () => {
-    try {
-        await db.exec(`
-            CREATE TABLE IF NOT EXISTS carbon_credits (
-                id TEXT PRIMARY KEY,
-                credit_id TEXT UNIQUE NOT NULL,
-                serial_number TEXT UNIQUE NOT NULL,
-                status TEXT NOT NULL DEFAULT 'minted',
-                quantity_tCO2e REAL NOT NULL,
-                quantity_kgCO2e REAL NOT NULL,
-                vintage_year INTEGER,
-                project_name TEXT,
-                project_type TEXT,
-                intervention TEXT,
-                route_type TEXT,
-                origin_region TEXT,
-                simulation_id TEXT,
-                reduction_uid TEXT,
-                mrv_confidence INTEGER DEFAULT 0,
-                mrv_hash TEXT,
-                evidence_hash TEXT NOT NULL,
-                issuer_id TEXT NOT NULL,
-                org_id TEXT NOT NULL DEFAULT 'default',
-                current_owner_id TEXT NOT NULL,
-                beneficiary_id TEXT,
-                provenance TEXT DEFAULT '[]',
-                retirement_data TEXT,
-                blockchain_status TEXT DEFAULT 'anchored',
-                created_at DATETIME DEFAULT (NOW()),
-                updated_at DATETIME DEFAULT (NOW())
-            );
-            CREATE TABLE IF NOT EXISTS carbon_simulations (
-                id TEXT PRIMARY KEY,
-                simulation_id TEXT UNIQUE NOT NULL,
-                event_id TEXT,
-                route_type TEXT,
-                distance_km REAL,
-                weight_tonnes REAL,
-                origin_region TEXT DEFAULT 'GLOBAL',
-                baseline_mode TEXT,
-                baseline_type TEXT,
-                baseline_emission REAL,
-                actual_mode TEXT,
-                actual_emission REAL,
-                reduction_kgCO2e REAL,
-                reduction_tCO2e REAL,
-                reduction_pct REAL,
-                intervention_type TEXT,
-                mrv_status TEXT,
-                mrv_confidence INTEGER DEFAULT 0,
-                mrv_hash TEXT,
-                additionality_status TEXT,
-                additionality_passed INTEGER DEFAULT 0,
-                reduction_uid TEXT,
-                credit_eligible INTEGER DEFAULT 0,
-                credit_id TEXT,
-                pipeline_result TEXT,
-                simulated_by TEXT,
-                created_at DATETIME DEFAULT (NOW())
-            );
-            CREATE TABLE IF NOT EXISTS carbon_fractional (
-                org_id TEXT PRIMARY KEY,
-                accumulated_kgCO2e REAL DEFAULT 0,
-                updated_at DATETIME DEFAULT (NOW())
-            );
-        `);
-    } catch (e) {
-        /* already exists */
-    }
-};
-init();
+// DB schema is natively managed by Prisma (carbon_credits, carbon_simulations, carbon_fractional)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FULL PIPELINE — L1→L7 in one call
@@ -432,28 +362,55 @@ router.post('/retire', requirePermission('esg:manage'), async (req, res) => {
 router.get('/balance', async (req, res) => {
     try {
         const orgId = req.orgId || req.user?.org_id || req.user?.orgId || null;
+
+        // 1. Direct Emissions (Scope 1/2) from native Minted Credits
         const credits = orgId
             ? await db.all('SELECT * FROM carbon_credits WHERE org_id = ?', [orgId])
             : await db.all('SELECT * FROM carbon_credits');
+
         const active = credits.filter(c => c.status === 'minted' || c.status === 'active');
         const retired = credits.filter(c => c.status === 'retired');
         const transferred = credits.filter(c => c.status === 'transferred');
         const sum = arr => arr.reduce((s, c) => s + (c.quantity_tCO2e || 0), 0);
 
-        const frac = await db.get('SELECT * FROM carbon_fractional WHERE org_id = ?', [
-            req.user?.org_id || req.user?.orgId,
-        ]);
+        const directTCO2e = sum(credits);
+
+        // 2. Indirect Supply Chain Emissions (Scope 3) from Fulfilled Purchase Orders
+        let scope3TCO2e = 0;
+        let posCount = 0;
+        if (orgId) {
+            const pos = await db.client.networkPurchaseOrder.findMany({
+                where: { buyerOrgId: orgId, status: 'fulfilled' },
+            });
+            posCount = pos.length;
+            for (const po of pos) {
+                const product = await db.client.productCatalog.findUnique({
+                    where: { id: po.productId },
+                });
+                if (product) {
+                    // Convert unit carbon (kg) to Tonnes (tCO2e) and multiply by PO quantity
+                    scope3TCO2e += (product.unitCarbonKgCO2e * po.quantity) / 1000.0;
+                }
+            }
+        }
+
+        const total_tCO2e = directTCO2e + scope3TCO2e;
+
+        const frac = await db.get('SELECT * FROM carbon_fractional WHERE org_id = ?', [orgId]);
 
         res.json({
-            title: 'Carbon Credit Portfolio (CCME v3.0)',
+            title: 'Networked Carbon Portfolio (CCME v4.0)',
             total_credits: credits.length,
-            total_tCO2e: Math.round(sum(credits) * 1000) / 1000,
+            total_tCO2e: Math.round(total_tCO2e * 1000) / 1000,
+            direct_emissions_tCO2e: Math.round(directTCO2e * 1000) / 1000,
+            scope3_inherited_tCO2e: Math.round(scope3TCO2e * 1000) / 1000,
+            purchase_orders_fulfilled: posCount,
             active: { count: active.length, tCO2e: Math.round(sum(active) * 1000) / 1000 },
             retired: { count: retired.length, tCO2e: Math.round(sum(retired) * 1000) / 1000 },
             transferred: { count: transferred.length, tCO2e: Math.round(sum(transferred) * 1000) / 1000 },
             fractional_buffer_kgCO2e: frac?.accumulated_kgCO2e || 0,
-            estimated_value_usd: Math.round(sum(active) * 45 * 100) / 100,
-            net_position_tCO2e: Math.round(sum(active) * 1000) / 1000,
+            estimated_value_usd: Math.round(total_tCO2e * 45 * 100) / 100, // Market value
+            net_position_tCO2e: Math.round(total_tCO2e * 1000) / 1000,
         });
     } catch (err) {
         res.status(500).json({ error: 'Balance failed' });
