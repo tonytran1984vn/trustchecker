@@ -72,7 +72,7 @@ router.get('/', async (req, res) => {
         query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
         params.push(Number(limit), Math.max(Number(offset) || 0, 0));
 
-        const products = await db.prepare(query).all(...params);
+        const products = await db.all(query, params);
         /* ATK-03 FIX */ const totalQ =
             req.user.role !== 'super_admin' && req.user.orgId
                 ? 'SELECT COUNT(*) as count FROM products WHERE org_id = ?'
@@ -125,7 +125,14 @@ router.get('/generation-history', authMiddleware, async (req, res) => {
 // ─── GET /api/products/:id ───────────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
     try {
-        const product = await db.get('SELECT * FROM products WHERE id = ?', [req.params.id]);
+        // BUG-01 FIX: Org-scoped product access — non-super_admin can only view own org's products
+        const orgId = req.user.orgId || req.user.org_id;
+        let product;
+        if (req.user.role !== 'super_admin' && orgId) {
+            product = await db.get('SELECT * FROM products WHERE id = ? AND org_id = ?', [req.params.id, orgId]);
+        } else {
+            product = await db.get('SELECT * FROM products WHERE id = ?', [req.params.id]);
+        }
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
         const qrCodes = await db.all('SELECT * FROM qr_codes WHERE product_id = ?', [req.params.id]);
@@ -586,26 +593,57 @@ router.post('/', requirePermission('product:create'), validate(schemas.createPro
 // ─── PUT /api/products/:id ───────────────────────────────────────────────────
 router.put('/:id', authMiddleware, requirePermission('product:update'), async (req, res) => {
     try {
-        const product = await db.get('SELECT * FROM products WHERE id = ?', [req.params.id]);
+        // BUG-02 FIX: Org-scoped product update — non-super_admin can only modify own org's products
+        const orgId = req.user.orgId || req.user.org_id;
+        let product;
+        if (req.user.role !== 'super_admin' && orgId) {
+            product = await db.get('SELECT * FROM products WHERE id = ? AND org_id = ?', [req.params.id, orgId]);
+        } else {
+            product = await db.get('SELECT * FROM products WHERE id = ?', [req.params.id]);
+        }
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
         const { name, description, category, manufacturer, batch_number, origin_country, status } = req.body;
 
-        await db.run(
-            `
-      UPDATE products SET 
-        name = COALESCE(?, name),
-        description = COALESCE(?, description),
-        category = COALESCE(?, category),
-        manufacturer = COALESCE(?, manufacturer),
-        batch_number = COALESCE(?, batch_number),
-        origin_country = COALESCE(?, origin_country),
-        status = COALESCE(?, status),
-        updated_at = NOW()
-      WHERE id = ?
-    `,
-            [name, description, category, manufacturer, batch_number, origin_country, status, req.params.id]
-        );
+        // BUG-02 FIX: Also add org_id to UPDATE WHERE for defense-in-depth
+        const updateQuery =
+            req.user.role !== 'super_admin' && orgId
+                ? `UPDATE products SET 
+                name = COALESCE(?, name),
+                description = COALESCE(?, description),
+                category = COALESCE(?, category),
+                manufacturer = COALESCE(?, manufacturer),
+                batch_number = COALESCE(?, batch_number),
+                origin_country = COALESCE(?, origin_country),
+                status = COALESCE(?, status),
+                updated_at = NOW()
+              WHERE id = ? AND org_id = ?`
+                : `UPDATE products SET 
+                name = COALESCE(?, name),
+                description = COALESCE(?, description),
+                category = COALESCE(?, category),
+                manufacturer = COALESCE(?, manufacturer),
+                batch_number = COALESCE(?, batch_number),
+                origin_country = COALESCE(?, origin_country),
+                status = COALESCE(?, status),
+                updated_at = NOW()
+              WHERE id = ?`;
+        const updateParams =
+            req.user.role !== 'super_admin' && orgId
+                ? [
+                      name,
+                      description,
+                      category,
+                      manufacturer,
+                      batch_number,
+                      origin_country,
+                      status,
+                      req.params.id,
+                      orgId,
+                  ]
+                : [name, description, category, manufacturer, batch_number, origin_country, status, req.params.id];
+
+        await db.run(updateQuery, updateParams);
 
         res.json({ message: 'Product updated', id: req.params.id });
     } catch (err) {

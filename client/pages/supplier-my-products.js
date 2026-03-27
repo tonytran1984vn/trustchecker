@@ -6,7 +6,12 @@ import { showToast } from '../components/toast.js';
 const WRITABLE_ROLES = ['supplier_contributor', 'company_admin', 'admin', 'org_owner', 'super_admin'];
 
 function canWrite() {
-    const role = State.user?.active_role || State.user?.role || '';
+    const user = State.user || {};
+    const role = user.active_role || user.role || '';
+    // BUG-10 FIX: Also check explicit permissions array if available
+    if (user.permissions && Array.isArray(user.permissions)) {
+        return user.permissions.includes('product:create') || user.permissions.includes('product:update');
+    }
     return WRITABLE_ROLES.includes(role);
 }
 
@@ -71,6 +76,8 @@ export function renderPage() {
       
       .smp-btn-edit { background: rgba(59,130,246,0.1); color: #2563eb; border: 1px solid rgba(59,130,246,0.3); padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
       .smp-btn-edit:hover { background: rgba(59,130,246,0.2); }
+      .smp-btn-del { background: rgba(239,68,68,0.08); color: #dc2626; border: 1px solid rgba(239,68,68,0.25); padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-left: 4px; }
+      .smp-btn-del:hover { background: rgba(239,68,68,0.15); }
 
       /* Modal */
       .smp-modal-underlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15,23,42,0.4); backdrop-filter: blur(4px); z-index: 999; display: none; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
@@ -91,6 +98,11 @@ export function renderPage() {
       .smp-btn-save:hover { background: #2563eb; }
 
       .smp-readonly-notice { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.15); border-radius: 8px; color: var(--text-muted, #64748b); font-size: 0.82rem; margin-bottom: 16px; }
+      .smp-pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 16px; padding: 12px 0; }
+      .smp-page-btn { background: var(--bg-element, #ffffff); border: 1px solid var(--border, #cbd5e1); color: var(--text, #1e293b); padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+      .smp-page-btn:hover:not(:disabled) { background: var(--hover, #f1f5f9); border-color: #3b82f6; }
+      .smp-page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+      .smp-page-info { font-size: 0.85rem; color: var(--text-muted, #64748b); font-weight: 600; }
     </style>
 
     <div class="smp-header">
@@ -132,6 +144,9 @@ export function renderPage() {
         </div>
     </div>
 
+    <!-- BUG-13 FIX: Pagination -->
+    <div class="smp-pagination" id="smpPagination" style="display:none;"></div>
+
     <!-- Add/Edit Modal -->
     <div id="smpModal" class="smp-modal-underlay">
         <div class="smp-modal">
@@ -164,6 +179,20 @@ export function renderPage() {
                     <label>Unit Price (USD)</label>
                     <input type="number" id="smpPrice" step="0.01" min="0" placeholder="0.00" />
                 </div>
+                <div class="smp-form-group">
+                    <label>Description</label>
+                    <textarea id="smpDesc" rows="3" placeholder="Brief product description..." style="width:100%; padding:10px 14px; background:var(--bg-element,#fff); border:1px solid var(--border,#cbd5e1); border-radius:8px; color:var(--text,#1e293b); font-size:0.9rem; font-family:inherit; resize:vertical;"></textarea>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="smp-form-group">
+                        <label>Product Type</label>
+                        <select id="smpType">
+                            <option value="sell">Selling</option>
+                            <option value="buy">Purchasing</option>
+                            <option value="both">Both</option>
+                        </select>
+                    </div>
+                </div>
                 
                 <div class="smp-modal-actions">
                     <button type="button" class="smp-btn-cancel" onclick="smpCloseModal()">Cancel</button>
@@ -179,11 +208,14 @@ export async function initPage() {
     setTimeout(smpLoadData, 50);
 }
 
-// ── Tab state ───────────────────────────────────────────────────
+// ── Tab & pagination state ──────────────────────────────────────
 let _currentView = 'all';
+let _currentOffset = 0;
+const PAGE_SIZE = 50;
 
 window.smpSwitchTab = function(view) {
     _currentView = view;
+    _currentOffset = 0;
     // Update active tab
     document.querySelectorAll('.smp-tab').forEach(t => {
         t.classList.toggle('active', t.dataset.view === view);
@@ -200,9 +232,10 @@ window.smpLoadData = async function() {
     tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center; padding: 40px; color:#64748b;">Loading products...</td></tr>`;
 
     try {
-        const res = await API.get(`/supplier-portal/my/products?view=${_currentView}`);
+        const res = await API.get(`/supplier-portal/my/products?view=${_currentView}&limit=${PAGE_SIZE}&offset=${_currentOffset}`);
         const products = res.products || [];
         const counts = res.counts || {};
+        const total = res.total || 0;
 
         // Update tab counts
         const countMap = { All: 'all', Selling: 'selling', Purchasing: 'purchasing', Inventory: 'inventory' };
@@ -242,11 +275,27 @@ window.smpLoadData = async function() {
                     <td><span class="smp-price">$${Number(p.price || 0).toFixed(2)}</span></td>
                     ${writable ? `<td style="text-align:right">
                         <button class="smp-btn-edit" onclick="smpEditProduct('${p.id}')">Edit</button>
+                        <button class="smp-btn-del" onclick="smpDeleteProduct('${p.id}','${p.name.replace(/'/g, "\\'")}')">Archive</button>
                     </td>` : ''}
                 </tr>
             `;
         });
         tbody.innerHTML = html;
+
+        // BUG-13 FIX: Render pagination
+        const pagDiv = document.getElementById('smpPagination');
+        if (pagDiv && total > PAGE_SIZE) {
+            const page = Math.floor(_currentOffset / PAGE_SIZE) + 1;
+            const totalPages = Math.ceil(total / PAGE_SIZE);
+            pagDiv.style.display = 'flex';
+            pagDiv.innerHTML = `
+                <button class="smp-page-btn" onclick="smpPagePrev()" ${page <= 1 ? 'disabled' : ''}>← Prev</button>
+                <span class="smp-page-info">Page ${page} of ${totalPages}</span>
+                <button class="smp-page-btn" onclick="smpPageNext()" ${page >= totalPages ? 'disabled' : ''}>Next →</button>
+            `;
+        } else if (pagDiv) {
+            pagDiv.style.display = 'none';
+        }
     } catch (err) {
         console.error('[Supplier Portal] Data load error:', err);
         tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center; padding: 30px; color:#ef4444; font-weight:600;">Failed to load products. Please check your connection.</td></tr>`;
@@ -277,6 +326,8 @@ window.smpEditProduct = function(id) {
     document.getElementById('smpCat').value = p.category || 'raw_material';
     document.getElementById('smpCountry').value = p.origin_country || '';
     document.getElementById('smpPrice').value = p.price || '';
+    document.getElementById('smpDesc').value = p.description || '';
+    document.getElementById('smpType').value = p.product_type || 'sell';
     
     document.getElementById('smpModalTitle').innerText = 'Edit Product';
     document.getElementById('smpModal').classList.add('visible');
@@ -292,7 +343,9 @@ window.smpSaveProduct = async function(e) {
         sku: document.getElementById('smpSku').value.trim(),
         category: document.getElementById('smpCat').value,
         origin_country: document.getElementById('smpCountry').value.toUpperCase().trim(),
-        price: parseFloat(document.getElementById('smpPrice').value) || 0
+        price: parseFloat(document.getElementById('smpPrice').value) || 0,
+        description: document.getElementById('smpDesc').value.trim(),
+        product_type: document.getElementById('smpType').value,
     };
 
     try {
@@ -308,6 +361,29 @@ window.smpSaveProduct = async function(e) {
     } catch (err) {
         showToast(err.message || 'Failed to save product', 'error');
     }
+};
+
+// BUG-06 FIX: Delete/archive product
+window.smpDeleteProduct = async function(id, name) {
+    if (!confirm(`Archive product "${name}"? It will be hidden from your catalog.`)) return;
+    try {
+        await API.delete('/supplier-portal/my/products/' + id);
+        showToast('Product archived', 'success');
+        smpLoadData();
+    } catch (err) {
+        showToast(err.message || 'Failed to archive product', 'error');
+    }
+};
+
+// BUG-13 FIX: Pagination helpers
+window.smpPagePrev = function() {
+    _currentOffset = Math.max(0, _currentOffset - PAGE_SIZE);
+    smpLoadData();
+};
+
+window.smpPageNext = function() {
+    _currentOffset += PAGE_SIZE;
+    smpLoadData();
 };
 
 export default { renderPage, initPage };
