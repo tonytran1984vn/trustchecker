@@ -17,6 +17,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const logger = require('../lib/logger');
+const complianceEngine = require('../services/compliance-engine/engine');
 
 router.use(authMiddleware);
 router.use(requirePermission('org:user_create'));
@@ -586,6 +587,84 @@ router.get('/metrics', async (req, res) => {
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PLATFORM COMPLIANCE GOVERNANCE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── GET /compliance/policies — List GLOBAL system policies ────────────────
+router.get('/compliance/policies', async (req, res) => {
+    try {
+        const { action } = req.query;
+        let query = `SELECT id, action, version_id, is_active, created_at, created_by,
+                            (SELECT username FROM users WHERE id = created_by) as creator_name
+                     FROM compliance_policies 
+                     WHERE org_id = 'SYSTEM'
+                     ORDER BY is_active DESC, created_at DESC LIMIT 100`;
+        const params = [];
+
+        if (action) {
+            query = `SELECT id, action, version_id, is_active, created_at, created_by, rules_jsonb,
+                            (SELECT username FROM users WHERE id = created_by) as creator_name
+                     FROM compliance_policies 
+                     WHERE org_id = 'SYSTEM' AND action = ?
+                     ORDER BY is_active DESC, created_at DESC LIMIT 100`;
+            params.push(action);
+        }
+
+        const policies = await db.all(query, params);
+        res.json({ policies });
+    } catch (err) {
+        logger.error('[PlatformAdmin] List compliance policies error:', err);
+        res.status(500).json({ error: 'Failed to list SYSTEM policies' });
+    }
+});
+
+// ─── POST /compliance/policies — Create a new SYSTEM Policy Version ──────────
+router.post('/compliance/policies', async (req, res) => {
+    try {
+        // Double down on platform guard
+        const isSuper = req.user?.role === 'super_admin' || req.user?.user_type === 'platform';
+        if (!isSuper) return res.status(403).json({ error: 'Only Platform Administrators can set SYSTEM rules.' });
+
+        const { action, rules_jsonb } = req.body;
+
+        if (!action || !rules_jsonb || !Array.isArray(rules_jsonb)) {
+            return res.status(400).json({ error: 'Valid action and Array rules_jsonb are required.' });
+        }
+
+        const version_id = `v_${Date.now()}_${uuidv4().substring(0, 6)}`;
+
+        // 1. Dập tắt toàn bộ SYSTEM policies hiện tại của Action này
+        await db.run(`UPDATE compliance_policies SET is_active = false WHERE org_id = 'SYSTEM' AND action = ?`, [
+            action,
+        ]);
+
+        // 2. Chèn Version Mới (org_id = 'SYSTEM')
+        await db.run(
+            `INSERT INTO compliance_policies (org_id, action, version_id, rules_jsonb, is_active, created_by) 
+             VALUES ('SYSTEM', ?, ?, ?, true, ?)`,
+            [action, version_id, JSON.stringify(rules_jsonb), req.user.id]
+        );
+
+        // 3. Tẩy Cache để Trí Tuệ Nạp Lại Luật Toàn Cầu
+        complianceEngine.clearCache('SYSTEM', action);
+
+        await db.run(
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'SYSTEM_POLICY_UPDATED', 'compliance_policy', ?, ?)`,
+            [uuidv4(), req.user.id, action, JSON.stringify({ new_version: version_id })]
+        );
+
+        res.status(201).json({
+            message: 'SYSTEM Policy Version Created and Global Engine reloaded.',
+            action,
+            version_id,
+        });
+    } catch (err) {
+        logger.error('[PlatformAdmin] Create compliance policy error:', err);
+        res.status(500).json({ error: 'Failed to create SYSTEM compliance policy' });
     }
 });
 

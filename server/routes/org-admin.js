@@ -23,6 +23,7 @@ const {
     isCAForbidden,
     isHighRiskRole,
 } = require('../auth/rbac');
+const complianceEngine = require('../services/compliance-engine/engine');
 
 // All routes require auth + org context + org admin
 router.use(authMiddleware);
@@ -704,6 +705,83 @@ router.post('/approvals/:id/reject', async (req, res) => {
     } catch (err) {
         logger.error('[OrgAdmin] Reject error:', err);
         res.status(500).json({ error: 'Failed to reject' });
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPLIANCE POLICY MANAGEMENT (DYNAMIC DSL ENGINE)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── GET /compliance/policies — List all active and history policies ─────────
+router.get('/compliance/policies', async (req, res) => {
+    try {
+        const { action } = req.query;
+        let query = `SELECT id, action, version_id, is_active, created_at, created_by,
+                            (SELECT username FROM users WHERE id = created_by) as creator_name
+                     FROM compliance_policies 
+                     WHERE org_id = ? OR org_id = 'SYSTEM'
+                     ORDER BY is_active DESC, created_at DESC LIMIT 100`;
+        const params = [req.orgId];
+
+        if (action) {
+            query = `SELECT id, action, version_id, is_active, created_at, created_by, rules_jsonb,
+                            (SELECT username FROM users WHERE id = created_by) as creator_name
+                     FROM compliance_policies 
+                     WHERE (org_id = ? OR org_id = 'SYSTEM') AND action = ?
+                     ORDER BY is_active DESC, created_at DESC LIMIT 100`;
+            params.push(action);
+        }
+
+        const policies = await db.all(query, params);
+        res.json({ policies });
+    } catch (err) {
+        logger.error('[OrgAdmin] List compliance policies error:', err);
+        res.status(500).json({ error: 'Failed to list policies' });
+    }
+});
+
+// ─── POST /compliance/policies — Create a new Policy Version ─────────────────
+router.post('/compliance/policies', async (req, res) => {
+    try {
+        const { action, rules_jsonb } = req.body;
+
+        if (!action || !rules_jsonb || !Array.isArray(rules_jsonb)) {
+            return res.status(400).json({ error: 'Valid action and Array rules_jsonb are required.' });
+        }
+
+        // Generate rigorous strict snapshot version ID
+        const version_id = `v_${Date.now()}_${uuidv4().substring(0, 6)}`;
+
+        // 1. Dập tắt toàn bộ policies hiện tại của Action này trong phạm vi Local Org
+        await db.run(`UPDATE compliance_policies SET is_active = false WHERE org_id = ? AND action = ?`, [
+            req.orgId,
+            action,
+        ]);
+
+        // 2. Chèn Version Mới
+        const insertRes = await db.run(
+            `INSERT INTO compliance_policies (org_id, action, version_id, rules_jsonb, is_active, created_by) 
+             VALUES (?, ?, ?, ?, true, ?)`,
+            [req.orgId, action, version_id, JSON.stringify(rules_jsonb), req.user.id]
+        );
+
+        // 3. Tẩy Động Bộ Nhớ Cache Của Mạch V8 (INVALIDATE CACHE)
+        complianceEngine.clearCache(req.orgId, action);
+
+        // Audit
+        await db.run(
+            `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, 'POLICY_UPDATED', 'compliance_policy', ?, ?)`,
+            [uuidv4(), req.user.id, action, JSON.stringify({ new_version: version_id, org_id: req.orgId })]
+        );
+
+        res.status(201).json({
+            message: 'Policy Version Created and Engine reloaded dynamically.',
+            action,
+            version_id,
+        });
+    } catch (err) {
+        logger.error('[OrgAdmin] Create compliance policy error:', err);
+        res.status(500).json({ error: 'Failed to create compliance policy' });
     }
 });
 
