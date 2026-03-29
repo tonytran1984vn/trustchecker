@@ -73,6 +73,7 @@ export function renderPage() {
             State.user?.role !== 'security_officer' ? { id: 'roles', label: 'Roles & Access', icon: icon('shield', 14), render: lazy(() => import('../role-manager.js')) } : null,
             { id: 'approvals', label: 'Approvals', icon: icon('check', 14), render: lazy(() => import('./approval-queue.js')) },
             { id: 'access-logs', label: 'Access Logs', icon: icon('scroll', 14), render: lazy(() => import('./access-logs.js')) },
+            { id: 'policies', label: 'Org Policies', icon: icon('settings', 14), render: lazy(() => import('../compliance/dynamic-policies.js')) },
             { id: 'carbon-passport', label: 'Carbon Passport', icon: icon('tag', 14), render: lazy(() => import('../scm/carbon-credit.js')) },
             { id: 'green-finance', label: 'Green Finance', icon: icon('globe', 14), render: lazy(() => import('../infra/green-finance.js')) },
         ].filter(Boolean),

@@ -68,6 +68,7 @@ export function renderPage() {
             { id: 'approvals', label: 'Approvals', icon: icon('check', 14), render: lazy(() => import('./approval-workflows.js')) },
             { id: 'escalation', label: 'Escalation', icon: icon('workflow', 14), render: lazy(() => import('./escalation-flow.js')) },
             { id: 'audit', label: 'Audit Trail', icon: icon('scroll', 14), render: lazy(() => import('./access-logs.js')) },
+            { id: 'policies', label: 'System Policies', icon: icon('settings', 14), render: lazy(() => import('../compliance/dynamic-policies.js')) },
         ],
     });
 }

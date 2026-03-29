@@ -87,6 +87,7 @@ const PAGE_LOADERS = {
     'integrations': () => import('../pages/integrations.js'),
     'sustainability': () => import('../pages/sustainability.js'),
     'compliance': () => import('../pages/compliance.js'),
+    'compliance-dynamic-policies': () => import('../pages/compliance/dynamic-policies.js'),
     'anomaly': () => import('../pages/anomaly.js'),
     'reports': () => import('../pages/reports.js'),
     'nft': () => import('../pages/nft.js'),
