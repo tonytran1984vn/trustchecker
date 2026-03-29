@@ -61,7 +61,7 @@ export async function renderPage() {
 
           <div style="display:flex; justify-content:space-between; align-items:center; margin-top: 1.5rem;">
               <div style="font-size:0.8rem; color:var(--text-secondary);">
-                  <strong>Note:</strong> Policies are version-controlled. Publishing creates an immutable ` + "`v_new`" + ` and invalidates edge caches.
+                  <strong>Note:</strong> Policies are version-controlled. Publishing creates an immutable v_new and invalidates edge caches.
               </div>
               <button id="btnPublishPolicy" class="btn btn-primary" onclick="window._publishPolicy()" style="padding: 10px 24px; font-weight: 600;">
                   ${icon('save', 16)} Publish New Version
@@ -75,23 +75,23 @@ export async function renderPage() {
                 <div>
                     <strong style="font-size:0.85rem">Supported Operators:</strong>
                     <ul style="font-size:0.8rem; color:var(--text-secondary); padding-left:20px; margin-top:0.5rem; line-height: 1.6;">
-                        <li>` + "`==`, `!=`, `<`, `>`, `<=`, `>=`" + ` (Comparisons)</li>
-                        <li>` + "`AND`, `OR`" + ` (Logical combinations)</li>
-                        <li>` + "`IN [...]`, `NOT IN [...]`" + ` (Array inclusion)</li>
+                        <li>==, !=, <, >, <=, >= (Comparisons)</li>
+                        <li>AND, OR (Logical combinations)</li>
+                        <li>IN [...], NOT IN [...] (Array inclusion)</li>
                     </ul>
                 </div>
                 <div>
                     <strong style="font-size:0.85rem">Available Context Variables (PUBLISH_PRODUCT):</strong>
                     <ul style="font-size:0.8rem; color:var(--text-secondary); padding-left:20px; margin-top:0.5rem; line-height: 1.6;">
-                        <li>` + "`trust_score`" + ` (Number, 0-100)</li>
-                        <li>` + "`origin_country`" + ` (String, ISO-2)</li>
-                        <li>` + "`category`" + ` (String)</li>
-                        <li>` + "`is_certified`" + ` (Boolean)</li>
+                        <li>trust_score (Number, 0-100)</li>
+                        <li>origin_country (String, ISO-2)</li>
+                        <li>category (String)</li>
+                        <li>is_certified (Boolean)</li>
                     </ul>
                 </div>
             </div>
             <div style="margin-top: 1rem; padding: 10px 15px; background: rgba(59, 130, 246, 0.05); border-left: 3px solid #3b82f6; border-radius: 4px; font-size:0.8rem;">
-                <strong>Example:</strong> ` + "`trust_score >= 80 AND origin_country IN ['US', 'VN'] AND is_certified == true`" + `
+                <strong>Example:</strong> trust_score >= 80 AND origin_country IN ['US', 'VN'] AND is_certified == true
             </div>
         </div>
       </div>
@@ -103,7 +103,7 @@ async function loadPolicies() {
         const isPlatformAdmin = State.user?.role === 'super_admin';
         const endpoint = isPlatformAdmin ? '/admin/compliance/policies' : '/org/compliance/policies';
 
-        const res = await API.get(` + "`" + `${endpoint}?action=${_selectedAction}` + "`" + `);
+        const res = await API.get(`${endpoint}?action=${_selectedAction}`);
         _activePolicies = res.policies || [];
 
         renderEditor();
