@@ -307,7 +307,6 @@ const COMPANY_ADMIN_NAV = [
   { id: 'ca-notifications', icon: icon('bell'), label: 'Notifications' },
   { id: 'scm-network', icon: icon('globe'), label: 'Trust Network' },
   { id: 'scm-supplier-products', icon: icon('box'), label: 'Supplier Catalog' },
-  { id: 'scm-supplier-products', icon: icon('box'), label: 'Supplier Catalog' },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -330,7 +329,6 @@ const DOMAIN_ITEMS = {
     { id: 'scans', icon: icon('check'), label: 'Verification Logs' },
     { id: 'scm-carbon', icon: icon('globe'), label: 'Carbon Accounting' },
     { id: 'scm-network', icon: icon('globe'), label: 'Trust Network' },
-  { id: 'scm-supplier-products', icon: icon('box'), label: 'Supplier Catalog' },
   { id: 'scm-supplier-products', icon: icon('box'), label: 'Supplier Catalog' },
   ],
   'risk-protection': [
@@ -361,7 +359,6 @@ const DOMAIN_ITEMS = {
     { id: 'settings', icon: icon('lock'), label: 'Security' },
     { id: 'ca-notifications', icon: icon('bell'), label: 'Notifications' },
   { id: 'scm-network', icon: icon('globe'), label: 'Trust Network' },
-  { id: 'scm-supplier-products', icon: icon('box'), label: 'Supplier Catalog' },
   { id: 'scm-supplier-products', icon: icon('box'), label: 'Supplier Catalog' },
     { id: 'ca-integrations', icon: icon('plug'), label: 'API & Integrations' },
     { id: 'billing', icon: icon('creditCard'), label: 'Billing & Quota' },
@@ -1325,12 +1322,50 @@ function renderOrgOwnerSidebar() {
   `;
 }
 
+// ── Company Admin: Intuitive Grouped Nav ────────────────
+const CA_GROUPS = {
+  CORE: [
+    { id: 'dashboard', icon: icon('dashboard'), label: 'Dashboard' },
+    { id: 'ca-kpi-overview', icon: icon('barChart'), label: 'KPI Overview' },
+    { id: 'ca-operations', icon: icon('products'), label: 'Operations' },
+  ],
+  SCM: [
+    { id: 'scm-network', icon: icon('globe'), label: 'Trust Network' },
+    { id: 'scm-supplier-products', icon: icon('box'), label: 'Supplier Catalog' },
+  ],
+  RISK: [
+    { id: 'ca-governance', icon: icon('shield'), label: 'Governance' },
+    { id: 'ca-risk', icon: icon('alert'), label: 'Risk' },
+    { id: 'ca-identity', icon: icon('key'), label: 'Identity' },
+    { id: 'ca-audit-dashboard', icon: icon('search'), label: 'Audit Dashboard' },
+    { id: 'ca-reports', icon: icon('clipboard'), label: 'Reports & Export' },
+  ],
+  SYSTEM: [
+    { id: 'ca-notifications', icon: icon('bell'), label: 'Notifications' },
+    { id: 'ca-settings', icon: icon('settings'), label: 'Settings' },
+  ]
+};
+
 function renderCompanyAdminSidebar() {
   const brandName = State.branding?.app_name || 'TrustChecker';
   const role = getUserRole();
 
-  // Flat nav items — matching SA style
-  const navItems = COMPANY_ADMIN_NAV.map(n => renderNavItem(n)).join('');
+  const renderGroup = (title, items) => `
+    <div class="nav-section">
+      <div style="padding:16px 20px 6px 20px;font-size:0.65rem;font-weight:800;letter-spacing:0.8px;color:rgba(148,163,184,0.7);text-transform:uppercase;">${title}</div>
+      <div class="nav-section-items">
+        ${items.map(n => renderNavItem(n)).join('')}
+      </div>
+    </div>
+  `;
+
+  const navHtml = `
+    ${renderGroup('Core Intelligence', CA_GROUPS.CORE)}
+    ${renderGroup('Supply Chain', CA_GROUPS.SCM)}
+    ${renderGroup('Governance & Risk', CA_GROUPS.RISK)}
+    <div style="height:1px;background:var(--border, rgba(0,0,0,0.05));margin:12px 20px"></div>
+    ${renderGroup('System', CA_GROUPS.SYSTEM)}
+  `;
 
   return `
     <nav class="sidebar sidebar-ca" role="navigation" aria-label="Company navigation">
@@ -1343,8 +1378,8 @@ function renderCompanyAdminSidebar() {
           </div>
         </div>
       </div>
-      <div class="sidebar-nav">
-        ${navItems}
+      <div class="sidebar-nav" style="padding-top:8px;">
+        ${navHtml}
       </div>
       <div class="sidebar-footer">
         <div class="user-avatar role-${role}">${(State.user?.email || State.user?.username || 'U')[0].toUpperCase()}</div>

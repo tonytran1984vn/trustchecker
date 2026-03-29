@@ -33,8 +33,13 @@ export function renderPage() {
   };
 
   return `
-    <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:var(--gap);margin-bottom:var(--gap)">
-      ${Object.entries(d.available).map(([key, p]) => `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+      <button onclick="window.location.hash='#/pricing'" style="background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:0.8rem;display:flex;align-items:center;gap:6px">
+        <span>View Full Pricing & Add-ons</span> <span style="font-size:1.1rem">→</span>
+      </button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:var(--gap);margin-bottom:var(--gap)">
+      ${(Array.isArray(d.available) ? d.available.map(p => [p.slug || p.name.toLowerCase(), p]) : Object.entries(d.available)).map(([key, p]) => `
         <div class="card" style="border:${plan?.plan_name === key ? '2px solid ' + planColors[key] : '1px solid var(--border)'};cursor:pointer;position:relative" onclick="${plan?.plan_name !== key && State.user?.role === 'admin' ? `upgradePlan('${key}')` : ''}">
           ${plan?.plan_name === key ? '<div style="position:absolute;top:8px;right:8px;font-size:0.65rem;background:var(--emerald);color:#000;padding:2px 8px;border-radius:99px;font-weight:700">CURRENT</div>' : ''}
           <div style="padding:var(--gap);text-align:center">
@@ -72,7 +77,12 @@ export function renderPage() {
               <tr>
                 <td style="font-weight:600;text-transform:capitalize">${inv.plan_name}</td>
                 <td style="font-family:'JetBrains Mono'">$${inv.amount}</td>
-                <td><span class="badge valid">${inv.status}</span></td>
+                <td>
+                  ${inv.status === 'pending'
+                    ? `<span class="badge" style="background:var(--rose);color:white;margin-right:8px">PENDING</span>
+                       <button onclick="payInvoice('${inv.id}')" style="background:#ef4444;color:#fff;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:0.7rem;font-weight:800;text-transform:uppercase">Pay $${inv.amount}</button>`
+                    : `<span class="badge valid">${inv.status}</span>`}
+                </td>
                 <td style="font-size:0.72rem;color:var(--text-muted)">${inv.period_start?.substring(0, 7) || '—'}</td>
               </tr>
             `).join('')}
@@ -84,13 +94,27 @@ export function renderPage() {
   `;
 }
 async function upgradePlan(plan) {
-  if (!confirm(`Upgrade to ${plan}?`)) return;
+  if (!confirm(`Upgrade to ${plan}? Pending charges will be invoiced.`)) return;
   try {
     const res = await API.post('/billing/upgrade', { plan_name: plan });
-    showToast(`Upgraded to ${plan} – $${res.amount}/mo`, 'success');
-    navigate('billing');
+    if (res.status === 'pending') {
+        showToast(`Upgraded to ${plan} – Prorated Invoice generated for $${res.amount}`, 'warning');
+    } else {
+        showToast(`Upgraded to ${plan} successfully`, 'success');
+    }
+    navigate(window.location.hash.includes('governance') ? 'billing' : window.location.hash);
   } catch (e) { showToast(e.message || 'Upgrade failed', 'error'); }
+}
+
+async function payInvoice(id) {
+  if (!confirm('Simulate paying this invoice via Stripe?')) return;
+  try {
+    await API.post(`/billing/pay/${id}`);
+    showToast('Payment successful, unrestricted access restored.', 'success');
+    navigate(window.location.hash);
+  } catch(e) { showToast(e.message || 'Payment failed', 'error'); }
 }
 
 // Window exports for onclick handlers
 window.upgradePlan = upgradePlan;
+window.payInvoice = payInvoice;

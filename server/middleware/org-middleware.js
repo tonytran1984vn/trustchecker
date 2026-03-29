@@ -40,7 +40,7 @@ function orgGuard(options = {}) {
                 // Platform admin can optionally scope to an org via query param
                 if (req.query.org_id) {
                     const org = await db.get(
-                        'SELECT id, name, plan, status, feature_flags FROM organizations WHERE id = ?',
+                        'SELECT id, name, plan, status, feature_flags FROM organizations WHERE id = $1',
                         [req.query.org_id]
                     );
                     if (!org) {
@@ -81,7 +81,7 @@ function orgGuard(options = {}) {
                     o.name as org_name, o.plan, o.status as org_status, o.feature_flags
              FROM memberships m
              JOIN organizations o ON o.id = m.org_id
-             WHERE m.user_id = ? AND m.org_id = ? AND m.status = 'active'`,
+             WHERE m.user_id = $1 AND m.org_id = $2 AND m.status = 'active'`,
             [req.user.id, orgId]
         );
 
@@ -108,7 +108,7 @@ function orgGuard(options = {}) {
             }
         } else {
             // Fallback: no membership exists yet (legacy users)
-            const org = await db.get('SELECT id, name, plan, status, feature_flags FROM organizations WHERE id = ?', [
+            const org = await db.get('SELECT id, name, plan, status, feature_flags FROM organizations WHERE id = $1', [
                 orgId,
             ]);
             if (!org) {
@@ -136,9 +136,10 @@ function orgGuard(options = {}) {
  */
 async function orgQuery(req, baseSql, orgColumn = 'org_id', params = []) {
     if (req.orgId) {
+        const pLen = (params ? params.length : 0) + 1;
         const scopedSql = baseSql.includes('WHERE')
-            ? `${baseSql} AND ${orgColumn} = ? LIMIT 1000`
-            : `${baseSql} WHERE ${orgColumn} = ?`;
+            ? `${baseSql} AND ${orgColumn} = $${pLen} LIMIT 1000`
+            : `${baseSql} WHERE ${orgColumn} = $${pLen}`;
         return db.all(scopedSql, [...params, req.orgId]);
     }
     // Platform admin without specific org → no filter (cross-org view)

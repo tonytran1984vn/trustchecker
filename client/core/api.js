@@ -9,6 +9,9 @@
  */
 import { State, render } from './state.js';
 
+// BUG-19 FIX: AbortController map to cancel duplicate GET requests
+const pendingGets = new Map();
+
 /**
  * Basic JWT structure validation — checks 3 dot-separated base64 parts.
  * Does NOT verify signature (that's the server's job).
@@ -115,9 +118,26 @@ export const API = {
             headers: { 'Content-Type': 'application/json' },
         };
         if (this.token) opts.headers['Authorization'] = `Bearer ${this.token}`;
+        
+        // BUG-15 FIX: Auto-inject Idempotency Key to prevent duplicate requests/double clicks
+        if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase())) {
+            opts.headers['Idempotency-Key'] = crypto.randomUUID();
+        }
+        
         if (body) opts.body = JSON.stringify(body);
-        const res = await fetch(this.base + path, opts);
-        const data = await res.json();
+        
+        // BUG-19 FIX: Attach AbortSignal to GET requests
+        if (method === 'GET') {
+            if (pendingGets.has(path)) pendingGets.get(path).abort();
+            const controller = new AbortController();
+            pendingGets.set(path, controller);
+            opts.signal = controller.signal;
+        }
+
+        try {
+            const res = await fetch(this.base + path, opts);
+            if (method === 'GET') pendingGets.delete(path);
+            const data = await res.json();
 
         // Auto-refresh on token expiry
         if (res.status === 401 && data.code === 'TOKEN_EXPIRED' && !_isRetry && this.refreshToken) {
@@ -125,8 +145,23 @@ export const API = {
             return this.request(method, path, body, true);
         }
 
+        // Global Suspension intercept
+        if (res.status === 402 && data.invoice) {
+            import('../components/toast.js').then(m => m.showToast(`System Suspended: Please pay pending invoice ($${data.invoice.amount}) to restore access.`, 'error'));
+            // Force hash reload to trigger view reset or stay on billing
+            if (!window.location.hash.includes('settings') && !window.location.hash.includes('governance')) {
+                window.location.hash = '#/';
+            }
+            throw new Error('Payment Required');
+        }
+
         if (!res.ok) throw new Error(data.error || 'Request failed');
         return data;
+        
+        } catch (e) {
+            if (e.name === 'AbortError') throw new Error('Request cancelled');
+            throw e;
+        }
     },
 
     async doRefresh() {

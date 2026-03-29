@@ -9,6 +9,7 @@ import { icon } from '../../core/icons.js';
 import { API as api } from '../../core/api.js';
 
 let _data = null;
+let _range = '180d';
 
 const FLAG = (cc) => {
   if (!cc || cc.length !== 2) return '🌍';
@@ -35,7 +36,25 @@ export function renderPage() {
   const products = _data.top_products_by_country || [];
   const monthly = _data.monthly_geo || [];
 
-  if (!geo.length) return `<div class="exec-page"><div style="text-align:center;padding:4rem;color:var(--text-secondary)">No geographic scan data available.</div></div>`;
+  if (!geo.length) return `
+    <div class="exec-page">
+      <div class="exec-header">
+        <h1>${icon('globe', 28)} Geographic Risk — Deep Analysis</h1>
+        <div style="display:flex;align-items:center;gap:1rem">
+          <select id="geo-range-select" onchange="window._geoChangeRange(this.value)" style="padding:6px 12px;border-radius:8px;border:1px solid rgba(99,102,241,0.25);background:rgba(99,102,241,0.08);color:var(--text-primary,#e2e8f0);font-size:0.78rem;font-weight:600;cursor:pointer">
+            <option value="30d" ${_range==='30d'?'selected':''}>30 Days</option>
+            <option value="90d" ${_range==='90d'?'selected':''}>90 Days</option>
+            <option value="180d" ${_range==='180d'?'selected':''}>6 Months</option>
+            <option value="1y" ${_range==='1y'?'selected':''}>1 Year</option>
+          </select>
+        </div>
+      </div>
+      <div style="text-align:center;padding:4rem">
+        <div style="font-size:2.5rem;margin-bottom:1rem;opacity:0.3">${icon('globe', 48)}</div>
+        <div style="font-size:0.95rem;font-weight:600;margin-bottom:0.5rem;color:var(--text-primary)">No geographic data in this time range</div>
+        <div style="font-size:0.8rem;color:var(--text-secondary)">Try selecting a longer time period using the dropdown above</div>
+      </div>
+    </div>`;
 
   const totalScans = geo.reduce((s, g) => s + g.scans, 0);
   const totalFlagged = geo.reduce((s, g) => s + g.flagged, 0);
@@ -57,7 +76,15 @@ export function renderPage() {
     <div class="exec-page">
       <div class="exec-header">
         <h1>${icon('globe', 28)} Geographic Risk — Deep Analysis</h1>
-        <div class="exec-timestamp">${geo.length} countries · ${totalScans.toLocaleString()} total scans · 30-day window</div>
+        <div style="display:flex;align-items:center;gap:1rem">
+          <select id="geo-range-select" onchange="window._geoChangeRange(this.value)" style="padding:6px 12px;border-radius:8px;border:1px solid rgba(99,102,241,0.25);background:rgba(99,102,241,0.08);color:var(--text-primary,#e2e8f0);font-size:0.78rem;font-weight:600;cursor:pointer">
+            <option value="30d" ${_range==='30d'?'selected':''}>30 Days</option>
+            <option value="90d" ${_range==='90d'?'selected':''}>90 Days</option>
+            <option value="180d" ${_range==='180d'?'selected':''}>6 Months</option>
+            <option value="1y" ${_range==='1y'?'selected':''}>1 Year</option>
+          </select>
+          <div class="exec-timestamp">${geo.length} countries · ${totalScans.toLocaleString()} total scans</div>
+        </div>
       </div>
 
       <!-- Overview KPIs -->
@@ -116,7 +143,7 @@ export function renderPage() {
 
       <!-- Regional Analysis -->
       <section class="exec-section">
-        <h2 class="exec-section-title">${icon('layers', 20)} Regional Risk Clusters</h2>
+        <h2 class="exec-section-title">${icon('network', 20)} Regional Risk Clusters</h2>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
           ${Object.entries(regionData).sort((a, b) => b[1].avgFraud - a[1].avgFraud).map(([region, rd]) => {
     const riskColor = rd.avgFraud > 5 ? '#ef4444' : rd.avgFraud > 2 ? '#f59e0b' : '#22c55e';
@@ -158,7 +185,7 @@ export function renderPage() {
       <!-- Monthly Geographic Progression (NOT in overview) -->
       ${monthly.length > 1 ? `
       <section class="exec-section">
-        <h2 class="exec-section-title">${icon('clock', 20)} Monthly Geographic Progression</h2>
+        <h2 class="exec-section-title">${icon('trendingUp', 20)} Monthly Geographic Progression</h2>
         <table class="ccs-table" style="font-size:0.78rem">
           <thead><tr><th>Month</th><th>Countries</th><th>Scans</th><th>Flagged</th><th>Flag Rate</th><th>Δ Flagged</th></tr></thead>
           <tbody>
@@ -181,7 +208,7 @@ export function renderPage() {
 
       <!-- Full Country Table -->
       <section class="exec-section">
-        <h2 class="exec-section-title">${icon('list', 20)} Full Country Detail</h2>
+        <h2 class="exec-section-title">${icon('clipboard', 20)} Full Country Detail</h2>
         <div style="max-height:400px;overflow-y:auto;border:1px solid rgba(255,255,255,0.06);border-radius:10px">
         <table class="ccs-table" style="font-size:0.75rem">
           <thead style="position:sticky;top:0;background:var(--surface-color,#12122a);z-index:1">
@@ -232,11 +259,18 @@ function formatMonth(m) {
 
 async function loadData() {
   try {
-    const r = await api.get('/org-admin/owner/ccs/geo-detail');
+    const r = await api.get(`/org-admin/owner/ccs/geo-detail?range=${_range}`);
     _data = r;
     rerender();
   } catch (e) { console.error('[Heatmap]', e); }
 }
+
+window._geoChangeRange = function(val) {
+  _range = val;
+  _data = null;
+  rerender();
+  loadData();
+};
 
 function rerender() {
   const el = document.getElementById('main-content');

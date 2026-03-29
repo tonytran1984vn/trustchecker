@@ -606,9 +606,25 @@ router.put('/:id', authMiddleware, requirePermission('product:update'), async (r
         }
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
-        const { name, description, category, manufacturer, batch_number, origin_country, status } = req.body;
+        const {
+            name,
+            description,
+            category,
+            manufacturer,
+            batch_number,
+            origin_country,
+            status,
+            version,
+            carbon_footprint_kgco2e,
+        } = req.body;
+
+        // BUG-17 FIX: Require version for optimistic locking to prevent lost updates
+        if (!version) {
+            return res.status(400).json({ error: 'version is required for optimistic locking' });
+        }
 
         // BUG-02 FIX: Also add org_id to UPDATE WHERE for defense-in-depth
+        // BUG-17 FIX: Added optimistic locking via version increment
         const updateQuery =
             req.user.role !== 'super_admin' && orgId
                 ? `UPDATE products SET 
@@ -619,8 +635,10 @@ router.put('/:id', authMiddleware, requirePermission('product:update'), async (r
                 batch_number = COALESCE(?, batch_number),
                 origin_country = COALESCE(?, origin_country),
                 status = COALESCE(?, status),
+                carbon_footprint_kgco2e = COALESCE(?, carbon_footprint_kgco2e),
+                version = version + 1,
                 updated_at = NOW()
-              WHERE id = ? AND org_id = ?`
+              WHERE id = ? AND org_id = ? AND version = ?`
                 : `UPDATE products SET 
                 name = COALESCE(?, name),
                 description = COALESCE(?, description),
@@ -629,24 +647,56 @@ router.put('/:id', authMiddleware, requirePermission('product:update'), async (r
                 batch_number = COALESCE(?, batch_number),
                 origin_country = COALESCE(?, origin_country),
                 status = COALESCE(?, status),
+                carbon_footprint_kgco2e = COALESCE(?, carbon_footprint_kgco2e),
+                version = version + 1,
                 updated_at = NOW()
-              WHERE id = ?`;
-        const updateParams =
-            req.user.role !== 'super_admin' && orgId
-                ? [
-                      name,
-                      description,
-                      category,
-                      manufacturer,
-                      batch_number,
-                      origin_country,
-                      status,
-                      req.params.id,
-                      orgId,
-                  ]
-                : [name, description, category, manufacturer, batch_number, origin_country, status, req.params.id];
+              WHERE id = ? AND version = ?`;
 
-        await db.run(updateQuery, updateParams);
+        const updateParams = [
+            name,
+            description,
+            category,
+            manufacturer,
+            batch_number,
+            origin_country,
+            status,
+            carbon_footprint_kgco2e,
+            req.params.id,
+        ];
+
+        if (req.user.role !== 'super_admin' && orgId) {
+            updateParams.push(orgId);
+        }
+
+        // Append version for optimistic lock WHERE clause
+        updateParams.push(version);
+
+        const updated = await db.run(updateQuery, updateParams);
+
+        if (updated.changes === 0) {
+            return res
+                .status(409)
+                .json({ error: 'Conflict: Product was updated by another user or version mismatch.' });
+        }
+
+        // BUG 2 & 3 FIX: ESG Event Sourcing Ledger (Record Carbon change lineage)
+        if (carbon_footprint_kgco2e !== undefined && product.carbon_footprint_kgco2e !== carbon_footprint_kgco2e) {
+            await db.client.auditLog.create({
+                data: {
+                    actorId: req.user.id || 'system',
+                    action: 'CARBON_FOOTPRINT_UPDATED',
+                    entityType: 'product',
+                    entityId: req.params.id,
+                    details: {
+                        oldValue: product.carbon_footprint_kgco2e,
+                        newValue: carbon_footprint_kgco2e,
+                        reason: req.body.update_reason || 'Manual user adjustment',
+                        version: version + 1,
+                    },
+                    ipAddress: req.ip || '0.0.0.0',
+                },
+            });
+        }
 
         res.json({ message: 'Product updated', id: req.params.id });
     } catch (err) {
@@ -938,7 +988,8 @@ router.delete('/codes/:codeId', authMiddleware, requirePermission('product:delet
         }
 
         // Org check: admin can only delete their org's codes
-        if (req.user.role !== 'super_admin' && req.user.orgId && code.org_id && code.org_id !== req.user.orgId) {
+        const orgId = req.user.orgId || req.user.org_id;
+        if (req.user.role !== 'super_admin' && orgId && code.org_id && code.org_id !== orgId) {
             return res.status(403).json({ error: 'Not authorized to delete codes from another organization' });
         }
 

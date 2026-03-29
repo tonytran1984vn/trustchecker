@@ -165,6 +165,8 @@ function computeRisk(input) {
 
     const annualRevenue = Number(fin.annual_revenue) || 0;
     const brandValue = Number(fin.brand_value_estimate) || 0;
+    const isPublic = fin.is_public_company === true;
+    const marketCap = Number(fin.market_capitalization) || (isPublic ? brandValue * 5 : 0);
     const totalScans = parseInt(s30.total) || 0;
     const suspicious30 = parseInt(s30.suspicious) || 0;
     const counterfeit30 = parseInt(s30.counterfeit) || 0;
@@ -239,14 +241,18 @@ function computeRisk(input) {
     const trustScore = Math.min(parseFloat(s30.avg_trust) || 90, 100);
     const brandRiskFactor = Math.pow(1 - trustScore / 100, preset.beta);
     const incidentEscalation = 1 - Math.exp(-preset.k * pFraud);
-    const EBI = Math.round(brandValue * brandRiskFactor * incidentEscalation);
+    let EBI = Math.round(brandValue * brandRiskFactor * incidentEscalation);
+    if (isPublic && marketCap > 0) {
+        // Market Cap Wipeout Impact
+        EBI += Math.round(marketCap * Math.min(pFraud * preset.beta, 0.05));
+    }
 
     // §4 — WCRS + RFE (Sigmoid)
     const crTotal = parseInt(cr.total) || 0;
     const crNonCompliant = parseInt(cr.non_compliant) || 0;
     const crPartial = parseInt(cr.partial) || 0;
     const WCRS = crTotal > 0 ? (crNonCompliant * 1.0 + crPartial * 0.5) / crTotal : 0;
-    const enforcementProbability = _SIG(WCRS, 0.2, 12, 0.08, 0.65);
+    const enforcementProbability = _SIG(WCRS, 0.2, 12, 0.08, 0.95);
     const RFE = Math.round(WCRS * preset.avgFine * enforcementProbability * crNonCompliant);
 
     // §5 — SCRI (Cluster-Dynamic)
@@ -267,15 +273,19 @@ function computeRisk(input) {
     const TCAR = ERL + EBI + RFE - diversification;
 
     // §7 — 5-Point Scenarios
-    function calcS(fm, td, em) {
-        const sp = pFraud * fm;
+    function calcS(fm, td, em, isFatTail = false) {
+        const tailMult = isFatTail ? 2.5 : 1.0;
+        const sp = Math.min(pFraud * fm * tailMult, 1);
         const se = Math.round(revenueCovered * sp * severity);
         const st = Math.max(0, Math.min(100, trustScore + td));
-        const sb = Math.pow(1 - st / 100, preset.beta);
+        const sb = Math.pow(1 - st / 100, preset.beta * tailMult);
         const si = 1 - Math.exp(-preset.k * sp);
-        const sei = Math.round(brandValue * sb * si);
-        const senf = Math.min(_SIG(WCRS * em, 0.2, 12, 0.08, 0.65), 1);
-        const sr = Math.round(WCRS * preset.avgFine * senf * crNonCompliant);
+        let sei = Math.round(brandValue * sb * si);
+        if (isPublic && marketCap > 0) {
+            sei += Math.round(marketCap * Math.min(sp * preset.beta, isFatTail ? 0.15 : 0.05));
+        }
+        const senf = Math.min(_SIG(WCRS * em * tailMult, 0.2, 12, 0.08, 0.95), 1);
+        const sr = Math.round(WCRS * preset.avgFine * senf * crNonCompliant * tailMult);
         const sd = _div(se, sei);
         return { erl: se, ebi: sei, rfe: sr, tcar: se + sei + sr - sd };
     }
@@ -284,7 +294,7 @@ function computeRisk(input) {
         moderate: calcS(0.8, +3, 0.5),
         base: { erl: ERL, ebi: EBI, rfe: RFE, tcar: TCAR },
         stress: calcS(1.5, -10, 2.0),
-        extreme: calcS(2.5, -20, 3.0),
+        extreme: calcS(3.0, -25, 4.0, true), // Fat-Tail Event
     };
 
     // §8 — 95% CI
@@ -299,9 +309,10 @@ function computeRisk(input) {
         const oERL = Math.round(revenueCovered * pFraud * oSev);
         const oBRF = Math.pow(1 - trustScore / 100, oB);
         const oIE = 1 - Math.exp(-oK * pFraud);
-        const oEBI = Math.round(brandValue * oBRF * oIE);
-        const oRFE = Math.round(WCRS * preset.avgFine * enforcementProbability * crNonCompliant);
-        tcar_ci_low = Math.round(oERL + oEBI + oRFE - 0.3 * Math.min(oERL, oEBI));
+        let oEBI = Math.round(brandValue * oBRF * oIE);
+        if (isPublic && marketCap > 0) oEBI += Math.round(marketCap * Math.min(pFraud * oB, 0.02));
+        const oRFE = Math.round(WCRS * preset.avgFine * _SIG(WCRS, 0.2, 12, 0.08, 0.95) * crNonCompliant);
+        tcar_ci_low = Math.round(oERL + oEBI + oRFE - _div(oERL, oEBI));
 
         const pB = Math.min(3.5, cluster.b.m + _Z * cluster.b.s);
         const pK = Math.min(8.0, cluster.k.m + _Z * cluster.k.s);
@@ -310,9 +321,10 @@ function computeRisk(input) {
         const pERL = Math.round(revenueCovered * pFraud * pSev);
         const pBRF = Math.pow(1 - trustScore / 100, pB);
         const pIE = 1 - Math.exp(-pK * pFraud);
-        const pEBI = Math.round(brandValue * pBRF * pIE);
-        const pRFE = Math.round(WCRS * preset.avgFine * enforcementProbability * crNonCompliant);
-        tcar_ci_high = Math.round(pERL + pEBI + pRFE - 0.3 * Math.min(pERL, pEBI));
+        let pEBI = Math.round(brandValue * pBRF * pIE);
+        if (isPublic && marketCap > 0) pEBI += Math.round(marketCap * Math.min(pFraud * pB, 0.1));
+        const pRFE = Math.round(WCRS * preset.avgFine * _SIG(WCRS, 0.2, 12, 0.08, 0.95) * crNonCompliant);
+        tcar_ci_high = Math.round(pERL + pEBI + pRFE - _div(pERL, pEBI));
     }
 
     // Geo Risk Map
@@ -436,7 +448,7 @@ function computeRisk(input) {
             gEBI += cAdj;
         }
         const rT = gERL + gEBI + gRFE;
-        const dD = Math.round(rT * (1 - rho) * 0.15);
+        const dD = Math.round(_div(gERL, gEBI) * (1 - rho) + rT * 0.05);
         const gT = rT - dD;
 
         groupAggregated = {

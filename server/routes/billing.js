@@ -156,6 +156,49 @@ router.post('/upgrade', requirePermission('billing:manage'), async (req, res) =>
         const savingsPercent =
             p.price_monthly > 0 ? Math.round((1 - (p.price_annual || 0) / (p.price_monthly * 12)) * 100) : 0;
 
+        // -- Proration Logic (Stripe-Style) --
+        const currentActiveInfo = await db.get("SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'", [
+            req.user.id,
+        ]);
+
+        let chargeAmount = amount;
+        let invoiceStatus = 'paid';
+
+        const now = new Date();
+        const periodEnd = new Date(now);
+        if (isAnnual) periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+        else periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+        if (currentActiveInfo && Object.keys(PLANS).indexOf(currentActiveInfo.plan_name) >= 0) {
+            // Check current active invoice to find period remaining
+            const currentInvoice = await db.get(
+                "SELECT * FROM invoices WHERE user_id = ? AND plan_name = ? AND status = 'paid' ORDER BY created_at DESC LIMIT 1",
+                [req.user.id, currentActiveInfo.plan_name]
+            );
+
+            if (currentInvoice && currentInvoice.period_end) {
+                const currentPeriodEnd = new Date(currentInvoice.period_end);
+                if (currentPeriodEnd > now) {
+                    const daysRemaining = Math.max(0, Math.ceil((currentPeriodEnd - now) / (1000 * 60 * 60 * 24)));
+                    if (daysRemaining > 0) {
+                        const oldP = PLANS[currentActiveInfo.plan_name];
+                        const oldPrice = isAnnual ? oldP?.price_annual || 0 : oldP?.price_monthly || 0;
+                        const newPrice = amount;
+                        const cycleDays = isAnnual ? 365 : 30;
+
+                        // Proration math: credit unused old plan, charge unused new plan
+                        const prorationCharge = Math.max(
+                            0,
+                            Math.round((newPrice * daysRemaining) / cycleDays - (oldPrice * daysRemaining) / cycleDays)
+                        );
+                        chargeAmount = prorationCharge;
+                    }
+                }
+            }
+        }
+
+        invoiceStatus = chargeAmount > 0 ? 'pending' : 'paid';
+
         // Deactivate current plan
         await db
             .prepare("UPDATE billing_plans SET status = 'inactive' WHERE user_id = ? AND status = 'active'")
@@ -181,17 +224,12 @@ router.post('/upgrade', requirePermission('billing:manage'), async (req, res) =>
 
         // Generate invoice
         const invoiceId = uuidv4();
-        const now = new Date();
-        const periodEnd = new Date(now);
-        if (isAnnual) periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-        else periodEnd.setMonth(periodEnd.getMonth() + 1);
-
         await db.run(
             `
       INSERT INTO invoices (id, user_id, plan_name, amount, status, period_start, period_end)
-      VALUES (?, ?, ?, ?, 'paid', ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
-            [invoiceId, req.user.id, plan_name, amount, now.toISOString(), periodEnd.toISOString()]
+            [invoiceId, req.user.id, plan_name, chargeAmount, invoiceStatus, now.toISOString(), periodEnd.toISOString()]
         );
 
         // Plan comparison for the response
@@ -208,8 +246,9 @@ router.post('/upgrade', requirePermission('billing:manage'), async (req, res) =>
         res.json({
             plan_name,
             billing_cycle: isAnnual ? 'annual' : 'monthly',
-            amount,
+            amount: chargeAmount,
             invoice_id: invoiceId,
+            status: invoiceStatus,
             savings: isAnnual
                 ? { percent: savingsPercent, saved: (p.price_monthly || 0) * 12 - (p.price_annual || 0) }
                 : null,
@@ -219,6 +258,21 @@ router.post('/upgrade', requirePermission('billing:manage'), async (req, res) =>
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);
+    }
+});
+
+// ─── POST /pay/:id ──────────────────────────────────────────
+// Mock endpoint to simulate Stripe checkout / manual payment completion
+router.post('/pay/:id', requirePermission('billing:manage'), async (req, res) => {
+    try {
+        const inv = await db.get('SELECT * FROM invoices WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+        if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+        if (inv.status === 'paid') return res.status(400).json({ error: 'Invoice already paid' });
+
+        await db.run("UPDATE invoices SET status = 'paid' WHERE id = ?", [req.params.id]);
+        res.json({ message: 'Payment successful', id: req.params.id, status: 'paid' });
+    } catch (e) {
+        safeError(res, 'Payment failed', e);
     }
 });
 

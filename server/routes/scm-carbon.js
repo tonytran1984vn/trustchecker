@@ -12,6 +12,16 @@ const router = express.Router();
 const db = require('../db');
 const { authMiddleware, requireRole, requirePermission } = require('../auth');
 const engineClient = require('../engines/infrastructure/engine-client');
+const rateLimit = require('express-rate-limit');
+
+// BUG 13 FIX: Rate Limiter for compute-heavy ESG endpoints to prevent CPU DDoS
+const esgComputeLimiter = rateLimit({
+    windowMs: 15 * 1000, // 15 seconds
+    max: 5, // Limit each IP to 5 requests per window
+    message: { error: 'Too many requests to ESG compute engines. Please wait a moment.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
 const carbonEngine = require('../engines/intelligence/carbon-engine');
 const factorService = require('../engines/carbon-support').factorService;
 const { cacheMiddleware } = require('../cache');
@@ -222,7 +232,7 @@ function getOrgBOM(orgId) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // BUNDLE — Single call that returns ALL carbon dashboard data (replaces 9 calls)
 // ═══════════════════════════════════════════════════════════════════════════════
-router.get('/bundle', cacheMiddleware(180), async (req, res) => {
+router.get('/bundle', esgComputeLimiter, async (req, res) => {
     try {
         const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const { from, to } = req.query;
@@ -537,8 +547,14 @@ router.get('/bundle', cacheMiddleware(180), async (req, res) => {
         res.json({
             scope: {
                 ...scope,
-                // Override Scope 3 with real PO-based data if available
-                scope_3_po_inherited_kgCO2e: lineage.total_scope3_inherited_kgCO2e,
+                // BUG 4 FIX: Separate Corporate Scope 3 (PO) from Product Scope 3 (BOM) to prevent Double Counting
+                corporate_scope3_po_kgCO2e: lineage.total_scope3_inherited_kgCO2e,
+                product_scope3_bom_kgCO2e: (bomGraph || []).reduce(
+                    (s, b) => s + (b.quantity || 1) * (b.component_carbon || 0),
+                    0
+                ),
+                warning:
+                    'Do not aggregate Corporate PO carbon with Product BOM carbon (Overlapping supply chain layers)',
             },
             leaderboard: leaderboardData,
             report,
@@ -595,26 +611,48 @@ router.get('/footprint/:productId', async (req, res) => {
 });
 
 // ─── GET /api/scm/carbon/scope — Scope 1/2/3 breakdown ─────────────────────
-router.get('/scope', cacheMiddleware(120), async (req, res) => {
+router.get('/scope', esgComputeLimiter, async (req, res) => {
     try {
         const orgId = req.orgId || req.user?.orgId || req.user?.org_id || null;
         const { from, to } = req.query;
-        const [products, shipments, events] = await Promise.all([
+        const [products, shipments, events, bomGraph] = await Promise.all([
             getOrgProducts(orgId, from, to),
             getOrgShipments(orgId, from, to),
             getOrgEvents(orgId, from, to),
+            getOrgBOM(orgId),
         ]);
 
-        // Use actual product carbon data
-        const total_emissions_kgCO2e = products.reduce((s, p) => s + (p.carbon_footprint_kgco2e || 0), 0);
+        // BUG 9 FIX: Floating Point Aggregation (Shift left by 3, Sum, Shift right) -> (sum_milligrams / 1000)
+        let total_emissions_mgCO2e = 0;
+        products.forEach(p => {
+            total_emissions_mgCO2e += Math.round((p.carbon_footprint_kgco2e || 0) * 1000);
+        });
+        const total_emissions_kgCO2e = total_emissions_mgCO2e / 1000;
 
-        // Scope breakdown: use industry-standard ratios for mixed manufacturing/export
-        const s1Pct = 25,
-            s2Pct = 20,
-            s3Pct = 55;
-        const s1Total = Math.round((total_emissions_kgCO2e * s1Pct) / 100);
-        const s2Total = Math.round((total_emissions_kgCO2e * s2Pct) / 100);
-        const s3Total = Math.round((total_emissions_kgCO2e * s3Pct) / 100);
+        // Scope 3: Transport (Shipments) + Purchased Goods (BOM Components)
+        let transport_mgCO2e = 0;
+        (shipments || []).forEach(sh => {
+            transport_mgCO2e += Math.round((sh.distance_km || 100) * 0.12 * 1000);
+        });
+        const transport_kgCO2e = transport_mgCO2e / 1000;
+
+        let purchased_goods_mgCO2e = 0;
+        (bomGraph || []).forEach(b => {
+            purchased_goods_mgCO2e += Math.round((b.quantity || 1) * (b.component_carbon || 0) * 1000);
+        });
+        const purchased_goods_kgCO2e = purchased_goods_mgCO2e / 1000;
+
+        const s3Total = Math.round(transport_kgCO2e + purchased_goods_kgCO2e);
+
+        // Scope 1 & 2: Derive from remaining internal emissions (based on product factory data)
+        const true_total = Math.max(total_emissions_kgCO2e, s3Total);
+        const internal_emissions = true_total - s3Total;
+        const s1Total = Math.round(internal_emissions * 0.35); // Production fuel
+        const s2Total = Math.round(internal_emissions * 0.65); // Purchased electricity
+
+        const s1Pct = true_total ? Math.round((s1Total / true_total) * 100) : 0;
+        const s2Pct = true_total ? Math.round((s2Total / true_total) * 100) : 0;
+        const s3Pct = true_total ? 100 - s1Pct - s2Pct : 0;
 
         // Monthly trend from product creation dates
         const monthMap = {};

@@ -909,7 +909,10 @@ async function doMfaVerify() {
   }
 }
 
-function doLogout() {
+async function doLogout() {
+  if (window.API?.refreshToken) {
+    try { await window.API.post('/auth/logout', { refresh_token: window.API.refreshToken }); } catch(e){}
+  }
   API.clearToken();
   State.user = null;
   render();

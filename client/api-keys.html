@@ -316,11 +316,20 @@ async function login() {
     } catch(e) { showToast('Login failed: ' + e.message, 'error'); }
 }
 
-function logout() {
-    token = null;
-    localStorage.removeItem('tc_token');
-    document.getElementById('loginScreen').style.display = '';
-    document.getElementById('mainApp').style.display = 'none';
+async function logout() {
+    const refresh = sessionStorage.getItem('tc_refresh');
+    if (refresh) {
+        try {
+            await fetch('/api/auth/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: refresh })
+            });
+        } catch(e) {}
+    }
+    localStorage.clear();
+    sessionStorage.clear();
+    location.href='/login';
 }
 
 function showApp() {

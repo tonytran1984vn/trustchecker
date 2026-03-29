@@ -18,14 +18,14 @@ router.use(authMiddleware);
 // ─── GET /api/scm/inventory – Stock levels ───────────────────────────────────
 router.get('/', async (req, res) => {
     try {
-        const { location, partner_id, product_id } = req.query;
-        const orgId = req.user?.org_id || req.user?.orgId || null;
+        const { product_id, limit = 50 } = req.query;
+        const orgId = req.user?.orgId || req.user?.org_id;
         let query = `
       SELECT i.*, p.name as product_name, p.sku, pt.name as partner_name
       FROM inventory i
       LEFT JOIN products p ON i.product_id = p.id
       LEFT JOIN partners pt ON i.partner_id = pt.id
-      WHERE 1=1
+      WHERE 1=1 AND (p.status != 'archived' OR p.status IS NULL)
     `;
         const params = [];
         if (orgId) {

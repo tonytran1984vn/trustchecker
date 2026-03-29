@@ -1975,7 +1975,7 @@ router.get('/owner/financial', requireOrgOwner(), async (req, res) => {
 
         res.json({
             plan: {
-                plan_name: plan.plan_name || orgInfo?.plan || 'free',
+                plan_name: orgInfo?.plan || plan.plan_name || 'free',
                 price_monthly: plan.price_monthly || 0,
                 billing_cycle: plan.billing_cycle || 'monthly',
                 sla_level: plan.sla_level || null,
@@ -2315,13 +2315,22 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
         const fin = orgInfo?.settings?.financials || {};
 
         // ═══ ERQF v2.0 — Protected Engine (V8 Bytecode) ═══
-        require('bytenode');
-        const fs = require('fs');
-        const path = require('path');
-        const jscPath = path.join(__dirname, '..', 'engines', 'regulatory-engine', 'erqf.jsc');
-        const { computeRisk } = fs.existsSync(jscPath)
-            ? require('../engines/regulatory-engine/erqf.jsc')
-            : require('../engines/regulatory-engine/erqf');
+        let computeRisk;
+        try {
+            require('bytenode');
+            const fs = require('fs');
+            const path = require('path');
+            const jscPath = path.join(__dirname, '..', 'engines', 'regulatory-engine', 'erqf.jsc');
+            if (fs.existsSync(jscPath)) {
+                ({ computeRisk } = require('../engines/regulatory-engine/erqf.jsc'));
+            } else {
+                ({ computeRisk } = require('../engines/regulatory-engine/erqf'));
+            }
+        } catch (jscErr) {
+            // Fallback: .jsc bytecode incompatible with current Node.js version
+            logger.warn('[ERQF] Bytecode fallback to .js:', jscErr.message);
+            ({ computeRisk } = require('../engines/regulatory-engine/erqf'));
+        }
         const erqf = computeRisk({
             scanStats30d,
             scanStatsPrev,
@@ -2586,7 +2595,13 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
     try {
         const tid = req.orgId;
 
-        // Per-country summary (30 days)
+        // Configurable time range (default 180d)
+        const rangeMap = { '30d': '30 days', '90d': '90 days', '180d': '180 days', '1y': '365 days' };
+        const rangeKey = req.query.range || '180d';
+        const interval = rangeMap[rangeKey] || '180 days';
+        const rangeLabel = rangeKey === '1y' ? '1 Year' : rangeKey;
+
+        // Per-country summary
         const countries = await db.all(
             `
             SELECT geo_country as country, COUNT(*) as scans,
@@ -2596,7 +2611,7 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
                    ROUND(AVG(trust_score)::numeric, 1) as avg_trust,
                    ROUND(AVG(fraud_score)::numeric, 3) as avg_fraud
             FROM scan_events WHERE org_id = $1
-            AND scanned_at >= NOW() - INTERVAL '30 days'
+            AND scanned_at >= NOW() - INTERVAL '${interval}'
             AND geo_country IS NOT NULL AND geo_country != ''
             GROUP BY geo_country
             ORDER BY flagged DESC LIMIT 1000`,
@@ -2630,7 +2645,7 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
                        COUNT(*) as scans,
                        COUNT(*) FILTER (WHERE result IN ('suspicious','counterfeit')) as flagged
                 FROM scan_events WHERE org_id = $1
-                AND scanned_at >= NOW() - INTERVAL '12 weeks'
+                AND scanned_at >= NOW() - INTERVAL '${interval}'
                 AND geo_country = ANY($2)
                 GROUP BY geo_country, DATE_TRUNC('week', scanned_at)
                 ORDER BY week ASC LIMIT 1000`,
@@ -2660,7 +2675,7 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
             FROM scan_events se
             JOIN products p ON p.id = se.product_id
             WHERE p.org_id = $1 AND se.result IN ('suspicious','counterfeit')
-            AND se.scanned_at >= NOW() - INTERVAL '30 days'
+            AND se.scanned_at >= NOW() - INTERVAL '${interval}'
             AND se.geo_country IS NOT NULL AND se.geo_country != ''
             GROUP BY se.geo_country, p.name
             ORDER BY flags DESC
@@ -2696,6 +2711,8 @@ router.get('/owner/ccs/geo-detail', requireExecutiveAccess(), async (req, res) =
             flagged: parseInt(m.flagged) || 0,
         }));
 
+        result.range = rangeKey;
+        result.range_label = rangeLabel;
         res.json(result);
     } catch (err) {
         logger.error('[CCS] Geo detail error:', err);
@@ -2857,6 +2874,8 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
         const fin = org?.settings?.financials || {};
         const annualRevenue = Number(fin.annual_revenue) || 0;
         const platformCost = Number(fin.platform_cost) || 6000;
+        const cacEstimate = Number(fin.cac_estimate) || 10;
+        const salesRecoveryRate = Number(fin.recovery_rate) || 0.3;
 
         const totalScans = parseInt(scanTotals?.total) || 0;
         const authenticScans = parseInt(scanTotals?.authentic) || 0;
@@ -2870,12 +2889,16 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
         const estimatedUnits = Number(fin.estimated_units_ytd) || totalScans || 1;
         const avgUnitValue = annualRevenue / estimatedUnits;
 
-        // Detection Value = counterfeits caught × avg unit value × recovery multiplier
-        // Each counterfeit caught prevents ~1 unit of revenue loss
-        const detectionValue = Math.round(counterfeitTotal * avgUnitValue);
+        // Detection Value = counterfeits caught × avg unit value × sales recovery rate
+        // Adjusted for cannibalization (not every fake stopped equates to a real sale)
+        const detectionValue = Math.round(counterfeitTotal * avgUnitValue * salesRecoveryRate);
+
+        // Marketing CRM Value = authentic scans × estimated CAC
+        // 1st-party data acquisition value from verified scans
+        const marketingValue = Math.round(authenticScans * cacEstimate);
 
         // Revenue protected = estimated fraud loss avoided
-        // fraud_rate × revenue × detection_effectiveness
+        // fraud_rate × revenue × authentication rate
         const fraudRate = totalScans > 0 ? (counterfeitTotal + suspiciousTotal) / totalScans : 0;
         const protectedRevenue = Math.round(annualRevenue * fraudRate * authRate);
 
@@ -2888,7 +2911,8 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
         const costSavings = Math.round(totalScans * manualCostPerCheck);
 
         // ROI = total value generated / platform cost
-        const totalValue = detectionValue + costSavings;
+        // Combining Detection (Sales Recovery), Operational Savings, and Marketing Lead generation
+        const totalValue = detectionValue + costSavings + marketingValue;
         const roiMultiple = platformCost > 0 ? Math.round((totalValue / platformCost) * 10) / 10 : 0;
 
         // Months since launch
@@ -2903,6 +2927,9 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
             counterfeits_detected: counterfeitTotal,
             suspicious_flagged: suspiciousTotal,
             detection_value: detectionValue,
+            marketing_value: marketingValue,
+            cost_savings: costSavings,
+            total_value: totalValue,
             cost_per_detection: costPerDetection,
             platform_cost: platformCost,
             roi_multiple: roiMultiple,
@@ -2910,9 +2937,10 @@ router.get('/owner/ccs/roi', requireExecutiveAccess(), async (req, res) => {
             total_scans: totalScans,
             avg_detection_days: parseFloat(firstDetection?.avg_days) || 0,
             months_active: monthsSinceLaunch,
-            cost_savings: costSavings,
             manual_cost_per_check: manualCostPerCheck,
             avg_unit_value: Math.round(avgUnitValue * 100) / 100,
+            sales_recovery_rate: salesRecoveryRate,
+            cac_estimate: cacEstimate,
         };
 
         // Full detail: monthly progression + category breakdown
@@ -3272,6 +3300,7 @@ router.get('/owner/ccs/valuation', requireExecutiveAccess(), async (req, res) =>
         const ebitda = fin.ebitda || 0;
         const baseMultiple = fin.ev_multiple || 8;
         const brandValue = fin.brand_value_estimate || 0;
+        const industryType = fin.industry_type || 'luxury'; // Default fallback
 
         // Governance Maturity Score (0-100)
         const compScore = compStats?.total > 0 ? parseInt(compStats.compliant) / parseInt(compStats.total) : 0;
@@ -3290,8 +3319,21 @@ router.get('/owner/ccs/valuation', requireExecutiveAccess(), async (req, res) =>
                 consentRate * 15 // GDPR consent (15%)
         );
 
-        // Governance Premium Multiplier (0.8x to 1.2x based on governance score)
-        const govPremium = 0.8 + (governanceScore / 100) * 0.4;
+        // Governance Premium Multiplier (Interpolated based on Industry Risk Cluster)
+        const riskClusters = {
+            pharmaceutical: { lo: 0.6, hi: 1.3 }, // Life-critical (High binary risk)
+            medical: { lo: 0.6, hi: 1.3 },
+            aerospace: { lo: 0.6, hi: 1.3 },
+            finance: { lo: 0.7, hi: 1.25 },
+            technology: { lo: 0.7, hi: 1.25 },
+            luxury: { lo: 0.75, hi: 1.25 },
+            electronics: { lo: 0.75, hi: 1.25 },
+            retail: { lo: 0.85, hi: 1.15 },
+            fmcg: { lo: 0.85, hi: 1.15 },
+            industrial: { lo: 0.9, hi: 1.1 },
+        };
+        const activeCluster = riskClusters[industryType.toLowerCase()] || { lo: 0.8, hi: 1.2 };
+        const govPremium = activeCluster.lo + (governanceScore / 100) * (activeCluster.hi - activeCluster.lo);
 
         // EV Calculations
         const adjustedMultiple = Math.round(baseMultiple * govPremium * 100) / 100;

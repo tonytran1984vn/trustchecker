@@ -244,6 +244,11 @@ class PrismaBackend {
      * Connection safety: cancel-race guard, query cancellation, slow query logging.
      */
     async _withRLS(fn) {
+        // Capture context BEFORE awaiting the connection pool
+        // pg pool connection queuing can drop AsyncLocalStorage context
+        const ctx = safeGetContext();
+        const orgId = ctx.orgId || '';
+
         const client = await this._pool.connect();
         let released = false;
         let finished = false; // Cancel-race guard: prevents cancelling wrong query after PID reuse
@@ -251,14 +256,10 @@ class PrismaBackend {
         const queryStart = Date.now();
 
         try {
-            // Read org context from AsyncLocalStorage (per-request isolated)
-            const ctx = safeGetContext();
-            const orgId = ctx.orgId || '';
-
             if (orgId) {
-                await client.query('SET app.current_org = $1', [orgId]);
+                await client.query("SELECT set_config('app.current_org', $1, false)", [orgId]);
             } else {
-                await client.query("SET app.current_org = ''");
+                await client.query("SELECT set_config('app.current_org', '', false)");
             }
 
             // Application-level timeout with query cancellation + race guard

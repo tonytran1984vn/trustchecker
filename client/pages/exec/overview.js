@@ -317,7 +317,7 @@ function renderCCS() {
         <div class="ccs-ev-card ccs-ev-uplift">
           <div class="ccs-ev-label">EV Uplift</div>
           <div class="ccs-ev-value">${ev.ev_uplift >= 0 ? '+' : ''}${fmtMoney(ev.ev_uplift)}</div>
-          <div class="ccs-ev-sub">Governance premium: ${((gov.premium_multiplier || 1) * 100 - 100).toFixed(1)}%</div>
+          <div class="ccs-ev-sub">Governance premium: ${((gov.premium_multiplier || 1) * 100 - 100).toFixed(1)}% · ${gov.industry_cluster_range ? `[${gov.industry_cluster_range.lo}x–${gov.industry_cluster_range.hi}x]` : ''}</div>
         </div>
         <div class="ccs-ev-card ccs-ev-rar">
           <div class="ccs-ev-label">Risk-Adjusted Revenue</div>
@@ -344,8 +344,8 @@ function renderCCS() {
 
       ${eff.roi > 0 ? `
       <div class="exec-card" style="margin-top:0.75rem">
-        <h3>${icon('creditCard', 18)} Capital Efficiency</h3>
-        <div class="ccs-metric-grid">
+        <h3>${icon('star', 18)} Valuation Yield</h3>
+        <div class="ccs-metric-grid" style="grid-template-columns:repeat(3,1fr)">
           <div class="ccs-metric">
             <div class="ccs-metric-value">${fmtMoney(eff.platform_cost)}</div>
             <div class="ccs-metric-label">Platform Investment</div>
@@ -356,11 +356,7 @@ function renderCCS() {
           </div>
           <div class="ccs-metric">
               <div class="ccs-metric-value" style="color:#6366f1">${eff.roi}x</div>
-            <div class="ccs-metric-label">ROI</div>
-          </div>
-          <div class="ccs-metric">
-            <div class="ccs-metric-value">${eff.payback_months}mo</div>
-            <div class="ccs-metric-label">Payback Period</div>
+            <div class="ccs-metric-label">Equity Multiple</div>
           </div>
         </div>
       </div>` : ''}
@@ -426,14 +422,37 @@ function renderCCS() {
           <label>Brand Value Estimate (USD)</label>
           <input type="number" id="ccs-fin-brand" value="${fin.brand_value || ''}" placeholder="e.g. 15000000">
 
-          <div style="font-size:0.7rem;opacity:0.6;margin:1rem 0 0.75rem;text-transform:uppercase;letter-spacing:1px;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.75rem">Operational Parameters</div>
-          <label>Estimated Units Sold (YTD)</label>
-          <input type="number" id="ccs-fin-units" value="${fin.estimated_units_ytd || ''}" placeholder="e.g. 500000 · Leave blank for auto">
-          <label>Manual Cost per Check (USD)</label>
-          <input type="number" id="ccs-fin-manual-cost" value="${fin.manual_cost_per_check || 5}" step="0.5" placeholder="e.g. 5">
-          <label>Fraud Recovery Rate (0–1)</label>
-          <input type="number" id="ccs-fin-recovery" value="${fin.recovery_rate || 0.2}" step="0.05" min="0" max="1" placeholder="e.g. 0.2">
-          <div style="font-size:0.68rem;opacity:0.4;margin-top:0.3rem">Industry-specific β, k, avgFine are now configured per Business Unit via Edit BUs.</div>
+          <div style="font-size:0.7rem;opacity:0.6;margin:1rem 0 0.75rem;text-transform:uppercase;letter-spacing:1px;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.75rem">Operational & ROI Parameters</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
+            <div>
+              <label>Estimated Units Sold (YTD)</label>
+              <input type="number" id="ccs-fin-units" value="${fin.estimated_units_ytd || ''}" placeholder="Leave blank for auto">
+            </div>
+            <div>
+              <label>Manual QA Cost/Check ($)</label>
+              <input type="number" id="ccs-fin-manual-cost" value="${fin.manual_cost_per_check || 5}" step="0.5" placeholder="e.g. 5">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <label>Sales Recovery Rate (0–1)</label>
+              <input type="number" id="ccs-fin-recovery" value="${fin.recovery_rate || 0.3}" step="0.05" min="0" max="1" placeholder="e.g. 0.3">
+            </div>
+            <div>
+              <label>Est. Marketing CAC ($/Lead)</label>
+              <input type="number" id="ccs-fin-cac" value="${fin.cac_estimate || 10}" step="1" min="0" placeholder="e.g. 10">
+            </div>
+          </div>
+          <label style="margin-top:10px">Industry Risk Cluster</label>
+          <select id="ccs-fin-industry" style="width:100%;padding:8px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:0.8rem;margin-bottom:8px">
+            <option value="pharmaceutical" ${fin.industry_type==='pharmaceutical'?'selected':''}>Pharmaceutical / Medical (High Binary Risk)</option>
+            <option value="luxury" ${fin.industry_type==='luxury'?'selected':''}>Luxury Goods (High Brand Sensitivity)</option>
+            <option value="finance" ${fin.industry_type==='finance'?'selected':''}>Financial Services (High Regulated)</option>
+            <option value="retail" ${(fin.industry_type==='retail'||!fin.industry_type)?'selected':''}>Apparel / Retail (Mass Market)</option>
+            <option value="fmcg" ${fin.industry_type==='fmcg'?'selected':''}>FMCG (Commodity)</option>
+          </select>
+
+          <div style="font-size:0.68rem;opacity:0.4;margin-top:0.3rem">Industry-specific β, k, avgFine are now configured per Business Unit via Edit BUs. Sales Recovery Rate limits detection value cannibalization.</div>
         </div>
         <div class="ccs-modal-footer">
           <button onclick="document.getElementById('ccs-fin-modal').style.display='none'" class="ccs-btn-secondary">Cancel</button>
@@ -450,7 +469,7 @@ function renderTrendChart() {
   if (!t.length) return '';
   const maxTCAR = Math.max(...t.map(d => d.tcar), 1);
   const maxPF = Math.max(...t.map(d => d.pFraud), 1);
-  const W = 680, H = 200, PAD = 40;
+  const W = 960, H = 220, PAD = 45;
   const cw = (W - PAD * 2) / Math.max(t.length - 1, 1);
   const tcarPts = t.map((d, i) => `${PAD + i * cw},${H - PAD - ((d.tcar / maxTCAR) * (H - PAD * 2))}`).join(' ');
   const pfPts = t.map((d, i) => `${PAD + i * cw},${H - PAD - ((d.pFraud / maxPF) * (H - PAD * 2))}`).join(' ');
@@ -465,13 +484,13 @@ function renderTrendChart() {
   const trendIcon = trendDir === 'improving' ? '↘' : trendDir === 'worsening' ? '↗' : '→';
 
   return `
-  <section class="ccs-section">
-    <div class="ccs-section-header">
-      <h3>${icon('trending-up', 18)} Risk Trend (12 Weeks)</h3>
+  <section class="exec-section">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <h2 class="exec-section-title" style="margin:0">${icon('trendingUp', 20)} Risk Trend (12 Weeks)</h2>
       <span style="font-size:0.75rem;padding:3px 10px;border-radius:20px;background:${trendColor}22;color:${trendColor};font-weight:600">${trendIcon} ${trendDir}</span>
     </div>
-    <div style="overflow-x:auto">
-      <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;margin:0 auto;display:block">
+    <div class="exec-card" style="padding:1.25rem">
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" preserveAspectRatio="xMidYMid meet">
         <defs>
           <linearGradient id="tcar-grad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="#6366f1" stop-opacity="0.3"/>
@@ -497,10 +516,10 @@ function renderTrendChart() {
         <text x="${PAD - 4}" y="${H - PAD}" text-anchor="end" fill="#888" font-size="9">$0</text>
         <text x="${W - PAD + 4}" y="${PAD + 4}" text-anchor="start" fill="#f59e0b" font-size="9">${maxPF}%</text>
       </svg>
-    </div>
-    <div style="display:flex;gap:1.5rem;justify-content:center;margin-top:0.5rem;font-size:0.72rem;opacity:0.7">
-      <span><span style="display:inline-block;width:16px;height:3px;background:#6366f1;vertical-align:middle;margin-right:4px;border-radius:2px"></span>TCAR ($)</span>
-      <span><span style="display:inline-block;width:16px;height:3px;background:#f59e0b;vertical-align:middle;margin-right:4px;border-radius:2px;border-top:2px dashed #f59e0b;height:0"></span>P(Fraud) %</span>
+      <div style="display:flex;gap:1.5rem;justify-content:center;margin-top:0.75rem;font-size:0.72rem;opacity:0.7">
+        <span><span style="display:inline-block;width:16px;height:3px;background:#6366f1;vertical-align:middle;margin-right:4px;border-radius:2px"></span>TCAR ($)</span>
+        <span><span style="display:inline-block;width:16px;height:3px;background:#f59e0b;vertical-align:middle;margin-right:4px;border-radius:2px;border-top:2px dashed #f59e0b;height:0"></span>P(Fraud) %</span>
+      </div>
     </div>
   </section>`;
 }
@@ -509,8 +528,8 @@ function renderTrendChart() {
 function renderAlertFeed() {
   const al = (_alerts || {}).alerts || [];
   if (!al.length) return `
-  <section class="ccs-section">
-    <div class="ccs-section-header"><h3>${icon('bell', 18)} Intelligence Alerts</h3></div>
+  <section class="exec-section">
+    <h2 class="exec-section-title">${icon('bell', 20)} Intelligence Alerts</h2>
     <div style="text-align:center;padding:1.5rem;opacity:0.5;font-size:0.85rem">${icon('check-circle', 24)}<br>No active alerts — all systems nominal</div>
   </section>`;
 
@@ -523,9 +542,9 @@ function renderAlertFeed() {
 
   const shown = al.slice(0, 5);
   return `
-  <section class="ccs-section">
-    <div class="ccs-section-header">
-      <h3>${icon('bell', 18)} Intelligence Alerts</h3>
+  <section class="exec-section">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+      <h2 class="exec-section-title" style="margin:0">${icon('bell', 20)} Intelligence Alerts</h2>
       <span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:2px 10px;border-radius:20px;font-size:0.72rem;font-weight:600">${al.length} active</span>
     </div>
     <div style="display:flex;flex-direction:column;gap:0.5rem">
@@ -570,9 +589,9 @@ function renderRiskHeatmap() {
   const top3 = sorted.slice(0, 3);
 
   return `
-  <section class="ccs-section">
-    <div class="ccs-section-header">
-      <h3>${icon('globe', 18)} Geographic Risk Heatmap</h3>
+  <section class="exec-section">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h2 class="exec-section-title" style="margin:0">${icon('globe', 20)} Geographic Risk Heatmap</h2>
       <span style="font-size:0.7rem;opacity:0.5">${geo.length} regions · ${totalScans.toLocaleString()} scans</span>
     </div>
 
@@ -665,11 +684,8 @@ function renderROIDashboard() {
   const detSpark = sparkline(t.map(w => w.counterfeit || 0), '#f59e0b');
 
   return `
-  <section class="ccs-section">
-    <div class="ccs-section-header">
-      <h3>${icon('bar-chart-2', 18)} Platform ROI</h3>
-      <button onclick="window._exportBoardReport()" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;padding:6px 16px;border-radius:8px;font-size:0.72rem;cursor:pointer;font-weight:600;box-shadow:0 2px 8px rgba(99,102,241,0.3);transition:transform 0.15s" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">📄 Export Board Report</button>
-    </div>
+  <section class="exec-section">
+    <h2 class="exec-section-title">${icon('barChart', 20)} Platform ROI</h2>
 
     <!-- 2×2 Premium Card Grid -->
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:0.5rem">
@@ -708,34 +724,49 @@ function renderROIDashboard() {
         </div>
       </div>
 
-      <!-- Detection Value -->
+      <!-- Recovery Value (Sales Recovery) -->
       <div style="background:linear-gradient(135deg,rgba(245,158,11,0.08),rgba(245,158,11,0.02));border:1px solid rgba(245,158,11,0.2);border-radius:14px;padding:16px;position:relative;overflow:hidden">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
           <div style="width:32px;height:32px;border-radius:8px;background:rgba(245,158,11,0.15);display:flex;align-items:center;justify-content:center;font-size:1.1rem">💰</div>
-          <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;opacity:0.6;font-weight:600">Detection Value</span>
+          <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;opacity:0.6;font-weight:600">Recovery Value</span>
         </div>
         <div style="display:flex;align-items:flex-end;justify-content:space-between">
           <div>
             <div style="font-size:1.5rem;font-weight:800;color:#f59e0b;letter-spacing:-0.5px">${fmtMoney(r.detection_value)}</div>
-            <div style="font-size:0.68rem;opacity:0.5;margin-top:2px">$${r.cost_per_detection || 0} per detection</div>
+            <div style="font-size:0.68rem;opacity:0.5;margin-top:2px">Sales Recovery: ${((r.sales_recovery_rate||0.3)*100).toFixed(0)}%</div>
           </div>
           <div style="flex-shrink:0">${detSpark}</div>
         </div>
       </div>
 
-      <!-- ROI Multiple -->
-      <div style="background:linear-gradient(135deg,rgba(99,102,241,0.1),rgba(139,92,246,0.05));border:1px solid rgba(99,102,241,0.25);border-radius:14px;padding:16px;position:relative;overflow:hidden">
+      <!-- Marketing Lead Value -->
+      <div style="background:linear-gradient(135deg,rgba(16,185,129,0.08),rgba(16,185,129,0.02));border:1px solid rgba(16,185,129,0.2);border-radius:14px;padding:16px;position:relative;overflow:hidden">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <div style="width:32px;height:32px;border-radius:8px;background:rgba(99,102,241,0.15);display:flex;align-items:center;justify-content:center;font-size:1.1rem">📈</div>
-          <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;opacity:0.6;font-weight:600">ROI Multiple</span>
+          <div style="width:32px;height:32px;border-radius:8px;background:rgba(16,185,129,0.15);display:flex;align-items:center;justify-content:center;font-size:1.1rem">🎯</div>
+          <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;opacity:0.6;font-weight:600">Marketing Leads</span>
         </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div style="font-size:1.8rem;font-weight:900;background:linear-gradient(135deg,#6366f1,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-1px">${r.roi_multiple || 0}x</div>
-          <div style="background:rgba(99,102,241,0.1);padding:3px 10px;border-radius:20px;font-size:0.65rem;font-weight:600;color:#a78bfa">Payback: ${r.payback_months || 0}mo</div>
+        <div style="display:flex;align-items:flex-end;justify-content:space-between">
+          <div>
+            <div style="font-size:1.5rem;font-weight:800;color:#10b981;letter-spacing:-0.5px">${fmtMoney(r.marketing_value)}</div>
+            <div style="font-size:0.68rem;opacity:0.5;margin-top:2px">${Math.round((r.marketing_value || 0) / (r.cac_estimate || 1)).toLocaleString()} Leads · $${r.cac_estimate || 10} CAC</div>
+          </div>
+          <div style="flex-shrink:0">${tcarSpark}</div>
         </div>
-        <div style="font-size:0.65rem;opacity:0.4;margin-top:6px">Platform cost: $${(r.platform_cost || 0).toLocaleString()} · ${r.months_active || 0} months active</div>
       </div>
 
+    </div>
+
+    <!-- Total Value Generated (Operational ROI) -->
+    <div style="margin-top:10px;background:linear-gradient(135deg,rgba(99,102,241,0.1),rgba(139,92,246,0.05));border:1px solid rgba(99,102,241,0.25);border-radius:14px;padding:16px;position:relative;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div style="width:32px;height:32px;border-radius:8px;background:rgba(99,102,241,0.15);display:flex;align-items:center;justify-content:center;font-size:1.1rem">📈</div>
+        <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:1px;opacity:0.6;font-weight:600">Total Value Generated (Operational ROI)</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:1.8rem;font-weight:900;background:linear-gradient(135deg,#6366f1,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-1px">${fmtMoney(r.total_value)}</div>
+        <div style="background:rgba(99,102,241,0.1);padding:3px 10px;border-radius:20px;font-size:0.65rem;font-weight:600;color:#a78bfa">ROI: ${r.roi_multiple || 0}x</div>
+      </div>
+      <div style="font-size:0.65rem;opacity:0.4;margin-top:6px">Payback: ${r.payback_months || 0}mo · Platform cost: $${(r.platform_cost || 0).toLocaleString()}</div>
     </div>
 
     <!-- Protection Coverage Footer -->

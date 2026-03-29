@@ -90,6 +90,25 @@ async function authMiddleware(req, res, next) {
             }
         }
 
+        // Global System Suspension: Block if any pending invoice exists
+        if (!req.originalUrl.startsWith('/api/billing') && !req.originalUrl.startsWith('/api/auth')) {
+            try {
+                const pendingInvoice = await db.get(
+                    "SELECT id, amount, plan_name FROM invoices WHERE user_id = ? AND status = 'pending' LIMIT 1",
+                    [decoded.id]
+                );
+                if (pendingInvoice) {
+                    return res.status(402).json({
+                        error: 'Payment Required',
+                        message: 'Your system access is temporarily suspended due to a pending invoice.',
+                        invoice: pendingInvoice,
+                    });
+                }
+            } catch (billingErr) {
+                console.warn(`[Auth] Pending invoice check failed: ${billingErr.message}`);
+            }
+        }
+
         next();
     } catch (err) {
         if (err.name === 'TokenExpiredError') {

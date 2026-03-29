@@ -69,6 +69,8 @@ const PLANS = {
 // Overage pricing tiers
 const USAGE_PRICING = {
     scans: {
+        name: 'Security Scans',
+        unit: 'scan',
         tiers: [
             { up_to: 1000, price: 0.01 },
             { up_to: 10000, price: 0.008 },
@@ -77,6 +79,8 @@ const USAGE_PRICING = {
         ],
     },
     nft_mints: {
+        name: 'NFT Details',
+        unit: 'mint',
         tiers: [
             { up_to: 100, price: 0.5 },
             { up_to: 1000, price: 0.35 },
@@ -84,6 +88,8 @@ const USAGE_PRICING = {
         ],
     },
     carbon_calcs: {
+        name: 'Carbon Computations',
+        unit: 'calculation',
         tiers: [
             { up_to: 500, price: 0.05 },
             { up_to: 5000, price: 0.03 },
@@ -91,6 +97,8 @@ const USAGE_PRICING = {
         ],
     },
     api_calls: {
+        name: 'API Execution',
+        unit: 'call',
         tiers: [
             { up_to: 10000, price: 0.001 },
             { up_to: 100000, price: 0.0008 },

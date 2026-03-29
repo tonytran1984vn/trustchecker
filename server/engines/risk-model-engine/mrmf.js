@@ -779,24 +779,35 @@ class MRMFEngine {
         // Model age factor: increases with age (max at 365 days → 1.0)
         const age_factor = Math.min(1.0, model_age_days / 365);
 
-        // Composite residual risk (0-100)
-        const rawScore =
-            drift_index * RESIDUAL_RISK_WEIGHTS.drift_index * 400 +
-            fp_volatility * RESIDUAL_RISK_WEIGHTS.fp_volatility * 5000 +
-            bias_variance * RESIDUAL_RISK_WEIGHTS.bias_variance * 1000 +
-            override_rate * RESIDUAL_RISK_WEIGHTS.override_rate * 5000 +
-            age_factor * RESIDUAL_RISK_WEIGHTS.model_age_factor * 100;
+        // BUG 6: Normalize inputs (0 to 1 scale) based on acceptable thresholds instead of raw arbitrary multipliers
+        const driftRisk = Math.min(1, drift_index / 0.5); // Max risk if drift >= 0.5
+        const fpRisk = Math.min(1, fp_volatility / 0.05); // Max risk if volatility >= 5%
+        const biasRisk = Math.min(1, bias_variance / 0.2); // Max risk if bias >= 20%
+        const overrideRisk = Math.min(1, override_rate / 0.05); // Max risk if overrides >= 5%
 
-        const score = Math.min(100, Math.round(rawScore * 10) / 10);
-        const grade = score > 70 ? 'High' : score > 50 ? 'Moderate' : 'Controlled';
-        const cro_review = score > 70;
+        // Weighted composite risk ratio (0 to 1)
+        const weightedSum =
+            driftRisk * RESIDUAL_RISK_WEIGHTS.drift_index +
+            fpRisk * RESIDUAL_RISK_WEIGHTS.fp_volatility +
+            biasRisk * RESIDUAL_RISK_WEIGHTS.bias_variance +
+            overrideRisk * RESIDUAL_RISK_WEIGHTS.override_rate +
+            age_factor * RESIDUAL_RISK_WEIGHTS.model_age_factor;
+
+        // Apply Logistic Sigmoid function for smooth scaling: 100 / (1 + e^(-k(x - x0)))
+        const k_curve = 8;
+        const x_mid = 0.5;
+        const sigmoidScore = 100 / (1 + Math.exp(-k_curve * (weightedSum - x_mid)));
+
+        const score = Math.max(0, Math.min(100, Math.round(sigmoidScore * 10) / 10));
+        const grade = score > 75 ? 'Critical' : score > 60 ? 'High' : score > 40 ? 'Moderate' : 'Controlled';
+        const cro_review = score > 75;
 
         return {
             title: 'Residual Risk Score',
             score,
             grade,
             cro_review_required: cro_review,
-            formula: 'drift×0.25 + fp_vol×0.20 + bias×0.15 + override×0.20 + age×0.20',
+            formula: 'Sigmoid( weighted_sum(normalized_factors) )',
             inputs: {
                 drift_index,
                 fp_volatility,

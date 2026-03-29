@@ -21,8 +21,10 @@ export function renderPage() {
   const fmtM = fmtUSD;
   const fmtFull = fmtUSD;
 
-  const totalValue = (r.detection_value || 0) + (r.cost_savings || 0);
+  const totalValue = (r.detection_value || 0) + (r.cost_savings || 0) + (r.marketing_value || 0);
   const dvPct = totalValue > 0 ? Math.round((r.detection_value || 0) / totalValue * 100) : 0;
+  const mvPct = totalValue > 0 ? Math.round((r.marketing_value || 0) / totalValue * 100) : 0;
+  const csPct = totalValue > 0 ? 100 - dvPct - mvPct : 0;
 
   // Monthly value for projection
   const monthlyAvgValue = r.months_active > 0 ? totalValue / r.months_active : 0;
@@ -52,11 +54,13 @@ export function renderPage() {
       <!-- Value Breakdown -->
       <section class="exec-section">
         <h2 class="exec-section-title">${icon('layers', 20)} Value Breakdown</h2>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px">
           ${valueCard('Detection Value', r.detection_value, dvPct, '#22c55e',
-    `Counterfeits: ${fmtNum(r.counterfeits_detected || 0)} · Unit value: ${fmtFull(r.avg_unit_value)} · Formula: counterfeits × unit value`)}
-          ${valueCard('Cost Savings', r.cost_savings, 100 - dvPct, '#6366f1',
-      `Scans: ${fmtNum(r.total_scans || 0)} · Manual cost: $${r.manual_cost_per_check || 5}/check · Formula: scans × manual cost`)}
+    `Counterfeits: ${fmtNum(r.counterfeits_detected || 0)} · Avg Unit: ${fmtFull(r.avg_unit_value)} · Recovery: ${((r.sales_recovery_rate || 0.3) * 100).toFixed(0)}%`)}
+          ${valueCard('Marketing Lead Value', r.marketing_value, mvPct, '#f59e0b',
+    `Authentic Scans: ${fmtNum(Math.round((r.marketing_value || 0) / (r.cac_estimate || 1)))} · Est CAC: $${r.cac_estimate || 10}/lead`)}
+          ${valueCard('Operational Savings', r.cost_savings, csPct, '#6366f1',
+      `Manual QA Scans: ${fmtNum(r.total_scans || 0)} · Labor cost: $${r.manual_cost_per_check || 5}/check`)}
         </div>
       </section>
 

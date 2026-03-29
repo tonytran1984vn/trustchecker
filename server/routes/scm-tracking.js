@@ -600,8 +600,12 @@ router.post('/batches/:id/recall', authMiddleware, requirePermission('batch:mana
         const affectedShipments = await db.all("SELECT * FROM shipments WHERE batch_id = ? AND status != 'delivered'", [
             req.params.id,
         ]);
-        for (const s of affectedShipments) {
-            await db.prepare("UPDATE shipments SET status = 'recalled' WHERE id = ?").run(s.id);
+
+        // BUG-13 FIX: Replaced N+1 query loop with a bulk UPDATE statement
+        if (affectedShipments.length > 0) {
+            await db.run("UPDATE shipments SET status = 'recalled' WHERE batch_id = ? AND status != 'delivered'", [
+                req.params.id,
+            ]);
         }
 
         // Find downstream partners

@@ -76,23 +76,32 @@ async function dualWriteProductInTx(tx, data) {
         return;
     }
 
-    const { id, name, orgId, sku, category, description, origin_country, manufacturer } = data;
+    const { id, name, orgId, sku, category, description, origin_country, manufacturer, product_capabilities } = data;
+    const defaultCaps = JSON.stringify({
+        can_buy: true,
+        can_sell: true,
+        can_manufacture: false,
+        can_consume: true,
+        can_stock: true,
+        can_transfer: true,
+    });
+    const capsJson = product_capabilities ? JSON.stringify(product_capabilities) : defaultCaps;
 
     // 1. product_definitions (idempotent via ON CONFLICT)
     await tx.run(
-        `INSERT INTO product_definitions (id, name, brand_org_id, category, description, origin_country, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW(), NOW())
+        `INSERT INTO product_definitions (id, name, brand_org_id, category, description, origin_country, status, product_capabilities, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, NOW(), NOW())
          ON CONFLICT (id) DO NOTHING`,
-        [id, name, orgId || 'UNKNOWN_ORG', category || '', description || '', origin_country || '']
+        [id, name, orgId || 'UNKNOWN_ORG', category || '', description || '', origin_country || '', capsJson]
     );
 
     // 2. product_catalogs (deterministic ID for idempotency)
     const catalogId = id + '_catalog';
     await tx.run(
-        `INSERT INTO product_catalogs (id, org_id, product_definition_id, sku, status, created_at)
-         VALUES ($1, $2, $3, $4, 'active', NOW())
+        `INSERT INTO product_catalogs (id, org_id, product_definition_id, sku, status, product_capabilities, created_at)
+         VALUES ($1, $2, $3, $4, 'active', $5, NOW())
          ON CONFLICT (id) DO NOTHING`,
-        [catalogId, orgId || 'UNKNOWN_ORG', id, sku || '']
+        [catalogId, orgId || 'UNKNOWN_ORG', id, sku || '', capsJson]
     );
 
     stats.product_success++;

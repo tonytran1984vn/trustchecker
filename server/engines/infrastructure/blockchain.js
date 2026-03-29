@@ -20,9 +20,19 @@ class BlockchainEngine {
         this.pendingEvents = [];
     }
 
+    /** BUG 2: Deterministic JSON Stringify to prevent Hash mutation on key reordering */
+    deterministicStringify(obj) {
+        if (typeof obj !== 'object' || obj === null) return JSON.stringify(obj);
+        if (Array.isArray(obj)) return '[' + obj.map(item => this.deterministicStringify(item)).join(',') + ']';
+        const keys = Object.keys(obj).sort();
+        const parts = keys.map(k => JSON.stringify(k) + ':' + this.deterministicStringify(obj[k]));
+        return '{' + parts.join(',') + '}';
+    }
+
     /** Hash data using SHA-256 */
     hash(data) {
-        return crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex');
+        const strData = typeof data === 'object' ? this.deterministicStringify(data) : String(data);
+        return crypto.createHash('sha256').update(strData).digest('hex');
     }
 
     /** Build Merkle root from list of hashes */
@@ -55,55 +65,67 @@ class BlockchainEngine {
             timestamp: new Date().toISOString(),
         });
 
-        // Get previous seal for chain linking
-        const prevSeal = await db.get(`
-      SELECT data_hash, block_index FROM blockchain_seals
-      ORDER BY block_index DESC LIMIT 1
-    `);
+        // BUG 2b: Use Prisma $transaction with Table Lock to prevent Blockchain Forking Race Conditions
+        return await db.client.$transaction(async tx => {
+            // Lock table for serializable block writing
+            await tx.$executeRawUnsafe('LOCK TABLE blockchain_seals IN EXCLUSIVE MODE;');
 
-        const prevHash = prevSeal ? prevSeal.data_hash : '0'.repeat(64);
-        const blockIndex = prevSeal ? prevSeal.block_index + 1 : 0;
+            // Get previous seal for chain linking
+            const prevSeals = await tx.$queryRawUnsafe(`
+                SELECT data_hash, block_index FROM blockchain_seals
+                ORDER BY block_index DESC LIMIT 1
+            `);
+            const prevSeal = prevSeals && prevSeals.length > 0 ? prevSeals[0] : null;
 
-        // Add to pending events for Merkle batching
-        this.pendingEvents.push(dataHash);
+            const prevHash = prevSeal ? prevSeal.data_hash : '0'.repeat(64);
+            const blockIndex = prevSeal ? parseInt(prevSeal.block_index) + 1 : 0;
 
-        // Calculate Merkle root for current batch
-        const merkleRoot = this.buildMerkleRoot(this.pendingEvents);
+            // Add to pending events for Merkle batching
+            this.pendingEvents.push(dataHash);
 
-        // Simple PoW nonce
-        const nonce = this.findNonce(dataHash + prevHash, 2); // 2 leading zeros
+            // Calculate Merkle root for current batch
+            const merkleRoot = this.buildMerkleRoot(this.pendingEvents);
 
-        const sealId = uuidv4();
-        await db.run(
-            `
-      INSERT INTO blockchain_seals (id, event_type, event_id, data_hash, prev_hash, merkle_root, block_index, nonce)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-            [sealId, eventType, eventId, dataHash, prevHash, merkleRoot, blockIndex, nonce]
-        );
+            // Simple PoW nonce
+            const nonce = this.findNonce(dataHash + prevHash, 2); // 2 leading zeros
 
-        // Reset batch if full
-        if (this.pendingEvents.length >= this.BATCH_SIZE) {
-            this.pendingEvents = [];
-        }
+            const sealId = uuidv4();
+            await tx.$executeRawUnsafe(
+                `INSERT INTO blockchain_seals (id, event_type, event_id, data_hash, prev_hash, merkle_root, block_index, nonce)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                sealId,
+                eventType,
+                eventId,
+                dataHash,
+                prevHash,
+                merkleRoot,
+                blockIndex,
+                nonce
+            );
 
-        // Broadcast
-        eventBus.emitEvent(EVENT_TYPES.BLOCKCHAIN_SEALED, {
-            seal_id: sealId,
-            event_type: eventType,
-            data_hash: dataHash.substring(0, 16) + '...',
-            block_index: blockIndex,
-            merkle_root: merkleRoot.substring(0, 16) + '...',
+            // Reset batch if full
+            if (this.pendingEvents.length >= this.BATCH_SIZE) {
+                this.pendingEvents = [];
+            }
+
+            // Broadcast
+            eventBus.emitEvent(EVENT_TYPES.BLOCKCHAIN_SEALED, {
+                seal_id: sealId,
+                event_type: eventType,
+                data_hash: dataHash.substring(0, 16) + '...',
+                block_index: blockIndex,
+                merkle_root: merkleRoot.substring(0, 16) + '...',
+            });
+
+            return {
+                seal_id: sealId,
+                data_hash: dataHash,
+                prev_hash: prevHash,
+                merkle_root: merkleRoot,
+                block_index: blockIndex,
+                nonce,
+            };
         });
-
-        return {
-            seal_id: sealId,
-            data_hash: dataHash,
-            prev_hash: prevHash,
-            merkle_root: merkleRoot,
-            block_index: blockIndex,
-            nonce,
-        };
     }
 
     /** Simple proof-of-work: find nonce where hash starts with N zeros */

@@ -439,18 +439,25 @@
 
     <div class="formula-box primary">
       <span class="label">Primary Formula</span>
-      $$\text{EBI} = V_{\text{brand}} \times \underbrace{\left(1 - \frac{T}{100}\right)^\beta}_{\text{Brand Risk Factor}} \times \underbrace{\left(1 - e^{-k \cdot P(\text{Fraud})}\right)}_{\text{Incident Escalation}}$$
+      $$\text{EBI} = \left[V_{\text{brand}} \times \underbrace{\left(1 - \frac{T}{100}\right)^\beta}_{\text{Brand Risk Factor}} \times \underbrace{\left(1 - e^{-k \cdot P(\text{Fraud})}\right)}_{\text{Incident Escalation}}\right] + \mathcal{W}_{\text{mcap}}$$
+    </div>
+
+    <div class="formula-box">
+      <span class="label">Market Cap Wipeout (Public Co. Only)</span>
+      $$\mathcal{W}_{\text{mcap}} = V_{\text{mcap}} \times \min(P(\text{Fraud}) \cdot \beta,\ 0.05)$$
     </div>
 
     <div class="sub-formula">
       <div class="where">
         <strong>Where:</strong><br>
         \( V_{\text{brand}} \) — estimated brand value (USD)<br>
+        \( V_{\text{mcap}} \) — market capitalization of public company<br>
         \( T \) — average trust score (0–100)<br>
         \( \beta \) — brand sensitivity exponent (from Risk Cluster, range 1.2–2.8)<br>
         \( k \) — incident escalation rate (from Risk Cluster, range 1.25–2.8)<br><br>
         <strong>BRF behavior:</strong> Higher β → brand more sensitive to trust erosion (luxury/pharma)<br>
-        <strong>IE behavior:</strong> Saturating function — small fraud rates cause proportionally larger escalation
+        <strong>IE behavior:</strong> Saturating function — small fraud rates cause proportionally larger escalation<br>
+        <strong>MCap behavior:</strong> Models 2%–5% cap wipeout during panic sell-offs
       </div>
     </div>
   </div>
@@ -478,7 +485,7 @@
 
     <div class="formula-box">
       <span class="label">Sigmoid Enforcement · v2.0</span>
-      $$\mathcal{E}(\text{WCRS}) = 0.08 + \frac{0.57}{1 + e^{-12 \cdot (\text{WCRS} - 0.2)}}$$
+      $$\mathcal{E}(\text{WCRS}) = 0.08 + \frac{0.87}{1 + e^{-12 \cdot (\text{WCRS} - 0.2)}}$$
     </div>
 
     <div class="sub-formula">
@@ -487,8 +494,8 @@
         \( \bar{F}_{\text{industry}} \) — average regulatory fine per incident (industry-specific, see §9)<br>
         \( N_{\text{nc}} \) — number of non-compliant records<br>
         \( N_{\text{partial}} \) — number of partially compliant records<br><br>
-        <strong>Sigmoid parameters:</strong> L = 0.08 (floor), U = 0.65 (ceiling), midpoint = 0.2, steepness = 12<br>
-        <strong>Behavior:</strong> Smooth transition from 8% → 65% enforcement probability as WCRS increases
+        <strong>Sigmoid parameters:</strong> L = 0.08 (floor), U = 0.95 (ceiling), midpoint = 0.2, steepness = 12<br>
+        <strong>Behavior:</strong> Smooth transition from 8% → 95% enforcement probability as WCRS increases
       </div>
     </div>
 
@@ -589,9 +596,10 @@
 
     <div class="sub-formula">
       <div class="where">
-        \( \text{ERL}_s = R_{\text{covered}} \times P(\text{Fraud}) \times m_f \times (1 - r) \)<br>
-        \( \text{EBI}_s = V_b \times (1 - \frac{T + \Delta T}{100})^\beta \times (1 - e^{-k \cdot P \cdot m_f}) \)<br>
-        \( \text{RFE}_s = \text{WCRS} \times \bar{F} \times \mathcal{E}(\text{WCRS} \times m_e) \times N_{\text{nc}} \)
+        \( \text{ERL}_s = R_{\text{covered}} \times \min(P \times m_f \times \tau,\ 1) \times (1 - r) \)<br>
+        \( \text{EBI}_s = V_b \times (1 - \frac{T + \Delta T}{100})^{\beta \cdot \tau} \times (1 - e^{-k \cdot P \cdot m_f}) + \mathcal{W}_{\text{mcap}, s} \)<br>
+        \( \text{RFE}_s = \text{WCRS} \times \bar{F} \times \mathcal{E}(\text{WCRS} \times m_e \times \tau) \times N_{\text{nc}} \times \tau \)<br>
+        Where \( \tau \) = Fat-Tail Multiplier (default 1.0, Extreme 2.5)
       </div>
     </div>
 
@@ -604,7 +612,7 @@
         <tr class="s-mod"><td>🟢 Moderate</td><td>0.8× (−20%)</td><td>+3%</td><td>0.5×</td><td>Gradual improvement trajectory</td></tr>
         <tr class="s-base"><td>⚪ Base</td><td>1.0×</td><td>0</td><td>1.0×</td><td>Current state extrapolation</td></tr>
         <tr class="s-stress"><td>🟡 Stress</td><td>1.5× (+50%)</td><td>−10%</td><td>2.0×</td><td>Regulatory tightening + fraud escalation</td></tr>
-        <tr class="s-extreme"><td>🔴 Extreme Tail</td><td>2.5× (+150%)</td><td>−20%</td><td>3.0×</td><td>Black swan: major breach + full enforcement</td></tr>
+        <tr class="s-extreme"><td>🔴 Extreme Tail</td><td>3.0× (+200%)</td><td>−25%</td><td>4.0×</td><td>Black swan: Fat-tail event (\(\tau=2.5\))</td></tr>
       </tbody>
     </table>
 
@@ -754,8 +762,8 @@
         <strong>Brand Contagion (Branded House only):</strong><br>
         \( \mathcal{C} = \gamma \times \sum_i P(\text{Fraud})_i \times \left(V_{\text{brand}} - V_{\text{brand}} \times w_i\right) \times \text{IE}_i \)<br>
         \( \gamma \) — contagion factor (0 = no contagion, 1 = full contagion)<br><br>
-        <strong>Group Diversification:</strong><br>
-        \( \mathcal{D}_{\text{group}} = \rho_{\text{cross}} \times 0.3 \times \min(\text{ERL}_{\text{group}}, \text{EBI}_{\text{group}}) \)<br>
+        <strong>Group Diversification (Actuarial Covariance):</strong><br>
+        \( \mathcal{D}_{\text{group}} = (1 - \rho_{\text{cross}}) \cdot \mathcal{D}_{\text{cov}}(E_{\text{group}}, B_{\text{group}}) + (\text{TCAR}_{\text{raw}} \times 0.05) \)<br>
         \( \rho_{\text{cross}} \) — cross-BU correlation (default: 0.3)
       </div>
     </div>

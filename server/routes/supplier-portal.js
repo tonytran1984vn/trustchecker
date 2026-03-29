@@ -16,6 +16,7 @@ const { eventBus, EVENT_TYPES } = require('../events');
 const { dualWriteProduct, dualWriteQR } = require('../lib/dual-write');
 const qrStorage = require('../lib/qr-storage');
 const { idempotency } = require('../middleware/idempotency');
+const complianceEngine = require('../services/compliance-engine/engine');
 
 // Public: view published supplier profile
 router.get('/:slug', async function (req, res) {
@@ -135,16 +136,41 @@ router.put('/my/assessment', authMiddleware, async function (req, res) {
 router.get('/my/products', authMiddleware, requirePermission('product:view'), async function (req, res) {
     try {
         const orgId = req.user.orgId || req.user.org_id;
-        const { search, view = 'all', limit = 50, offset = 0 } = req.query;
+        const {
+            search,
+            view = 'all',
+            limit = 50,
+            offset = 0,
+            category,
+            sync_status,
+            sort_by = 'created_at',
+            sort_dir = 'desc',
+        } = req.query;
 
         let whereExtra = '';
         const params = [orgId];
 
         if (search) {
-            whereExtra = ' AND (p.name ILIKE $2 OR p.sku ILIKE $3)';
+            whereExtra += ` AND (p.name ILIKE $${params.length + 1} OR p.sku ILIKE $${params.length + 2})`;
             const s = `%${search}%`;
             params.push(s, s);
         }
+
+        if (category && category !== 'all') {
+            whereExtra += ` AND p.category = $${params.length + 1}`;
+            params.push(category);
+        }
+
+        // Validate Sorting parameters
+        const allowedSortCols = {
+            created_at: 'created_at',
+            name: 'name',
+            sku: 'sku',
+            price: 'price',
+            category: 'category',
+        };
+        const sortColStr = allowedSortCols[sort_by] || 'created_at';
+        const sortOrderStr = (sort_dir || '').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
         let products;
         let counts = { all: 0, selling: 0, purchasing: 0, inventory: 0 };
@@ -164,25 +190,32 @@ router.get('/my/products', authMiddleware, requirePermission('product:view'), as
                 viewWhere = ' AND opr.has_inventory = true';
             }
 
-            // Main query with role data + sync status
+            // Main query wrapped in CTE to filter aliases like sync_status
+            const syncStatusFilter =
+                sync_status && sync_status !== 'all' ? `WHERE sync_status = '${sync_status.replace(/'/g, "''")}'` : '';
+
             const query = `
-                SELECT p.*,
-                       COALESCE(opr2.has_outbound, false) AS has_outbound,
-                       COALESCE(opr2.has_inbound, false) AS has_inbound,
-                       COALESCE(opr2.has_inventory, false) AS has_inventory,
-                       CASE
-                           WHEN dwf.id IS NOT NULL THEN 'failed'
-                           WHEN pd.id IS NOT NULL AND pc.id IS NOT NULL THEN 'synced'
-                           ELSE 'pending'
-                       END AS sync_status
-                FROM products p
-                ${viewJoin}
-                LEFT JOIN org_product_roles opr2 ON opr2.product_definition_id = p.id AND opr2.org_id = p.org_id
-                LEFT JOIN product_definitions pd ON pd.id = p.id
-                LEFT JOIN product_catalogs pc ON pc.product_definition_id = p.id AND pc.org_id = p.org_id
-                LEFT JOIN dual_write_failures dwf ON dwf.idempotency_key = p.id AND dwf.write_type = 'product'
-                WHERE p.org_id = $1${whereExtra}${viewWhere}
-                ORDER BY p.created_at DESC
+                WITH matched_items AS (
+                    SELECT p.*,
+                           COALESCE(opr2.has_outbound, false) AS has_outbound,
+                           COALESCE(opr2.has_inbound, false) AS has_inbound,
+                           COALESCE(opr2.has_inventory, false) AS has_inventory,
+                           CASE
+                               WHEN dwf.id IS NOT NULL THEN 'failed'
+                               WHEN pd.id IS NOT NULL AND pc.id IS NOT NULL THEN 'synced'
+                               ELSE 'pending'
+                           END AS sync_status
+                    FROM products p
+                    ${viewJoin}
+                    LEFT JOIN org_product_roles opr2 ON opr2.product_definition_id = p.id AND opr2.org_id = p.org_id
+                    LEFT JOIN product_definitions pd ON pd.id = p.id
+                    LEFT JOIN product_catalogs pc ON pc.product_definition_id = p.id AND pc.org_id = p.org_id
+                    LEFT JOIN dual_write_failures dwf ON dwf.idempotency_key = p.id AND dwf.write_type = 'product'
+                    WHERE p.org_id = $1${whereExtra}${viewWhere}
+                )
+                SELECT * FROM matched_items
+                ${syncStatusFilter}
+                ORDER BY ${sortColStr} ${sortOrderStr}
                 LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
             const richParams = [...params, limit, offset];
             products = await db.all(query, richParams);
@@ -210,8 +243,17 @@ router.get('/my/products', authMiddleware, requirePermission('product:view'), as
             // Fallback: if materialized view or dual-write tables don't exist
             console.warn('[supplier-portal] Role/sync tables missing, using fallback:', joinErr.message);
             const fallbackParams = [...params];
-            let fallback = `SELECT *, 'pending' AS sync_status, false AS has_outbound, false AS has_inbound, false AS has_inventory FROM products WHERE org_id = $1${whereExtra.replace(/p\./g, '')}`;
-            fallback += ` ORDER BY created_at DESC LIMIT $${fallbackParams.length + 1} OFFSET $${fallbackParams.length + 2}`;
+            const fallback = `
+                WITH matched_items AS (
+                    SELECT *, 'pending' AS sync_status, false AS has_outbound, false AS has_inbound, false AS has_inventory 
+                    FROM products p 
+                    WHERE p.org_id = $1${whereExtra}
+                )
+                SELECT * FROM matched_items
+                ${sync_status && sync_status !== 'all' ? `WHERE sync_status = '${sync_status.replace(/'/g, "''")}'` : ''}
+                ORDER BY ${sortColStr} ${sortOrderStr}
+                LIMIT $${fallbackParams.length + 1} OFFSET $${fallbackParams.length + 2}`;
+
             fallbackParams.push(limit, offset);
             products = await db.all(fallback, fallbackParams);
 
@@ -237,7 +279,18 @@ router.post(
     async function (req, res) {
         try {
             const orgId = req.user.orgId || req.user.org_id;
-            const { name, sku, description, category, manufacturer, origin_country, price, product_type } = req.body;
+            const { name, sku, description, category, manufacturer, origin_country, price, product_capabilities } =
+                req.body;
+
+            // Default capabilities if none provided
+            const caps = product_capabilities || {
+                can_buy: true,
+                can_sell: true,
+                can_manufacture: false,
+                can_consume: true,
+                can_stock: true,
+                can_transfer: true,
+            };
 
             if (!name || !sku) return res.status(400).json({ error: 'Name and SKU required' });
 
@@ -248,19 +301,52 @@ router.post(
                     .json({ error: 'SKU must be 3-50 characters, only letters, numbers, hyphens, and underscores' });
             }
 
-            // BUG-08 FIX: Validate product_type
-            const validTypes = ['sell', 'buy', 'both'];
-            const pType = validTypes.includes(product_type) ? product_type : 'sell';
-
             const existing = await db.get('SELECT id FROM products WHERE sku = $1 AND org_id = $2', [sku, orgId]);
             if (existing) return res.status(409).json({ error: 'SKU already used in your catalog' });
 
             const productId = uuidv4();
+
+            // --- [PHASE 0: COMPLIANCE OS INTERCEPTOR] ---
+            const supplierData = await db.get(
+                'SELECT current_trust_score as trust_score, verified FROM organizations WHERE id = $1',
+                [orgId]
+            );
+
+            const requestData = {
+                request_id: req.idempotencyKey || productId,
+                action: 'PUBLISH_PRODUCT',
+                org_id: orgId,
+                supplier: {
+                    trust_score: supplierData ? supplierData.trust_score : 0,
+                    verified: supplierData ? supplierData.verified : false,
+                },
+                product: {
+                    sku,
+                    capabilities: caps,
+                },
+                event: { timestamp: new Date().toISOString() },
+            };
+
+            const decision = await complianceEngine.evaluate(requestData, res);
+
+            if (!decision.is_allowed) {
+                console.warn(
+                    `[ComplianceBlock] Product '${sku}' blocked for Org ${orgId}. Violations:`,
+                    decision.violated_rule_ids
+                );
+                return res.status(403).json({
+                    error: 'COMPLIANCE_BLOCKED',
+                    message: decision.rejection_reason || 'Product creation blocked by Compliance Rules',
+                    violated_rules: decision.violated_rule_ids,
+                });
+            }
+            // --- [/END COMPLIANCE OS INTERCEPTOR] ---
+
             // BUG-04 FIX: Catch global SKU unique constraint violation
             try {
                 await db.run(
-                    `INSERT INTO products (id, name, sku, description, category, manufacturer, origin_country, registered_by, org_id, price)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                    `INSERT INTO products (id, name, sku, description, category, manufacturer, origin_country, registered_by, org_id, price, product_capabilities)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
                     [
                         productId,
                         name,
@@ -272,6 +358,7 @@ router.post(
                         req.user.id,
                         orgId,
                         parseFloat(price) || 0,
+                        JSON.stringify(caps),
                     ]
                 );
             } catch (insertErr) {
@@ -295,12 +382,13 @@ router.post(
                     description: description || '',
                     origin_country: origin_country || '',
                     manufacturer: manufacturer || '',
+                    product_capabilities: caps,
                 });
             } catch (e) {
                 console.error('[DualWrite] create supplier product:', e.message);
             }
 
-            res.status(201).json({ product: { id: productId, name, sku, category, product_type: pType } });
+            res.status(201).json({ product: { id: productId, name, sku, category } });
         } catch (err) {
             console.error('[supplier-portal] POST /my/products error:', err.message);
             res.status(500).json({ error: 'Failed to create product' });
@@ -316,7 +404,8 @@ router.put('/my/products/:id', authMiddleware, requirePermission('product:update
         const product = await db.get('SELECT id FROM products WHERE id = $1 AND org_id = $2', [productId, orgId]);
         if (!product) return res.status(404).json({ error: 'Product not found or unauthorized' });
 
-        const { name, description, category, manufacturer, origin_country, price, status } = req.body;
+        const { name, description, category, manufacturer, origin_country, price, status, product_capabilities } =
+            req.body;
 
         await db.run(
             `UPDATE products SET 
@@ -327,9 +416,21 @@ router.put('/my/products/:id', authMiddleware, requirePermission('product:update
                 origin_country = COALESCE($5, origin_country),
                 price = COALESCE($6, price),
                 status = COALESCE($7, status),
+                product_capabilities = COALESCE($8, product_capabilities),
                 updated_at = NOW()
-            WHERE id = $8 AND org_id = $9`,
-            [name, description, category, manufacturer, origin_country, price, status, productId, orgId]
+            WHERE id = $9 AND org_id = $10`,
+            [
+                name,
+                description,
+                category,
+                manufacturer,
+                origin_country,
+                price,
+                status,
+                product_capabilities ? JSON.stringify(product_capabilities) : null,
+                productId,
+                orgId,
+            ]
         );
 
         res.json({ message: 'Product updated', id: productId });
@@ -362,5 +463,36 @@ router.delete('/my/products/:id', authMiddleware, requirePermission('product:upd
         res.status(500).json({ error: 'Failed to archive product' });
     }
 });
+
+// Added: Bulk Soft-delete endpoint
+router.post(
+    '/my/products/bulk-archive',
+    authMiddleware,
+    requirePermission('product:update'),
+    async function (req, res) {
+        try {
+            const orgId = req.user.orgId || req.user.org_id;
+            const { productIds } = req.body;
+
+            if (!Array.isArray(productIds) || productIds.length === 0) {
+                return res.status(400).json({ error: 'No product IDs provided' });
+            }
+
+            // Generate parameter placeholders $1, $2, $3...
+            const placeholders = productIds.map((_, i) => `$${i + 2}`).join(',');
+
+            // Soft-delete: set status to archived
+            const result = await db.run(
+                `UPDATE products SET status = 'archived', updated_at = NOW() WHERE org_id = $1 AND id IN (${placeholders})`,
+                [orgId, ...productIds]
+            );
+
+            res.json({ message: `Successfully archived products.`, count: productIds.length });
+        } catch (err) {
+            console.error('[supplier-portal] POST /my/products/bulk-archive error:', err.message);
+            res.status(500).json({ error: 'Failed to bulk archive products' });
+        }
+    }
+);
 
 module.exports = router;

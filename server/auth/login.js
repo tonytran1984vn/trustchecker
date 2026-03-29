@@ -13,9 +13,14 @@ const { verifySync } = require('otplib');
 const db = require('../db');
 const { eventBus, EVENT_TYPES } = require('../events');
 const {
-    JWT_SECRET, MAX_FAILED_ATTEMPTS, LOCKOUT_MINUTES,
-    generateTokenPair, enrichUserWithOrg, createSession,
-    checkIPAnomaly, cleanupExpiredRoles
+    JWT_SECRET,
+    MAX_FAILED_ATTEMPTS,
+    LOCKOUT_MINUTES,
+    generateTokenPair,
+    enrichUserWithOrg,
+    createSession,
+    checkIPAnomaly,
+    cleanupExpiredRoles,
 } = require('./core');
 const { validate, schemas } = require('../middleware/validate');
 
@@ -23,7 +28,7 @@ const router = express.Router();
 
 // ATK-18: IP-based progressive lockout to prevent targeted DoS
 const ipFailures = new Map(); // ip → { count, blockUntil }
-const IP_MAX_FAILURES = 20;   // 20 failures per IP (covers multiple accounts)
+const IP_MAX_FAILURES = 20; // 20 failures per IP (covers multiple accounts)
 const IP_BLOCK_MINUTES = 30;
 
 function checkIpBlock(ip) {
@@ -54,8 +59,6 @@ setInterval(() => {
     }
 }, 600000).unref();
 
-
-
 // ─── POST /register ──────────────────────────────────────────────────────────
 
 // SEC-11: Apply schema validation middleware
@@ -71,8 +74,15 @@ router.post('/register', validate(schemas.register), async (req, res) => {
             return res.status(400).json({ error: 'Password must be at least 12 characters' });
         }
 
-        if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
-            return res.status(400).json({ error: 'Password must contain uppercase, lowercase, number, and special character' });
+        if (
+            !/[A-Z]/.test(password) ||
+            !/[a-z]/.test(password) ||
+            !/[0-9]/.test(password) ||
+            !/[^A-Za-z0-9]/.test(password)
+        ) {
+            return res
+                .status(400)
+                .json({ error: 'Password must contain uppercase, lowercase, number, and special character' });
         }
 
         const existing = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
@@ -81,26 +91,35 @@ router.post('/register', validate(schemas.register), async (req, res) => {
         }
 
         const id = uuidv4();
-        const displayName = email.split('@')[0].replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 50) || 'User';
+        const displayName =
+            email
+                .split('@')[0]
+                .replace(/[^a-zA-Z0-9._-]/g, '')
+                .slice(0, 50) || 'User';
         const password_hash = await bcrypt.hash(password, 12);
 
-        await db.prepare(`
+        await db
+            .prepare(
+                `
       INSERT INTO users (id, username, email, password_hash, company)
       VALUES (?, ?, ?, ?, ?)
-    `).run(id, displayName, email, password_hash, company || '');
+    `
+            )
+            .run(id, displayName, email, password_hash, company || '');
 
         const sessionId = await createSession(id, req);
         const user = { id, email, role: 'operator' };
         const { accessToken, refreshToken } = await generateTokenPair(user, sessionId);
 
-        await db.prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?, ?)`)
+        await db
+            .prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?, ?)`)
             .run(uuidv4(), id, 'USER_REGISTERED', 'user', id);
 
         res.status(201).json({
             message: 'User registered successfully',
             token: accessToken,
             refresh_token: refreshToken,
-            user: { id, email, role: 'operator' }
+            user: { id, email, role: 'operator' },
         });
     } catch (err) {
         console.error('Register error:', err);
@@ -126,7 +145,10 @@ router.post('/login', validate(schemas.login), async (req, res) => {
         // Step 2: MFA verification (if mfa_token provided)
         if (mfa_token) {
             try {
-                const decoded = jwt.verify(mfa_token, JWT_SECRET, { issuer: 'trustchecker', audience: 'trustchecker-users' });
+                const decoded = jwt.verify(mfa_token, JWT_SECRET, {
+                    issuer: 'trustchecker',
+                    audience: 'trustchecker-users',
+                });
                 if (decoded.type !== 'mfa_challenge') {
                     return res.status(400).json({ error: 'Invalid MFA token' });
                 }
@@ -141,7 +163,7 @@ router.post('/login', validate(schemas.login), async (req, res) => {
                     return res.status(401).json({ error: 'Invalid MFA code' });
                 }
 
-                await db.prepare("UPDATE users SET last_login = NOW(), failed_attempts = 0 WHERE id = ?").run(user.id);
+                await db.prepare('UPDATE users SET last_login = NOW(), failed_attempts = 0 WHERE id = ?').run(user.id);
                 const sessionId = await createSession(user.id, req);
                 const { accessToken, refreshToken } = await generateTokenPair(user, sessionId);
 
@@ -150,7 +172,7 @@ router.post('/login', validate(schemas.login), async (req, res) => {
                 return res.json({
                     token: accessToken,
                     refresh_token: refreshToken,
-                    user: { id: user.id, email: user.email, role: user.role }
+                    user: { id: user.id, email: user.email, role: user.role },
                 });
             } catch (e) {
                 return res.status(401).json({ error: 'Invalid or expired MFA token' });
@@ -175,7 +197,7 @@ router.post('/login', validate(schemas.login), async (req, res) => {
                 const remainMin = Math.ceil((lockTime - Date.now()) / 60000);
                 return res.status(423).json({
                     error: `Account locked. Try again in ${remainMin} minute(s)`,
-                    locked_until: user.locked_until
+                    locked_until: user.locked_until,
                 });
             }
             await db.prepare('UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?').run(user.id);
@@ -186,53 +208,66 @@ router.post('/login', validate(schemas.login), async (req, res) => {
             const attempts = (user.failed_attempts || 0) + 1;
             if (attempts >= MAX_FAILED_ATTEMPTS) {
                 const lockUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60000).toISOString().replace('Z', '');
-                await db.prepare('UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?')
+                await db
+                    .prepare('UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?')
                     .run(attempts, lockUntil, user.id);
 
-                await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-                    .run(uuidv4(), user.id, 'ACCOUNT_LOCKED', 'user', user.id, JSON.stringify({ attempts, lockout_minutes: LOCKOUT_MINUTES }));
+                await db
+                    .prepare(
+                        'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+                    )
+                    .run(
+                        uuidv4(),
+                        user.id,
+                        'ACCOUNT_LOCKED',
+                        'user',
+                        user.id,
+                        JSON.stringify({ attempts, lockout_minutes: LOCKOUT_MINUTES })
+                    );
 
                 return res.status(423).json({
                     error: `Account locked after ${MAX_FAILED_ATTEMPTS} failed attempts. Try again in ${LOCKOUT_MINUTES} minutes`,
-                    locked: true
+                    locked: true,
                 });
             }
 
             await db.prepare('UPDATE users SET failed_attempts = ? WHERE id = ?').run(attempts, user.id);
-                recordIpFailure(clientIp); // ATK-18
+            recordIpFailure(clientIp); // ATK-18
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
         // Password valid — check if MFA is required
         if (user.mfa_enabled && user.mfa_secret) {
-            const mfaChallenge = jwt.sign(
-                { user_id: user.id, type: 'mfa_challenge' },
-                JWT_SECRET,
-                { expiresIn: '5m', issuer: 'trustchecker', audience: 'trustchecker-users' }
-            );
+            const mfaChallenge = jwt.sign({ user_id: user.id, type: 'mfa_challenge' }, JWT_SECRET, {
+                expiresIn: '5m',
+                issuer: 'trustchecker',
+                audience: 'trustchecker-users',
+            });
             return res.json({
                 mfa_required: true,
                 mfa_token: mfaChallenge,
-                message: 'Please provide your MFA code'
+                message: 'Please provide your MFA code',
             });
         }
 
         // No MFA — check force password change
         if (user.must_change_password) {
-            const changeToken = jwt.sign(
-                { user_id: user.id, type: 'password_change' },
-                JWT_SECRET,
-                { expiresIn: '10m', issuer: 'trustchecker', audience: 'trustchecker-users' }
-            );
+            const changeToken = jwt.sign({ user_id: user.id, type: 'password_change' }, JWT_SECRET, {
+                expiresIn: '10m',
+                issuer: 'trustchecker',
+                audience: 'trustchecker-users',
+            });
             return res.json({
                 must_change_password: true,
                 change_token: changeToken,
-                message: 'Password change required before first login'
+                message: 'Password change required before first login',
             });
         }
 
         // Issue tokens directly
-        await db.prepare("UPDATE users SET last_login = NOW(), failed_attempts = 0, locked_until = NULL WHERE id = ?").run(user.id);
+        await db
+            .prepare('UPDATE users SET last_login = NOW(), failed_attempts = 0, locked_until = NULL WHERE id = ?')
+            .run(user.id);
         await enrichUserWithOrg(user);
 
         // P3: IP Anomaly Detection
@@ -250,7 +285,7 @@ router.post('/login', validate(schemas.login), async (req, res) => {
         const response = {
             token: accessToken,
             refresh_token: refreshToken,
-            user: { id: user.id, email: user.email, role: user.role, plan: user.plan || 'free' }
+            user: { id: user.id, email: user.email, role: user.role, plan: user.plan || 'free' },
         };
 
         // Include security warnings in response
@@ -258,7 +293,7 @@ router.post('/login', validate(schemas.login), async (req, res) => {
             response.security_warning = {
                 type: 'new_ip_detected',
                 message: 'Login from a new IP address detected',
-                ip: ipCheck.ip
+                ip: ipCheck.ip,
             };
         }
         if (expiredRoles.length > 0) {
@@ -282,9 +317,9 @@ router.post('/refresh', async (req, res) => {
         }
 
         const tokenHash = crypto.createHash('sha256').update(refresh_token).digest('hex');
-        const stored = await db.prepare(
-            'SELECT * FROM refresh_tokens WHERE token_hash = ? AND revoked = 0'
-        ).get(tokenHash);
+        const stored = await db
+            .prepare('SELECT * FROM refresh_tokens WHERE token_hash = ? AND revoked = 0')
+            .get(tokenHash);
 
         if (!stored) {
             return res.status(401).json({ error: 'Invalid refresh token' });
@@ -303,20 +338,36 @@ router.post('/refresh', async (req, res) => {
             return res.status(401).json({ error: 'User not found' });
         }
 
-        const existingSession = await db.prepare(
-            'SELECT id FROM sessions WHERE user_id = ? AND revoked = 0 ORDER BY last_active DESC LIMIT 1'
-        ).get(user.id);
+        const existingSession = await db
+            .prepare('SELECT id FROM sessions WHERE user_id = ? AND revoked = 0 ORDER BY last_active DESC LIMIT 1')
+            .get(user.id);
         const sessionId = existingSession ? existingSession.id : await createSession(user.id, req);
 
         const { accessToken, refreshToken: newRefresh } = await generateTokenPair(user, sessionId);
 
         res.json({
             token: accessToken,
-            refresh_token: newRefresh
+            refresh_token: newRefresh,
         });
     } catch (err) {
         console.error('Refresh error:', err);
         res.status(500).json({ error: 'Token refresh failed' });
+    }
+});
+
+// ─── POST /logout ───────────────────────────────────────────────────────────
+
+router.post('/logout', async (req, res) => {
+    try {
+        const { refresh_token } = req.body;
+        if (refresh_token) {
+            const tokenHash = crypto.createHash('sha256').update(refresh_token).digest('hex');
+            await db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE token_hash = ?').run(tokenHash);
+        }
+        res.json({ message: 'Logged out successfully' });
+    } catch (err) {
+        console.error('Logout error:', err);
+        res.status(500).json({ error: 'Logout failed' });
     }
 });
 

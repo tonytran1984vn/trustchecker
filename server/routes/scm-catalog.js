@@ -158,24 +158,55 @@ router.post('/:id/bom', async (req, res) => {
             return res.status(403).json({ error: 'Parent product not found or not owned by your org' });
         }
 
-        // Delete existing BOM for this product
-        await db.client.productBom.deleteMany({
-            where: { parentProductId },
-        });
+        // BUG 3: BOM Component Isolation (Prevent Fake/Adversarial Attachments)
+        // Ensure components belong to self OR connected suppliers
+        const componentIds = components.map(c => c.componentProductId).filter(Boolean);
+        if (componentIds.length > 0) {
+            const connectedOrgs = await db.all(
+                `SELECT DISTINCT network_org_id AS connected_org_id FROM partners
+                 WHERE org_id = $1 AND network_org_id IS NOT NULL
+                 UNION
+                 SELECT DISTINCT accepted_org_id FROM supplier_invitations
+                 WHERE org_id = $1 AND status = 'accepted' AND accepted_org_id IS NOT NULL`,
+                [orgId]
+            );
+            const validOrgIds = connectedOrgs.map(r => r.connected_org_id).filter(Boolean);
+            validOrgIds.push(orgId); // Include self
 
-        // Insert new BOM elements
-        const created = await Promise.all(
-            components.map(async comp => {
-                return db.client.productBom.create({
-                    data: {
-                        id: uuidv4(),
-                        parentProductId,
-                        componentProductId: comp.componentProductId,
-                        quantity: parseFloat(comp.quantity || 1.0),
-                    },
-                });
-            })
-        );
+            const validComponentsCount = await db.client.productCatalog.count({
+                where: {
+                    id: { in: componentIds },
+                    orgId: { in: validOrgIds },
+                },
+            });
+            if (validComponentsCount !== componentIds.length) {
+                return res
+                    .status(403)
+                    .json({ error: 'One or more components are invalid or belong to an unauthorized organization' });
+            }
+        }
+
+        // Use a transaction to ensure atomic replacement (Bug 18 Fix)
+        const created = await db.client.$transaction(async tx => {
+            // Delete existing BOM for this product
+            await tx.productBom.deleteMany({
+                where: { parentProductId },
+            });
+
+            // Insert new BOM elements
+            return await Promise.all(
+                components.map(async comp => {
+                    return tx.productBom.create({
+                        data: {
+                            id: uuidv4(),
+                            parentProductId,
+                            componentProductId: comp.componentProductId,
+                            quantity: parseFloat(comp.quantity || 1.0),
+                        },
+                    });
+                })
+            );
+        });
 
         res.json({ success: true, count: created.length });
     } catch (e) {

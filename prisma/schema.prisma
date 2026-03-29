@@ -227,6 +227,7 @@ model Product {
   quantity      Int      @default(0)
   price         Float?
   status        String   @default("active")
+  productCapabilities Json @default("{\"can_buy\":true,\"can_sell\":true,\"can_manufacture\":false,\"can_consume\":true,\"can_stock\":true,\"can_transfer\":true}") @map("product_capabilities")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @default(now()) @map("updated_at")
 

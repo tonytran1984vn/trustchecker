@@ -8,7 +8,6 @@ const WRITABLE_ROLES = ['supplier_contributor', 'company_admin', 'admin', 'org_o
 function canWrite() {
     const user = State.user || {};
     const role = user.active_role || user.role || '';
-    // BUG-10 FIX: Also check explicit permissions array if available
     if (user.permissions && Array.isArray(user.permissions)) {
         return user.permissions.includes('product:create') || user.permissions.includes('product:update');
     }
@@ -53,12 +52,29 @@ export function renderPage() {
       .smp-tab-count { display: inline-block; background: rgba(99,102,241,0.1); color: #6366f1; font-size: 0.7rem; padding: 1px 6px; border-radius: 10px; margin-left: 5px; font-weight: 700; }
       .smp-tab.active .smp-tab-count { background: rgba(99,102,241,0.15); }
       
+      /* ── Enhanced Toolbar ── */
+      .smp-toolbar { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; align-items: center; justify-content: space-between; }
+      .smp-toolbar-left, .smp-toolbar-right { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      .smp-filter-input, .smp-filter-select { padding: 8px 12px; border: 1px solid var(--border, #cbd5e1); border-radius: 8px; font-size: 0.85rem; color: var(--text, #1e293b); background: var(--bg-element, #fff); font-family: inherit; }
+      .smp-filter-input:focus, .smp-filter-select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+      .smp-filter-input { width: 220px; }
+      .smp-filter-select { cursor: pointer; }
+      
+      .smp-btn-outline { background: transparent; color: var(--text, #1e293b); border: 1px solid var(--border, #cbd5e1); padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
+      .smp-btn-outline:hover { background: var(--hover, #f1f5f9); border-color: #94a3b8; }
+      .smp-btn-danger { background: #fee2e2; color: #b91c1c; border: 1px solid rgba(185,28,28,0.2); padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
+      .smp-btn-danger:hover { background: #fca5a5; }
+
       .smp-card { background: var(--card, #ffffff); border: 1px solid var(--border, #e2e8f0); border-radius: 16px; padding: 24px; }
       
       .smp-table { width: 100%; border-collapse: collapse; text-align: left; }
       .smp-table th { padding: 12px 16px; border-bottom: 1px solid var(--border, #e2e8f0); color: var(--text-muted, #64748b); font-size: 0.75rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
       .smp-table td { padding: 14px 16px; border-bottom: 1px solid var(--border, #e2e8f0); color: var(--text, #1e293b); font-size: 0.9rem; }
       .smp-table tr:hover td { background: var(--hover, rgba(0,0,0,0.02)); }
+      
+      .smp-sortable { cursor: pointer; user-select: none; }
+      .smp-sortable:hover { color: #3b82f6; }
+      .smp-sort-icon { display: inline-block; margin-left: 4px; font-size: 0.7rem; color: #94a3b8; }
       
       .smp-sku { font-family: monospace; color: var(--text-muted, #64748b); background: var(--bg-muted, #f1f5f9); padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; }
       .smp-cat { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; background: rgba(99,102,241,0.1); color: #4f46e5; text-transform: capitalize; }
@@ -78,6 +94,12 @@ export function renderPage() {
       .smp-btn-edit:hover { background: rgba(59,130,246,0.2); }
       .smp-btn-del { background: rgba(239,68,68,0.08); color: #dc2626; border: 1px solid rgba(239,68,68,0.25); padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-left: 4px; }
       .smp-btn-del:hover { background: rgba(239,68,68,0.15); }
+
+      .smp-group-header td { background: var(--bg-muted, #f8fafc); cursor: pointer; font-weight: 700; border-top: 2px solid var(--border, #e2e8f0); transition: background 0.2s; }
+      .smp-group-header:hover td { background: #f1f5f9; }
+      .smp-group-row { display: table-row; }
+      .smp-group-row.hidden { display: none; }
+      .smp-checkbox { width: 16px; height: 16px; cursor: pointer; accent-color: #3b82f6; margin: 0; padding: 0; border-radius: 4px; border: 1px solid var(--border, #cbd5e1); }
 
       /* Modal */
       .smp-modal-underlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15,23,42,0.4); backdrop-filter: blur(4px); z-index: 999; display: none; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
@@ -123,28 +145,64 @@ export function renderPage() {
         <button class="smp-tab" data-view="inventory" onclick="smpSwitchTab('inventory')">Inventory <span class="smp-tab-count" id="smpCountInventory">–</span></button>
     </div>
 
+    <!-- Enhanced Toolbar -->
+    <div class="smp-toolbar">
+        <div class="smp-toolbar-left">
+            <input type="text" id="smpSearchFilter" class="smp-filter-input" placeholder="Search Name or SKU..." onkeyup="smpDebounceFilter()" />
+            <select id="smpCatFilter" class="smp-filter-select" onchange="smpApplyFilters()">
+                <option value="all">All Categories</option>
+                <option value="raw_material">Raw Material</option>
+                <option value="component">Component</option>
+                <option value="finished_goods">Finished Goods</option>
+            </select>
+            <select id="smpSyncFilter" class="smp-filter-select" onchange="smpApplyFilters()">
+                <option value="all">All Sync Status</option>
+                <option value="synced">✓ Synced</option>
+                <option value="pending">⏳ Pending</option>
+                <option value="failed">✗ Failed</option>
+            </select>
+        </div>
+        <div class="smp-toolbar-right">
+            <label style="font-size:0.85rem;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" class="smp-checkbox" id="smpGroupToggle" onchange="smpToggleGroupView()" />
+                Group by Name
+            </label>
+            <button class="smp-btn-outline" onclick="smpExportCSV()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Export CSV
+            </button>
+        </div>
+    </div>
+
+    <!-- Bulk Actions Bar -->
+    <div id="smpBulkActions" style="display:none; background: #fff8f1; border: 1px solid #fed7aa; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; align-items: center; justify-content: space-between;">
+        <div style="font-weight: 600; color: #9a3412;"><span id="smpSelectedCount">0</span> items selected</div>
+        <button class="smp-btn-danger" onclick="smpBulkArchive()">Archive Selected</button>
+    </div>
+
     <div class="smp-card">
         <div style="overflow-x:auto;">
             <table class="smp-table">
                 <thead>
                     <tr>
-                        <th>Product Name</th>
-                        <th>SKU</th>
-                        <th>Role</th>
-                        <th>Category</th>
-                        <th>Origin</th>
-                        <th>Price ($)</th>
-                        ${canWrite() ? '<th style="text-align:right">Actions</th>' : ''}
+                        ${canWrite() ? '<th style="width: 40px"><input type="checkbox" class="smp-checkbox" id="smpSelectAll" onchange="smpToggleAll(this.checked)"></th>' : ''}
+                        <th class="smp-sortable" onclick="smpSortBy('name')">Product Name <span class="smp-sort-icon" id="smpSort_name">↕</span></th>
+                        <th class="smp-sortable" onclick="smpSortBy('sku')">SKU <span class="smp-sort-icon" id="smpSort_sku">↕</span></th>
+                        <th>Activity Status</th>
+                        <th class="smp-sortable" onclick="smpSortBy('category')">Category <span class="smp-sort-icon" id="smpSort_category">↕</span></th>
+                        <th style="width:70px">Origin</th>
+                        <th class="smp-sortable" onclick="smpSortBy('price')">Price ($) <span class="smp-sort-icon" id="smpSort_price">↕</span></th>
+                        ${canWrite() ? '<th style="text-align:right; width: 140px;">Actions</th>' : ''}
                     </tr>
                 </thead>
                 <tbody id="smpProductsTbody">
-                    <tr><td colspan="${canWrite() ? 7 : 6}" style="text-align:center; padding: 40px; color:#64748b;">Loading products...</td></tr>
+                    <tr><td colspan="${canWrite() ? 8 : 6}" style="text-align:center; padding: 40px; color:#64748b;">Loading products...</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
 
-    <!-- BUG-13 FIX: Pagination -->
+    <!-- Pagination -->
     <div class="smp-pagination" id="smpPagination" style="display:none;"></div>
 
     <!-- Add/Edit Modal -->
@@ -183,16 +241,6 @@ export function renderPage() {
                     <label>Description</label>
                     <textarea id="smpDesc" rows="3" placeholder="Brief product description..." style="width:100%; padding:10px 14px; background:var(--bg-element,#fff); border:1px solid var(--border,#cbd5e1); border-radius:8px; color:var(--text,#1e293b); font-size:0.9rem; font-family:inherit; resize:vertical;"></textarea>
                 </div>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                    <div class="smp-form-group">
-                        <label>Product Type</label>
-                        <select id="smpType">
-                            <option value="sell">Selling</option>
-                            <option value="buy">Purchasing</option>
-                            <option value="both">Both</option>
-                        </select>
-                    </div>
-                </div>
                 
                 <div class="smp-modal-actions">
                     <button type="button" class="smp-btn-cancel" onclick="smpCloseModal()">Cancel</button>
@@ -204,40 +252,153 @@ export function renderPage() {
     `;
 }
 
-export async function initPage() {
-    setTimeout(smpLoadData, 50);
-}
-
-// ── Tab & pagination state ──────────────────────────────────────
+// ── Globals & State ──────────────────────────────────────────────
 let _currentView = 'all';
 let _currentOffset = 0;
+let _filterSearch = '';
+let _filterCat = 'all';
+let _filterSync = 'all';
+let _sortBy = 'created_at';
+let _sortDir = 'desc';
+let _isGroupedView = false;
+let _selectedIds = new Set();
 const PAGE_SIZE = 50;
+
+export async function initPage() {
+    // Sync state from URL hash
+    const hashParts = window.location.hash.split('?');
+    if (hashParts.length > 1) {
+        const params = new URLSearchParams(hashParts[1]);
+        if (params.has('view')) _currentView = params.get('view');
+        if (params.has('offset')) _currentOffset = parseInt(params.get('offset')) || 0;
+    }
+    
+    // Init DOM inputs
+    setTimeout(() => {
+        document.getElementById('smpSearchFilter').value = _filterSearch;
+        document.getElementById('smpCatFilter').value = _filterCat;
+        document.getElementById('smpSyncFilter').value = _filterSync;
+        document.getElementById('smpGroupToggle').checked = _isGroupedView;
+        smpUpdateSortIcons();
+        
+        // Sync tabs visually
+        document.querySelectorAll('.smp-tab').forEach(t => {
+            t.classList.toggle('active', t.dataset.view === _currentView);
+        });
+        smpLoadData();
+    }, 50);
+}
 
 window.smpSwitchTab = function(view) {
     _currentView = view;
     _currentOffset = 0;
-    // Update active tab
+    _selectedIds.clear();
+    smpUpdateBulkUI();
     document.querySelectorAll('.smp-tab').forEach(t => {
         t.classList.toggle('active', t.dataset.view === view);
     });
     smpLoadData();
 };
 
-window.smpLoadData = async function() {
+let _debounceTimer;
+window.smpDebounceFilter = function() {
+    clearTimeout(_debounceTimer);
+    _debounceTimer = setTimeout(() => {
+        smpApplyFilters();
+    }, 400);
+};
+
+window.smpApplyFilters = function() {
+    _filterSearch = document.getElementById('smpSearchFilter').value.trim();
+    _filterCat = document.getElementById('smpCatFilter').value;
+    _filterSync = document.getElementById('smpSyncFilter').value;
+    _currentOffset = 0;
+    _selectedIds.clear();
+    smpUpdateBulkUI();
+    smpLoadData();
+};
+
+window.smpSortBy = function(col) {
+    if (_sortBy === col) {
+        _sortDir = _sortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+        _sortBy = col;
+        _sortDir = col === 'price' ? 'desc' : 'asc';
+    }
+    smpUpdateSortIcons();
+    smpLoadData();
+};
+
+window.smpUpdateSortIcons = function() {
+    document.querySelectorAll('.smp-sort-icon').forEach(el => el.innerHTML = '↕');
+    const activeIcon = document.getElementById(`smpSort_${_sortBy}`);
+    if (activeIcon) activeIcon.innerHTML = _sortDir === 'desc' ? '↓' : '↑';
+};
+
+window.smpToggleGroupView = function() {
+    _isGroupedView = document.getElementById('smpGroupToggle').checked;
+    smpRenderTable();
+};
+
+window.smpExportCSV = function() {
+    const products = Object.values(window._smpCache || {});
+    if (products.length === 0) return showToast('No data to export', 'error');
+    
+    let csv = 'ID,Name,SKU,Roles,Category,Origin,Price,Sync_Status\n';
+    products.forEach(p => {
+        const rolesArr = [];
+        if (p.has_outbound) rolesArr.push('Selling');
+        if (p.has_inbound) rolesArr.push('Purchasing');
+        if (p.has_inventory) rolesArr.push('Inventory');
+        const roles = rolesArr.join('/');
+        
+        csv += `"${p.id}","${(p.name||'').replace(/"/g,'""')}","${p.sku}","${roles}","${p.category||''}","${p.origin_country||''}","${p.price||0}","${p.sync_status||'pending'}"\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('href', url);
+    a.setAttribute('download', 'supplier_products_export.csv');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+};
+
+window.smpLoadData = async function(silent = false) {
     const tbody = document.getElementById('smpProductsTbody');
     if (!tbody) return;
     const writable = canWrite();
-    const cols = writable ? 7 : 6;
+    const cols = writable ? 8 : 6;
+    
+    const baseUrl = window.location.hash.split('?')[0];
+    const newHash = `${baseUrl}?view=${_currentView}&offset=${_currentOffset}`;
+    if (window.location.hash !== newHash) {
+        window.history.replaceState(null, '', newHash);
+    }
 
-    tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center; padding: 40px; color:#64748b;">Loading products...</td></tr>`;
+    if (!silent) {
+        tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center; padding: 40px; color:#64748b;">Loading products...</td></tr>`;
+    }
 
     try {
-        const res = await API.get(`/supplier-portal/my/products?view=${_currentView}&limit=${PAGE_SIZE}&offset=${_currentOffset}`);
+        const q = new URLSearchParams({ 
+            view: _currentView, 
+            limit: PAGE_SIZE, 
+            offset: _currentOffset, 
+            sort_by: _sortBy, 
+            sort_dir: _sortDir 
+        });
+        if (_filterSearch) q.set('search', _filterSearch);
+        if (_filterCat !== 'all') q.set('category', _filterCat);
+        if (_filterSync !== 'all') q.set('sync_status', _filterSync);
+        
+        const res = await API.get(`/supplier-portal/my/products?${q.toString()}`);
         const products = res.products || [];
         const counts = res.counts || {};
         const total = res.total || 0;
 
-        // Update tab counts
         const countMap = { All: 'all', Selling: 'selling', Purchasing: 'purchasing', Inventory: 'inventory' };
         for (const [label, key] of Object.entries(countMap)) {
             const el = document.getElementById(`smpCount${label}`);
@@ -252,37 +413,15 @@ window.smpLoadData = async function() {
             return;
         }
 
-        // Store for editing
         window._smpCache = {};
         products.forEach(p => window._smpCache[p.id] = p);
+        
+        // Re-check selected IDs against loaded cache to prevent ghost selections
+        const loadedIds = new Set(products.map(p => p.id));
+        for (let id of _selectedIds) if (!loadedIds.has(id)) _selectedIds.delete(id);
+        
+        smpRenderTable();
 
-        let html = '';
-        products.forEach(p => {
-            const roles = roleBadges(p);
-            const sync = syncBadge(p.sync_status || 'pending');
-            html += `
-                <tr>
-                    <td>
-                        <div style="font-weight:700; color:var(--text, #1e293b); font-size: 0.95rem; margin-bottom:4px;">${p.name}</div>
-                        <div style="display:flex; gap: 4px; align-items:center; flex-wrap: wrap;">
-                            ${sync}
-                        </div>
-                    </td>
-                    <td><span class="smp-sku">${p.sku}</span></td>
-                    <td><div style="display:flex; gap: 3px; flex-wrap: wrap;">${roles}</div></td>
-                    <td><span class="smp-cat">${(p.category || 'misc').replace(/_/g, ' ')}</span></td>
-                    <td>${p.origin_country || '-'}</td>
-                    <td><span class="smp-price">$${Number(p.price || 0).toFixed(2)}</span></td>
-                    ${writable ? `<td style="text-align:right">
-                        <button class="smp-btn-edit" onclick="smpEditProduct('${p.id}')">Edit</button>
-                        <button class="smp-btn-del" onclick="smpDeleteProduct('${p.id}','${p.name.replace(/'/g, "\\'")}')">Archive</button>
-                    </td>` : ''}
-                </tr>
-            `;
-        });
-        tbody.innerHTML = html;
-
-        // BUG-13 FIX: Render pagination
         const pagDiv = document.getElementById('smpPagination');
         if (pagDiv && total > PAGE_SIZE) {
             const page = Math.floor(_currentOffset / PAGE_SIZE) + 1;
@@ -301,6 +440,122 @@ window.smpLoadData = async function() {
         tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center; padding: 30px; color:#ef4444; font-weight:600;">Failed to load products. Please check your connection.</td></tr>`;
         showToast('Error loading products', 'error');
     }
+};
+
+window.smpToggleAll = function(checked) {
+    const products = Object.values(window._smpCache || {});
+    if (checked) {
+        products.forEach(p => _selectedIds.add(p.id));
+    } else {
+        _selectedIds.clear();
+    }
+    document.querySelectorAll('.smp-row-checkbox').forEach(cb => cb.checked = checked);
+    smpUpdateBulkUI();
+};
+
+window.smpToggleRow = function(id, checked) {
+    if (checked) _selectedIds.add(id);
+    else _selectedIds.delete(id);
+    
+    const selectAll = document.getElementById('smpSelectAll');
+    if (selectAll) {
+        const totalCount = Object.keys(window._smpCache || {}).length;
+        selectAll.checked = (totalCount > 0 && _selectedIds.size === totalCount);
+    }
+    smpUpdateBulkUI();
+};
+
+window.smpUpdateBulkUI = function() {
+    const bar = document.getElementById('smpBulkActions');
+    if (!bar) return;
+    if (_selectedIds.size > 0) {
+        bar.style.display = 'flex';
+        document.getElementById('smpSelectedCount').textContent = _selectedIds.size;
+    } else {
+        bar.style.display = 'none';
+    }
+};
+
+window.smpBulkArchive = async function() {
+    if (_selectedIds.size === 0) return;
+    if (!confirm(`Archive ${_selectedIds.size} selected items?`)) return;
+    try {
+        await API.post('/supplier-portal/my/products/bulk-archive', { productIds: Array.from(_selectedIds) });
+        showToast('Bulk archive successful', 'success');
+        _selectedIds.clear();
+        smpLoadData();
+    } catch(err) {
+        showToast(err.message || 'Failed to bulk archive', 'error');
+    }
+};
+
+window.smpToggleGroupCollapse = function(groupId) {
+    document.querySelectorAll(`.smp-group-row-${groupId}`).forEach(el => el.classList.toggle('hidden'));
+};
+
+window.smpRenderTable = function() {
+    const tbody = document.getElementById('smpProductsTbody');
+    if (!tbody) return;
+    const writable = canWrite();
+    const products = Object.values(window._smpCache || {});
+    let html = '';
+    
+    const renderRow = (p, hiddenClass = '') => {
+        const roles = roleBadges(p);
+        const sync = syncBadge(p.sync_status || 'pending');
+        const isChecked = _selectedIds.has(p.id);
+        
+        return `
+            <tr class="${hiddenClass}">
+                ${writable ? `<td><input type="checkbox" class="smp-checkbox smp-row-checkbox" ${isChecked ? 'checked' : ''} onchange="smpToggleRow('${p.id}', this.checked)"></td>` : ''}
+                <td>
+                    <div style="font-weight:700; color:var(--text, #1e293b); font-size: 0.95rem; margin-bottom:4px;">${p.name}</div>
+                    <div style="display:flex; gap: 4px; align-items:center; flex-wrap: wrap;">${sync}</div>
+                </td>
+                <td><span class="smp-sku">${p.sku}</span></td>
+                <td><div style="display:flex; gap: 3px; flex-wrap: wrap;">${roles}</div></td>
+                <td><span class="smp-cat">${(p.category || 'misc').replace(/_/g, ' ')}</span></td>
+                <td>${p.origin_country || '-'}</td>
+                <td><span class="smp-price">$${Number(p.price || 0).toFixed(2)}</span></td>
+                ${writable ? `<td style="text-align:right">
+                    <button class="smp-btn-edit" onclick="smpEditProduct('${p.id}')">Edit</button>
+                    <button class="smp-btn-del" onclick="smpDeleteProduct('${p.id}','${p.name.replace(/'/g, "\\'")}')">Archive</button>
+                </td>` : ''}
+            </tr>
+        `;
+    };
+
+    if (_isGroupedView) {
+        const groups = {};
+        products.forEach(p => {
+            if (!groups[p.name]) groups[p.name] = [];
+            groups[p.name].push(p);
+        });
+        
+        let gIndex = 0;
+        for (let name in groups) {
+            gIndex++;
+            html += `
+                <tr class="smp-group-header" onclick="smpToggleGroupCollapse('${gIndex}')">
+                    <td colspan="${writable ? 8 : 6}">
+                        <span style="display:inline-block; width: 20px; color: #94a3b8; font-size: 0.8rem;">▼</span>
+                        ${name} <span style="color:#64748b; font-weight: normal; font-size:0.85rem; margin-left: 8px;">(${groups[name].length} items)</span>
+                    </td>
+                </tr>
+            `;
+            groups[name].forEach(p => html += renderRow(p, `smp-group-row smp-group-row-${gIndex}`));
+        }
+    } else {
+        products.forEach(p => html += renderRow(p));
+    }
+    
+    tbody.innerHTML = html;
+    
+    const selectAll = document.getElementById('smpSelectAll');
+    if (selectAll) {
+        selectAll.checked = (products.length > 0 && _selectedIds.size === products.length);
+    }
+    smpUpdateBulkUI();
 };
 
 window.smpOpenModal = function() {
@@ -327,7 +582,6 @@ window.smpEditProduct = function(id) {
     document.getElementById('smpCountry').value = p.origin_country || '';
     document.getElementById('smpPrice').value = p.price || '';
     document.getElementById('smpDesc').value = p.description || '';
-    document.getElementById('smpType').value = p.product_type || 'sell';
     
     document.getElementById('smpModalTitle').innerText = 'Edit Product';
     document.getElementById('smpModal').classList.add('visible');
@@ -335,6 +589,11 @@ window.smpEditProduct = function(id) {
 
 window.smpSaveProduct = async function(e) {
     e.preventDefault();
+    const btn = e.target.querySelector('.smp-btn-save');
+    const oldHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = 'Saving...';
+    
     const id = document.getElementById('smpId').value;
     const isEdit = !!id;
     
@@ -345,7 +604,6 @@ window.smpSaveProduct = async function(e) {
         origin_country: document.getElementById('smpCountry').value.toUpperCase().trim(),
         price: parseFloat(document.getElementById('smpPrice').value) || 0,
         description: document.getElementById('smpDesc').value.trim(),
-        product_type: document.getElementById('smpType').value,
     };
 
     try {
@@ -357,13 +615,15 @@ window.smpSaveProduct = async function(e) {
             showToast('Product added to catalog', 'success');
         }
         smpCloseModal();
-        smpLoadData();
+        smpLoadData(true);
     } catch (err) {
         showToast(err.message || 'Failed to save product', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = oldHtml;
     }
 };
 
-// BUG-06 FIX: Delete/archive product
 window.smpDeleteProduct = async function(id, name) {
     if (!confirm(`Archive product "${name}"? It will be hidden from your catalog.`)) return;
     try {
@@ -375,7 +635,6 @@ window.smpDeleteProduct = async function(id, name) {
     }
 };
 
-// BUG-13 FIX: Pagination helpers
 window.smpPagePrev = function() {
     _currentOffset = Math.max(0, _currentOffset - PAGE_SIZE);
     smpLoadData();

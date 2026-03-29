@@ -16,33 +16,59 @@ const _appPrefix = (() => {
 
 export function renderPage() {
   return `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;gap:12px">
-      <input class="input" style="max-width:300px" placeholder="Search products..." oninput="searchProducts(this.value)">
-      <div style="display:flex;gap:8px">
+    <div class="sa-page">
+      <div class="sa-page-title">
+        <h1>📦 Company Products</h1>
+        <div class="sa-title-actions">
+          <button class="btn btn-sm" onclick="exportProductsCSV()" title="Export CSV">📊 Export CSV</button>
+          ${State.user?.role !== 'viewer' ? '<button class="btn btn-primary btn-sm" onclick="showAddProduct()">+ Add Product</button>' : ''}
+        </div>
+      </div>
 
-        <button class="btn" onclick="exportProductsCSV()" title="Export CSV">📊 Export CSV</button>
-        ${State.user?.role !== 'viewer' ? '<button class="btn btn-primary" onclick="showAddProduct()">+ Add Product</button>' : ''}
+      <div class="sa-toolbar">
+        <input class="input" style="max-width:300px;font-size:0.85rem;padding:8px 12px" placeholder="Search products (Name or SKU)..." oninput="searchProducts(this.value)">
+      </div>
+
+      <div class="sa-card" id="product-grid">
+        ${renderTable()}
       </div>
     </div>
-    <div class="product-grid" id="product-grid">
-      ${State.products.length ? State.products.map(p => `
-        <div class="product-card" onclick="showProductDetail('${p.id}')">
-          <div class="product-name">${p.name}</div>
-          <div class="product-sku">${p.sku}</div>
-          <div class="product-meta">
-            <span class="product-category">${p.category || 'General'}</span>
-            <div class="trust-gauge" style="flex-direction:row;gap:8px">
-              <span style="font-family:'JetBrains Mono';font-weight:800;color:${scoreColor(p.trust_score)}">${Math.round(p.trust_score)}</span>
-              <span style="font-size:0.65rem;color:var(--text-muted)">Trust</span>
-            </div>
-          </div>
-          <div style="margin-top:8px;font-size:0.7rem;color:var(--text-muted)">
-            ${p.manufacturer ? '🏭 ' + p.manufacturer : ''} ${p.origin_country ? '🌍 ' + p.origin_country : ''}
-          </div>
-          <div style="margin-top:6px"><span class="badge ${p.status === 'active' ? 'valid' : 'warning'}">${p.status}</span></div>
-        </div>
-      `).join('') : '<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">📦</div><div class="empty-text">No products yet</div></div>'}
-    </div>
+  `;
+}
+
+function renderTable() {
+  if (!State.products || !State.products.length) {
+    return '<div style="text-align:center;padding:40px;color:var(--text-muted)">No Company Products yet. Click "+ Add Product".</div>';
+  }
+  const formatStr = (s) => s ? s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—';
+  
+  return `
+    <table class="sa-table">
+      <thead>
+        <tr>
+          <th>SKU</th>
+          <th>Product Name</th>
+          <th>Category</th>
+          <th>Manufacturer</th>
+          <th>Origin</th>
+          <th>Trust</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${State.products.map(p => `
+          <tr class="sa-row-clickable" onclick="showProductDetail('${p.id}')">
+            <td><strong class="sa-code" style="font-family:'JetBrains Mono'">${p.sku || '—'}</strong></td>
+            <td style="font-weight:600;color:var(--text-primary)">${p.name || '—'}</td>
+            <td>${formatStr(p.category)}</td>
+            <td style="color:var(--text-secondary)">${p.manufacturer || '—'}</td>
+            <td style="color:var(--text-secondary)">${(p.origin_country || '').toUpperCase() || '—'}</td>
+            <td><span style="font-family:'JetBrains Mono';font-weight:700;color:${scoreColor(p.trust_score)}">${Math.round(p.trust_score || 0)}</span></td>
+            <td><span class="sa-status-pill sa-pill-${p.status === 'active' ? 'green' : 'orange'}">${(p.status || 'active').replace(/_/g, ' ').toUpperCase()}</span></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
   `;
 }
 
@@ -217,7 +243,7 @@ async function searchProducts(q) {
     const res = await API.get(`/products?search=${encodeURIComponent(q)}`);
     State.products = res.products || [];
     const grid = document.getElementById('product-grid');
-    if (grid) grid.innerHTML = renderPage().match(/<div class="product-grid"[^>]*>([\s\S]*?)<\/div>\s*$/)?.[1] || '';
+    if (grid) grid.innerHTML = renderTable();
   } catch (e) { }
 }
 
