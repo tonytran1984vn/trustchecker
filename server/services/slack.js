@@ -13,15 +13,19 @@ async function getConfig() {
     if (_config && now - _lastLoad < TTL) return _config;
     try {
         const row = await db.get("SELECT * FROM channel_settings WHERE channel = 'slack'");
-        _config = row ? { ...row, config: typeof row.config === 'string' ? JSON.parse(row.config) : (row.config || {}) } : null;
+        _config = row
+            ? { ...row, config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config || {} }
+            : null;
         _lastLoad = now;
-    } catch (e) { console.error('[Slack] Config load error:', e.message); }
+    } catch (e) {
+        console.error('[Slack] Config load error:', e.message);
+    }
     return _config;
 }
 
 // ── Slack Block Kit Templates ───────────────────────────────────
 const TEMPLATES = {
-    fraud_detected: (data) => ({
+    fraud_detected: data => ({
         text: `🚨 Fraud Detected: ${data.product_name || 'Unknown'}`,
         blocks: alertBlocks('🚨 Fraud Detected', '#ef4444', [
             `*Product:* ${data.product_name || 'Unknown'}`,
@@ -29,7 +33,7 @@ const TEMPLATES = {
             `*Details:* ${data.details || 'Suspicious activity detected.'}`,
         ]),
     }),
-    scan_anomaly: (data) => ({
+    scan_anomaly: data => ({
         text: `⚠️ Scan Anomaly: ${data.product_name || 'Unknown'}`,
         blocks: alertBlocks('⚠️ Scan Anomaly', '#f59e0b', [
             `*Product:* ${data.product_name || 'Unknown'}`,
@@ -37,35 +41,35 @@ const TEMPLATES = {
             `*Details:* ${data.details || 'Unusual scan pattern.'}`,
         ]),
     }),
-    sla_violation: (data) => ({
+    sla_violation: data => ({
         text: `⏰ SLA Violation: ${data.service_name || 'Unknown'}`,
         blocks: alertBlocks('⏰ SLA Violation', '#f97316', [
             `*Service:* ${data.service_name || 'Unknown'}`,
             `*Violation:* ${data.violation || 'Threshold exceeded.'}`,
         ]),
     }),
-    new_org: (data) => ({
+    new_org: data => ({
         text: `🏢 New Org: ${data.org_name || 'Unknown'}`,
         blocks: alertBlocks('🏢 New Org Registered', '#3b82f6', [
             `*Organization:* ${data.org_name || 'Unknown'}`,
             `*Admin:* ${data.admin_email || 'Unknown'}`,
         ]),
     }),
-    usage_threshold: (data) => ({
+    usage_threshold: data => ({
         text: `📊 Usage Alert: ${data.metric || 'API calls'}`,
         blocks: alertBlocks('📊 Usage Threshold', '#f59e0b', [
             `*Metric:* ${data.metric || 'API calls'}`,
             `*Usage:* ${data.usage || '>80%'}`,
         ]),
     }),
-    certificate_expiry: (data) => ({
+    certificate_expiry: data => ({
         text: `🔒 Certificate Expiring: ${data.cert_name || 'SSL/TLS'}`,
         blocks: alertBlocks('🔒 Certificate Expiring', '#ef4444', [
             `*Certificate:* ${data.cert_name || 'SSL/TLS'}`,
             `*Expires:* ${data.expiry_date || 'Soon'}`,
         ]),
     }),
-    system_health: (data) => ({
+    system_health: data => ({
         text: `🖥️ System Health: ${data.component || 'Unknown'}`,
         blocks: alertBlocks('🖥️ System Health Alert', '#ef4444', [
             `*Component:* ${data.component || 'Unknown'}`,
@@ -73,13 +77,50 @@ const TEMPLATES = {
             `*Details:* ${data.details || 'Performance issue.'}`,
         ]),
     }),
-    payment_failed: (data) => ({
+    payment_failed: data => ({
         text: `💳 Payment Failed: ${data.org_name || 'Unknown'}`,
         blocks: alertBlocks('💳 Payment Failed', '#ef4444', [
             `*Org:* ${data.org_name || 'Unknown'}`,
             `*Amount:* ${data.amount || 'N/A'}`,
             `*Reason:* ${data.reason || 'Processing error.'}`,
         ]),
+    }),
+    valuation_guard: data => ({
+        text: `🚨 VALUATION RISK ALERT: ${data.org_name || 'Unknown'}`,
+        blocks: [
+            { type: 'header', text: { type: 'plain_text', text: `🚨 VALUATION RISK ALERT`, emoji: true } },
+            {
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: `*Organization:* ${data.org_name || 'Unknown'}\n*Risk Cluster Threshold Breached!*`,
+                },
+            },
+            {
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text:
+                        '```\n' +
+                        data.ascii_map +
+                        '\n\n' +
+                        'Current EV Destruction: ' +
+                        data.p95_evd +
+                        '\n' +
+                        'WACC Increase: +' +
+                        data.wacc_increase +
+                        ' (ESG Penalty Triggered)\n```',
+                },
+            },
+            {
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: `*[ 📊 View Full Simulation in Dashboard ](https://app.trustchecker.com/dashboard/${data.org_id}/risk/valuation)*`,
+                },
+            },
+            { type: 'divider' },
+        ],
     }),
     test: () => ({
         text: '✅ TrustChecker Slack integration working!',
@@ -95,7 +136,10 @@ function alertBlocks(title, color, lines) {
     return [
         { type: 'header', text: { type: 'plain_text', text: title, emoji: true } },
         { type: 'section', text: { type: 'mrkdwn', text: lines.join('\n') } },
-        { type: 'context', elements: [{ type: 'mrkdwn', text: `_TrustChecker Alerts • ${new Date().toLocaleString()}_` }] },
+        {
+            type: 'context',
+            elements: [{ type: 'mrkdwn', text: `_TrustChecker Alerts • ${new Date().toLocaleString()}_` }],
+        },
         { type: 'divider' },
     ];
 }
@@ -144,6 +188,9 @@ async function sendTest() {
     return sendAlert('test');
 }
 
-function invalidateConfig() { _config = null; _lastLoad = 0; }
+function invalidateConfig() {
+    _config = null;
+    _lastLoad = 0;
+}
 
 module.exports = { sendAlert, sendTest, getConfig, invalidateConfig };

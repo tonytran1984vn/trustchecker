@@ -297,6 +297,47 @@ router.put('/:id/plan', requireSuperAdmin(), async (req, res) => {
     }
 });
 
+// ─── Set Features Override for Organization (super_admin only) ───────────────
+router.put('/:id/features', requireSuperAdmin(), async (req, res) => {
+    try {
+        const { featureFlags } = req.body;
+        if (!featureFlags || typeof featureFlags !== 'object') {
+            return res.status(400).json({ error: 'featureFlags object is required' });
+        }
+
+        const org = await db.get('SELECT * FROM organizations WHERE id = ?', [req.params.id]);
+        if (!org) return res.status(404).json({ error: 'Organization not found' });
+
+        await db
+            .prepare('UPDATE organizations SET feature_flags = ?, updated_at = NOW() WHERE id = ?')
+            .run(JSON.stringify(featureFlags), req.params.id);
+
+        // Invalidate Entitlement Cache for this ORG
+        const { EntitlementService } = require('../services/entitlement.service');
+        await EntitlementService.refreshCache(req.params.id);
+
+        // Audit
+        await db
+            .prepare(
+                `INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)`
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'ORG_FEATURES_UPDATED',
+                'organization',
+                req.params.id,
+                JSON.stringify({ old_features: org.feature_flags, new_features: featureFlags }),
+                req.ip || null
+            );
+
+        res.json({ message: 'Features updated', org_id: req.params.id, feature_flags: featureFlags });
+    } catch (err) {
+        logger.error('[org] Features update error:', err.message);
+        res.status(500).json({ error: 'Failed to update features' });
+    }
+});
+
 // ─── Deactivate Organization (super_admin only) ──────────────────────────────
 router.delete('/:id', requireSuperAdmin(), async (req, res) => {
     try {

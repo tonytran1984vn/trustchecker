@@ -17,39 +17,65 @@ let _decData = [], _decPage = 1, _decSize = 5;
 let _ccsLoading = false; // dedup guard
 
 export function renderPage() {
-  loadCCSData();
-  return `
-    <div class="exec-page ccs-page">
-      <div class="exec-header">
-        <h1>${icon('target', 28)} Capital Command System</h1>
-        <div class="exec-timestamp">Live · ${new Date().toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}</div>
-      </div>
-      <div id="my-actions-widget" style="display:none"></div>
-      <div id="ccs-overview-content">
-        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
-          <div class="spinner"></div>
-          <div style="font-size:0.78rem;color:var(--text-muted)">Initializing Capital Command…</div>
+  const isLoaded = !!(_exposure && _decisions && _valuation);
+  
+  if (!isLoaded) {
+    loadCCSData();
+    return `
+      <div class="exec-page ccs-page">
+        <div class="exec-header">
+          <h1>${icon('target', 28)} Capital Command System</h1>
+          <div class="exec-timestamp">Live · ${new Date().toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}</div>
+        </div>
+        <div id="my-actions-widget" style="display:none"></div>
+        <div id="ccs-overview-content">
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px">
+            <div class="spinner"></div>
+            <div style="font-size:0.78rem;color:var(--text-muted)">Initializing Capital Command…</div>
+          </div>
         </div>
       </div>
-    </div>
-  `;
+    `;
+  } else {
+    // Zero-State Flash Protection: Display cached DOM immediately 
+    setTimeout(() => {
+      renderCCS();
+      setTimeout(() => injectMyActionsWidget('my-actions-widget'), 50);
+      filterCategoryTable();
+      filterDecisionTable();
+    }, 0);
+    
+    // Background refresh silently
+    loadCCSData(true);
+    return `
+      <div class="exec-page ccs-page">
+        <div class="exec-header">
+          <h1>${icon('target', 28)} Capital Command System</h1>
+          <div class="exec-timestamp">Live · ${new Date().toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}</div>
+        </div>
+        <div id="my-actions-widget" style="display:none"></div>
+        <div id="ccs-overview-content"></div>
+      </div>
+    `;
+  }
 }
 
-async function loadCCSData() {
+async function loadCCSData(isBackground = false) {
   if (_ccsLoading) return; // dedup: skip if already loading
   _ccsLoading = true;
   try {
     const API = window.API;
-    [_exposure, _decisions, _valuation, _trends, _alerts, _roi] = await Promise.all([
+    
+    // --- Phase 1: Critical Path Preloading (TTI < 1s) ---
+    [_exposure, _decisions, _valuation] = await Promise.all([
       API.get('/org-admin/owner/ccs/exposure').catch(() => null),
       API.get('/org-admin/owner/ccs/decisions').catch(() => null),
       API.get('/org-admin/owner/ccs/valuation').catch(() => null),
-      API.get('/org-admin/owner/ccs/trends').catch(() => null),
-      API.get('/org-admin/owner/ccs/alerts').catch(() => null),
-      API.get('/org-admin/owner/ccs/roi').catch(() => null),
     ]);
+    
     renderCCS();
     setTimeout(() => injectMyActionsWidget('my-actions-widget'), 200);
+    
     // Populate category table after DOM is ready
     setTimeout(() => {
       _catData = (_exposure || {}).category_exposure || [];
@@ -65,10 +91,28 @@ async function loadCCSData() {
       _decPage = 1;
       filterDecisionTable();
     }, 0);
+
+    // Give browser 50ms to paint the Phase 1 UI (removes Radar Bottleneck)
+    await new Promise(r => setTimeout(r, 50));
+    
+    // --- Phase 2: Deferred Heavy Data (Radar & Trends Bottleneck) ---
+    [_trends, _alerts, _roi] = await Promise.all([
+      API.get('/org-admin/owner/ccs/trends').catch(() => null),
+      API.get('/org-admin/owner/ccs/alerts').catch(() => null),
+      API.get('/org-admin/owner/ccs/roi').catch(() => null),
+    ]);
+
+    // Re-render Phase 2 silently
+    renderCCS();
+    setTimeout(() => {
+      filterCategoryTable();
+      filterDecisionTable();
+    }, 0);
+
   } catch (e) {
     console.error('[CCS] Load error:', e);
     const el = document.getElementById('ccs-overview-content');
-    if (el) el.innerHTML = '<div style="text-align:center;padding:40px;color:#ef4444">Failed to load Capital Command data</div>';
+    if (el && !isBackground) el.innerHTML = '<div style="text-align:center;padding:40px;color:#ef4444">Failed to load Capital Command data</div>';
   } finally {
     _ccsLoading = false;
   }
@@ -153,6 +197,54 @@ function renderCCS() {
             <tr style="color:#ef4444"><td>🔴 Stress Test</td><td>${fmtMoney(exp.scenarios.stress?.erl)}</td><td>${fmtMoney(exp.scenarios.stress?.ebi)}</td><td>${fmtMoney(exp.scenarios.stress?.rfe)}</td><td><strong>${fmtMoney(exp.scenarios.stress?.tcar)}</strong></td></tr>
           </tbody>
         </table>
+      </div>` : ''}
+
+      ${exp.monte_carlo_v3 ? `
+      <!-- ═══ Monte Carlo V3 Dual-Shock ═══ -->
+      <div class="exec-card" style="margin-top:0.75rem;border-color:rgba(239,68,68,0.3);background:linear-gradient(180deg, rgba(239,68,68,0.05) 0%, transparent 100%)">
+        <h3 style="color:#ef4444">${icon('alertTriangle', 18)} Fat-Tail Valuation Shock (Monte Carlo v3.0)
+          <span style="font-size:0.65rem;opacity:0.7;margin-left:6px;font-weight:400;color:var(--text-primary)">Simulating 10,000 dual-shock paths</span>
+        </h3>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px">
+          <!-- P50 Base -->
+          <div style="background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.08)">
+            <div style="font-size:0.75rem;opacity:0.6;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">P50 (Median Expected)</div>
+            <div style="font-size:1.25rem;font-weight:700;color:#f59e0b">${fmtMoney(exp.monte_carlo_v3.p50_evd)} <span style="font-size:0.75rem;font-weight:500;opacity:0.8">EVD</span></div>
+            <div style="font-size:0.75rem;margin-top:6px;display:flex;justify-content:space-between">
+              <span>WACC Premium: <span style="color:#ef4444">+${exp.monte_carlo_v3.p50_wacc_shock}%</span></span>
+              <span>ESG Drop: <span style="color:#ef4444">-${exp.monte_carlo_v3.p50_esg_drop}%</span></span>
+            </div>
+          </div>
+          
+          <!-- P95 Severe -->
+          <div style="background:rgba(249,115,22,0.05);padding:12px;border-radius:8px;border:1px solid rgba(249,115,22,0.2)">
+            <div style="font-size:0.75rem;color:#f97316;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">P95 (Severe Contagion)</div>
+            <div style="font-size:1.25rem;font-weight:700;color:#f97316">${fmtMoney(exp.monte_carlo_v3.p95_evd)} <span style="font-size:0.75rem;font-weight:500;opacity:0.8">EVD</span></div>
+            <div style="font-size:0.75rem;margin-top:6px;display:flex;justify-content:space-between">
+              <span>WACC Premium: <span style="color:#f97316">+${exp.monte_carlo_v3.p95_wacc_shock}%</span></span>
+              <span>ESG Drop: <span style="color:#f97316">-${exp.monte_carlo_v3.p95_esg_drop}%</span></span>
+            </div>
+          </div>
+          
+          <!-- P99 Ruin -->
+          <div style="background:rgba(239,68,68,0.1);padding:12px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);position:relative;overflow:hidden">
+            <div style="position:absolute;top:6px;right:8px;background:#ef4444;color:#fff;font-size:0.55rem;padding:2px 6px;border-radius:10px;font-weight:700">FAT-TAIL</div>
+            <div style="font-size:0.75rem;color:#ef4444;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">P99 (Systemic Ruin)</div>
+            <div style="font-size:1.25rem;font-weight:800;color:#ef4444">${fmtMoney(exp.monte_carlo_v3.p99_evd)} <span style="font-size:0.75rem;font-weight:600;opacity:0.8">EVD</span></div>
+            <div style="font-size:0.75rem;margin-top:6px;display:flex;justify-content:space-between">
+              <span>WACC Premium: <span style="color:#ef4444;font-weight:700">+${exp.monte_carlo_v3.p99_wacc_shock}%</span></span>
+              <span>ESG Drop: <span style="color:#ef4444;font-weight:700">-${exp.monte_carlo_v3.p99_esg_drop}%</span></span>
+            </div>
+            <!-- Progress Bar viz -->
+            <div style="margin-top:8px;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden">
+                <div style="width:100%;height:100%;background:linear-gradient(90deg, #f97316 0%, #ef4444 100%)"></div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:10px;font-size:0.72rem;color:var(--text-muted);display:flex;justify-content:space-between">
+          <span>Base P(Fraud): ${exp.monte_carlo_v3.base_p_fraud}% · WCRS Baseline: ${exp.monte_carlo_v3.base_wcrs}</span>
+          <span>Last Snapshot: ${timeAgo(exp.monte_carlo_v3.timestamp)}</span>
+        </div>
       </div>` : ''}
 
       ${exp.per_bu && exp.per_bu.length > 0 ? `

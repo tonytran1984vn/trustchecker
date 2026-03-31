@@ -28,6 +28,16 @@ model Organization {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @default(now()) @map("updated_at")
 
+  // Billing Config
+  billingStatus        String    @default("ACTIVE") @map("billing_status") // ACTIVE, PAST_DUE, CANCELED
+  currentPlan          String    @default("free") @map("current_plan")
+  pendingDowngradePlan String?   @map("pending_downgrade_plan")
+  downgradeAt          DateTime? @map("downgrade_at")
+  gracePeriodUntil     DateTime? @map("grace_period_until")
+  billingUpdatedAt     DateTime  @default(now()) @map("billing_updated_at")
+
+  experimentCohort String @default("A_CONTROL") @map("experiment_cohort")
+
   users       User[]
   memberships Membership[]
 
@@ -212,24 +222,24 @@ model RbacUserRole {
 // ═══════════════════════════════════════════════════════════════════
 
 model Product {
-  id            String   @id @default(uuid())
-  name          String
-  sku           String   @unique
-  description   String   @default("")
-  category      String   @default("")
-  manufacturer  String   @default("")
-  batchNumber   String   @default("") @map("batch_number")
-  originCountry String   @default("") @map("origin_country")
-  registeredBy  String?  @map("registered_by")
-  orgId         String?  @map("org_id")
-  trustScore    Float    @default(100.0) @map("trust_score")
-  weightKg      Float?   @map("weight_kg")
-  quantity      Int      @default(0)
-  price         Float?
-  status        String   @default("active")
-  productCapabilities Json @default("{\"can_buy\":true,\"can_sell\":true,\"can_manufacture\":false,\"can_consume\":true,\"can_stock\":true,\"can_transfer\":true}") @map("product_capabilities")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @default(now()) @map("updated_at")
+  id                  String   @id @default(uuid())
+  name                String
+  sku                 String   @unique
+  description         String   @default("")
+  category            String   @default("")
+  manufacturer        String   @default("")
+  batchNumber         String   @default("") @map("batch_number")
+  originCountry       String   @default("") @map("origin_country")
+  registeredBy        String?  @map("registered_by")
+  orgId               String?  @map("org_id")
+  trustScore          Float    @default(100.0) @map("trust_score")
+  weightKg            Float?   @map("weight_kg")
+  quantity            Int      @default(0)
+  price               Float?
+  status              String   @default("active")
+  productCapabilities Json     @default("{\"can_buy\":true,\"can_sell\":true,\"can_manufacture\":false,\"can_consume\":true,\"can_stock\":true,\"can_transfer\":true}") @map("product_capabilities")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @map("updated_at")
 
   // Relations
   registeredByUser     User?                 @relation("RegisteredBy", fields: [registeredBy], references: [id])
@@ -625,6 +635,34 @@ model LeakAlert {
 
   @@index([productId])
   @@map("leak_alerts")
+}
+
+model RiskAnalyticSnapshot {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  timestamp DateTime @default(now())
+
+  // Base Parameters
+  basePFraud Float @map("base_p_fraud")
+  baseWcrs   Float @map("base_wcrs")
+
+  // P50 Metrics (Expected)
+  p50EsgDrop   Float @map("p50_esg_drop")
+  p50WaccShock Float @map("p50_wacc_shock")
+  p50Evd       Float @map("p50_evd")
+
+  // P95 Metrics (Stress)
+  p95EsgDrop   Float @map("p95_esg_drop")
+  p95WaccShock Float @map("p95_wacc_shock")
+  p95Evd       Float @map("p95_evd")
+
+  // P99 Metrics (Tail/Ruin)
+  p99EsgDrop   Float @map("p99_esg_drop")
+  p99WaccShock Float @map("p99_wacc_shock")
+  p99Evd       Float @map("p99_evd")
+
+  @@index([orgId, timestamp])
+  @@map("risk_analytic_snapshots")
 }
 
 model SupplyChainGraph {
@@ -1728,40 +1766,40 @@ model LrgfBlockchainAnchor {
 // ═══════════════════════════════════════════════════════════════════
 
 model SupplierProfile {
-  id                 String    @id @default(uuid())
-  orgId              String?   @unique @map("org_id")
-  partnerId          String?   @map("partner_id")
-  publicName         String    @map("public_name")
-  slug               String    @unique
-  description        String?
-  website            String?
-  country            String?
-  certifications     String?   // Stored as JSON string
-  logoUrl            String?   @map("logo_url")
-  publicTrustScore   Float     @default(85.0) @map("public_trust_score")
-  isPublished        Boolean   @default(false) @map("is_published")
-  improvementPlan    String?   @map("improvement_plan") // Stored as JSON string
-  selfAssessment     String?   @map("self_assessment") // Stored as JSON string
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  id               String   @id @default(uuid())
+  orgId            String?  @unique @map("org_id")
+  partnerId        String?  @map("partner_id")
+  publicName       String   @map("public_name")
+  slug             String   @unique
+  description      String?
+  website          String?
+  country          String?
+  certifications   String? // Stored as JSON string
+  logoUrl          String?  @map("logo_url")
+  publicTrustScore Float    @default(85.0) @map("public_trust_score")
+  isPublished      Boolean  @default(false) @map("is_published")
+  improvementPlan  String?  @map("improvement_plan") // Stored as JSON string
+  selfAssessment   String?  @map("self_assessment") // Stored as JSON string
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   @@map("supplier_profiles")
 }
 
 model ScoreValidation {
-  id                   String    @id @default(uuid())
-  orgId                String    @map("org_id")
-  entityType           String    @map("entity_type")
-  entityId             String    @map("entity_id")
-  predictedScore       Float     @map("predicted_score")
-  predictedRiskLevel   String    @map("predicted_risk_level")
-  actualOutcome        String?   @map("actual_outcome")
-  outcomeDate          DateTime? @map("outcome_date")
-  validationStatus     String    @default("pending") @map("validation_status")
-  accuracyDelta        Float?    @map("accuracy_delta")
-  validatedAt          DateTime? @map("validated_at")
-  validatorId          String?   @map("validator_id")
-  createdAt            DateTime  @default(now()) @map("created_at")
+  id                 String    @id @default(uuid())
+  orgId              String    @map("org_id")
+  entityType         String    @map("entity_type")
+  entityId           String    @map("entity_id")
+  predictedScore     Float     @map("predicted_score")
+  predictedRiskLevel String    @map("predicted_risk_level")
+  actualOutcome      String?   @map("actual_outcome")
+  outcomeDate        DateTime? @map("outcome_date")
+  validationStatus   String    @default("pending") @map("validation_status")
+  accuracyDelta      Float?    @map("accuracy_delta")
+  validatedAt        DateTime? @map("validated_at")
+  validatorId        String?   @map("validator_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
 
   @@map("score_validations")
 }
@@ -1809,4 +1847,280 @@ model NetworkPurchaseOrder {
   @@index([supplierOrgId])
   @@index([productId])
   @@map("network_purchase_orders")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// USAGE LEDGER & BILLING MODELS
+// ═══════════════════════════════════════════════════════════════════
+
+model UsageEvent {
+  id             BigInt   @id @default(autoincrement())
+  eventId        String   @unique @map("event_id")
+  orgId          String   @map("org_id")
+  feature        String
+  amount         Int      @default(1)
+  occurredAt     DateTime @map("occurred_at")
+  receivedAt     DateTime @default(now()) @map("received_at")
+  idempotencyKey String?  @map("idempotency_key")
+  source         String   @default("api")
+  userId         String?  @map("user_id")
+  metadata       Json?
+  schemaVersion  Int      @default(1) @map("schema_version")
+
+  @@index([orgId, feature, occurredAt])
+  @@index([idempotencyKey])
+  @@map("usage_events")
+}
+
+model UsageAggregateMonthly {
+  orgId   String @map("org_id")
+  feature String
+  cycle   String
+  total   BigInt @default(0)
+
+  @@id([orgId, feature, cycle])
+  @@map("usage_aggregates_monthly")
+}
+
+model StripeMapping {
+  orgId                String  @id @map("org_id")
+  stripeCustomerId     String  @map("stripe_customer_id")
+  stripeSubscriptionId String? @map("stripe_subscription_id")
+
+  @@map("stripe_mappings")
+}
+
+model StripeFeaturePrice {
+  feature       String @id
+  stripePriceId String @map("stripe_price_id")
+
+  @@map("stripe_feature_prices")
+}
+
+model StripeEvent {
+  eventId     String   @id @map("event_id")
+  type        String
+  createdAt   DateTime @map("created_at")
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@map("stripe_events")
+}
+
+model StripeSubscriptionItem {
+  id                   String @id @default(uuid())
+  orgId                String @map("org_id")
+  feature              String // e.g. qr_scan
+  stripeSubscriptionId String @map("stripe_subscription_id")
+  subscriptionItemId   String @map("subscription_item_id") // ID used to push Usage
+
+  @@unique([orgId, feature])
+  @@map("stripe_subscription_items")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// REVENUE OPTIMIZATION LAYER
+// ═══════════════════════════════════════════════════════════════════
+
+model RetentionEvent {
+  id            String   @id @default(uuid())
+  orgId         String   @map("org_id")
+  actionType    String   @map("action_type") // e.g. EMERGENCY_QUOTA, DISCOUNT_OFFER, EDUCATION_NUDGE
+  triggerReason String   @map("trigger_reason") // e.g. QUOTA_EXCEEDED, HIGH_CHURN_RISK
+  outcome       String   @map("outcome") // e.g. IGNORED, ACCEPTED, CONVERTED_UPGRADE
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, actionType])
+  @@map("retention_events")
+}
+
+model OrganizationPricingSnapshot {
+  orgId           String   @id @map("org_id")
+  basePriceId     String   @map("base_price_id")
+  featurePriceMap Json     @map("feature_price_map") // e.g. { "qr_scan": "price_xxx" }
+  cohort          String
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("organization_pricing_snapshots")
+}
+
+model ExperimentExposure {
+  id            String   @id @default(uuid())
+  orgId         String   @map("org_id")
+  experimentKey String   @map("experiment_key") // e.g. PRICING_V2
+  cohort        String
+  exposedAt     DateTime @default(now()) @map("exposed_at")
+
+  @@index([orgId, experimentKey])
+  @@map("experiment_exposures")
+}
+
+// Global registry mapping active variants and their traffic allocation weights
+model ExperimentConfig {
+  experimentKey String   @id @map("experiment_key")
+  weights       Json // e.g. { "A_CONTROL": 0.8, "B_OFFER_DISCOUNT": 0.2 }
+  status        String   @default("active") // active, disabled
+  updatedAt     DateTime @default(now()) @map("updated_at")
+
+  @@map("experiment_configs")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DATA WAREHOUSE V1 (ELT OLAP SCHEMAS)
+// ═══════════════════════════════════════════════════════════════════
+
+// 1. Landing Zone (Append Only Event Stream - HYBRID SCHEMA)
+model RawEvent {
+  eventId   String @id @default(uuid()) @map("event_id")
+  eventType String @map("event_type") // e.g. USAGE_RECORDED, INVOICE_PAID, EXPERIMENT_EXPOSED
+  version   Int    @default(1)
+  orgId     String @map("org_id")
+
+  // Indexed Hot Fields (Denormalized)
+  feature       String?
+  amount        Float?
+  plan          String?
+  contextKey    String? @map("context_key")
+  geoTier       String? @map("geo_tier")
+  usageVelocity String? @map("usage_velocity")
+  companySize   String? @map("company_size")
+
+  // Flexible Cold Fields
+  payload Json
+
+  // Timestamps
+  occurredAt DateTime @default(now()) @map("occurred_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, occurredAt])
+  @@index([eventType])
+  @@index([feature])
+  @@index([contextKey])
+  @@map("dw_raw_events")
+}
+
+// 2. Fact Table: Usage Rollup
+model FactUsageDaily {
+  id         String   @id @default(uuid())
+  orgId      String   @map("org_id")
+  date       DateTime @db.Date
+  feature    String
+  totalUsage Int      @default(0) @map("total_usage")
+
+  @@unique([orgId, date, feature])
+  @@map("fact_usage_daily")
+}
+
+// 3. Fact Table: Revenue Rollup
+model FactRevenueMonthly {
+  id                  String   @id @default(uuid())
+  orgId               String   @map("org_id")
+  month               DateTime @db.Date // Store as YYYY-MM-01
+  subscriptionRevenue Float    @default(0) @map("subscription_revenue")
+  overageRevenue      Float    @default(0) @map("overage_revenue")
+  totalRevenue        Float    @default(0) @map("total_revenue")
+
+  @@unique([orgId, month])
+  @@map("fact_revenue_monthly")
+}
+
+// 4. Fact Table: Experiment Outcomes
+model FactExperimentOutcome {
+  id            String   @id @default(uuid())
+  orgId         String   @map("org_id")
+  experiment    String
+  cohort        String
+  contextHash   String   @default("GLOBAL") @map("context_hash") // Guard: Contextual Separation
+  exposedAt     DateTime @map("exposed_at")
+  cohortAgeDays Int      @default(0) @map("cohort_age_days") // Guard: Maturity Window
+  ltvMatured    Boolean  @default(false) @map("ltv_matured") // Guard: >= 30 Days True
+  converted     Boolean  @default(false)
+  revenueImpact Float    @default(0) @map("revenue_impact")
+
+  @@unique([orgId, experiment])
+  @@map("fact_experiment_outcomes")
+}
+
+// 4.1 Causal Inference Matrix (Phase 15 Uplift Engine base / Phase 17 Causal Ledger)
+model FactExperimentObservation {
+  id              String    @id @default(uuid())
+  orgId           String    @map("org_id")
+  contextKey      String    @map("context_key")
+  variant         String    @map("variant")
+  propensityScore Float     @map("propensity_score")
+  reward          Float     @default(0) @map("reward") // IPS Adjusted
+  exposedAt       DateTime  @map("exposed_at")
+  rewardAt        DateTime? @map("reward_at")
+  experimentKey   String    @map("experiment_key")
+
+  // Multi-touch Causal Ledger JSON Arrays
+  exposureIds     Json? @map("exposure_ids")
+  exposureWeights Json? @map("exposure_weights")
+
+  @@unique([orgId, experimentKey, exposedAt])
+  @@index([contextKey, variant])
+  @@map("fact_experiment_observations")
+}
+
+// 4.1.2 The Absolute Ledger Trace of Causal AI Exposures
+model FactExposure {
+  id              String   @id @default(uuid())
+  orgId           String   @map("org_id")
+  contextKey      String   @map("context_key")
+  variant         String   @map("variant")
+  timestamp       DateTime @default(now()) @map("timestamp")
+  propensityScore Float    @map("propensity_score")
+
+  @@index([orgId, timestamp])
+  @@map("fact_exposures")
+}
+
+// 4.2 Causal Brain Backup (Phase 16 Hardening)
+model BanditStateSnapshot {
+  contextKey  String   @map("context_key")
+  variant     String   @map("variant")
+  count       Int      @default(0)
+  rewardSum   Float    @default(0) @map("reward_sum")
+  rewardSqSum Float    @default(0) @map("reward_sq_sum")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  @@id([contextKey, variant])
+  @@map("bandit_state_snapshots")
+}
+
+// 5. Dimension Table: Org Snapshot
+model DimOrg {
+  orgId     String   @id @map("org_id")
+  country   String?
+  plan      String   @default("free")
+  cohort    String
+  createdAt DateTime @map("created_at")
+
+  @@map("dim_org")
+}
+
+// 6. Fact Table: Cohort Retention
+model FactCohortRetention {
+  id            String @id @default(uuid())
+  cohortMonth   String @map("cohort_month") // e.g. 2026-03
+  lifetimeMonth Int    @map("lifetime_month") // e.g. 0, 1, 2
+  activeCount   Int    @map("active_count")
+  totalUsers    Int    @map("total_users")
+  retentionRate Float  @map("retention_rate") // e.g. 85.5
+
+  @@unique([cohortMonth, lifetimeMonth])
+  @@map("fact_cohort_retention")
+}
+
+// 7. Fact Table: LTV Metrics (Experimentation Rewards)
+model FactLtvMetrics {
+  id             String @id @default(uuid())
+  experimentKey  String @map("experiment_key")
+  cohort         String
+  totalExposures Int    @default(0) @map("total_exposures")
+  arpu           Float  @default(0) // Average Revenue Per User
+  churnRate      Float  @default(0) @map("churn_rate")
+  ltv            Float  @default(0) // Calculated Final 
+
+  @@unique([experimentKey, cohort])
+  @@map("fact_ltv_metrics")
 }

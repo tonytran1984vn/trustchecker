@@ -1,870 +1,473 @@
-const { safeError } = require('../utils/safe-error');
 /**
- * Billing & Pricing Routes v2.0
- * Hybrid pricing: Core Subscription + Usage-Based Add-ons + Freemium
- * 5-tier plans, metered overages, enterprise quotes
+ * Stripe Billing & Webhook API
  */
 
-const { withTransaction } = require('../middleware/transaction');
-const { cacheInvalidate } = require('../middleware/cache-invalidate');
-
-function _safeWhere(clause) {
-    // Only allow basic WHERE fragments: column op value AND/OR
-    if (!/^[a-zA-Z_. <>='0-9\-AND OR()]+$/.test(clause)) throw new Error('Invalid WHERE clause');
-    return clause;
-}
-
-function _safeDate(d) {
-    return d;
-}
 const express = require('express');
 const router = express.Router();
-const { v4: uuidv4 } = require('uuid');
+const Stripe = require('stripe');
+const { billingQueue } = require('../workers/stripe-webhook.worker');
 const db = require('../db');
-const { authMiddleware, requireRole, requirePermission } = require('../auth');
-const pricing = require('../engines/infrastructure/pricing-engine');
-const { getDetailedUsage, getOverageCharges } = require('../middleware/usage-meter');
-const logger = require('../lib/logger');
+const { authMiddleware, requireRole } = require('../auth/core');
 
-// ─── POST /webhook — Webhook receiver with signature verification ────
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_test';
+
+/**
+ * Endpoint: POST /api/v1/billing/webhook
+ * Receives Webhook from Stripe servers.
+ * Verifies validity via signature, then enqueues to Worker to avoid Timeout drops safely.
+ */
 router.post('/webhook', async (req, res) => {
-    try {
-        // Verify webhook signature (Fix: was completely unauthenticated)
-        const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
-        const signature = req.headers['x-webhook-signature'] || req.headers['stripe-signature'];
+    // 1. Recover the rawBody previously buffered by express.json verification hook
+    const rawBody = req.rawBody;
+    const signature = req.headers['stripe-signature'];
 
-        if (WEBHOOK_SECRET) {
-            if (!signature) {
-                return res.status(401).json({ error: 'Missing webhook signature' });
-            }
-            const crypto = require('crypto');
-            const expectedSig = crypto
-                .createHmac('sha256', WEBHOOK_SECRET)
-                .update(JSON.stringify(req.body))
-                .digest('hex');
-            if (signature !== `sha256=${expectedSig}` && signature !== expectedSig) {
-                return res.status(403).json({ error: 'Invalid webhook signature' });
-            }
-        } else if (process.env.NODE_ENV === 'production') {
-            return res.status(500).json({ error: 'Webhook secret not configured' });
+    if (!rawBody || !signature) {
+        return res.status(400).send('Webhook Error: Missing signature or body');
+    }
+
+    let event;
+
+    // 2. Cryptographic Protocol Verification
+    try {
+        event = stripe.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET);
+    } catch (err) {
+        console.error(`⚠️ Webhook signature verification failed: ${err.message}`);
+        return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // 3. Accepted Signature -> Enqueue Event logic into BullMQ Queue
+    // We immediately drop connection returning HTTP 200 so Stripe doesn't classify as timeout
+    try {
+        await billingQueue.add('stripe_invoice_event', event, {
+            jobId: event.id, // Absolute StripeId Idempotency constraint guarantees 1 run
+            attempts: 5,
+            backoff: { type: 'exponential', delay: 1000 },
+        });
+
+        res.json({ received: true });
+    } catch (queueErr) {
+        console.error('Failed to queue Stripe Webhook Event:', queueErr.message);
+        // By returning 500, Stripe will attempt to retry the webhook payload later
+        res.status(500).send('Internal Queue Error');
+    }
+});
+
+/**
+ * Endpoint: POST /api/v1/billing/subscribe
+ * Creates a Stripe Checkout session combining the Base Plan with Metered Addons.
+ */
+router.post('/subscribe', authMiddleware, requireRole('admin'), async (req, res) => {
+    try {
+        const orgId = req.orgId || req.user?.org_id;
+        const { planId } = req.body; // e.g., 'price_1QxYzZ...' (The Pro base plan)
+
+        if (!planId) {
+            return res.status(400).json({ error: 'Missing planId parameters' });
+        }
+
+        let customerId;
+        // Check if Org already has a Stripe Customer ID
+        const org = await db.get('SELECT current_plan FROM organizations WHERE id = $1', [orgId]);
+        const mapping = await db.get('SELECT stripe_customer_id FROM stripe_mappings WHERE org_id = $1', [orgId]);
+
+        if (mapping && mapping.stripe_customer_id) {
+            customerId = mapping.stripe_customer_id;
         } else {
-            logger.warn('⚠️  WEBHOOK_SECRET not set — accepting unsigned webhook in dev mode');
+            // Lazy load Customer onto Stripe
+            const orgTitle = await db.get('SELECT name FROM organizations WHERE id = $1', [orgId]);
+            const customer = await stripe.customers.create({
+                name: orgTitle?.name || 'TrustChecker Customer',
+                metadata: { org_id: orgId },
+            });
+            customerId = customer.id;
+
+            // Persist the CustomerId securely
+            await db.run('INSERT INTO stripe_mappings (org_id, stripe_customer_id) VALUES ($1, $2)', [
+                orgId,
+                customerId,
+            ]);
         }
 
-        const { event_type, data } = req.body;
-        if (!event_type) return res.status(400).json({ error: 'event_type required' });
+        // Fetch DB cached Pricing IDs for the metered features natively created from script
+        const meteredFeatures = await db.all('SELECT feature, stripe_price_id FROM stripe_feature_prices');
 
-        const id = uuidv4();
-        await db.run(
-            `
-      INSERT INTO webhook_events (id, event_type, source, payload, status, processed_at)
-      VALUES (?, ?, ?, ?, 'processed', NOW())
-    `,
-            [id, event_type, data?.source || 'stripe', JSON.stringify(req.body)]
+        // Assemble Line Items (1 Recurring Base + N Metered Addons)
+        const lineItems = [
+            {
+                price: planId, // The Base Pro/Premium Plan Recurring Price
+                quantity: 1,
+            },
+        ];
+
+        for (const meta of meteredFeatures) {
+            lineItems.push({
+                price: meta.stripe_price_id,
+                // Metered items explicitly do not declare quantity upfront.
+            });
+        }
+
+        // Initialize Checkout
+        const session = await stripe.checkout.sessions.create({
+            customer: customerId,
+            mode: 'subscription',
+            payment_method_types: ['card'],
+            line_items: lineItems,
+            subscription_data: {
+                description: 'TrustChecker Master Platform SaaS',
+                metadata: {
+                    org_id: orgId,
+                    internal_plan_code: 'pro',
+                },
+            },
+            success_url: process.env.CLIENT_URL
+                ? `${process.env.CLIENT_URL}/settings/billing?success=true`
+                : 'https://trustchecker.tech/settings/billing?success=true',
+            cancel_url: process.env.CLIENT_URL
+                ? `${process.env.CLIENT_URL}/settings/billing?canceled=true`
+                : 'https://trustchecker.tech/settings/billing?canceled=true',
+        });
+
+        res.json({ checkoutUrl: session.url });
+    } catch (e) {
+        console.error('Failed to create Checkout Session:', e.message);
+        res.status(500).json({ error: 'Checkout Session Initialization failed.' });
+    }
+});
+
+/**
+ * Endpoint: GET /api/v1/billing/preview
+ * Analyzes upcoming charges and calculates behavioral Upsell mechanics natively.
+ */
+router.get('/preview', authMiddleware, requireRole('admin'), async (req, res) => {
+    try {
+        const orgId = req.orgId || req.user?.org_id;
+
+        // Fetch DB mappings
+        const mapping = await db.get(
+            'SELECT stripe_customer_id, stripe_subscription_id FROM stripe_mappings WHERE org_id = $1',
+            [orgId]
         );
+        const orgInfo = await db.get('SELECT current_plan FROM organizations WHERE id = $1', [orgId]);
 
-        let action = 'logged';
-        if (event_type === 'payment.succeeded') action = 'payment_confirmed';
-        else if (event_type === 'subscription.cancelled') action = 'subscription_cancelled';
-        else if (event_type === 'invoice.payment_failed') action = 'payment_failed_alert';
+        if (!mapping || !mapping.stripe_customer_id || !mapping.stripe_subscription_id) {
+            return res.json({
+                current_usage_cost: 0,
+                projected_end_month: 0,
+                current_plan: orgInfo?.current_plan || 'free',
+                suggested_plan: 'pro',
+                suggestion_reason: 'Pro unlocks advanced feature scaling and removes basic quota limiters.',
+            });
+        }
 
-        res.json({ received: true, event_id: id, action });
-    } catch (e) {
-        logger.error('Webhook error:', e);
-        res.status(500).json({ error: 'Webhook processing failed' });
-    }
-});
+        const upcoming = await stripe.invoices.retrieveUpcoming({
+            customer: mapping.stripe_customer_id,
+            subscription: mapping.stripe_subscription_id,
+        });
 
-// ─── GET /pricing — Public pricing page data (no auth) ──────────
-router.get('/pricing', async (req, res) => {
-    try {
-        res.json(await pricing.getPublicPricing());
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
+        // Sum lines
+        let flatFees = 0;
+        let meteredFees = 0;
 
-router.use(authMiddleware);
-
-const PLANS = pricing.PLANS;
-
-// ─── GET /plan ──────────────────────────────────────────────
-router.get('/plan', async (req, res) => {
-    try {
-        let plan = await db.get("SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'", [req.user.id]);
-
-        if (!plan) {
-            // Try to create default free plan, but handle missing table gracefully
-            try {
-                const id = uuidv4();
-                const p = PLANS.free;
-                await db.run(
-                    `
-        INSERT INTO billing_plans (id, user_id, plan_name, scan_limit, api_limit, storage_mb, price_monthly)
-        VALUES (?, ?, 'free', ?, ?, ?, ?)
-      `,
-                    [id, req.user.id, p.limits.scans, p.limits.api_calls, p.limits.storage_mb, p.price_monthly]
-                );
-                plan = await db.get('SELECT * FROM billing_plans WHERE id = ?', [id]);
-            } catch (insertErr) {
-                // billing_plans table may not exist — return default plan info
-                logger.warn('[billing] billing_plans table error, returning defaults:', insertErr.message);
-                const defaultPlan = PLANS.free;
-                return res.json({
-                    plan: {
-                        plan_name: 'free',
-                        status: 'active',
-                        scan_limit: defaultPlan.limits.scans,
-                        api_limit: defaultPlan.limits.api_calls,
-                        storage_mb: defaultPlan.limits.storage_mb,
-                        price_monthly: 0,
-                    },
-                    plan_details: defaultPlan,
-                    available_plans: Object.entries(PLANS).map(([k, v]) => ({ slug: k, ...v })),
-                });
+        for (const line of upcoming.lines.data) {
+            const amount = line.amount / 100.0; // Stripe uses Cents
+            if (line.price?.recurring?.usage_type === 'metered') {
+                meteredFees += amount;
+            } else {
+                flatFees += amount;
             }
         }
 
-        const planDef = PLANS[plan?.plan_name || 'free'];
-        res.json({
-            plan,
-            plan_details: planDef,
-            available_plans: (await pricing.getPublicPricing()).plans,
-        });
-    } catch (e) {
-        // Catch-all: return default free plan instead of 500
-        logger.warn('[billing] /plan error, returning defaults:', e.message);
-        const defaultPlan = PLANS.free;
-        res.json({
-            plan: { plan_name: 'free', status: 'active' },
-            plan_details: defaultPlan,
-            available_plans: Object.entries(PLANS).map(([k, v]) => ({ slug: k, ...v })),
-        });
-    }
-});
+        const totalCost = (upcoming.amount_due || upcoming.total) / 100.0;
+        let suggestion = null;
+        let reason = null;
 
-// ─── POST /upgrade ──────────────────────────────────────────
-router.post('/upgrade', requirePermission('billing:manage'), async (req, res) => {
-    try {
-        const { plan_name, billing_cycle } = req.body;
-        if (!PLANS[plan_name])
-            return res.status(400).json({ error: 'Invalid plan. Choose: free, starter, pro, business, enterprise' });
+        // Fetch the Locked Pricing Matrix (Frozen Architecture to prevent Price-Drift)
+        const pricingSnapshot = await db.get(
+            'SELECT cohort, feature_price_map FROM organization_pricing_snapshots WHERE org_id = $1',
+            [orgId]
+        );
+        const activeCohort = pricingSnapshot?.cohort || 'A_CONTROL';
 
-        const p = PLANS[plan_name];
-        const isAnnual = billing_cycle === 'annual';
-        const amount = isAnnual ? p.price_annual || 0 : p.price_monthly || 0;
-        const savingsPercent =
-            p.price_monthly > 0 ? Math.round((1 - (p.price_annual || 0) / (p.price_monthly * 12)) * 100) : 0;
-
-        // -- Proration Logic (Stripe-Style) --
-        const currentActiveInfo = await db.get("SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'", [
-            req.user.id,
-        ]);
-
-        let chargeAmount = amount;
-        let invoiceStatus = 'paid';
-
-        const now = new Date();
-        const periodEnd = new Date(now);
-        if (isAnnual) periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-        else periodEnd.setMonth(periodEnd.getMonth() + 1);
-
-        if (currentActiveInfo && Object.keys(PLANS).indexOf(currentActiveInfo.plan_name) >= 0) {
-            // Check current active invoice to find period remaining
-            const currentInvoice = await db.get(
-                "SELECT * FROM invoices WHERE user_id = ? AND plan_name = ? AND status = 'paid' ORDER BY created_at DESC LIMIT 1",
-                [req.user.id, currentActiveInfo.plan_name]
-            );
-
-            if (currentInvoice && currentInvoice.period_end) {
-                const currentPeriodEnd = new Date(currentInvoice.period_end);
-                if (currentPeriodEnd > now) {
-                    const daysRemaining = Math.max(0, Math.ceil((currentPeriodEnd - now) / (1000 * 60 * 60 * 24)));
-                    if (daysRemaining > 0) {
-                        const oldP = PLANS[currentActiveInfo.plan_name];
-                        const oldPrice = isAnnual ? oldP?.price_annual || 0 : oldP?.price_monthly || 0;
-                        const newPrice = amount;
-                        const cycleDays = isAnnual ? 365 : 30;
-
-                        // Proration math: credit unused old plan, charge unused new plan
-                        const prorationCharge = Math.max(
-                            0,
-                            Math.round((newPrice * daysRemaining) / cycleDays - (oldPrice * daysRemaining) / cycleDays)
-                        );
-                        chargeAmount = prorationCharge;
-                    }
+        // Behavioral Upgrade Engine (Stripe / Snowflake Tier Threshold Analysis)
+        if (orgInfo.current_plan === 'pro') {
+            if (activeCohort === 'A_CONTROL') {
+                // Heuristic A: Upsale explicitly on high overages
+                if (meteredFees > 49.0) {
+                    suggestion = 'enterprise';
+                    reason = `You are paying $${meteredFees.toFixed(2)} in usage overages. Upgrade to Enterprise to consolidate your bill with custom unlimited tiers.`;
+                }
+            } else if (activeCohort === 'B_OFFER_DISCOUNT') {
+                // Heuristic B: Discount focused
+                if (meteredFees > 30.0) {
+                    suggestion = 'enterprise';
+                    reason = `Your overages are rising. Secure an immediate 30% Lifetime discount by switching to the Enterprise Plan now!`;
                 }
             }
         }
 
-        invoiceStatus = chargeAmount > 0 ? 'pending' : 'paid';
-
-        // Deactivate current plan
-        await db
-            .prepare("UPDATE billing_plans SET status = 'inactive' WHERE user_id = ? AND status = 'active'")
-            .run(req.user.id);
-
-        // Create new plan
-        const id = uuidv4();
-        await db.run(
-            `
-      INSERT INTO billing_plans (id, user_id, plan_name, scan_limit, api_limit, storage_mb, price_monthly)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `,
-            [
-                id,
-                req.user.id,
-                plan_name,
-                p.limits.scans,
-                p.limits.api_calls,
-                p.limits.storage_mb,
-                isAnnual ? Math.round((p.price_annual || 0) / 12) : p.price_monthly || 0,
-            ]
-        );
-
-        // Generate invoice
-        const invoiceId = uuidv4();
-        await db.run(
-            `
-      INSERT INTO invoices (id, user_id, plan_name, amount, status, period_start, period_end)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `,
-            [invoiceId, req.user.id, plan_name, chargeAmount, invoiceStatus, now.toISOString(), periodEnd.toISOString()]
-        );
-
-        // Plan comparison for the response
-        const comparison = pricing.comparePlans(
-            (
-                await db.get(
-                    "SELECT plan_name FROM billing_plans WHERE user_id = ? AND status = 'inactive' ORDER BY started_at DESC LIMIT 1",
-                    [req.user.id]
-                )
-            )?.plan_name || 'free',
-            plan_name
-        );
+        // Emit Exposure Signal - Securing Snowflake Analytics Logging Principles
+        const { RetentionService } = require('../services/retention.service');
+        await RetentionService.trackExposure(orgId, 'UPSELL_NUDGING_V1', activeCohort);
 
         res.json({
-            plan_name,
-            billing_cycle: isAnnual ? 'annual' : 'monthly',
-            amount: chargeAmount,
-            invoice_id: invoiceId,
-            status: invoiceStatus,
-            savings: isAnnual
-                ? { percent: savingsPercent, saved: (p.price_monthly || 0) * 12 - (p.price_annual || 0) }
-                : null,
-            new_limits: p.limits,
-            new_features: comparison?.new_features || [],
-            sla: p.sla,
+            flat_cost: flatFees,
+            metered_overage_cost: meteredFees,
+            projected_end_month: totalCost,
+            currency: upcoming.currency,
+            current_plan: orgInfo.current_plan,
+            suggested_plan: suggestion,
+            suggestion_reason: reason,
         });
     } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
-
-// ─── POST /pay/:id ──────────────────────────────────────────
-// Mock endpoint to simulate Stripe checkout / manual payment completion
-router.post('/pay/:id', requirePermission('billing:manage'), async (req, res) => {
-    try {
-        const inv = await db.get('SELECT * FROM invoices WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
-        if (!inv) return res.status(404).json({ error: 'Invoice not found' });
-        if (inv.status === 'paid') return res.status(400).json({ error: 'Invoice already paid' });
-
-        await db.run("UPDATE invoices SET status = 'paid' WHERE id = ?", [req.params.id]);
-        res.json({ message: 'Payment successful', id: req.params.id, status: 'paid' });
-    } catch (e) {
-        safeError(res, 'Payment failed', e);
-    }
-});
-
-// ─── GET /usage ─────────────────────────────────────────────
-router.get('/usage', async (req, res) => {
-    try {
-        const plan = await db.get("SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'", [req.user.id]);
-
-        // Calculate real usage from existing tables
-        const period = new Date().toISOString().substring(0, 7); // YYYY-MM
-
-        // Use PG date_trunc for month start
-        const monthStart = "date_trunc('month', now())";
-
-        const scans = (await db.get(
-            `SELECT COUNT(*) as count FROM scan_events WHERE scanned_at >= ${_safeDate(monthStart)}`
-        )) || { count: 0 };
-
-        const evidenceSize = (await db.get('SELECT COALESCE(SUM(file_size), 0) as size FROM evidence_items')) || {
-            size: 0,
-        };
-
-        const apiCalls = (await db.get(
-            `SELECT COUNT(*) as count FROM audit_log WHERE timestamp >= ${_safeDate(monthStart)}`
-        )) || { count: 0 };
-
-        const usage = {
-            scans: {
-                used: scans.count,
-                limit: plan?.scan_limit || 100,
-                percent: plan?.scan_limit > 0 ? Math.round((scans.count / plan.scan_limit) * 100) : 0,
-            },
-            api_calls: {
-                used: apiCalls.count,
-                limit: plan?.api_limit || 500,
-                percent: plan?.api_limit > 0 ? Math.round((apiCalls.count / plan.api_limit) * 100) : 0,
-            },
-            storage_mb: {
-                used: Math.round((evidenceSize.size / (1024 * 1024)) * 100) / 100,
-                limit: plan?.storage_mb || 50,
-                percent:
-                    plan?.storage_mb > 0 ? Math.round((evidenceSize.size / (1024 * 1024) / plan.storage_mb) * 100) : 0,
-            },
-        };
-
-        // Unlimited for enterprise
-        if (plan?.plan_name === 'enterprise') {
-            usage.scans.limit = '∞';
-            usage.scans.percent = 0;
-            usage.api_calls.limit = '∞';
-            usage.api_calls.percent = 0;
-            usage.storage_mb.limit = '∞';
-            usage.storage_mb.percent = 0;
-        }
-
-        res.json({ period, plan_name: plan?.plan_name || 'free', usage });
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
-
-// ─── GET /usage/detailed — Full usage breakdown with overage costs ──
-router.get('/usage/detailed', async (req, res) => {
-    try {
-        const detailed = await getDetailedUsage(req.user.id);
-        res.json(detailed);
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
-
-// ─── GET /estimate — Project next invoice (base + overages) ─────────
-router.get('/estimate', async (req, res) => {
-    try {
-        const plan = await db.get("SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'", [req.user.id]);
-        const planName = plan?.plan_name || 'free';
-        const detailed = await getDetailedUsage(req.user.id);
-
-        const estimate = pricing.estimateInvoice(planName, req.query.cycle || 'monthly', {
-            scans: detailed.usage.scans?.used || 0,
-            nft_mints: detailed.usage.nft_mints?.used || 0,
-            carbon_calcs: detailed.usage.carbon_calcs?.used || 0,
-            api_calls: detailed.usage.api_calls?.used || 0,
-        });
-
-        res.json({
-            ...estimate,
-            period: detailed.period,
-            usage_snapshot: detailed.usage,
-        });
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
-
-// ─── GET /overage — Current overage charges ─────────────────────────
-router.get('/overage', async (req, res) => {
-    try {
-        const charges = await getOverageCharges(req.user.id);
-        res.json(charges);
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
-
-// ─── POST /enterprise/request — Enterprise quote request ────────────
-router.post('/enterprise/request', async (req, res) => {
-    try {
-        const { estimated_scans, estimated_api_calls, requirements } = req.body;
-
-        const quote = pricing.generateEnterpriseQuote(
-            {
-                scans: estimated_scans || 100000,
-                api_calls: estimated_api_calls || 500000,
-            },
-            requirements || {}
-        );
-
-        // Log the enterprise request
-        const id = uuidv4();
-        await db.run(
-            `
-            INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details)
-            VALUES (?, ?, 'ENTERPRISE_QUOTE_REQUEST', 'billing', ?, ?)
-        `,
-            [
-                id,
-                req.user.id,
-                id,
-                JSON.stringify({
-                    estimated_scans,
-                    estimated_api_calls,
-                    requirements,
-                    quote,
-                }),
-            ]
-        );
-
-        res.json({
-            quote,
-            request_id: id,
-            message: 'Our enterprise team will reach out within 48 hours.',
-        });
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
-
-// ─── GET /compare — Compare plans ───────────────────────────────────
-router.get('/compare', async (req, res) => {
-    try {
-        const plan = await db.get("SELECT plan_name FROM billing_plans WHERE user_id = ? AND status = 'active'", [
-            req.user.id,
-        ]);
-        const currentPlan = plan?.plan_name || 'free';
-        const { to } = req.query;
-
-        if (to) {
-            const comparison = pricing.comparePlans(currentPlan, to);
-            if (!comparison) return res.status(400).json({ error: 'Invalid target plan' });
-            return res.json(comparison);
-        }
-
-        // Compare all plans
-        const comparisons = {};
-        for (const slug of Object.keys(PLANS)) {
-            if (slug !== currentPlan) {
-                comparisons[slug] = pricing.comparePlans(currentPlan, slug);
-            }
-        }
-        res.json({ current_plan: currentPlan, comparisons });
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
-
-// ─── GET /invoices ──────────────────────────────────────────
-router.get('/invoices', async (req, res) => {
-    try {
-        // Super admin sees ALL platform invoices; regular users see only their own
-        const isSuperAdmin = req.user?.role === 'super_admin' || req.user?.user_type === 'platform';
-        const invoices = isSuperAdmin
-            ? await db.all('SELECT * FROM invoices ORDER BY created_at DESC LIMIT 1000')
-            : await db.all('SELECT * FROM invoices WHERE user_id = ? ORDER BY created_at DESC LIMIT 1000', [
-                  req.user.id,
-              ]);
-        res.json({ invoices });
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
-
-// ─── GET /limits ────────────────────────────────────────────
-router.get('/limits', async (req, res) => {
-    try {
-        const plan = await db.get("SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'", [req.user.id]);
-        const planDetails = PLANS[plan?.plan_name || 'free'];
-
-        res.json({
-            current_plan: plan?.plan_name || 'free',
-            limits: planDetails,
-            all_plans: PLANS,
-        });
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
-
-// ─── GET /webhook/events — View webhook event log (admin) ───
-router.get('/webhook/events', requirePermission('org:settings_update'), async (req, res) => {
-    try {
-        const events = await db.all('SELECT * FROM webhook_events ORDER BY created_at DESC LIMIT 50');
-        res.json({ events });
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
-
-// ─── POST /downgrade ────────────────────────────────────────
-router.post('/downgrade', requirePermission('org:settings_update'), async (req, res) => {
-    try {
-        const { plan_name } = req.body;
-        if (!plan_name || !PLANS[plan_name]) return res.status(400).json({ error: 'Invalid plan' });
-
-        const current = await db.get("SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'", [
-            req.user.id,
-        ]);
-        const currentPlan = current?.plan_name || 'free';
-        const planOrder = ['free', 'starter', 'pro', 'enterprise'];
-        if (planOrder.indexOf(plan_name) >= planOrder.indexOf(currentPlan)) {
-            return res.status(400).json({ error: 'Can only downgrade to a lower tier. Use /upgrade for upgrades.' });
-        }
-
-        if (current) {
-            await db
-                .prepare("UPDATE billing_plans SET status = 'cancelled', expires_at = NOW() WHERE id = ?")
-                .run(current.id);
-        }
-
-        const newId = uuidv4();
-        const p = PLANS[plan_name];
-        await db
-            .prepare(
-                `INSERT INTO billing_plans (id, user_id, plan_name, scan_limit, api_limit, storage_mb, price_monthly) VALUES (?, ?, ?, ?, ?, ?, ?)`
-            )
-            .run(
-                newId,
-                req.user.id,
-                plan_name,
-                p.limits.scans,
-                p.limits.api_calls,
-                p.limits.storage_mb,
-                p.price_monthly
-            );
-
-        // Generate prorated refund notice
-        res.json({
-            downgraded_to: plan_name,
-            previous_plan: currentPlan,
-            new_limits: p,
-            effective_immediately: true,
-            note: 'Prorated refund will be applied to your next billing cycle',
-        });
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
-
-// ─── GET /usage/alerts ──────────────────────────────────────
-router.get('/usage/alerts', async (req, res) => {
-    try {
-        const plan = await db.get("SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'", [req.user.id]);
-        const planLimits = PLANS[plan?.plan_name || 'free'];
-        const period = new Date().toISOString().substring(0, 7);
-
-        const scanCount =
-            (await db.get(`SELECT COUNT(*) as c FROM scan_events WHERE to_char(scanned_at, 'YYYY-MM') = $1`, [period]))
-                ?.c || 0;
-        const apiCount =
-            (await db.get(`SELECT COUNT(*) as c FROM audit_log WHERE to_char(created_at, 'YYYY-MM') = $1`, [period]))
-                ?.c || 0;
-        const storageSize = (await db.get('SELECT COALESCE(SUM(file_size), 0) as s FROM evidence_items'))?.s || 0;
-        const storageMB = storageSize / (1024 * 1024);
-
-        const alerts = [];
-        const scanPct = planLimits.scan_limit > 0 ? (scanCount / planLimits.scan_limit) * 100 : 0;
-        const apiPct = planLimits.api_limit > 0 ? (apiCount / planLimits.api_limit) * 100 : 0;
-        const storagePct = planLimits.storage_mb > 0 ? (storageMB / planLimits.storage_mb) * 100 : 0;
-
-        if (scanPct >= 90)
-            alerts.push({
-                type: 'scans',
-                level: 'critical',
-                message: `Scan usage at ${Math.round(scanPct)}% (${scanCount}/${planLimits.scan_limit})`,
+        console.error('Invoice Preview Error:', e.message);
+        // If the org has no upcoming invoice (canceled, etc)
+        if (e.message.includes('No upcoming invoices for customer')) {
+            return res.json({
+                current_usage_cost: 0,
+                projected_end_month: 0,
+                current_plan: 'canceled',
+                suggested_plan: 'pro',
             });
-        else if (scanPct >= 75)
-            alerts.push({ type: 'scans', level: 'warning', message: `Scan usage at ${Math.round(scanPct)}%` });
+        }
+        res.status(500).json({ error: 'Failed to preview billing usage.' });
+    }
+});
 
-        if (apiPct >= 90)
-            alerts.push({ type: 'api', level: 'critical', message: `API usage at ${Math.round(apiPct)}%` });
-        else if (apiPct >= 75)
-            alerts.push({ type: 'api', level: 'warning', message: `API usage at ${Math.round(apiPct)}%` });
+/**
+ * Endpoint: POST /api/v1/billing/upgrade
+ * 1-Click Zero-Downtime SaaS Upgrade Flow. Swaps the Base recurring plan and creates Stripe Prorations.
+ */
+router.post('/upgrade', authMiddleware, requireRole('admin'), async (req, res) => {
+    try {
+        const orgId = req.orgId || req.user?.org_id;
+        const { targetPriceId, targetPlanName } = req.body;
 
-        if (storagePct >= 90)
-            alerts.push({ type: 'storage', level: 'critical', message: `Storage at ${Math.round(storagePct)}%` });
-        else if (storagePct >= 75)
-            alerts.push({ type: 'storage', level: 'warning', message: `Storage at ${Math.round(storagePct)}%` });
+        if (!targetPriceId || !targetPlanName) {
+            return res.status(400).json({ error: 'Missing targetPriceId or targetPlanName' });
+        }
 
-        res.json({
-            plan: plan?.plan_name || 'free',
-            period,
-            alerts,
-            has_alerts: alerts.length > 0,
-            usage_summary: {
-                scans: scanPct.toFixed(1) + '%',
-                api: apiPct.toFixed(1) + '%',
-                storage: storagePct.toFixed(1) + '%',
+        // Fetch Subscription Identity
+        const mapping = await db.get('SELECT stripe_subscription_id FROM stripe_mappings WHERE org_id = $1', [orgId]);
+
+        if (!mapping || !mapping.stripe_subscription_id) {
+            return res
+                .status(400)
+                .json({ error: 'Org has no active subscription. Use /subscribe to create a new one.' });
+        }
+
+        const subId = mapping.stripe_subscription_id;
+
+        // 1. Retrieve Current Subscription Details
+        const subDetails = await stripe.subscriptions.retrieve(subId);
+
+        // 2. Locate the existing Base Plan Item (The one that is NOT metered)
+        const oldBaseItem = subDetails.items.data.find(i => i.price?.recurring?.usage_type !== 'metered');
+
+        if (!oldBaseItem) {
+            return res.status(500).json({ error: 'Could not resolve existing Base Plan item for Proration.' });
+        }
+
+        // 3. Command Stripe to Perform Atomic Proration Swap
+        const updatedSub = await stripe.subscriptions.update(subId, {
+            items: [
+                {
+                    id: oldBaseItem.id, // The item to edit
+                    price: targetPriceId, // The new Price to apply
+                },
+            ],
+            proration_behavior: 'create_prorations',
+            metadata: {
+                ...subDetails.metadata,
+                internal_plan_code: targetPlanName,
             },
         });
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
 
-// ─── POST /sdk/api-key — Generate API key ───────────────────
-router.post('/sdk/api-key', requirePermission('org:settings_update'), async (req, res) => {
-    try {
-        const { name, permissions } = req.body;
-        const crypto = require('crypto');
-        const apiKey = 'tc_' + crypto.randomBytes(24).toString('hex');
-        const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
-        const id = uuidv4();
+        // 4. Prioritize Upgrade Over Downgrade (Guard rails)
+        if (subDetails.schedule) {
+            await stripe.subscriptionSchedules.cancel(subDetails.schedule);
+            console.log(`🧹 Canceled existing Downgrade Schedule on Org ${orgId} during Upgrade.`);
+        }
 
-        await db
-            .prepare(
-                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
-            )
-            .run(
-                id,
-                req.user.id,
-                'API_KEY_CREATED',
-                'api_key',
-                id,
-                JSON.stringify({
-                    name: name || 'Default',
-                    key_hash: keyHash,
-                    permissions: permissions || ['read'],
-                    created_at: new Date().toISOString(),
-                })
-            );
-
-        res.json({
-            api_key: apiKey,
-            key_id: id,
-            name: name || 'Default',
-            permissions: permissions || ['read'],
-            note: 'Store this key securely. It will not be shown again.',
-        });
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
-
-// ─── GET /sdk/api-keys — List API keys ──────────────────────
-router.get('/sdk/api-keys', requirePermission('org:settings_update'), async (req, res) => {
-    try {
-        const keys = await db.all(
-            "SELECT id, details, created_at FROM audit_log WHERE actor_id = ? AND action = 'API_KEY_CREATED' ORDER BY created_at DESC LIMIT 1000",
-            [req.user.id]
+        // 5. Synchronous Core State Mutation & Cache Flush
+        await db.run(
+            `UPDATE organizations 
+             SET current_plan = $1, billing_updated_at = NOW(), pending_downgrade_plan = NULL, downgrade_at = NULL
+             WHERE id = $2`,
+            [targetPlanName, orgId]
         );
-        const parsed = keys.map(k => {
-            const d = JSON.parse(k.details || '{}');
-            return {
-                id: k.id,
-                name: d.name,
-                permissions: d.permissions,
-                created_at: d.created_at || k.created_at,
-                revoked: !!d.revoked,
-            };
-        });
-        res.json({ api_keys: parsed.filter(k => !k.revoked) });
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
 
-// ─── DELETE /sdk/api-key/:id — Revoke API key ───────────────
-router.delete('/sdk/api-key/:id', requirePermission('org:settings_update'), async (req, res) => {
-    try {
-        const key = await db.get("SELECT * FROM audit_log WHERE id = ? AND action = 'API_KEY_CREATED'", [
-            req.params.id,
-        ]);
-        if (!key) return res.status(404).json({ error: 'API key not found' });
+        const { EntitlementService } = require('../services/entitlement.service');
+        await EntitlementService.refreshCache(orgId);
 
-        const details = JSON.parse(key.details || '{} LIMIT 1000');
-        details.revoked = true;
-        details.revoked_at = new Date().toISOString();
-        await db.run('UPDATE audit_log SET details = ? WHERE id = ?', [JSON.stringify(details), req.params.id]);
-
-        res.json({ revoked: true, key_id: req.params.id });
-    } catch (e) {
-        safeError(res, 'Operation failed', e);
-    }
-});
-
-// ─── GET /sdk/snippet — Generate SDK code snippet ───────────
-router.get('/sdk/snippet', async (req, res) => {
-    try {
-        const { language = 'javascript' } = req.query;
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
-
-        const snippets = {
-            javascript: `// TrustChecker SDK — JavaScript
-const TRUSTCHECKER_API = '${baseUrl}/api';
-const API_KEY = 'tc_YOUR_API_KEY';
-
-async function verifyProduct(productId) {
-  const res = await fetch(\`\${TRUSTCHECKER_API}/public/api/v1/products/\${productId}/trust\`, {
-    headers: { 'X-API-Key': API_KEY }
-  });
-  return res.json();
-}
-
-async function submitScan(productId, scanData) {
-  const res = await fetch(\`\${TRUSTCHECKER_API}/qr/verify\`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY },
-    body: JSON.stringify({ product_id: productId, ...scanData })
-  });
-  return res.json();
-}`,
-            python: `# TrustChecker SDK — Python
-import requests
-
-TRUSTCHECKER_API = '${baseUrl}/api'
-API_KEY = 'tc_YOUR_API_KEY'
-
-def verify_product(product_id):
-    resp = requests.get(f'{TRUSTCHECKER_API}/public/api/v1/products/{product_id}/trust',
-                        headers={'X-API-Key': API_KEY})
-    return resp.json()
-
-def submit_scan(product_id, scan_data):
-    resp = requests.post(f'{TRUSTCHECKER_API}/qr/verify',
-                         headers={'Authorization': f'Bearer {API_KEY}'},
-                         json={'product_id': product_id, **scan_data})
-    return resp.json()`,
-            curl: `# TrustChecker SDK — cURL
-# Verify product trust score
-curl -s '${baseUrl}/api/public/api/v1/products/PRODUCT_ID/trust' \\
-  -H 'X-API-Key: tc_YOUR_API_KEY' | jq .
-
-# Submit scan
-curl -s -X POST '${baseUrl}/api/qr/verify' \\
-  -H 'Authorization: Bearer tc_YOUR_API_KEY' \\
-  -H 'Content-Type: application/json' \\
-  -d '{"product_id":"PRODUCT_ID"}' | jq .`,
-        };
+        console.log(`🚀 Successfully Upgraded Org ${orgId} to ${targetPlanName} with Prorations.`);
 
         res.json({
-            language,
-            snippet: snippets[language] || snippets.javascript,
-            available_languages: Object.keys(snippets),
+            success: true,
+            message: `Successfully upgraded to ${targetPlanName}`,
+            subscription: updatedSub.id,
         });
     } catch (e) {
-        safeError(res, 'Operation failed', e);
+        console.error('Upgrade Endpoint Error:', e.message);
+        res.status(500).json({ error: 'Failed to process plan switch request.' });
     }
 });
 
-// ═══════════════════════════════════════════════════════════════════
-// PRICING ADMIN (super_admin only)
-// ═══════════════════════════════════════════════════════════════════
-const requireSuperAdmin = require('../middleware/requireSuperAdmin');
-
-// ─── PUT /pricing — Update plan pricing (super_admin only) ───────────────────
-router.put('/pricing', requireSuperAdmin(), async (req, res) => {
+/**
+ * Endpoint: POST /api/v1/billing/downgrade
+ * Safe Downgrade Flow. Schedules plan transitions strictly at period_end.
+ */
+router.post('/downgrade', authMiddleware, requireRole('admin'), async (req, res) => {
     try {
-        const { plans } = req.body;
-        if (!plans || typeof plans !== 'object') {
-            return res.status(400).json({ error: 'plans object is required' });
+        const orgId = req.orgId || req.user?.org_id;
+        const { targetPlanName, targetPriceId } = req.body; // e.g., 'free' or 'pro'
+
+        if (!targetPlanName) {
+            return res.status(400).json({ error: 'Missing targetPlanName' });
         }
 
-        await pricing.updatePricingOverrides('plans', plans, req.user.id);
+        const mapping = await db.get('SELECT stripe_subscription_id FROM stripe_mappings WHERE org_id = $1', [orgId]);
 
-        // Audit
-        await db
-            .prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, details) VALUES (?, ?, ?, ?, ?)`)
-            .run(
-                uuidv4(),
-                req.user.id,
-                'PRICING_PLANS_UPDATED',
-                'system',
-                JSON.stringify({ updated_plans: Object.keys(plans) })
-            );
-
-        const updated = await pricing.getPublicPricing();
-        res.json({ message: 'Plan pricing updated', plans: updated.plans });
-    } catch (e) {
-        logger.error('[billing] Pricing update error:', e);
-        safeError(res, 'Failed to update pricing', e);
-    }
-});
-
-// ─── PUT /usage-pricing — Update usage-based pricing (super_admin only) ──────
-router.put('/usage-pricing', requireSuperAdmin(), async (req, res) => {
-    try {
-        const { usage } = req.body;
-        if (!usage || typeof usage !== 'object') {
-            return res.status(400).json({ error: 'usage object is required' });
+        if (!mapping || !mapping.stripe_subscription_id) {
+            return res.status(400).json({ error: 'Org has no active subscription to downgrade.' });
         }
 
-        await pricing.updatePricingOverrides('usage', usage, req.user.id);
+        const subId = mapping.stripe_subscription_id;
+        const subDetails = await stripe.subscriptions.retrieve(subId);
 
-        // Audit
-        await db
-            .prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, details) VALUES (?, ?, ?, ?, ?)`)
-            .run(
-                uuidv4(),
-                req.user.id,
-                'PRICING_USAGE_UPDATED',
-                'system',
-                JSON.stringify({ updated_types: Object.keys(usage) })
-            );
+        const endDate = new Date(subDetails.current_period_end * 1000);
 
-        const updated = await pricing.getPublicPricing();
-        res.json({ message: 'Usage pricing updated', usage_pricing: updated.usage_pricing });
+        if (targetPlanName === 'free') {
+            // Cancel at period end gracefully
+            await stripe.subscriptions.update(subId, {
+                cancel_at_period_end: true,
+            });
+        } else {
+            // Tiered Downgrade (Enterprise -> Pro) using Stripe Schedules
+            if (!targetPriceId) return res.status(400).json({ error: 'Missing targetPriceId' });
+
+            // 1. Convert sub to Schedule
+            let scheduleId = subDetails.schedule;
+            if (!scheduleId) {
+                const schedule = await stripe.subscriptionSchedules.create({
+                    from_subscription: subId,
+                });
+                scheduleId = schedule.id;
+            }
+
+            const scheduleDetail = await stripe.subscriptionSchedules.retrieve(scheduleId);
+            const currentPhase = scheduleDetail.phases[0];
+
+            // Filter out old base plan, inject new
+            const newItems = currentPhase.items.map(item => {
+                const priceType = item.price?.recurring?.usage_type; // 'metered' vs 'licensed'
+                if (priceType !== 'metered') {
+                    return { price: targetPriceId, quantity: 1 };
+                }
+                return { price: item.price, quantity: 1 }; // Might need tweaking based on dynamic stripe payload
+            });
+
+            // 2. Queue Phase 2 at end of Phase 1
+            await stripe.subscriptionSchedules.update(scheduleId, {
+                phases: [
+                    {
+                        start_date: currentPhase.start_date,
+                        end_date: currentPhase.end_date,
+                        items: currentPhase.items,
+                    },
+                    {
+                        start_date: currentPhase.end_date,
+                        items: newItems,
+                        metadata: { internal_plan_code: targetPlanName },
+                    },
+                ],
+            });
+        }
+
+        // 3. Mark DB for Native Tracker
+        await db.run(
+            `UPDATE organizations 
+             SET pending_downgrade_plan = $1, downgrade_at = $2
+             WHERE id = $3`,
+            [targetPlanName, endDate.toISOString(), orgId]
+        );
+
+        console.log(`📉 Org ${orgId} Scheduled to Downgrade to ${targetPlanName} firmly at ${endDate.toISOString()}`);
+
+        res.json({
+            success: true,
+            message: `Your downgrade to ${targetPlanName} has been scheduled for the end of the current billing cycle (${endDate.toLocaleDateString()}).`,
+        });
     } catch (e) {
-        logger.error('[billing] Usage pricing update error:', e);
-        safeError(res, 'Failed to update usage pricing', e);
+        console.error('Downgrade Feature Error:', e.message);
+        res.status(500).json({ error: 'Failed to execute Downgrade scheduling.' });
     }
 });
 
-// ─── POST /pricing/reset — Reset pricing to defaults (super_admin only) ──────
-router.post('/pricing/reset', requireSuperAdmin(), async (req, res) => {
+/**
+ * Endpoint: POST /api/v1/billing/cancel-offer
+ * Churn Deflection Engine. Offers an immediate, Stripe-Native discount to retain users who intent to downgrade.
+ */
+router.post('/cancel-offer', authMiddleware, requireRole('admin'), async (req, res) => {
     try {
-        const result = await pricing.resetPricingToDefaults();
+        const orgId = req.orgId || req.user?.org_id;
 
-        // Audit
-        await db
-            .prepare(`INSERT INTO audit_log (id, actor_id, action, entity_type, details) VALUES (?, ?, ?, ?, ?)`)
-            .run(
-                uuidv4(),
-                req.user.id,
-                'PRICING_RESET',
-                'system',
-                JSON.stringify({ reset_at: new Date().toISOString() })
-            );
+        const mapping = await db.get('SELECT stripe_subscription_id FROM stripe_mappings WHERE org_id = $1', [orgId]);
 
-        res.json({ message: 'Pricing reset to defaults', plans: result.plans });
+        if (!mapping || !mapping.stripe_subscription_id) {
+            return res.status(400).json({ error: 'Org has no active subscription to rescue.' });
+        }
+
+        const subId = mapping.stripe_subscription_id;
+
+        // Note: You must manually create a Promo Code named 'SAVE30' inside your Stripe Dashboard that offers e.g. 30% off for 3 months.
+        const COUPO_CODE = 'SAVE30';
+
+        try {
+            await stripe.subscriptions.update(subId, {
+                coupon: COUPO_CODE,
+            });
+            console.log(`🛡️ Churn Deflected: Applied 30% retention discount to Org ${orgId}`);
+        } catch (couponErr) {
+            console.warn(`[Churn Deflection] Promo Code SAVE30 might not exist on Stripe: ${couponErr.message}`);
+            return res.status(400).json({ error: 'Retention offer expired or invalid.' });
+        }
+
+        res.json({
+            success: true,
+            message: `Retention offer successfully applied! You now have a 30% discount on your current Subscription.`,
+        });
     } catch (e) {
-        logger.error('[billing] Pricing reset error:', e);
-        safeError(res, 'Failed to reset pricing', e);
+        console.error('Cancel-Offer Error:', e.message);
+        res.status(500).json({ error: 'Failed to process retention offer.' });
     }
 });
 
-// ═══════════════════════════════════════════════════════════════════
-// TRANSACTION FEE INFRASTRUCTURE (per-transaction pricing)
-// ═══════════════════════════════════════════════════════════════════
-const txFeeEngine = require('../engines/economics-engine').transactionFee;
+/**
+ * Endpoint: POST /api/v1/billing/retention-event
+ * Analytics Collector for Experimentation Engine A/B Testing.
+ */
+router.post('/retention-event', authMiddleware, requireRole('admin'), async (req, res) => {
+    try {
+        const orgId = req.orgId || req.user?.org_id;
+        const { actionType, triggerReason, outcome } = req.body;
 
-// ─── GET /transaction-fees — Fee schedule ────────────────────────────
-router.get('/transaction-fees', (req, res) => {
-    res.json(txFeeEngine.getFeeSchedule());
-});
+        if (!actionType || !triggerReason || !outcome) {
+            return res.status(400).json({ error: 'Missing retention event data.' });
+        }
 
-// ─── GET /transaction-fees/calculate — Calculate fee for a volume ────
-router.get('/transaction-fees/calculate', (req, res) => {
-    const { type, volume } = req.query;
-    if (!type || !volume) return res.status(400).json({ error: 'type and volume query params required' });
-    const result = txFeeEngine.calculateFee(type, parseInt(volume));
-    if (result.error) return res.status(400).json(result);
-    res.json(result);
-});
+        const { AnalyticsService } = require('../services/analytics.service');
+        await AnalyticsService.publishEvent('RETENTION_ACCEPTED', 1, orgId, {
+            action_type: actionType,
+            trigger_reason: triggerReason,
+            outcome: outcome,
+        });
 
-// ─── GET /revenue/report — Platform revenue report ──────────────────
-router.get('/revenue/report', requirePermission('admin:manage'), (req, res) => {
-    const period = req.query.period || new Date().toISOString().slice(0, 7);
-    res.json(txFeeEngine.generateRevenueReport(period));
-});
-
-// ─── GET /revenue/invoice — Org transaction invoice ──────────────
-router.get('/revenue/invoice', (req, res) => {
-    const period = req.query.period || new Date().toISOString().slice(0, 7);
-    const orgId = req.user?.org_id || req.user?.orgId || req.user?.id;
-    res.json(txFeeEngine.generateOrgInvoice(orgId, period));
-});
-
-// ─── POST /transaction-fees/simulate — Pricing simulator ────────────
-router.post('/transaction-fees/simulate', (req, res) => {
-    const { usage } = req.body;
-    if (!usage || typeof usage !== 'object') return res.status(400).json({ error: 'usage object required' });
-    res.json(txFeeEngine.simulate(usage));
+        res.json({ success: true, message: 'Retention analytic queued for DW extraction.' });
+    } catch (e) {
+        console.error('Retention Log Error:', e.message);
+        res.status(500).json({ error: 'Failed to record retention analytic.' });
+    }
 });
 
 module.exports = router;

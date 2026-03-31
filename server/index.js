@@ -94,7 +94,16 @@ app.use(
     })
 );
 app.use(compression());
-app.use(express.json({ limit: '2mb' })); // SEC-API-2: reduced from 5mb
+app.use(
+    express.json({
+        limit: '2mb', // SEC-API-2: reduced from 5mb
+        verify: (req, res, buf) => {
+            if (req.originalUrl.startsWith('/api/v1/billing/webhook')) {
+                req.rawBody = buf.toString();
+            }
+        },
+    })
+);
 
 // BS-DEFENSE: Global idempotency guard
 const { idempotencyGuard } = require('./middleware/blind-spot-defense');
@@ -305,6 +314,22 @@ async function boot() {
         console.log('✅ Dual-write retry worker started');
     } catch (e) {
         console.warn('⚠️  Dual-write worker skipped:', e.message);
+    }
+
+    try {
+        const { UsageWorker } = require('./workers/usage.worker');
+        UsageWorker.start();
+        console.log('✅ BullMQ Usage Ledger worker started');
+
+        // DW Analytics Worker
+        require('./workers/analytics-etl.worker');
+        console.log('✅ OLAP Data Warehouse ETL worker started');
+
+        const { StripeWebhookWorker } = require('./workers/stripe-webhook.worker');
+        StripeWebhookWorker.start();
+        console.log('✅ BullMQ Stripe Webhook Control worker started');
+    } catch (e) {
+        console.warn('⚠️  BullMQ worker(s) skipped:', e.message);
     }
 
     // 10. Start server

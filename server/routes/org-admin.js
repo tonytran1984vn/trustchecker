@@ -2289,6 +2289,7 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             categoryBreakdown,
             orgInfo,
             dailyScanBreakdown,
+            mcSnapshot,
         ] = await Promise.all([
             // Products overview
             db.get(
@@ -2384,6 +2385,8 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
                     ORDER BY scan_date DESC LIMIT 1000`,
                 [tid]
             ),
+            // Monte Carlo V3 snapshot
+            db.get(`SELECT * FROM risk_analytic_snapshots WHERE org_id = $1 ORDER BY timestamp DESC LIMIT 1`, [tid]),
         ]);
 
         const s30 = scanStats30d || {};
@@ -2510,6 +2513,7 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             },
             supply_chain: { events: parseInt(supplyEvents?.total) || 0, scri: SCRI },
             geo_risk: geoRisk,
+            monte_carlo_v3: mcSnapshot || null,
             category_exposure: (categoryBreakdown || []).map(c => ({
                 category: c.category,
                 products: parseInt(c.products),
