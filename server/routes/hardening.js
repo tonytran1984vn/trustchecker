@@ -314,6 +314,9 @@ router.post('/ercm/attestation', requireOrgAdmin(), (req, res) => {
     if (result.error) return res.status(400).json(result);
     res.status(201).json(result);
 });
+router.get('/ercm/attestations', (req, res) => {
+    res.json(ercm.getAttestations());
+});
 router.get('/ercm/ipo-gap', (req, res) => {
     res.json(ercm.getIPOGapAnalysis());
 });

@@ -28,9 +28,14 @@ export function renderPage() {
             <div style="display:flex;align-items:center;gap:6px;font-size:0.8rem;background:rgba(239,68,68,0.1);color:#ef4444;padding:6px 12px;border-radius:20px;border:1px solid rgba(239,68,68,0.3)">
                 ${icon('alertTriangle', 14)} <strong>Critical Risks:</strong> ${bd?.risk_count?.critical || 0}
             </div>
-            <button onclick="window._attestControls()" style="display:flex;align-items:center;gap:8px;background:linear-gradient(135deg, #10b981, #059669);color:#fff;border:none;padding:8px 16px;border-radius:8px;font-weight:700;font-size:0.8rem;cursor:pointer;box-shadow:0 4px 12px rgba(16,185,129,0.3)">
+            ${ _data.attestations?.length > 0 ? 
+            `<div style="display:flex;align-items:center;gap:8px;background:rgba(16,185,129,0.1);color:#10b981;border:1px solid rgba(16,185,129,0.3);padding:8px 16px;border-radius:8px;font-size:0.8rem;" title="Hash: ${_data.attestations[_data.attestations.length-1].hash}">
+                ${icon('checkCircle', 16)} <strong>Attested</strong> ${formatDate(_data.attestations[_data.attestations.length-1].attested_at)}
+            </div>` 
+            : 
+            `<button type="button" onclick="event.preventDefault(); window._attestControls()" style="display:flex;align-items:center;gap:8px;background:linear-gradient(135deg, #10b981, #059669);color:#fff;border:none;padding:8px 16px;border-radius:8px;font-weight:700;font-size:0.8rem;cursor:pointer;box-shadow:0 4px 12px rgba(16,185,129,0.3)">
                 ${icon('check', 16)} Sign-off Controls
-            </button>
+            </button>` }
         </div>
       </div>
 
@@ -234,10 +239,11 @@ async function loadData() {
             api.get('/hardening/ercm/board-dashboard').catch(() => ({})),
             api.get('/hardening/ercm/control-tests').catch(() => ({})),
             api.get('/hardening/ercm/ipo-gap').catch(() => ({})),
-            api.get('/hardening/ercm/maturity').catch(() => ({}))
+            api.get('/hardening/ercm/maturity').catch(() => ({})),
+            api.get('/hardening/ercm/attestations').catch(() => ([]))
         ]);
         
-        _data = { tl, gov, reg, hm, cm, ra, bd, ct, gap, mat };
+        _data = { tl, gov, reg, hm, cm, ra, bd, ct, gap, mat, attestations: Array.isArray(attData) ? attData : [] };
         rerender();
     } catch (e) {
         console.error('[ERCM Heatmap]', e);
@@ -253,8 +259,10 @@ window._attestControls = async function() {
         const res = await api.post('/hardening/ercm/attestation', { role: 'CEO', statement: 'I attest internal controls are effective for IPO standards.' });
         if(res.hash) {
             alert(`Sign-off successful!\\n\\nAudit Hash:\\n${res.hash}\\n\\nTimestamp: ${res.attested_at}`);
+            loadData();
         } else {
             alert('Attestation recorded successfully.');
+            loadData();
         }
     } catch(err) {
         alert('Failed to attest controls: ' + (err.message || 'Server error'));

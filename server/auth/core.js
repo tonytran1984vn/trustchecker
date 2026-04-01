@@ -39,6 +39,9 @@ const ROLE_HIERARCHY = {
     admin: 3,
     company_admin: 3,
     executive: 3,
+    ceo: 3,
+    cfo: 3,
+    cro: 3,
     carbon_officer: 3,
     security_officer: 3,
     // L2: Operational
