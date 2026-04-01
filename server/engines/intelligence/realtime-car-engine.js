@@ -1,6 +1,6 @@
 /**
- * TrustChecker — Real-Time Capital Adequacy Engine v1.0
- * IPO-GRADE: Live CAR Ratio + Dynamic Buffers + Auto Capital Call
+ * TrustChecker — Agentic Real-Time Capital Adequacy Engine v3.0
+ * IPO-GRADE: Live CAR Ratio + Dynamic Buffers + Directive-Based Capital Call
  *
  * Capital ratio must be LIVE, not periodic.
  * If infrastructure scales, capital must track in real-time.
@@ -105,14 +105,18 @@ const CAPITAL_CALL = {
         {
             level: 'EMERGENCY',
             trigger: 'CAR drops below critical (<6%)',
-            action: 'Emergency capital injection + settlement freeze + regulator alert',
+            action: 'Generate CAPITAL_CALL_DIRECTIVE',
             response_days: 3,
             automatic: true,
-            restrictions: [
-                'Freeze new settlements',
-                'Emergency board meeting',
-                'Potential orderly wind-down preparation',
-            ],
+            directive: {
+                type: 'CONTAINMENT_DIRECTIVE',
+                level: 'FULL_CONTAINMENT',
+                target: 'SYSTEMWIDE_SETTLEMENT',
+                action: 'FREEZE_NEW_SETTLEMENTS',
+                confidence_score: 1.0, // Mathematical certainty based on CAR stringency
+                details: 'CAR < 6%. Emergency board meeting, halt all new settlements via directive.',
+                ttl: '48h',
+            },
         },
     ],
 
@@ -169,7 +173,7 @@ let _currentState = {
     last_updated: new Date().toISOString(),
 };
 
-class RealtimeCAREngine {
+class AgenticRealtimeCAREngine {
     calculateLiveCAR(state) {
         const s = state || _currentState;
         const totalCapital = s.tier1_capital + s.tier2_capital;
@@ -199,10 +203,15 @@ class RealtimeCAREngine {
 
         // Capital call check
         let capitalCall = null;
+        let agentic_directive = null;
+
         for (const level of CAPITAL_CALL.trigger_levels) {
             const triggerPct = parseFloat(level.trigger.match(/\d+/)?.[0] || 0);
             if (triggerPct > 0 && car_pct < triggerPct) {
                 capitalCall = level;
+                if (level.directive) {
+                    agentic_directive = { ...level.directive, timestamp: new Date().toISOString() };
+                }
             }
         }
 
@@ -220,6 +229,7 @@ class RealtimeCAREngine {
             status,
             action,
             capital_call: capitalCall,
+            agentic_directive: agentic_directive, // Sent to Economics Engine
             next_refresh_ms: CAR_MODEL.refresh_interval_ms,
         };
     }
@@ -244,8 +254,8 @@ class RealtimeCAREngine {
 
     getFullDashboard() {
         return {
-            title: 'Real-Time Capital Adequacy Dashboard — IPO-Grade',
-            version: '1.0',
+            title: 'Agentic Real-Time Capital Adequacy Dashboard — IPO-Grade v3.0',
+            version: '3.0',
             live_car: this.calculateLiveCAR(),
             thresholds: CAR_MODEL,
             dynamic_buffers: DYNAMIC_BUFFERS,
@@ -255,4 +265,4 @@ class RealtimeCAREngine {
     }
 }
 
-module.exports = new RealtimeCAREngine();
+module.exports = new AgenticRealtimeCAREngine();

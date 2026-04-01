@@ -1,16 +1,25 @@
 /**
- * TrustChecker Risk Radar Engine
+ * TrustChecker Agentic Risk Radar v3.0
  * Multi-dimensional supply chain risk assessment across 8 vectors
- * Aggregates partner, geographic, route, financial, compliance, cyber,
- * environmental, and supply disruption risks into unified threat index
+ * Aggregates risks into unified threat index. Emits Tiered Auto-Containment Directives.
+ * Guardrails: Threat Index (TI) + Confidence Score (CS) Matrix
  */
 
-class RiskRadar {
+class AgenticRiskRadar {
     /**
-     * Compute full risk radar — all 8 dimensions
+     * Agentic v3.0: Compute full risk radar and evaluate Auto-Containment Directives
      */
-    computeRadar(data = {}) {
-        const { partners = [], shipments = [], violations = [], leaks = [], alerts = [], inventory = [], certifications = [], sustainability = [] } = data;
+    resolveAgenticThreatIndex(data = {}) {
+        const {
+            partners = [],
+            shipments = [],
+            violations = [],
+            leaks = [],
+            alerts = [],
+            inventory = [],
+            certifications = [],
+            sustainability = [],
+        } = data;
 
         const vectors = {
             partner_risk: this.assessPartnerRisk(partners, violations),
@@ -20,21 +29,95 @@ class RiskRadar {
             compliance_risk: this.assessComplianceRisk(certifications),
             cyber_risk: this.assessCyberRisk(partners, alerts),
             environmental_risk: this.assessEnvironmentalRisk(sustainability),
-            supply_disruption: this.assessSupplyDisruption(inventory, partners, shipments)
+            supply_disruption: this.assessSupplyDisruption(inventory, partners, shipments),
         };
 
-        // Overall threat index (0-100, higher = more risky)
-        const weights = { partner_risk: 0.2, geographic_risk: 0.1, route_risk: 0.15, financial_risk: 0.15, compliance_risk: 0.1, cyber_risk: 0.1, environmental_risk: 0.05, supply_disruption: 0.15 };
+        // Overall threat index (0-100)
+        const weights = {
+            partner_risk: 0.2,
+            geographic_risk: 0.1,
+            route_risk: 0.15,
+            financial_risk: 0.15,
+            compliance_risk: 0.1,
+            cyber_risk: 0.1,
+            environmental_risk: 0.05,
+            supply_disruption: 0.15,
+        };
         let overallScore = 0;
-        for (const [key, weight] of Object.entries(weights)) {
-            overallScore += vectors[key].score * weight;
+        const signalSources = [];
+
+        for (const [key, vector] of Object.entries(vectors)) {
+            overallScore += vector.score * weights[key];
+            if (vector.level === 'high' || vector.level === 'critical') {
+                signalSources.push(key);
+            }
+        }
+
+        // Confidence Score Calculation (Data Completeness / Agreement)
+        // More robust data = higher confidence
+        let confidenceScore = 0.5;
+        if (partners.length > 5 && shipments.length > 20) confidenceScore += 0.2;
+        if (certifications.length > 0 && sustainability.length > 0) confidenceScore += 0.1;
+        if (alerts.length > 0 || violations.length > 0) confidenceScore += 0.1;
+        confidenceScore = Math.min(1.0, confidenceScore);
+
+        const threatIndex = Math.round(overallScore * 10) / 10;
+
+        // ─── TIERED AUTO-CONTAINMENT MATRIX (Risk-based Autonomy) ───
+        let agentic_directive = null;
+        let requires_human = false;
+
+        const baseDirective = {
+            type: 'CONTAINMENT_DIRECTIVE',
+            target: data.target_id || 'NETWORK_NODE',
+            threat_index: threatIndex,
+            confidence_score: confidenceScore,
+            signal_sources: signalSources,
+            ttl: '24h', // Cooldown Window enforcement
+        };
+
+        if (threatIndex < 60) {
+            agentic_directive = { ...baseDirective, level: 'ALERT_ONLY', action: 'MONITOR' };
+        } else if (threatIndex >= 60 && threatIndex <= 75) {
+            // Level 1: Soft Containment
+            agentic_directive = {
+                ...baseDirective,
+                level: 'SOFT_CONTAINMENT',
+                action: 'THROTTLE_RATE_LIMIT',
+                details: 'Reduce credit line and throughput exposure',
+            };
+        } else if (threatIndex > 75) {
+            if (confidenceScore >= 0.8 && signalSources.length >= 2) {
+                // Level 3: Full Containment (Auto allowed)
+                agentic_directive = {
+                    ...baseDirective,
+                    level: 'FULL_CONTAINMENT',
+                    action: 'BLOCK_ALL_INTERACTION',
+                    details: 'Immediate systemic freeze executed autonomously.',
+                };
+            } else {
+                // Confidence < 0.8 OR Single Signal -> Human in the loop required
+                requires_human = true;
+                // Level 2 default while waiting for human
+                agentic_directive = {
+                    ...baseDirective,
+                    level: 'PARTIAL_FREEZE',
+                    action: 'BLOCK_OUTBOUND_ONLY',
+                    details: 'Low confidence / Single signal. Inbound allowed. Human review required for full freeze.',
+                };
+            }
         }
 
         return {
-            overall_threat_index: Math.round(overallScore * 10) / 10,
-            threat_level: overallScore > 70 ? 'critical' : overallScore > 50 ? 'high' : overallScore > 30 ? 'medium' : 'low',
+            overall_threat_index: threatIndex,
+            confidence_score: parseFloat(confidenceScore.toFixed(2)),
+            threat_level:
+                threatIndex > 75 ? 'critical' : threatIndex > 50 ? 'high' : threatIndex > 30 ? 'medium' : 'low',
+            active_signals: signalSources,
+            human_review_required: requires_human,
+            directive: agentic_directive,
             vectors,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
         };
     }
 
@@ -46,10 +129,9 @@ class RiskRadar {
         const lowTrust = partners.filter(p => (p.trust_score || 50) < 50).length;
         const violationCount = violations.length;
 
-        const score = Math.min(100,
-            (kycFailed / partners.length * 40) +
-            (lowTrust / partners.length * 30) +
-            (Math.min(violationCount, 10) * 3)
+        const score = Math.min(
+            100,
+            (kycFailed / partners.length) * 40 + (lowTrust / partners.length) * 30 + Math.min(violationCount, 10) * 3
         );
 
         return {
@@ -60,14 +142,14 @@ class RiskRadar {
                 kyc_incomplete: kycFailed,
                 low_trust_partners: lowTrust,
                 sla_violations: violationCount,
-                avg_trust_score: Math.round(partners.reduce((s, p) => s + (p.trust_score || 50), 0) / partners.length)
-            }
+                avg_trust_score: Math.round(partners.reduce((s, p) => s + (p.trust_score || 50), 0) / partners.length),
+            },
         };
     }
 
     // ─── Vector 2: Geographic Risk ───────────────────────────────────────────
     assessGeographicRisk(partners, shipments) {
-        const highRiskRegions = { 'CN': 35, 'RU': 45, 'IN': 20, 'KR': 10, 'TH': 15 };
+        const highRiskRegions = { CN: 35, RU: 45, IN: 20, KR: 10, TH: 15 };
         const concentrationMap = {};
 
         partners.forEach(p => {
@@ -98,10 +180,11 @@ class RiskRadar {
             level: score > 60 ? 'high' : score > 30 ? 'medium' : 'low',
             details: {
                 herfindahl_index: Math.round(hhi),
-                concentration_warning: hhi > 5000 ? 'High concentration — diversification needed' : 'Adequate diversification',
+                concentration_warning:
+                    hhi > 5000 ? 'High concentration — diversification needed' : 'Adequate diversification',
                 country_distribution: concentrationMap,
-                avg_country_risk: Math.round(countryRisk * 10) / 10
-            }
+                avg_country_risk: Math.round(countryRisk * 10) / 10,
+            },
         };
     }
 
@@ -116,9 +199,13 @@ class RiskRadar {
 
         const inTransit = shipments.filter(s => s.status === 'in_transit' || s.status === 'pending');
         const lateRate = lateShipments.length / shipments.length;
-        const avgDelay = lateShipments.length > 0
-            ? lateShipments.reduce((s, sh) => s + (new Date(sh.actual_delivery) - new Date(sh.estimated_delivery)) / 3600000, 0) / lateShipments.length
-            : 0;
+        const avgDelay =
+            lateShipments.length > 0
+                ? lateShipments.reduce(
+                      (s, sh) => s + (new Date(sh.actual_delivery) - new Date(sh.estimated_delivery)) / 3600000,
+                      0
+                  ) / lateShipments.length
+                : 0;
 
         const carrierStats = {};
         shipments.forEach(s => {
@@ -140,10 +227,12 @@ class RiskRadar {
                 avg_delay_hours: Math.round(avgDelay * 10) / 10,
                 in_transit: inTransit.length,
                 carrier_performance: Object.entries(carrierStats).map(([c, s]) => ({
-                    carrier: c, total: s.total, late: s.late,
-                    reliability: Math.round((1 - s.late / s.total) * 100) + '%'
-                }))
-            }
+                    carrier: c,
+                    total: s.total,
+                    late: s.late,
+                    reliability: Math.round((1 - s.late / s.total) * 100) + '%',
+                })),
+            },
         };
     }
 
@@ -158,10 +247,11 @@ class RiskRadar {
         }, 0);
 
         const penaltyTotal = violations.reduce((s, v) => s + (v.penalty_amount || 0), 0);
-        const score = Math.min(100,
+        const score = Math.min(
+            100,
             Math.min(leakCount * 5, 40) +
-            (leakCount > 0 ? (priceDeviation / leakCount) * 30 : 0) +
-            Math.min(penaltyTotal / 1000, 30)
+                (leakCount > 0 ? (priceDeviation / leakCount) * 30 : 0) +
+                Math.min(penaltyTotal / 1000, 30)
         );
 
         return {
@@ -169,16 +259,17 @@ class RiskRadar {
             level: score > 60 ? 'high' : score > 30 ? 'medium' : 'low',
             details: {
                 leak_alerts: leakCount,
-                avg_price_deviation: leakCount > 0 ? Math.round(priceDeviation / leakCount * 100) + '%' : '0%',
+                avg_price_deviation: leakCount > 0 ? Math.round((priceDeviation / leakCount) * 100) + '%' : '0%',
                 total_penalties: penaltyTotal,
-                gray_market_risk: leakCount > 3 ? 'elevated' : 'normal'
-            }
+                gray_market_risk: leakCount > 3 ? 'elevated' : 'normal',
+            },
         };
     }
 
     // ─── Vector 5: Compliance Risk ───────────────────────────────────────────
     assessComplianceRisk(certifications) {
-        if (certifications.length === 0) return { score: 20, level: 'low', details: { message: 'No certifications tracked' } };
+        if (certifications.length === 0)
+            return { score: 20, level: 'low', details: { message: 'No certifications tracked' } };
 
         const expired = certifications.filter(c => c.expiry_date && new Date(c.expiry_date) < new Date()).length;
         const expiringSoon = certifications.filter(c => {
@@ -187,7 +278,10 @@ class RiskRadar {
             return diff > 0 && diff < 30 * 24 * 3600 * 1000;
         }).length;
 
-        const score = Math.min(100, (expired / certifications.length * 60) + (expiringSoon / certifications.length * 20) + 5);
+        const score = Math.min(
+            100,
+            (expired / certifications.length) * 60 + (expiringSoon / certifications.length) * 20 + 5
+        );
 
         return {
             score: Math.round(score * 10) / 10,
@@ -196,8 +290,8 @@ class RiskRadar {
                 total_certifications: certifications.length,
                 expired: expired,
                 expiring_30_days: expiringSoon,
-                active: certifications.length - expired
-            }
+                active: certifications.length - expired,
+            },
         };
     }
 
@@ -206,9 +300,9 @@ class RiskRadar {
         const noApiKey = partners.filter(p => !p.api_key).length;
         const fraudAlerts = alerts.filter(a => a.alert_type === 'STATISTICAL_ANOMALY' || a.severity === 'high').length;
 
-        const score = Math.min(100,
-            (noApiKey / Math.max(partners.length, 1) * 30) +
-            Math.min(fraudAlerts * 8, 40) + 10
+        const score = Math.min(
+            100,
+            (noApiKey / Math.max(partners.length, 1)) * 30 + Math.min(fraudAlerts * 8, 40) + 10
         );
 
         return {
@@ -217,14 +311,15 @@ class RiskRadar {
             details: {
                 partners_without_api_auth: noApiKey,
                 anomaly_alerts: fraudAlerts,
-                data_integrity: 'blockchain_sealed'
-            }
+                data_integrity: 'blockchain_sealed',
+            },
         };
     }
 
     // ─── Vector 7: Environmental Risk ────────────────────────────────────────
     assessEnvironmentalRisk(sustainability) {
-        if (sustainability.length === 0) return { score: 30, level: 'medium', details: { message: 'No ESG assessments — risk unmeasured' } };
+        if (sustainability.length === 0)
+            return { score: 30, level: 'medium', details: { message: 'No ESG assessments — risk unmeasured' } };
 
         const avgScore = sustainability.reduce((s, ss) => s + (ss.overall_score || 50), 0) / sustainability.length;
         const lowPerformers = sustainability.filter(s => (s.overall_score || 50) < 50).length;
@@ -238,8 +333,8 @@ class RiskRadar {
                 avg_esg_score: Math.round(avgScore * 10) / 10,
                 products_assessed: sustainability.length,
                 low_performers: lowPerformers,
-                carbon_risk: avgScore < 60 ? 'elevated' : 'acceptable'
-            }
+                carbon_risk: avgScore < 60 ? 'elevated' : 'acceptable',
+            },
         };
     }
 
@@ -260,10 +355,9 @@ class RiskRadar {
             return daysInTransit > 14;
         }).length;
 
-        const score = Math.min(100,
-            singleSourceRisk * 0.35 +
-            stockRatio * 100 * 0.35 +
-            Math.min(stuckShipments * 10, 30) * 0.30
+        const score = Math.min(
+            100,
+            singleSourceRisk * 0.35 + stockRatio * 100 * 0.35 + Math.min(stuckShipments * 10, 30) * 0.3
         );
 
         return {
@@ -274,8 +368,8 @@ class RiskRadar {
                 single_source_dependencies: supplierCount <= 1,
                 low_stock_items: lowStock,
                 total_inventory_items: inventory.length,
-                stuck_shipments: stuckShipments
-            }
+                stuck_shipments: stuckShipments,
+            },
         };
     }
 
@@ -289,7 +383,7 @@ class RiskRadar {
             const region = p.country || p.region || 'Unknown';
             if (!regionMap[region]) regionMap[region] = { partners: 0, risk_score: 0, leaks: 0, shipments: 0 };
             regionMap[region].partners++;
-            regionMap[region].risk_score += (100 - (p.trust_score || 50));
+            regionMap[region].risk_score += 100 - (p.trust_score || 50);
         });
 
         leaks.forEach(l => {
@@ -299,14 +393,21 @@ class RiskRadar {
             regionMap[region].risk_score += (l.risk_score || 0.5) * 20;
         });
 
-        return Object.entries(regionMap).map(([region, data]) => ({
-            region,
-            heat_score: Math.round(Math.min(100, data.risk_score / Math.max(data.partners, 1))),
-            partners: data.partners,
-            leak_alerts: data.leaks,
-            risk_level: data.risk_score / Math.max(data.partners, 1) > 50 ? 'hot' : data.risk_score / Math.max(data.partners, 1) > 25 ? 'warm' : 'cool'
-        })).sort((a, b) => b.heat_score - a.heat_score);
+        return Object.entries(regionMap)
+            .map(([region, data]) => ({
+                region,
+                heat_score: Math.round(Math.min(100, data.risk_score / Math.max(data.partners, 1))),
+                partners: data.partners,
+                leak_alerts: data.leaks,
+                risk_level:
+                    data.risk_score / Math.max(data.partners, 1) > 50
+                        ? 'hot'
+                        : data.risk_score / Math.max(data.partners, 1) > 25
+                          ? 'warm'
+                          : 'cool',
+            }))
+            .sort((a, b) => b.heat_score - a.heat_score);
     }
 }
 
-module.exports = new RiskRadar();
+module.exports = new AgenticRiskRadar();

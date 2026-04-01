@@ -1,7 +1,7 @@
 /**
- * Carbon Integrity Engine (CIE) v2.0
+ * Agentic Carbon Integrity Engine (CIE) v3.0
  * Core engine for passport management, emission calculation, snapshot capsules,
- * methodology governance, and blockchain anchoring
+ * methodology governance, and Tiered Risk Directives.
  */
 
 const crypto = require('crypto');
@@ -9,24 +9,65 @@ const crypto = require('crypto');
 // ─── Emission Factor Library (MGB-controlled, version-locked) ────────────────
 const FACTOR_VERSIONS = {
     'EF-2024.12.01': {
-        frozen_by: 'MGB-2024-004', frozen_at: '2024-12-01T09:00:00Z',
+        frozen_by: 'MGB-2024-004',
+        frozen_at: '2024-12-01T09:00:00Z',
         hash: null, // computed at load
         factors: [
-            { source: 'Grid Electricity', scope: 2, factor: 0.42, unit: 'kgCO2e/kWh', region: 'Global Avg', citation: 'IEA 2023' },
-            { source: 'Diesel Fuel', scope: 1, factor: 2.68, unit: 'kgCO2e/liter', region: 'Global', citation: 'IPCC AR6' },
-            { source: 'Natural Gas', scope: 1, factor: 2.02, unit: 'kgCO2e/m3', region: 'Global', citation: 'IPCC AR6' },
-            { source: 'Road Transport', scope: 3, factor: 0.12, unit: 'kgCO2e/t-km', region: 'EU Avg', citation: 'DEFRA 2024' },
-            { source: 'Sea Freight', scope: 3, factor: 0.016, unit: 'kgCO2e/t-km', region: 'Global', citation: 'IMO GHG' },
-            { source: 'Air Freight', scope: 3, factor: 0.60, unit: 'kgCO2e/t-km', region: 'Global', citation: 'DEFRA 2024' },
+            {
+                source: 'Grid Electricity',
+                scope: 2,
+                factor: 0.42,
+                unit: 'kgCO2e/kWh',
+                region: 'Global Avg',
+                citation: 'IEA 2023',
+            },
+            {
+                source: 'Diesel Fuel',
+                scope: 1,
+                factor: 2.68,
+                unit: 'kgCO2e/liter',
+                region: 'Global',
+                citation: 'IPCC AR6',
+            },
+            {
+                source: 'Natural Gas',
+                scope: 1,
+                factor: 2.02,
+                unit: 'kgCO2e/m3',
+                region: 'Global',
+                citation: 'IPCC AR6',
+            },
+            {
+                source: 'Road Transport',
+                scope: 3,
+                factor: 0.12,
+                unit: 'kgCO2e/t-km',
+                region: 'EU Avg',
+                citation: 'DEFRA 2024',
+            },
+            {
+                source: 'Sea Freight',
+                scope: 3,
+                factor: 0.016,
+                unit: 'kgCO2e/t-km',
+                region: 'Global',
+                citation: 'IMO GHG',
+            },
+            {
+                source: 'Air Freight',
+                scope: 3,
+                factor: 0.6,
+                unit: 'kgCO2e/t-km',
+                region: 'Global',
+                citation: 'DEFRA 2024',
+            },
         ],
     },
 };
 
 // Compute hashes for all factor versions
 Object.entries(FACTOR_VERSIONS).forEach(([ver, data]) => {
-    data.hash = crypto.createHash('sha256')
-        .update(JSON.stringify(data.factors))
-        .digest('hex').slice(0, 16);
+    data.hash = crypto.createHash('sha256').update(JSON.stringify(data.factors)).digest('hex').slice(0, 16);
 });
 
 const ACTIVE_FACTOR_VERSION = 'EF-2024.12.01';
@@ -44,9 +85,7 @@ const METHODOLOGY = {
         3: 'All other indirect emissions in value chain',
     },
 };
-METHODOLOGY.version_hash = crypto.createHash('sha256')
-    .update(JSON.stringify(METHODOLOGY))
-    .digest('hex').slice(0, 16);
+METHODOLOGY.version_hash = crypto.createHash('sha256').update(JSON.stringify(METHODOLOGY)).digest('hex').slice(0, 16);
 
 // ─── Risk Thresholds ─────────────────────────────────────────────────────────
 const RISK_THRESHOLDS = {
@@ -61,8 +100,20 @@ const REGULATORY_MAPPINGS = {
     EU: {
         name: 'European Union',
         standards: [
-            { field: 'Scope 1 Direct', csrd: 'ESRS E1-6', gri: 'GRI 305-1', ifrs: 'Para 29(a)', ets: 'EU-ETS Phase IV' },
-            { field: 'Scope 2 Energy', csrd: 'ESRS E1-6', gri: 'GRI 305-2', ifrs: 'Para 29(a)', ets: 'EU-ETS Indirect' },
+            {
+                field: 'Scope 1 Direct',
+                csrd: 'ESRS E1-6',
+                gri: 'GRI 305-1',
+                ifrs: 'Para 29(a)',
+                ets: 'EU-ETS Phase IV',
+            },
+            {
+                field: 'Scope 2 Energy',
+                csrd: 'ESRS E1-6',
+                gri: 'GRI 305-2',
+                ifrs: 'Para 29(a)',
+                ets: 'EU-ETS Indirect',
+            },
             { field: 'Scope 3 Value Chain', csrd: 'ESRS E1-6', gri: 'GRI 305-3', ifrs: 'Para 29(b)', ets: 'Partial' },
             { field: 'Emission Intensity', csrd: 'ESRS E1-4', gri: 'GRI 305-4', ifrs: 'Para 29(c)', ets: 'N/A' },
             { field: 'Reduction Targets', csrd: 'ESRS E1-4', gri: 'GRI 305-5', ifrs: 'Para 33-34', ets: 'Cap Target' },
@@ -75,7 +126,13 @@ const REGULATORY_MAPPINGS = {
     US: {
         name: 'United States',
         standards: [
-            { field: 'Scope 1 Direct', sec: 'SEC Climate Rule', epa: 'EPA GHG', ifrs: 'Para 29(a)', ets: 'CA Cap-and-Trade' },
+            {
+                field: 'Scope 1 Direct',
+                sec: 'SEC Climate Rule',
+                epa: 'EPA GHG',
+                ifrs: 'Para 29(a)',
+                ets: 'CA Cap-and-Trade',
+            },
             { field: 'Scope 2 Energy', sec: 'SEC Climate Rule', epa: 'EPA Subpart C', ifrs: 'Para 29(a)', ets: 'RGGI' },
             { field: 'Scope 3 Value Chain', sec: 'Safe Harbor', epa: 'Voluntary', ifrs: 'Para 29(b)', ets: 'N/A' },
         ],
@@ -84,16 +141,40 @@ const REGULATORY_MAPPINGS = {
     VN: {
         name: 'Vietnam',
         standards: [
-            { field: 'Scope 1 Direct', monre: 'Decree 06/2022', vneep: 'VNEEP Target', ifrs: 'Para 29(a)', ets: 'Pilot ETS 2025' },
-            { field: 'Scope 2 Energy', monre: 'Decree 06/2022', vneep: 'Energy Audit', ifrs: 'Para 29(a)', ets: 'Pilot ETS 2025' },
+            {
+                field: 'Scope 1 Direct',
+                monre: 'Decree 06/2022',
+                vneep: 'VNEEP Target',
+                ifrs: 'Para 29(a)',
+                ets: 'Pilot ETS 2025',
+            },
+            {
+                field: 'Scope 2 Energy',
+                monre: 'Decree 06/2022',
+                vneep: 'Energy Audit',
+                ifrs: 'Para 29(a)',
+                ets: 'Pilot ETS 2025',
+            },
         ],
         regulation_version: 'Decree 06/2022/ND-CP',
     },
     SG: {
         name: 'Singapore',
         standards: [
-            { field: 'Scope 1 Direct', mas: 'MAS Guidelines', nea: 'Carbon Tax Act', ifrs: 'Para 29(a)', ets: 'Carbon Tax $25/t' },
-            { field: 'Scope 2 Energy', mas: 'MAS Guidelines', nea: 'EMA Report', ifrs: 'Para 29(a)', ets: 'Carbon Tax $25/t' },
+            {
+                field: 'Scope 1 Direct',
+                mas: 'MAS Guidelines',
+                nea: 'Carbon Tax Act',
+                ifrs: 'Para 29(a)',
+                ets: 'Carbon Tax $25/t',
+            },
+            {
+                field: 'Scope 2 Energy',
+                mas: 'MAS Guidelines',
+                nea: 'EMA Report',
+                ifrs: 'Para 29(a)',
+                ets: 'Carbon Tax $25/t',
+            },
         ],
         regulation_version: 'Carbon Tax Act 2024',
     },
@@ -114,7 +195,9 @@ function calculateEmission(input) {
 
     const emission = quantity * factor.factor;
     return {
-        source, scope, quantity,
+        source,
+        scope,
+        quantity,
         factor: factor.factor,
         unit: factor.unit,
         citation: factor.citation,
@@ -134,9 +217,7 @@ function createSnapshotCapsule(cipId, passportData) {
         seal_timestamp: new Date().toISOString(),
         storage_class: 'WORM',
         redundancy: '3-region',
-        data_hash: crypto.createHash('sha256')
-            .update(JSON.stringify(passportData))
-            .digest('hex'),
+        data_hash: crypto.createHash('sha256').update(JSON.stringify(passportData)).digest('hex'),
         method_version: METHODOLOGY.id,
         method_hash: METHODOLOGY.version_hash,
         factor_version: ACTIVE_FACTOR_VERSION,
@@ -152,9 +233,7 @@ function createSnapshotCapsule(cipId, passportData) {
         risk_thresholds_at_seal: { ...RISK_THRESHOLDS },
         integrity: 'verified',
     };
-    capsule.capsule_hash = crypto.createHash('sha256')
-        .update(JSON.stringify(capsule))
-        .digest('hex');
+    capsule.capsule_hash = crypto.createHash('sha256').update(JSON.stringify(capsule)).digest('hex');
     return capsule;
 }
 
@@ -165,14 +244,10 @@ function generateAnchorHash(type, data) {
     const payload = {
         type, // 'calculation', 'governance', 'methodology', 'seal'
         timestamp: new Date().toISOString(),
-        data_hash: crypto.createHash('sha256')
-            .update(JSON.stringify(data))
-            .digest('hex'),
+        data_hash: crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex'),
     };
     return {
-        anchor_hash: crypto.createHash('sha256')
-            .update(JSON.stringify(payload))
-            .digest('hex'),
+        anchor_hash: crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex'),
         anchor_type: type,
         chain: 'polygon',
         payload_hash: payload.data_hash,
@@ -181,9 +256,9 @@ function generateAnchorHash(type, data) {
 }
 
 /**
- * Assess risk score for a CIP
+ * Agentic v3.0: Assess risk score and emit Tiered Containment Directives for CIP
  */
-function assessRisk(passportData) {
+function resolveAgenticCIPAssessor(passportData) {
     const factors = {
         data_integrity: passportData.data_integrity_pct || 95,
         supplier_trust: passportData.supplier_trust_score || 70,
@@ -195,23 +270,55 @@ function assessRisk(passportData) {
 
     const weights = {
         data_integrity: 0.25,
-        supplier_trust: 0.20,
-        benchmark_deviation: 0.20,
+        supplier_trust: 0.2,
+        benchmark_deviation: 0.2,
         historical_stability: 0.15,
-        method_confidence: 0.10,
-        governance_quality: 0.10,
+        method_confidence: 0.1,
+        governance_quality: 0.1,
     };
 
-    const compositeRisk = 100 - Math.round(
-        Object.entries(weights).reduce((sum, [k, w]) => sum + (factors[k] * w), 0)
-    );
+    const compositeRisk = 100 - Math.round(Object.entries(weights).reduce((sum, [k, w]) => sum + factors[k] * w, 0));
 
     let action = 'approved';
-    if (compositeRisk >= RISK_THRESHOLDS.emergency_freeze) action = 'emergency_freeze';
-    else if (compositeRisk >= RISK_THRESHOLDS.auto_escalate) action = 'auto_escalate';
-    else if (compositeRisk >= RISK_THRESHOLDS.block_approval) action = 'block_approval';
+    let agentic_directive = null;
+    const overclaim_pct = passportData.overclaim_pct || 0;
 
-    return { composite_risk: compositeRisk, factors, action, thresholds: RISK_THRESHOLDS };
+    // Evaluate Risk using Tiered Auto-Containment matrix
+    if (compositeRisk >= RISK_THRESHOLDS.emergency_freeze) {
+        action = 'frozen_pending_audit';
+        agentic_directive = {
+            type: 'CONTAINMENT_DIRECTIVE',
+            level: 'PARTIAL_FREEZE',
+            target: passportData.id || 'CARBON_PASSPORT',
+            action: 'BLOCK_ISSUANCE',
+            confidence_score: 0.9,
+            details: 'Composite risk exceeds emergency freeze threshold. Outbound blocked, inbound review allowed.',
+            ttl: '72h',
+        };
+    } else if (overclaim_pct > RISK_THRESHOLDS.overclaim_alert_pct) {
+        action = 'liquidity_haircut_and_downgrade';
+        agentic_directive = {
+            type: 'CONTAINMENT_DIRECTIVE',
+            level: 'SOFT_CONTAINMENT',
+            target: passportData.id || 'CARBON_PASSPORT',
+            action: 'LIQUIDITY_HAIRCUT',
+            confidence_score: 0.85,
+            details: `Overclaim detected at ${overclaim_pct}%. Applying liquidity haircut and certificate downgrade. Freeze explicitly bypassed.`,
+            ttl: '168h', // 7 days review window
+        };
+    } else if (compositeRisk >= RISK_THRESHOLDS.auto_escalate) {
+        action = 'auto_escalate';
+    } else if (compositeRisk >= RISK_THRESHOLDS.block_approval) {
+        action = 'block_approval';
+    }
+
+    return {
+        composite_risk: compositeRisk,
+        factors,
+        action,
+        agentic_directive, // Directive payload for Economics Engine
+        thresholds: RISK_THRESHOLDS,
+    };
 }
 
 /**
@@ -229,7 +336,10 @@ function getComplianceGaps(country = 'EU') {
     const gaps = [];
     mapping.standards.forEach(s => {
         Object.entries(s).forEach(([key, val]) => {
-            if (typeof val === 'string' && (val === 'N/A' || val === 'Partial' || val === 'Limited' || val === 'Voluntary')) {
+            if (
+                typeof val === 'string' &&
+                (val === 'N/A' || val === 'Partial' || val === 'Limited' || val === 'Voluntary')
+            ) {
                 gaps.push({ field: s.field, standard: key, status: val, severity: val === 'N/A' ? 'info' : 'warning' });
             }
         });
@@ -241,7 +351,7 @@ module.exports = {
     calculateEmission,
     createSnapshotCapsule,
     generateAnchorHash,
-    assessRisk,
+    resolveAgenticCIPAssessor,
     getRegulatoryMapping,
     getComplianceGaps,
     FACTOR_VERSIONS,
