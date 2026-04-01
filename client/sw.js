@@ -3,7 +3,7 @@
  * Caches critical assets, enables offline QR validation, queues sync requests
  */
 
-const CACHE_NAME = 'trustchecker-v2';
+const CACHE_NAME = 'trustchecker-v3';
 const API_CACHE = 'trustchecker-api-v1';
 const SYNC_QUEUE = 'trustchecker-sync-queue';
 

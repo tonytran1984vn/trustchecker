@@ -240,7 +240,7 @@ async function loadData() {
             api.get('/hardening/ercm/control-tests').catch(() => ({})),
             api.get('/hardening/ercm/ipo-gap').catch(() => ({})),
             api.get('/hardening/ercm/maturity').catch(() => ({})),
-            api.get('/hardening/ercm/attestations').catch(() => ([]))
+            api.get('/hardening/ercm/attestations', { noCache: true }).catch(() => ([]))
         ]);
         
         _data = { tl, gov, reg, hm, cm, ra, bd, ct, gap, mat, attestations: Array.isArray(attData) ? attData : [] };
