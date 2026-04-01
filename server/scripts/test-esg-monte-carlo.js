@@ -46,3 +46,8 @@ console.log("──────────────────────�
 console.log("\n[CFO WARNING SYSTEM GENERATED]:");
 console.log(`If current compliance trajectories hold, there is a 5% chance (P95) that ESG penalties will trigger a ${fmtWACC(results.P95.shockWACC)} borrowing cost shock.`);
 console.log(`This translates directly to a loss of ${fmtUSD(results.P95.evd)} in Enterprise Value over the next fiscal cycle.`);
+
+console.log("\n[V3.2 Engine Diagnostic Metadata]:");
+console.log(`- Data Quality     : ${results.meta.data_quality}`);
+console.log(`- Denominator Warn : ${results.meta.denom_warning_pct}% paths bounded`);
+console.log(`- Confidence Band  : IQR ${fmtUSD(results.meta.confidence_band_evd.iqr)} (P25=${fmtUSD(results.P25.evd)} to P75=${fmtUSD(results.P75.evd)})`);

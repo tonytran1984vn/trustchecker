@@ -59,9 +59,10 @@ async function triggerValuationAlert(orgId, orgName, results, simParams, overrid
             : '';
 
         // Differentiate ESG shock vs Macro Shock
+        // Differentiate ESG shock vs Macro Shock
         const totalWaccP95 = simParams.wacc_0 + results.P95.shockWACC;
         // Since MonteCarlo V3 dynamically shocks WACC base, we note if ESG is the main driver or Macro is assisting
-        const shockFactorMsg = `Base Volatility (ESG Penalties): ${results.P95.dropESG.toFixed(2)} pts => Yield Premium +${(results.P95.shockWACC * 100).toFixed(2)}%`;
+        const shockFactorMsg = `Base Volatility (ESG Penalties): ${results.P95.dropESG.toFixed(2)} pts => Yield Premium +${(results.P95.shockWACC * 100).toFixed(2)}%\n*V3.2 Engine*: df=${simParams.df || 4}, Data Quality: ${simParams.data_quality || 'estimated'}`;
 
         const alertPayload = {
             org_name: orgName,
