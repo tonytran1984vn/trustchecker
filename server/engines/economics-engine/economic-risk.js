@@ -1,7 +1,7 @@
 /**
- * TrustChecker — Economic & Capital Risk Integration Engine v1.0
+ * TrustChecker — Agentic Economic Risk Engine v3.0
  * FINAL PILLAR 2: Financial risk integration with Trust Graph
- * 
+ *
  * Has monetization. But doesn't connect:
  *   - Revenue risk exposure to Trust Graph health
  *   - Org creditworthiness to settlement limits
@@ -22,7 +22,7 @@ const REVENUE_RISK = {
             stream: 'SaaS Subscription',
             risk_type: 'Concentration + Churn',
             metrics: {
-                top_10_client_pct: 45,       // % of SaaS revenue from top 10 clients
+                top_10_client_pct: 45, // % of SaaS revenue from top 10 clients
                 concentration_threshold: 30, // Alert if single client > 30%
                 annual_churn_rate_pct: 8,
                 net_revenue_retention_pct: 115,
@@ -90,23 +90,83 @@ const ORG_CREDIT = {
 
     scoring_model: {
         factors: [
-            { factor: 'Trust Graph Score', weight_pct: 25, source: 'IVU engine', description: 'Platform-computed trust score based on verification history' },
-            { factor: 'Payment History', weight_pct: 20, source: 'Billing system', description: 'On-time payment rate, overdue frequency, average days-to-pay' },
-            { factor: 'Settlement Track Record', weight_pct: 20, source: 'Settlement engine', description: 'Settlement success rate, dispute rate, default history' },
-            { factor: 'Business Maturity', weight_pct: 15, source: 'Onboarding data', description: 'Years in operation, employee count, revenue tier, industry' },
-            { factor: 'External Credit Signal', weight_pct: 10, source: 'External API (D&B, Experian)', description: 'External credit rating if available' },
-            { factor: 'Verification Engagement', weight_pct: 10, source: 'Usage analytics', description: 'Active verification frequency, API utilization, feature adoption' },
+            {
+                factor: 'Trust Graph Score',
+                weight_pct: 25,
+                source: 'IVU engine',
+                description: 'Platform-computed trust score based on verification history',
+            },
+            {
+                factor: 'Payment History',
+                weight_pct: 20,
+                source: 'Billing system',
+                description: 'On-time payment rate, overdue frequency, average days-to-pay',
+            },
+            {
+                factor: 'Settlement Track Record',
+                weight_pct: 20,
+                source: 'Settlement engine',
+                description: 'Settlement success rate, dispute rate, default history',
+            },
+            {
+                factor: 'Business Maturity',
+                weight_pct: 15,
+                source: 'Onboarding data',
+                description: 'Years in operation, employee count, revenue tier, industry',
+            },
+            {
+                factor: 'External Credit Signal',
+                weight_pct: 10,
+                source: 'External API (D&B, Experian)',
+                description: 'External credit rating if available',
+            },
+            {
+                factor: 'Verification Engagement',
+                weight_pct: 10,
+                source: 'Usage analytics',
+                description: 'Active verification frequency, API utilization, feature adoption',
+            },
         ],
         total_weight: 100,
         output: 'Org Credit Score: 0-100',
     },
 
     tiers: [
-        { tier: 'Platinum', score_min: 85, settlement_limit_multiplier: 3.0, payment_terms_days: 45, unsecured_limit_usd: 500000 },
-        { tier: 'Gold', score_min: 70, settlement_limit_multiplier: 2.0, payment_terms_days: 30, unsecured_limit_usd: 200000 },
-        { tier: 'Silver', score_min: 50, settlement_limit_multiplier: 1.0, payment_terms_days: 14, unsecured_limit_usd: 50000 },
-        { tier: 'Bronze', score_min: 30, settlement_limit_multiplier: 0.5, payment_terms_days: 7, unsecured_limit_usd: 10000 },
-        { tier: 'Restricted', score_min: 0, settlement_limit_multiplier: 0.1, payment_terms_days: 0, unsecured_limit_usd: 0 },
+        {
+            tier: 'Platinum',
+            score_min: 85,
+            settlement_limit_multiplier: 3.0,
+            payment_terms_days: 45,
+            unsecured_limit_usd: 500000,
+        },
+        {
+            tier: 'Gold',
+            score_min: 70,
+            settlement_limit_multiplier: 2.0,
+            payment_terms_days: 30,
+            unsecured_limit_usd: 200000,
+        },
+        {
+            tier: 'Silver',
+            score_min: 50,
+            settlement_limit_multiplier: 1.0,
+            payment_terms_days: 14,
+            unsecured_limit_usd: 50000,
+        },
+        {
+            tier: 'Bronze',
+            score_min: 30,
+            settlement_limit_multiplier: 0.5,
+            payment_terms_days: 7,
+            unsecured_limit_usd: 10000,
+        },
+        {
+            tier: 'Restricted',
+            score_min: 0,
+            settlement_limit_multiplier: 0.1,
+            payment_terms_days: 0,
+            unsecured_limit_usd: 0,
+        },
     ],
 
     review_cycle: 'Monthly auto-recalculation. Quarterly manual review for Platinum/Gold.',
@@ -178,7 +238,7 @@ const TOKEN_ECONOMICS = {
     fee_structure: {
         verification_anchor_fee: {
             model: 'Base fee + gas cost + batch discount',
-            base_fee_usd: 0.10,
+            base_fee_usd: 0.1,
             gas_cost: 'Variable — current chain gas × complexity multiplier',
             batch_discount: 'Up to 60% for batches > 100 anchors',
             who_pays: 'Originating org (included in transaction fee)',
@@ -203,7 +263,7 @@ const TOKEN_ECONOMICS = {
     economic_sustainability: {
         breakeven_daily_transactions: 1000,
         target_daily_transactions: 10000,
-        revenue_per_transaction_usd: 0.50,
+        revenue_per_transaction_usd: 0.5,
         cost_per_transaction_usd: 0.15,
         gross_profit_per_tx_usd: 0.35,
         note: 'Sustainable when daily volume > 1000 transactions',
@@ -218,17 +278,49 @@ const FINANCIAL_TRUST_FEEDBACK = {
     title: 'Bidirectional: Financial Risk ↔ Trust Graph',
 
     trust_to_financial: [
-        { signal: 'Trust score decline (entity)', financial_impact: 'Settlement limit reduced proportionally', mechanism: 'Org credit tier recalculation' },
-        { signal: 'Trust score < 40 (entity)', financial_impact: 'Counterparty removed from unsecured settlement', mechanism: 'Auto-restrict via credit tier "Restricted"' },
-        { signal: 'Network average trust decline > 5%', financial_impact: 'Platform-wide counterparty concentration review', mechanism: 'Risk Committee notification' },
-        { signal: 'Verification dispute rate > 2%', financial_impact: 'SLA credit provisioning increase', mechanism: 'Auto-adjust provision in deferred liabilities' },
+        {
+            signal: 'Trust score decline (entity)',
+            financial_impact: 'Settlement limit reduced proportionally',
+            mechanism: 'Org credit tier recalculation',
+        },
+        {
+            signal: 'Trust score < 40 (entity)',
+            financial_impact: 'Counterparty removed from unsecured settlement',
+            mechanism: 'Auto-restrict via credit tier "Restricted"',
+        },
+        {
+            signal: 'Network average trust decline > 5%',
+            financial_impact: 'Platform-wide counterparty concentration review',
+            mechanism: 'Risk Committee notification',
+        },
+        {
+            signal: 'Verification dispute rate > 2%',
+            financial_impact: 'SLA credit provisioning increase',
+            mechanism: 'Auto-adjust provision in deferred liabilities',
+        },
     ],
 
     financial_to_trust: [
-        { signal: 'Payment default (org)', trust_impact: 'Trust score reduced by 10 points', mechanism: 'Payment history factor (20% weight)' },
-        { signal: 'Settlement failure (counterparty)', trust_impact: 'Trust score reduced by 15 points + flag', mechanism: 'Settlement track record factor (20% weight)' },
-        { signal: 'Insurance claim filed against entity', trust_impact: 'Trust score reduced by 5 points (temporary)', mechanism: 'Risk signal integration' },
-        { signal: 'Regulatory violation (entity)', trust_impact: 'Trust score reduced by 20 points + compliance review required', mechanism: 'External signal factor (10% weight)' },
+        {
+            signal: 'Payment default (org)',
+            trust_impact: 'Trust score reduced by 10 points',
+            mechanism: 'Payment history factor (20% weight)',
+        },
+        {
+            signal: 'Settlement failure (counterparty)',
+            trust_impact: 'Trust score reduced by 15 points + flag',
+            mechanism: 'Settlement track record factor (20% weight)',
+        },
+        {
+            signal: 'Insurance claim filed against entity',
+            trust_impact: 'Trust score reduced by 5 points (temporary)',
+            mechanism: 'Risk signal integration',
+        },
+        {
+            signal: 'Regulatory violation (entity)',
+            trust_impact: 'Trust score reduced by 20 points + compliance review required',
+            mechanism: 'External signal factor (10% weight)',
+        },
     ],
 
     anti_manipulation: [
@@ -244,8 +336,14 @@ const FINANCIAL_TRUST_FEEDBACK = {
 // ═══════════════════════════════════════════════════════════════════
 
 class EconomicRiskEngine {
-
-    scoreOrg(trust_score, payment_on_time_pct, settlement_success_pct, years_in_business, external_credit, engagement_score) {
+    scoreOrg(
+        trust_score,
+        payment_on_time_pct,
+        settlement_success_pct,
+        years_in_business,
+        external_credit,
+        engagement_score
+    ) {
         const ts = trust_score || 70;
         const pay = payment_on_time_pct || 90;
         const settle = settlement_success_pct || 95;
@@ -253,18 +351,61 @@ class EconomicRiskEngine {
         const ext = external_credit || 60;
         const engage = engagement_score || 50;
 
-        const score = (ts * 0.25) + (pay * 0.20) + (settle * 0.20) + (Math.min(years * 5, 100) * 0.15) + (ext * 0.10) + (engage * 0.10);
+        const score = ts * 0.25 + pay * 0.2 + settle * 0.2 + Math.min(years * 5, 100) * 0.15 + ext * 0.1 + engage * 0.1;
         const rounded = parseFloat(Math.min(score, 100).toFixed(1));
-        const tier = ORG_CREDIT.tiers.find(t => rounded >= t.score_min) || ORG_CREDIT.tiers[ORG_CREDIT.tiers.length - 1];
+        const tier =
+            ORG_CREDIT.tiers.find(t => rounded >= t.score_min) || ORG_CREDIT.tiers[ORG_CREDIT.tiers.length - 1];
 
-        return { org_credit_score: rounded, tier: tier.tier, settlement_limit_multiplier: tier.settlement_limit_multiplier, payment_terms_days: tier.payment_terms_days, unsecured_limit_usd: tier.unsecured_limit_usd };
+        return {
+            org_credit_score: rounded,
+            tier: tier.tier,
+            settlement_limit_multiplier: tier.settlement_limit_multiplier,
+            payment_terms_days: tier.payment_terms_days,
+            unsecured_limit_usd: tier.unsecured_limit_usd,
+        };
     }
 
-    getRevenueRisk() { return REVENUE_RISK; }
-    getOrgCredit() { return ORG_CREDIT; }
-    getCostAllocation() { return COST_ALLOCATION; }
-    getTokenEconomics() { return TOKEN_ECONOMICS; }
-    getFinancialTrustFeedback() { return FINANCIAL_TRUST_FEEDBACK; }
+    /**
+     * Agentic v3.0: Resolve Real-Time Exposure Limits
+     */
+    resolveAgenticCounterpartyExposure(tcarPayload, baseCreditTier) {
+        if (!tcarPayload) return baseCreditTier;
+
+        // If TCAR (Total Capital at Risk) is high, restrict credit regardless of Tier
+        let dynamicLimit = baseCreditTier.unsecured_limit_usd;
+        const frictionFlags = [];
+
+        if (tcarPayload.tcar_usd > 1000000) {
+            dynamicLimit *= 0.1; // Squeeze limit by 90%
+            frictionFlags.push('TCAR_CRITICAL_SQUEEZE');
+        } else if (tcarPayload.tcar_usd > 200000) {
+            dynamicLimit *= 0.5; // Squeeze limit by 50%
+            frictionFlags.push('TCAR_WARNING_SQUEEZE');
+        }
+
+        return {
+            ...baseCreditTier,
+            original_unsecured_limit_usd: baseCreditTier.unsecured_limit_usd,
+            unsecured_limit_usd: dynamicLimit,
+            agentic_flags: frictionFlags,
+        };
+    }
+
+    getRevenueRisk() {
+        return REVENUE_RISK;
+    }
+    getOrgCredit() {
+        return ORG_CREDIT;
+    }
+    getCostAllocation() {
+        return COST_ALLOCATION;
+    }
+    getTokenEconomics() {
+        return TOKEN_ECONOMICS;
+    }
+    getFinancialTrustFeedback() {
+        return FINANCIAL_TRUST_FEEDBACK;
+    }
 
     getFullFramework() {
         return {

@@ -1,10 +1,10 @@
 /**
- * TrustChecker — Transaction Fee Revenue Engine v1.0
- * Infrastructure Monetization: Per-Transaction Fees + Volume Discounts
- * 
+ * TrustChecker — Agentic Transaction Fee Pricing v3.0
+ * Infrastructure Monetization: Dynamic Surge + Volume Pricing
+ *
  * Shifts from pure SaaS subscription → Hybrid Model:
  *   Subscription (base) + Per-Transaction Fees (usage) + Volume Discounts
- * 
+ *
  * Every billable event (scan, carbon settlement, NFT mint, blockchain seal, API call)
  * is metered and charged at volume-tiered rates.
  */
@@ -24,7 +24,7 @@ const FEE_SCHEDULE = {
             { up_to: 1000, price: 0.02 },
             { up_to: 10000, price: 0.015 },
             { up_to: 100000, price: 0.008 },
-            { up_to: null, price: 0.005 },  // unlimited
+            { up_to: null, price: 0.005 }, // unlimited
         ],
     },
     carbon_settlement: {
@@ -32,9 +32,9 @@ const FEE_SCHEDULE = {
         description: 'Each carbon credit offset calculation and settlement',
         unit: 'settlement',
         tiers: [
-            { up_to: 100, price: 0.50 },
+            { up_to: 100, price: 0.5 },
             { up_to: 1000, price: 0.35 },
-            { up_to: 10000, price: 0.20 },
+            { up_to: 10000, price: 0.2 },
             { up_to: null, price: 0.12 },
         ],
     },
@@ -43,9 +43,9 @@ const FEE_SCHEDULE = {
         description: 'Each trust certificate minted as NFT',
         unit: 'mint',
         tiers: [
-            { up_to: 100, price: 1.50 },
-            { up_to: 500, price: 1.00 },
-            { up_to: 2000, price: 0.60 },
+            { up_to: 100, price: 1.5 },
+            { up_to: 500, price: 1.0 },
+            { up_to: 2000, price: 0.6 },
             { up_to: null, price: 0.35 },
         ],
     },
@@ -56,7 +56,7 @@ const FEE_SCHEDULE = {
         tiers: [
             { up_to: 500, price: 0.25 },
             { up_to: 5000, price: 0.18 },
-            { up_to: 50000, price: 0.10 },
+            { up_to: 50000, price: 0.1 },
             { up_to: null, price: 0.06 },
         ],
     },
@@ -77,9 +77,9 @@ const FEE_SCHEDULE = {
 // ═══════════════════════════════════════════════════════════════════
 
 const REVENUE_SPLIT = {
-    platform_percent: 70,    // TrustChecker platform
-    validator_percent: 20,   // Network validators (future)
-    reserve_percent: 10,     // Operational reserve fund
+    platform_percent: 70, // TrustChecker platform
+    validator_percent: 20, // Network validators (future)
+    reserve_percent: 10, // Operational reserve fund
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -89,7 +89,7 @@ const REVENUE_SPLIT = {
 class TransactionFeeEngine {
     constructor() {
         // In-memory ledger (production: persisted to PostgreSQL)
-        this.transactions = [];     // all metered transactions
+        this.transactions = []; // all metered transactions
         this.monthlyAggregates = new Map(); // org_id → { type → count }
     }
 
@@ -133,21 +133,63 @@ class TransactionFeeEngine {
             if (remaining <= 0) break;
         }
 
-        const effective_rate = volume > 0 ? Math.round((totalCost / volume) * 10000) / 10000 : 0;
+        // ─── AGENTIC HYBRID PRICER v3.0 (Priority Processing) ─────────
+        const contextPayload = schedule.context || {};
+        const networkLoadPct = contextPayload.network_load_pct || 50;
+        const isOffPeak = contextPayload.is_off_peak || false;
+        const enterpriseLock = contextPayload.enterprise_price_lock || false;
+
+        let surgeMultiplier = 1.0;
+        const pricingFriction = [];
+        let featureName = 'Standard Pricing';
+
+        // Bounded Dynamic pricing: Mask surge as "Priority Services"
+        // Enterprise lock bypasses all surge completely.
+        if (!enterpriseLock) {
+            if (networkLoadPct > 80 && !contextPayload.reserved_capacity) {
+                surgeMultiplier = 1.25; // 25% capped surge
+                pricingFriction.push('PRIORITY_PROCESSING_HIGH_LOAD');
+                featureName = 'Priority Processing SLA';
+            } else if (isOffPeak && networkLoadPct < 30) {
+                surgeMultiplier = 0.85; // 15% discount
+                pricingFriction.push('OFF_PEAK_CAPACITY_DISCOUNT');
+                featureName = 'Off-Peak Discount';
+            }
+        } else {
+            pricingFriction.push('ENTERPRISE_PRICE_LOCK_ACTIVE');
+        }
+
+        const agenticTotalCost = totalCost * surgeMultiplier;
+        const effective_rate = volume > 0 ? Math.round((agenticTotalCost / volume) * 10000) / 10000 : 0;
 
         return {
             type,
             name: schedule.name,
+            feature_applied: featureName,
             volume,
-            total_cost: Math.round(totalCost * 100) / 100,
+            base_cost: Math.round(totalCost * 100) / 100,
+            surge_multiplier: surgeMultiplier,
+            agentic_flags: pricingFriction,
+            total_cost: Math.round(agenticTotalCost * 100) / 100,
             effective_rate,
             breakdown,
-            revenue_split: {
-                platform: Math.round(totalCost * REVENUE_SPLIT.platform_percent) / 100,
-                validator: Math.round(totalCost * REVENUE_SPLIT.validator_percent) / 100,
-                reserve: Math.round(totalCost * REVENUE_SPLIT.reserve_percent) / 100,
+            // (Splits are now informational here, actual allocation shifted to fee-distribution Bounded Split)
+            revenue_split_estimate: {
+                platform: Math.round(agenticTotalCost * REVENUE_SPLIT.platform_percent) / 100,
+                validator: Math.round(agenticTotalCost * REVENUE_SPLIT.validator_percent) / 100,
+                reserve: Math.round(agenticTotalCost * REVENUE_SPLIT.reserve_percent) / 100,
             },
         };
+    }
+
+    /**
+     * Agentic v3.0: Calculate Fee dynamically using Surge & Context
+     */
+    calculateAgenticFee(type, volume, context = {}) {
+        const schedule = FEE_SCHEDULE[type];
+        if (!schedule) return { error: `Unknown transaction type: ${type}` };
+        schedule.context = context; // Inject context
+        return this.calculateFee(type, volume);
     }
 
     // ─── Record transaction event ─────────────────────────────────
@@ -230,7 +272,8 @@ class TransactionFeeEngine {
                 reserve: Math.round(totalRevenue * REVENUE_SPLIT.reserve_percent) / 100,
             },
             by_type: byType,
-            avg_revenue_per_tx: totalTransactions > 0 ? Math.round((totalRevenue / totalTransactions) * 10000) / 10000 : 0,
+            avg_revenue_per_tx:
+                totalTransactions > 0 ? Math.round((totalRevenue / totalTransactions) * 10000) / 10000 : 0,
         };
     }
 

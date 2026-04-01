@@ -1,10 +1,10 @@
 /**
- * TrustChecker — Treasury & Liquidity Management Engine v1.0
- * IPO-GRADE: LCR + Cash Waterfall + Investment Policy
- * 
+ * TrustChecker — Agentic Treasury & Liquidity Management v3.0
+ * IPO-GRADE: LCR + Cash Waterfall + Agentic Emergency Response
+ *
  * Market infra entity needs liquidity governance, not just capital adequacy.
  * Capital = "do we have enough?" | Liquidity = "can we pay NOW?"
- * 
+ *
  * Models: Basel III LCR, NSFR, ECB intraday liquidity
  */
 
@@ -17,7 +17,7 @@ const { v4: uuidv4 } = require('uuid');
 const LCR_MODEL = {
     standard: 'Basel III Liquidity Coverage Ratio (adapted for infra)',
     formula: 'LCR = HQLA / Net Cash Outflows (30-day stress) × 100%',
-    minimum_pct: 100,   // Must cover 100% of 30-day stress outflows
+    minimum_pct: 100, // Must cover 100% of 30-day stress outflows
 
     hqla_categories: {
         level_1: {
@@ -67,16 +67,20 @@ const INTRADAY_MODEL = {
     monitoring_points: [
         { time: '00:00 UTC', checkpoint: 'Begin-of-day position', action: 'Reconcile previous day settlements' },
         { time: '06:00 UTC', checkpoint: 'Asia settlement window opens', action: 'Monitor AP-SE/AP-E settlements' },
-        { time: '09:00 UTC', checkpoint: 'EU settlement window opens', action: 'Monitor EU settlements + regulatory payments' },
+        {
+            time: '09:00 UTC',
+            checkpoint: 'EU settlement window opens',
+            action: 'Monitor EU settlements + regulatory payments',
+        },
         { time: '14:00 UTC', checkpoint: 'US settlement window opens', action: 'Monitor US settlements' },
         { time: '18:00 UTC', checkpoint: 'Peak cross-settlement overlap', action: 'Maximum liquidity stress point' },
         { time: '23:00 UTC', checkpoint: 'End-of-day reconciliation', action: 'Final position + overnight planning' },
     ],
 
     alerts: {
-        peak_usage_pct: 80,       // Alert if intraday usage > 80% of available
+        peak_usage_pct: 80, // Alert if intraday usage > 80% of available
         unexpected_outflow: 50000, // Alert if unplanned outflow > $50K
-        settlement_delay: 4,       // Alert if settlement delayed > 4 hours
+        settlement_delay: 4, // Alert if settlement delayed > 4 hours
     },
 
     reporting: 'Intraday position reported to treasury every 2 hours, to risk committee daily',
@@ -91,15 +95,50 @@ const CASH_WATERFALL = {
     description: 'When cash is limited, allocate in strict priority order',
 
     priority_tiers: [
-        { priority: 1, category: 'Settlement Obligations', description: 'Cleared settlements must be honored', pct_reserved: 100 },
-        { priority: 2, category: 'Regulatory Requirements', description: 'Capital adequacy + license fees', pct_reserved: 100 },
-        { priority: 3, category: 'Operational Expenses', description: 'Payroll, cloud, critical vendors (30d buffer)', pct_reserved: 100 },
+        {
+            priority: 1,
+            category: 'Settlement Obligations',
+            description: 'Cleared settlements must be honored',
+            pct_reserved: 100,
+        },
+        {
+            priority: 2,
+            category: 'Regulatory Requirements',
+            description: 'Capital adequacy + license fees',
+            pct_reserved: 100,
+        },
+        {
+            priority: 3,
+            category: 'Operational Expenses',
+            description: 'Payroll, cloud, critical vendors (30d buffer)',
+            pct_reserved: 100,
+        },
         { priority: 4, category: 'Insurance Premiums', description: 'Must maintain coverage', pct_reserved: 100 },
-        { priority: 5, category: 'SLA Credit Payouts', description: 'Provisioned SLA credits to clients', pct_reserved: 100 },
-        { priority: 6, category: 'Validator Rewards', description: 'Earned rewards — vested and claimable', pct_reserved: 90 },
-        { priority: 7, category: 'Capital Buffer Replenishment', description: 'Restore buffer if depleted', pct_reserved: 80 },
+        {
+            priority: 5,
+            category: 'SLA Credit Payouts',
+            description: 'Provisioned SLA credits to clients',
+            pct_reserved: 100,
+        },
+        {
+            priority: 6,
+            category: 'Validator Rewards',
+            description: 'Earned rewards — vested and claimable',
+            pct_reserved: 90,
+        },
+        {
+            priority: 7,
+            category: 'Capital Buffer Replenishment',
+            description: 'Restore buffer if depleted',
+            pct_reserved: 80,
+        },
         { priority: 8, category: 'Growth Investment', description: 'R&D, marketing, new features', pct_reserved: 0 },
-        { priority: 9, category: 'Dividends / Distributions', description: 'Only if all above fully funded', pct_reserved: 0 },
+        {
+            priority: 9,
+            category: 'Dividends / Distributions',
+            description: 'Only if all above fully funded',
+            pct_reserved: 0,
+        },
     ],
 
     stress_mode: {
@@ -118,9 +157,21 @@ const INVESTMENT_POLICY = {
     philosophy: 'Preserve capital, maintain liquidity, earn modest return. Not a profit center.',
 
     eligible_investments: [
-        { type: 'Bank Deposits (Term)', max_pct: 50, max_tenor_months: 12, min_rating: 'A-', purpose: 'Core liquidity' },
+        {
+            type: 'Bank Deposits (Term)',
+            max_pct: 50,
+            max_tenor_months: 12,
+            min_rating: 'A-',
+            purpose: 'Core liquidity',
+        },
         { type: 'Government Bonds', max_pct: 40, max_tenor_months: 36, min_rating: 'AA-', purpose: 'HQLA Level 1' },
-        { type: 'Money Market Funds', max_pct: 30, max_tenor_months: 3, min_rating: 'AAA', purpose: 'Overnight liquidity' },
+        {
+            type: 'Money Market Funds',
+            max_pct: 30,
+            max_tenor_months: 3,
+            min_rating: 'AAA',
+            purpose: 'Overnight liquidity',
+        },
         { type: 'Corporate Bonds', max_pct: 15, max_tenor_months: 24, min_rating: 'A-', purpose: 'Yield enhancement' },
     ],
 
@@ -133,10 +184,10 @@ const INVESTMENT_POLICY = {
     ],
 
     limits: {
-        single_issuer_max_pct: 20,       // No single issuer > 20% of portfolio
-        single_country_max_pct: 40,       // No single country > 40%
+        single_issuer_max_pct: 20, // No single issuer > 20% of portfolio
+        single_country_max_pct: 40, // No single country > 40%
         weighted_avg_maturity_months: 12, // WAM < 12 months
-        min_overnight_liquidity_pct: 20,  // At least 20% available overnight
+        min_overnight_liquidity_pct: 20, // At least 20% available overnight
     },
 
     governance: {
@@ -152,28 +203,42 @@ const INVESTMENT_POLICY = {
 // ═══════════════════════════════════════════════════════════════════
 
 class TreasuryLiquidityEngine {
-
     calculateLCR(hqla, outflows) {
         const defaults = {
-            level_1: 300000, level_2a: 100000, level_2b: 50000,
-            settlements: 200000, stake_returns: 50000, sla_credits: 10000,
-            deductibles: 25000, opex_30d: 150000, regulatory: 20000,
+            level_1: 300000,
+            level_2a: 100000,
+            level_2b: 50000,
+            settlements: 200000,
+            stake_returns: 50000,
+            sla_credits: 10000,
+            deductibles: 25000,
+            opex_30d: 150000,
+            regulatory: 20000,
         };
         const h = hqla || defaults;
         const o = outflows || defaults;
 
-        const adjustedHQLA = (h.level_1 || 0)
-            + (h.level_2a || 0) * (1 - LCR_MODEL.hqla_categories.level_2a.haircut_pct / 100)
-            + (h.level_2b || 0) * (1 - LCR_MODEL.hqla_categories.level_2b.haircut_pct / 100);
+        const adjustedHQLA =
+            (h.level_1 || 0) +
+            (h.level_2a || 0) * (1 - LCR_MODEL.hqla_categories.level_2a.haircut_pct / 100) +
+            (h.level_2b || 0) * (1 - LCR_MODEL.hqla_categories.level_2b.haircut_pct / 100);
 
-        const totalOutflows = (o.settlements || 0) + (o.stake_returns || 0) * 0.5
-            + (o.sla_credits || 0) + (o.deductibles || 0) + (o.opex_30d || 0) + (o.regulatory || 0) * 0.5;
+        const totalOutflows =
+            (o.settlements || 0) +
+            (o.stake_returns || 0) * 0.5 +
+            (o.sla_credits || 0) +
+            (o.deductibles || 0) +
+            (o.opex_30d || 0) +
+            (o.regulatory || 0) * 0.5;
 
         const lcr_pct = totalOutflows > 0 ? (adjustedHQLA / totalOutflows) * 100 : 999;
 
         let status = 'UNKNOWN';
         for (const [_, threshold] of Object.entries(LCR_MODEL.thresholds)) {
-            if (lcr_pct >= threshold.min_lcr_pct) { status = threshold.status; break; }
+            if (lcr_pct >= threshold.min_lcr_pct) {
+                status = threshold.status;
+                break;
+            }
         }
 
         return {
@@ -187,19 +252,47 @@ class TreasuryLiquidityEngine {
         };
     }
 
-    runCashWaterfall(available_cash, obligations) {
-        const defaults = { settlements: 200000, regulatory: 50000, opex: 150000, insurance: 15000, sla: 10000, rewards: 40000, buffer: 30000, growth: 100000, dividends: 50000 };
+    runAgenticCashWaterfall(available_cash, obligations) {
+        const defaults = {
+            settlements: 200000,
+            regulatory: 50000,
+            opex: 150000,
+            insurance: 15000,
+            sla: 10000,
+            rewards: 40000,
+            buffer: 30000,
+            growth: 100000,
+            dividends: 50000,
+        };
         const ob = obligations || defaults;
         const tiers = CASH_WATERFALL.priority_tiers;
-        const values = [ob.settlements, ob.regulatory, ob.opex, ob.insurance, ob.sla, ob.rewards, ob.buffer, ob.growth, ob.dividends];
+        const values = [
+            ob.settlements,
+            ob.regulatory,
+            ob.opex,
+            ob.insurance,
+            ob.sla,
+            ob.rewards,
+            ob.buffer,
+            ob.growth,
+            ob.dividends,
+        ];
 
         let remaining = available_cash || 500000;
         const allocation = [];
+        const emergencyModeActive = remaining < ob.settlements + ob.regulatory + ob.opex; // Cannot even fund priorities 1-3
 
         for (let i = 0; i < tiers.length; i++) {
-            const needed = values[i] || 0;
+            let needed = values[i] || 0;
+
+            // Agentic Emergency mode: Freeze priorities 7-9 completely if short on cash
+            if (emergencyModeActive && tiers[i].priority >= 7) {
+                needed = 0; // Frozen
+            }
+
             const allocated = Math.min(remaining, needed);
             remaining -= allocated;
+
             allocation.push({
                 priority: tiers[i].priority,
                 category: tiers[i].category,
@@ -207,6 +300,7 @@ class TreasuryLiquidityEngine {
                 allocated: Math.round(allocated),
                 fully_funded: allocated >= needed,
                 shortfall: Math.max(0, needed - allocated),
+                frozen: emergencyModeActive && tiers[i].priority >= 7,
             });
         }
 
@@ -215,14 +309,24 @@ class TreasuryLiquidityEngine {
             total_obligations: values.reduce((s, v) => s + (v || 0), 0),
             allocation,
             remaining_after_waterfall: Math.round(remaining),
-            stress_mode: remaining <= 0,
+            agentic_emergency_mode: emergencyModeActive,
+            stress_level: emergencyModeActive ? 'CRITICAL' : remaining <= 0 ? 'WARNING' : 'HEALTHY',
+            audit_log: `Waterfall resolved at ${new Date().toISOString()} | Remaining: $${Math.round(remaining)} | Emergency: ${emergencyModeActive}`,
         };
     }
 
-    getLCRModel() { return LCR_MODEL; }
-    getIntradayModel() { return INTRADAY_MODEL; }
-    getCashWaterfall() { return CASH_WATERFALL; }
-    getInvestmentPolicy() { return INVESTMENT_POLICY; }
+    getLCRModel() {
+        return LCR_MODEL;
+    }
+    getIntradayModel() {
+        return INTRADAY_MODEL;
+    }
+    getCashWaterfall() {
+        return CASH_WATERFALL;
+    }
+    getInvestmentPolicy() {
+        return INVESTMENT_POLICY;
+    }
 
     getFullFramework() {
         return {

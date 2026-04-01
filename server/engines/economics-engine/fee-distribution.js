@@ -1,6 +1,6 @@
 /**
- * TrustChecker — Fee Distribution Engine v1.0
- * Completes Infrastructure Monetization: Validator Incentives + Partner Revenue Sharing
+ * TrustChecker — Agentic Fee Distribution Engine v3.0
+ * Infrastructure Monetization: Bounded Dynamic Split & Controlled Autonomy
  *
  * Revenue Flow:
  *   Transaction Fee → Platform (70%) → Validator Pool (20%) → Reserve (10%)
@@ -15,18 +15,27 @@ const { v4: uuidv4 } = require('uuid');
 // ═══════════════════════════════════════════════════════════════════
 
 const DISTRIBUTION_POLICY = {
+    // Legacy mapping (maintained for fallback)
     platform_pct: 70,
     validator_pool_pct: 20,
     reserve_pct: 10,
+
+    // v3.0 Bounded Dynamic Split Engine Guardrails
+    dynamic_bounds: {
+        reserve: { min: 15, max: 35 }, // Reserve Floor: 15%
+        ops_platform: { min: 5, max: 15 },
+        distribution: { min: 50, max: 75 }, // Validators + Partners
+    },
+
     // Validator distribution weights
     validator_weights: {
-        trust_score: 0.40,      // 40% weight on trust score
+        trust_score: 0.4, // 40% weight on trust score
         rounds_participated: 0.35, // 35% weight on participation
-        uptime: 0.15,           // 15% weight on uptime
-        region_scarcity: 0.10,  // 10% bonus for under-served regions
+        uptime: 0.15, // 15% weight on uptime
+        region_scarcity: 0.1, // 10% bonus for under-served regions
     },
     // Minimum payout threshold (USD)
-    min_payout: 10.00,
+    min_payout: 10.0,
     // Payout cycle
     payout_cycle: 'monthly',
 };
@@ -37,20 +46,32 @@ const DISTRIBUTION_POLICY = {
 
 const PARTNER_TIERS = {
     bronze: {
-        name: 'Bronze', min_referrals: 0, max_referrals: 50,
-        revenue_share_pct: 10, bonus_pct: 0,
+        name: 'Bronze',
+        min_referrals: 0,
+        max_referrals: 50,
+        revenue_share_pct: 10,
+        bonus_pct: 0,
     },
     silver: {
-        name: 'Silver', min_referrals: 51, max_referrals: 200,
-        revenue_share_pct: 15, bonus_pct: 2,
+        name: 'Silver',
+        min_referrals: 51,
+        max_referrals: 200,
+        revenue_share_pct: 15,
+        bonus_pct: 2,
     },
     gold: {
-        name: 'Gold', min_referrals: 201, max_referrals: 1000,
-        revenue_share_pct: 20, bonus_pct: 5,
+        name: 'Gold',
+        min_referrals: 201,
+        max_referrals: 1000,
+        revenue_share_pct: 20,
+        bonus_pct: 5,
     },
     platinum: {
-        name: 'Platinum', min_referrals: 1001, max_referrals: null,
-        revenue_share_pct: 25, bonus_pct: 10,
+        name: 'Platinum',
+        min_referrals: 1001,
+        max_referrals: null,
+        revenue_share_pct: 25,
+        bonus_pct: 10,
     },
 };
 
@@ -61,12 +82,12 @@ const PARTNER_TIERS = {
 const REGION_SCARCITY = {
     'ap-southeast': 1.0,
     'ap-east': 1.0,
-    'eu-west': 0.8,     // well-served → lower scarcity bonus
+    'eu-west': 0.8, // well-served → lower scarcity bonus
     'eu-north': 0.9,
-    'us-east': 0.7,     // most served
+    'us-east': 0.7, // most served
     'us-west': 0.8,
-    'me-south': 1.5,    // under-served → higher bonus
-    'af-south': 2.0,    // most under-served
+    'me-south': 1.5, // under-served → higher bonus
+    'af-south': 2.0, // most under-served
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -75,16 +96,16 @@ const REGION_SCARCITY = {
 
 class FeeDistributionEngine {
     constructor() {
-        this.distributions = [];         // distribution records
+        this.distributions = []; // distribution records
         this.validatorBalances = new Map(); // node_id → { balance, total_earned, payouts }
-        this.partnerBalances = new Map();   // partner_id → { balance, tier, referrals }
+        this.partnerBalances = new Map(); // partner_id → { balance, tier, referrals }
         this.payoutHistory = [];
     }
 
     // ─── Calculate Validator Distribution ─────────────────────────
 
     calculateValidatorDistribution(totalRevenue, validators = []) {
-        const pool = totalRevenue * DISTRIBUTION_POLICY.validator_pool_pct / 100;
+        const pool = (totalRevenue * DISTRIBUTION_POLICY.validator_pool_pct) / 100;
         if (validators.length === 0 || pool <= 0) {
             return { pool, validators: [], message: 'No eligible validators' };
         }
@@ -104,22 +125,24 @@ class FeeDistributionEngine {
 
         // Normalize scores
         const totalScore = scored.reduce((a, s) => a + s.raw_score, 0);
-        const distributed = scored.map(s => {
-            const share = totalScore > 0 ? s.raw_score / totalScore : 1 / scored.length;
-            const amount = Math.round(pool * share * 100) / 100;
-            return {
-                node_id: s.node_id,
-                name: s.name || s.node_id,
-                region: s.region,
-                trust_score: s.trust_score,
-                rounds: s.rounds_participated,
-                uptime: s.uptime_pct,
-                region_weight: s.region_weight,
-                raw_score: Math.round(s.raw_score * 10000) / 10000,
-                share_pct: Math.round(share * 10000) / 100,
-                amount,
-            };
-        }).sort((a, b) => b.amount - a.amount);
+        const distributed = scored
+            .map(s => {
+                const share = totalScore > 0 ? s.raw_score / totalScore : 1 / scored.length;
+                const amount = Math.round(pool * share * 100) / 100;
+                return {
+                    node_id: s.node_id,
+                    name: s.name || s.node_id,
+                    region: s.region,
+                    trust_score: s.trust_score,
+                    rounds: s.rounds_participated,
+                    uptime: s.uptime_pct,
+                    region_weight: s.region_weight,
+                    raw_score: Math.round(s.raw_score * 10000) / 10000,
+                    share_pct: Math.round(share * 10000) / 100,
+                    amount,
+                };
+            })
+            .sort((a, b) => b.amount - a.amount);
 
         // Update balances
         for (const d of distributed) {
@@ -150,18 +173,26 @@ class FeeDistributionEngine {
         // Determine tier
         let currentTier = 'bronze';
         for (const [tier, def] of Object.entries(PARTNER_TIERS)) {
-            if (referralVolume >= def.min_referrals && (def.max_referrals === null || referralVolume <= def.max_referrals)) {
+            if (
+                referralVolume >= def.min_referrals &&
+                (def.max_referrals === null || referralVolume <= def.max_referrals)
+            ) {
                 currentTier = tier;
             }
         }
 
         const tierDef = PARTNER_TIERS[currentTier];
-        const baseShare = transactionRevenue * tierDef.revenue_share_pct / 100;
-        const bonus = baseShare * tierDef.bonus_pct / 100;
+        const baseShare = (transactionRevenue * tierDef.revenue_share_pct) / 100;
+        const bonus = (baseShare * tierDef.bonus_pct) / 100;
         const total = Math.round((baseShare + bonus) * 100) / 100;
 
         // Update partner balance
-        const bal = this.partnerBalances.get(partnerId) || { balance: 0, total_earned: 0, tier: currentTier, referrals: 0 };
+        const bal = this.partnerBalances.get(partnerId) || {
+            balance: 0,
+            total_earned: 0,
+            tier: currentTier,
+            referrals: 0,
+        };
         bal.balance += total;
         bal.total_earned += total;
         bal.tier = currentTier;
@@ -181,24 +212,60 @@ class FeeDistributionEngine {
         };
     }
 
-    // ─── Revenue Breakdown ────────────────────────────────────────
+    // ─── Bounded Dynamic Split (Agentic v3.0) ─────────────────────
 
-    getRevenueBreakdown(totalRevenue) {
+    resolveAgenticSplit(totalRevenue, systemState = {}) {
+        const { reserve_ratio = 20, volatility_spike = false, admin_override = null } = systemState;
+        const bounds = DISTRIBUTION_POLICY.dynamic_bounds;
+
+        let activeSplit = { reserve: 20, ops: 15, distribution: 65 };
+        let mode = 'STANDARD';
+        const flags = [];
+
+        if (admin_override) {
+            activeSplit = admin_override;
+            mode = 'MANUAL_OVERRIDE';
+            flags.push('ADMIN_OVERRIDE_ACTIVE');
+        } else if (reserve_ratio < bounds.reserve.min || volatility_spike) {
+            // Emergency Mode Trigger
+            activeSplit.reserve = 50; // Priority fill
+            activeSplit.ops = 10;
+            activeSplit.distribution = 40; // Reduced yield to restore solvency
+            mode = 'EMERGENCY_RESERVE_PRIORITY';
+            flags.push('EMERGENCY_MODE_ACTIVATED: Yield Restricted');
+        } else {
+            // Dynamic auto-balance based on reserve health
+            // If reserve is healthy (e.g. 25%), we can maximize distribution (yield)
+            if (reserve_ratio > 25) {
+                activeSplit.reserve = bounds.reserve.min; // 15
+                activeSplit.ops = 10;
+                activeSplit.distribution = bounds.distribution.max; // 75
+                flags.push('OPTIMIZED_YIELD_MODE');
+            } else {
+                // Typical safe balance
+                activeSplit.reserve = 25;
+                activeSplit.ops = 10;
+                activeSplit.distribution = 65;
+            }
+        }
+
         return {
             total_revenue: totalRevenue,
-            platform: {
-                pct: DISTRIBUTION_POLICY.platform_pct,
-                amount: Math.round(totalRevenue * DISTRIBUTION_POLICY.platform_pct) / 100,
+            mode,
+            flags,
+            split_pct: activeSplit,
+            allocations: {
+                reserve: Math.round(totalRevenue * (activeSplit.reserve / 100) * 100) / 100,
+                ops: Math.round(totalRevenue * (activeSplit.ops / 100) * 100) / 100,
+                distribution: Math.round(totalRevenue * (activeSplit.distribution / 100) * 100) / 100,
             },
-            validator_pool: {
-                pct: DISTRIBUTION_POLICY.validator_pool_pct,
-                amount: Math.round(totalRevenue * DISTRIBUTION_POLICY.validator_pool_pct) / 100,
-            },
-            reserve: {
-                pct: DISTRIBUTION_POLICY.reserve_pct,
-                amount: Math.round(totalRevenue * DISTRIBUTION_POLICY.reserve_pct) / 100,
-            },
+            audit_log: `Split resolved at ${new Date().toISOString()} under mode ${mode} with Reserve Ratio: ${reserve_ratio}%`,
         };
+    }
+
+    getRevenueBreakdown(totalRevenue, systemState = {}) {
+        // Now redirects to the Agentic Splitter instead of the static logic
+        return this.resolveAgenticSplit(totalRevenue, systemState);
     }
 
     // ─── Process Payout ───────────────────────────────────────────
@@ -212,7 +279,9 @@ class FeeDistributionEngine {
         }
         if (!balance) return { error: `No balance found for ${entityType}:${entityId}` };
         if (balance.balance < DISTRIBUTION_POLICY.min_payout) {
-            return { error: `Balance $${balance.balance.toFixed(2)} below minimum payout $${DISTRIBUTION_POLICY.min_payout}` };
+            return {
+                error: `Balance $${balance.balance.toFixed(2)} below minimum payout $${DISTRIBUTION_POLICY.min_payout}`,
+            };
         }
 
         const payout = {
@@ -263,10 +332,18 @@ class FeeDistributionEngine {
 
     // ─── Getters ──────────────────────────────────────────────────
 
-    getDistributionPolicy() { return DISTRIBUTION_POLICY; }
-    getPartnerTiers() { return PARTNER_TIERS; }
-    getRegionScarcity() { return REGION_SCARCITY; }
-    getDistributionHistory(limit = 20) { return this.distributions.slice(-limit).reverse(); }
+    getDistributionPolicy() {
+        return DISTRIBUTION_POLICY;
+    }
+    getPartnerTiers() {
+        return PARTNER_TIERS;
+    }
+    getRegionScarcity() {
+        return REGION_SCARCITY;
+    }
+    getDistributionHistory(limit = 20) {
+        return this.distributions.slice(-limit).reverse();
+    }
 }
 
 module.exports = new FeeDistributionEngine();

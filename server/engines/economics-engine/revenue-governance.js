@@ -1,7 +1,7 @@
 /**
- * TrustChecker — Revenue Governance Map Engine v1.0
- * CRITICAL: Who controls pricing, fees, AI weights, settlement rails
- * 
+ * TrustChecker — Agentic Revenue Governance Map Engine v3.0
+ * CRITICAL: Bounded Autonomy + Explainable Audit Trails for Financial Decisions
+ *
  * Infrastructure monetization WITHOUT revenue governance = risk manipulation.
  * Every revenue-touching decision must have:
  *   - Clear authority (who can change)
@@ -125,9 +125,24 @@ const SETTLEMENT_CONTROL = {
 
     rails: [
         { rail: 'Carbon Credit Settlement', cycle: 'T+1', jurisdiction: 'EU (MiCA)', controlled_by: 'Settlement GmbH' },
-        { rail: 'Cross-Border Transfer', cycle: 'T+3', jurisdiction: 'Multi', controlled_by: 'Settlement GmbH + Local Entity' },
-        { rail: 'QR Verification Settlement', cycle: 'Instant', jurisdiction: 'All', controlled_by: 'Technology Pte Ltd' },
-        { rail: 'Carbon Certificate Issuance', cycle: 'T+2', jurisdiction: 'Registry-specific', controlled_by: 'Settlement GmbH' },
+        {
+            rail: 'Cross-Border Transfer',
+            cycle: 'T+3',
+            jurisdiction: 'Multi',
+            controlled_by: 'Settlement GmbH + Local Entity',
+        },
+        {
+            rail: 'QR Verification Settlement',
+            cycle: 'Instant',
+            jurisdiction: 'All',
+            controlled_by: 'Technology Pte Ltd',
+        },
+        {
+            rail: 'Carbon Certificate Issuance',
+            cycle: 'T+2',
+            jurisdiction: 'Registry-specific',
+            controlled_by: 'Settlement GmbH',
+        },
     ],
 };
 
@@ -152,8 +167,14 @@ const FEE_GOVERNANCE = {
     },
 
     extraction_controls: [
-        { control: 'No fee extraction outside allocation formula', enforced_by: 'Smart contract / constitutional RBAC' },
-        { control: 'Operating entity cannot access reserve funds', enforced_by: 'Capital Reserve Trust (bankruptcy-remote)' },
+        {
+            control: 'No fee extraction outside allocation formula',
+            enforced_by: 'Smart contract / constitutional RBAC',
+        },
+        {
+            control: 'Operating entity cannot access reserve funds',
+            enforced_by: 'Capital Reserve Trust (bankruptcy-remote)',
+        },
         { control: 'Fee allocation changes require 30-day notice', enforced_by: 'Constitutional amendment process' },
         { control: 'All fee flows auditable in real-time', enforced_by: 'Hash-chained audit log + external audit API' },
     ],
@@ -164,16 +185,39 @@ const FEE_GOVERNANCE = {
 // ═══════════════════════════════════════════════════════════════════
 
 class RevenueGovernanceEngine {
-    getPricingAuthority() { return PRICING_AUTHORITY; }
-    getAIRevenueMap() { return AI_REVENUE_MAP; }
-    getSettlementControl() { return SETTLEMENT_CONTROL; }
-    getFeeGovernance() { return FEE_GOVERNANCE; }
+    getPricingAuthority() {
+        return PRICING_AUTHORITY;
+    }
+    getAIRevenueMap() {
+        return AI_REVENUE_MAP;
+    }
+    getSettlementControl() {
+        return SETTLEMENT_CONTROL;
+    }
+    getFeeGovernance() {
+        return FEE_GOVERNANCE;
+    }
+
+    // ─── AGENTIC EXPLAINABLE AUDIT TRAIL v3.0 ──────────────────────
+
+    auditAgenticDecision(decisionType, context, outcome) {
+        // Enforces the "Explainable & Replayable" requirement
+        return {
+            audit_id: `AUDIT-REV-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            decision_type: decisionType,
+            agentic_context_snapshot: context,
+            outcome: outcome,
+            explainability: `Agentic engine initiated ${decisionType}. Snapshot state recorded for replay.`,
+            governance_status: 'AUTHORIZED_BOUNDED_AUTONOMY',
+        };
+    }
 
     getFullMap() {
         return {
-            title: 'Revenue Governance Map — Infrastructure-Grade',
-            version: '1.0',
-            principle: 'Revenue-touching decisions require separation of powers + constitutional limits + audit trail',
+            title: 'Agentic Revenue Governance Map — Infrastructure-Grade',
+            version: '3.0',
+            principle: 'Bounded Dynamic Split + Explainable Autonomous Triggers',
             pricing: PRICING_AUTHORITY,
             ai_impact: AI_REVENUE_MAP,
             settlement: SETTLEMENT_CONTROL,

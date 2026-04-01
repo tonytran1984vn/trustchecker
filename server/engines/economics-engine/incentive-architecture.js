@@ -1,10 +1,10 @@
 /**
- * TrustChecker — Incentive Architecture Engine v1.0
+ * TrustChecker — Agentic Incentive Architecture Engine v3.0
  * INFRASTRUCTURE LAYER: Making Every Participant Profit From Integrity
- * 
+ *
  * Control says "you must not cheat". Incentive says "you profit more from honesty".
  * Infrastructure that lasts is built on incentive, not just enforcement.
- * 
+ *
  * Models: per-participant incentive design, network fee topology,
  *         switching cost moat, carbon market layer (registry→trading→clearing)
  */
@@ -25,7 +25,8 @@ const PARTICIPANT_INCENTIVES = {
                 'Competitive replacement: GGC can replace admin company with 75% supermajority vote',
                 'Insurance premium reduction: lower claims = lower D&O/E&O premiums (direct $ benefit)',
             ],
-            perverse_incentive_guard: 'Admin cannot profit from volume inflation — revenue audited quarterly, synthetic volume detection built into monitoring',
+            perverse_incentive_guard:
+                'Admin cannot profit from volume inflation — revenue audited quarterly, synthetic volume detection built into monitoring',
             alignment_metric: 'Net Promoter Score of orgs + validator satisfaction index',
         },
         {
@@ -37,7 +38,8 @@ const PARTICIPANT_INCENTIVES = {
                 'Data certification badge: verified supply chain displayed to end consumers → brand value',
                 'Insurance reduction: verified supply chain → lower product liability insurance',
             ],
-            perverse_incentive_guard: 'Gaming detection: statistical anomaly detection on data submissions. Known-truth test injections (honeypots).',
+            perverse_incentive_guard:
+                'Gaming detection: statistical anomaly detection on data submissions. Known-truth test injections (honeypots).',
             punishment: 'Data quality < 50% for 3 months → downgrade to Bronze tier → settlement limit reduced to $10K',
         },
         {
@@ -48,7 +50,8 @@ const PARTICIPANT_INCENTIVES = {
                 'Infrastructure grant: operators maintaining >99.95% uptime eligible for annual infrastructure subsidy',
                 'Priority in geographic expansion: high-uptime operators get first-mover advantage in new regions',
             ],
-            perverse_incentive_guard: 'Uptime must be independently verifiable (external monitoring + cross-validator attestation). Cannot self-report uptime.',
+            perverse_incentive_guard:
+                'Uptime must be independently verifiable (external monitoring + cross-validator attestation). Cannot self-report uptime.',
             punishment: 'Uptime < 95% for 30 days → 10% stake slashing. < 90% for 7 days → temporary suspension.',
         },
         {
@@ -59,7 +62,8 @@ const PARTICIPANT_INCENTIVES = {
                 'Model improvement bounty: validators finding scoring model flaws → bounty ($5K-$25K per improvement)',
                 'Independence premium: 10% elevated reward rate for validators with no org relationships',
             ],
-            perverse_incentive_guard: 'SEP-3: IVU cannot set model weights. Cross-validation: 3+ independent validators per score. Canary scores: platform injects known-truth test cases.',
+            perverse_incentive_guard:
+                'SEP-3: IVU cannot set model weights. Cross-validation: 3+ independent validators per score. Canary scores: platform injects known-truth test cases.',
             punishment: 'Accuracy < 70% for 60 days → enhanced monitoring. < 60% → suspension + retraining required.',
         },
         {
@@ -70,8 +74,10 @@ const PARTICIPANT_INCENTIVES = {
                 'Liability protection: good-faith decisions protected by D&O insurance + constitutional shield',
                 'Legacy: named in governance transparency report — public accountability = personal brand value',
             ],
-            perverse_incentive_guard: 'COI disclosure mandatory, recusal enforced, proxy voting limited, composition diversified.',
-            punishment: 'Governance failure leading to system incident → investigation + potential removal. No liability shield if bad faith.',
+            perverse_incentive_guard:
+                'COI disclosure mandatory, recusal enforced, proxy voting limited, composition diversified.',
+            punishment:
+                'Governance failure leading to system incident → investigation + potential removal. No liability shield if bad faith.',
         },
         {
             participant: 'External Auditor / Assurance Partner',
@@ -80,7 +86,8 @@ const PARTICIPANT_INCENTIVES = {
                 'Reputation: published audit results. Missed finding later discovered → professional reputation damage',
                 'Regulatory requirement: auditor rotation every 5-7 years (no entrenchment). Independent from management.',
             ],
-            perverse_incentive_guard: 'Auditor cannot provide consulting to same entity (independence). Rotation enforced.',
+            perverse_incentive_guard:
+                'Auditor cannot provide consulting to same entity (independence). Rotation enforced.',
         },
     ],
 };
@@ -173,7 +180,8 @@ const SWITCHING_MOAT = {
         },
         {
             moat: 'Regulatory Compliance Lock-in',
-            description: 'Orgs build compliance workflows around platform. Changing platforms = re-validation with regulators.',
+            description:
+                'Orgs build compliance workflows around platform. Changing platforms = re-validation with regulators.',
             switching_cost: '$100K-$300K regulatory re-submission costs + 6-12 month delay',
             defensibility: 'HIGH — regulatory relationships are entity-specific. Cannot transfer.',
         },
@@ -191,7 +199,8 @@ const SWITCHING_MOAT = {
         },
         {
             moat: 'Blockchain Anchor History',
-            description: 'Immutable verification history anchored on-chain. Cannot be replicated on different infrastructure.',
+            description:
+                'Immutable verification history anchored on-chain. Cannot be replicated on different infrastructure.',
             switching_cost: 'Cannot replicate historical proofs. New platform = fresh start.',
             defensibility: 'ABSOLUTE — cryptographic proofs are chain-specific.',
         },
@@ -212,10 +221,18 @@ const CARBON_MARKET = {
         {
             layer: 'Registry Logic',
             design: {
-                supported_registries: ['Verra VCS', 'Gold Standard', 'ACR (American Carbon Registry)', 'CAR (Climate Action Reserve)', 'Regional (EU ETS bridged)'],
+                supported_registries: [
+                    'Verra VCS',
+                    'Gold Standard',
+                    'ACR (American Carbon Registry)',
+                    'CAR (Climate Action Reserve)',
+                    'Regional (EU ETS bridged)',
+                ],
                 bridge_mechanism: 'API integration per registry. Platform acts as aggregation layer, NOT issuer.',
-                credit_lifecycle: 'Issuance (registry) → Verification (platform) → Trading (platform orderbook) → Retirement (registry)',
-                double_counting_prevention: 'Unique serial number tracking + cross-registry reconciliation + blockchain anchor per credit',
+                credit_lifecycle:
+                    'Issuance (registry) → Verification (platform) → Trading (platform orderbook) → Retirement (registry)',
+                double_counting_prevention:
+                    'Unique serial number tracking + cross-registry reconciliation + blockchain anchor per credit',
             },
         },
         {
@@ -234,7 +251,8 @@ const CARBON_MARKET = {
                 clearing_model: 'CCP novation via Settlement GmbH',
                 margin: 'Initial margin (5% of position) + variation margin (daily mark-to-market)',
                 default_fund: 'Mutualized: each member contributes pro-rata to default waterfall',
-                default_waterfall: '1. Defaulter margin → 2. Defaulter default fund → 3. CCP skin-in-game → 4. Non-defaulter fund → 5. Insurance → 6. Capital Reserve Trust',
+                default_waterfall:
+                    '1. Defaulter margin → 2. Defaulter default fund → 3. CCP skin-in-game → 4. Non-defaulter fund → 5. Insurance → 6. Capital Reserve Trust',
                 recovery: 'Voluntary tear-up + partial allocation (CPMI-IOSCO principles)',
             },
         },
@@ -243,7 +261,8 @@ const CARBON_MARKET = {
             design: {
                 detection: 'Auto-detect: failed settlement T+3 → margin call → T+5 → default declaration',
                 close_out: 'Netting of all positions. Auction of defaulter portfolio to remaining members.',
-                loss_allocation: 'Default waterfall (above). If waterfall exhausted → pro-rata loss sharing among non-defaulters.',
+                loss_allocation:
+                    'Default waterfall (above). If waterfall exhausted → pro-rata loss sharing among non-defaulters.',
                 recovery_timeline: 'Target: full resolution within 7 business days of default',
                 reporting: 'Regulatory notification within 24 hours. Client notification within 4 hours.',
             },
@@ -256,14 +275,22 @@ const CARBON_MARKET = {
 // ═══════════════════════════════════════════════════════════════════
 
 class IncentiveArchitectureEngine {
-    getParticipantIncentives() { return PARTICIPANT_INCENTIVES; }
-    getFeeTopology() { return FEE_TOPOLOGY; }
-    getSwitchingMoat() { return SWITCHING_MOAT; }
-    getCarbonMarket() { return CARBON_MARKET; }
+    getParticipantIncentives() {
+        return PARTICIPANT_INCENTIVES;
+    }
+    getFeeTopology() {
+        return FEE_TOPOLOGY;
+    }
+    getSwitchingMoat() {
+        return SWITCHING_MOAT;
+    }
+    getCarbonMarket() {
+        return CARBON_MARKET;
+    }
 
     calculateNetworkValue(org_count) {
         const n = org_count || 50;
-        const metcalfe = n * (n - 1) / 2;
+        const metcalfe = (n * (n - 1)) / 2;
         const valuePerConnection = 50000; // $50K network value per connection pair
         const adjustedValue = metcalfe * valuePerConnection * 0.001; // Metcalfe discount
         return {
@@ -274,6 +301,39 @@ class IncentiveArchitectureEngine {
             switching_cost_per_org: '$350K-$900K',
             ltv_cac_ratio: '8:1 at scale',
         };
+    }
+
+    /**
+     * Agentic v3.0: Yield Optimizer for Validators
+     */
+    resolveAgenticValidatorYield(networkState = {}) {
+        const { participation_pct = 60, base_yield_pct = 5.0 } = networkState;
+
+        let dynamicYield = base_yield_pct;
+        let mode = 'STANDARD';
+
+        // If participation is low, drastically boost APY to attract capital
+        if (participation_pct < 40) {
+            dynamicYield = base_yield_pct * 2.5; // Boost by 150%
+            mode = 'SCARCITY_BOOST';
+        } else if (participation_pct < 60) {
+            dynamicYield = base_yield_pct * 1.5; // Boost by 50%
+            mode = 'MODERATE_BOOST';
+        } else if (participation_pct > 90) {
+            dynamicYield = base_yield_pct * 0.8; // Reduce if over-saturated
+            mode = 'SATURATION_DAMPENING';
+        }
+
+        return {
+            base_yield_pct,
+            current_participation_pct: participation_pct,
+            dynamic_yield_pct: this._round(dynamicYield, 2),
+            yield_mode: mode,
+        };
+    }
+
+    _round(n, decimals) {
+        return Math.round(n * Math.pow(10, decimals)) / Math.pow(10, decimals);
     }
 
     getFullArchitecture() {
