@@ -5,7 +5,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { authMiddleware, requirePermission } = require('../auth');
+const { authMiddleware, requirePermission, requireOrgAdmin } = require('../auth');
 const riskGov = require('../engines/risk-model-engine').governance;
 const saConstraints = require('../engines/infrastructure/sa-constraints');
 const observability = require('../engines/platform-ops-engine').observability;
@@ -309,7 +309,7 @@ router.get('/ercm/board-dashboard', (req, res) => {
 router.get('/ercm/control-tests', (req, res) => {
     res.json(ercm.getControlTests());
 });
-router.post('/ercm/attestation', requirePermission('admin:manage'), (req, res) => {
+router.post('/ercm/attestation', requireOrgAdmin(), (req, res) => {
     const result = ercm.submitAttestation({ ...req.body, attester_id: req.user?.id });
     if (result.error) return res.status(400).json(result);
     res.status(201).json(result);
