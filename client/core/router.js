@@ -187,6 +187,7 @@ const PAGE_LOADERS = {
     'exec-alerts': () => import('../pages/exec/alerts.js'),
     'exec-trends': () => import('../pages/exec/trends.js'),
     'exec-heatmap': () => import('../pages/exec/heatmap.js'),
+    'exec-ercm': () => import('../pages/exec/ercm-heatmap.js'),
     'exec-roi': () => import('../pages/exec/roi.js'),
     'exec-risk-intel': () => import('../pages/exec/risk-intel.js'),
     'exec-market': () => import('../pages/exec/market.js'),
