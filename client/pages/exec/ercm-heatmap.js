@@ -69,7 +69,7 @@ export function renderPage() {
                 <span>${icon('alertTriangle', 20)} Top 10 Residual Risks (Post-Controls)</span>
                 <span style="font-size:0.7rem;color:var(--text-secondary);font-weight:normal">Max Score: 25</span>
             </h2>
-            <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;flex-direction:column;gap:8px;max-height:450px;overflow-y:auto;overflow-x:hidden;padding-right:5px">
                 ${(bd?.top_10_residual_risks || []).map((r, i) => {
                     const c = sc(r.score);
                     const pct = Math.min(100, (r.score / 25) * 100);
