@@ -65,21 +65,31 @@ export function renderPage() {
 
         <!-- Right: Top 10 Residual Risks -->
         <section class="exec-section" style="margin-bottom:0">
-            <h2 class="exec-section-title">${icon('alertTriangle', 20)} Top 10 Residual Risks (Post-Controls)</h2>
-            <div style="background:var(--surface-color,rgba(0,0,0,0.2));border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:8px">
+            <h2 class="exec-section-title" style="display:flex;justify-content:space-between;align-items:center">
+                <span>${icon('alertTriangle', 20)} Top 10 Residual Risks (Post-Controls)</span>
+                <span style="font-size:0.7rem;color:var(--text-secondary);font-weight:normal">Max Score: 25</span>
+            </h2>
+            <div style="display:flex;flex-direction:column;gap:8px">
                 ${(bd?.top_10_residual_risks || []).map((r, i) => {
                     const c = sc(r.score);
+                    const pct = Math.min(100, (r.score / 25) * 100);
                     return `
-                    <div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid rgba(255,255,255,0.04)">
-                        <div style="width:24px;height:24px;border-radius:12px;background:${c}22;color:${c};display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:800">${i + 1}</div>
-                        <div style="flex:1">
-                            <div style="display:flex;justify-content:space-between;margin-bottom:2px">
-                                <span style="font-size:0.85rem;font-weight:700;color:var(--text-primary)">${r.id}: ${r.description}</span>
-                                <span style="font-size:0.9rem;font-weight:800;color:${c}">${r.score}</span>
-                            </div>
-                            <div style="display:flex;gap:10px;font-size:0.7rem;color:var(--text-secondary)">
-                                <span><strong>Domain:</strong> ${r.domain}</span>
-                                <span><strong>Owner:</strong> ${r.owner}</span>
+                    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-left:4px solid ${c};border-radius:8px;padding:12px;transition:all 0.2s" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='rgba(255,255,255,0.02)'">
+                        <div style="display:flex;align-items:flex-start;gap:12px">
+                            <div style="width:28px;height:28px;border-radius:14px;background:${c}15;color:${c};display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:800;flex-shrink:0;box-shadow:inset 0 0 0 1px ${c}40">#${i + 1}</div>
+                            <div style="flex:1">
+                                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+                                    <div style="font-size:0.85rem;font-weight:700;color:var(--text-primary);line-height:1.3">${r.id}: ${r.description}</div>
+                                    <div style="font-size:1rem;font-weight:800;color:${c};background:${c}10;padding:2px 8px;border-radius:6px;margin-left:10px">${r.score}</div>
+                                </div>
+                                <div style="display:flex;gap:12px;font-size:0.65rem;color:var(--text-secondary);margin-bottom:8px">
+                                    <span style="display:flex;align-items:center;gap:4px">${icon('folder', 12)} ${r.domain}</span>
+                                    <span style="display:flex;align-items:center;gap:4px">${icon('user', 12)} ${r.owner}</span>
+                                </div>
+                                <!-- Threat Bar -->
+                                <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden">
+                                    <div style="height:100%;width:${pct}%;background:linear-gradient(90deg, ${c}40, ${c});border-radius:2px"></div>
+                                </div>
                             </div>
                         </div>
                     </div>`;
