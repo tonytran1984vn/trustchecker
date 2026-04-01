@@ -1,5 +1,5 @@
 /**
- * L-RGF Engine — Logistics Risk Governance Flow v1.0
+ * L-RGF Agentic Governance Engine v3.0 — Logistics Risk Governance Flow
  *
  * Audit-Grade governance engine implementing the 8-step flow:
  *
@@ -23,7 +23,7 @@ const { safeParse } = require('../../utils/safe-json');
 
 // ─── MODEL VERSION REGISTRY ─────────────────────────────────────────────────
 const MODEL_REGISTRY = {
-    current_version: 'ERS-v1.0.0',
+    current_version: 'ERS-v3.0.0',
     weight_hash: null, // Computed at init
     weights: {
         velocity_anomaly: 0.2,

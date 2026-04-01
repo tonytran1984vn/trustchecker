@@ -1,14 +1,14 @@
 /**
- * TrustChecker — Regulatory Scenario Engine v1.0
+ * TrustChecker — Agentic Regulatory Horizon Scanner v3.0
  * IPO-GRADE: Regulatory Shock Simulation
- * 
+ *
  * Economic stress tests exist. But regulatory stress tests don't.
  * Global supply chain infra MUST simulate regulatory shocks:
  *   - Sudden classification changes (MiCA, SEC)
  *   - Carbon regulation freezes
  *   - Sanctions expansion (OFAC)
  *   - Country-level settlement prohibition
- * 
+ *
  * Models: EU DORA, Federal Reserve CCAR regulatory scenarios
  */
 
@@ -159,11 +159,36 @@ const REGULATORY_SCENARIOS = {
 
 const READINESS_SCORECARD = {
     jurisdictions: [
-        { jurisdiction: 'EU/EEA', framework: 'MiCA + GDPR + EU ETS', readiness_score: 75, gaps: ['MiCA license pending', 'Carbon settlement specific authorization'] },
-        { jurisdiction: 'US', framework: 'SEC + CFTC + OFAC', readiness_score: 50, gaps: ['Securities classification unclear', 'CFTC carbon derivative ruling pending'] },
-        { jurisdiction: 'Singapore', framework: 'MAS + PSA', readiness_score: 85, gaps: ['Payment services license scope clarification'] },
-        { jurisdiction: 'Vietnam', framework: 'SBV + MOIT', readiness_score: 60, gaps: ['Carbon credit regulatory framework emerging', 'FDI routing compliance'] },
-        { jurisdiction: 'UK', framework: 'FCA + UK ETS', readiness_score: 70, gaps: ['Post-Brexit divergence from EU rules'] },
+        {
+            jurisdiction: 'EU/EEA',
+            framework: 'MiCA + GDPR + EU ETS',
+            readiness_score: 75,
+            gaps: ['MiCA license pending', 'Carbon settlement specific authorization'],
+        },
+        {
+            jurisdiction: 'US',
+            framework: 'SEC + CFTC + OFAC',
+            readiness_score: 50,
+            gaps: ['Securities classification unclear', 'CFTC carbon derivative ruling pending'],
+        },
+        {
+            jurisdiction: 'Singapore',
+            framework: 'MAS + PSA',
+            readiness_score: 85,
+            gaps: ['Payment services license scope clarification'],
+        },
+        {
+            jurisdiction: 'Vietnam',
+            framework: 'SBV + MOIT',
+            readiness_score: 60,
+            gaps: ['Carbon credit regulatory framework emerging', 'FDI routing compliance'],
+        },
+        {
+            jurisdiction: 'UK',
+            framework: 'FCA + UK ETS',
+            readiness_score: 70,
+            gaps: ['Post-Brexit divergence from EU rules'],
+        },
     ],
 
     composite_score: 68,
@@ -176,13 +201,13 @@ const READINESS_SCORECARD = {
 // ═══════════════════════════════════════════════════════════════════
 
 class RegulatoryScenarioEngine {
-
     simulateScenario(scenario_id, current_revenue_usd) {
         const scenario = REGULATORY_SCENARIOS.scenarios.find(s => s.id === scenario_id);
         if (!scenario) return { error: `Unknown scenario: ${scenario_id}` };
 
         const revenue = current_revenue_usd || 1000000;
-        const affectedPct = typeof scenario.impact.affected_revenue_pct === 'number' ? scenario.impact.affected_revenue_pct : 15;
+        const affectedPct =
+            typeof scenario.impact.affected_revenue_pct === 'number' ? scenario.impact.affected_revenue_pct : 15;
         const revenueLoss = revenue * (affectedPct / 100);
         const complianceCost = scenario.impact.financial?.includes('$500K') ? 1000000 : 200000;
         const totalImpact = revenueLoss * (scenario.impact.timeline_months / 12) + complianceCost;
@@ -205,13 +230,62 @@ class RegulatoryScenarioEngine {
         };
     }
 
-    getScenarios() { return REGULATORY_SCENARIOS; }
-    getReadinessScorecard() { return READINESS_SCORECARD; }
+    /**
+     * Agentic v3.0: Run Regulatory Stress Test across full portfolio
+     */
+    runRegulatoryStressTest(portfolioContext) {
+        if (!portfolioContext || !portfolioContext.annual_revenue) return { error: 'Missing portfolio context' };
+
+        let totalSimulatedLoss = 0;
+        const shocks = [];
+
+        REGULATORY_SCENARIOS.scenarios.forEach(scenario => {
+            // Calculate dynamic probability scalar based on region exposure
+            let probabilityMultiplier = 1.0;
+            if (scenario.id === 'REG-01' || scenario.id === 'REG-02') {
+                const euExposure = portfolioContext.eu_revenue_pct || 0;
+                probabilityMultiplier = euExposure > 30 ? 1.5 : euExposure < 10 ? 0.2 : 1.0;
+            } else if (scenario.id === 'REG-03') {
+                const sancExposure = portfolioContext.high_risk_corridor_pct || 0;
+                probabilityMultiplier = sancExposure > 10 ? 2.0 : 0.5;
+            }
+
+            const activeImpactPct =
+                typeof scenario.impact.affected_revenue_pct === 'number' ? scenario.impact.affected_revenue_pct : 15;
+            const revenueLoss = portfolioContext.annual_revenue * (activeImpactPct / 100) * probabilityMultiplier;
+            const complianceCost = scenario.impact.financial?.includes('$500K') ? 1000000 : 200000;
+            const evd = Math.round(revenueLoss * (scenario.impact.timeline_months / 12) + complianceCost);
+
+            totalSimulatedLoss += evd;
+            shocks.push({
+                id: scenario.id,
+                name: scenario.name,
+                probability_multiplier: probabilityMultiplier,
+                expected_value_destruction: evd,
+                agentic_suggested_mitigations: scenario.mitigation.slice(0, 2), // Top 2 priority
+            });
+        });
+
+        return {
+            stress_test_version: 'v3.0',
+            portfolio_revenue: portfolioContext.annual_revenue,
+            total_simulated_regulatory_evd: totalSimulatedLoss,
+            shocks: shocks.sort((a, b) => b.expected_value_destruction - a.expected_value_destruction),
+            capital_buffer_recommended: Math.round(totalSimulatedLoss * 1.5),
+        };
+    }
+
+    getScenarios() {
+        return REGULATORY_SCENARIOS;
+    }
+    getReadinessScorecard() {
+        return READINESS_SCORECARD;
+    }
 
     getFullFramework() {
         return {
-            title: 'Regulatory Scenario Engine — IPO-Grade',
-            version: '1.0',
+            title: 'Agentic Regulatory Horizon Scanner — v3.0',
+            version: '3.0',
             scenarios: REGULATORY_SCENARIOS,
             readiness: READINESS_SCORECARD,
         };

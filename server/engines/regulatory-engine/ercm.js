@@ -1,5 +1,5 @@
 /**
- * TrustChecker — ERCM v1.0 (Enterprise Risk & Control Map)
+ * TrustChecker — Agentic ERCM v3.0 (Enterprise Risk & Control Map)
  * COSO ERM + Three Lines Model + IPO-Grade Auditability
  *
  * Governance overlay across all 6 EAS layers:
@@ -727,6 +727,79 @@ class ERCMEngine {
             scoring_formula:
                 'Risk Score = Likelihood (1-5) × Impact (1-5) × Control Effectiveness Modifier (0.5=Strong, 1.0=Moderate, 1.5=Weak)',
             risks: scored.sort((a, b) => b.risk_score - a.risk_score),
+            generated_at: new Date().toISOString(),
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // V3.0 AGENTIC ERQF INTEGRATION (REAL-TIME RISK QUANTIFICATION)
+    // ═══════════════════════════════════════════════════════════════
+    agenticHeatmapSync(erqfPayload) {
+        if (!erqfPayload || !erqfPayload.exposure) return this.generateHeatmap();
+
+        const { total_capital_at_risk, expected_revenue_loss, expected_brand_impact, fraud_probability } =
+            erqfPayload.exposure;
+
+        // Agentic Translation: map USD quantities into qualitative COSO brackets
+        const dynamicImpact = Math.min(Math.max(Math.round(total_capital_at_risk / 500000), 1), 5);
+        const dynamicLikelihood = Math.min(Math.max(Math.ceil(fraud_probability * 10), 1), 5);
+
+        const scored = RISK_REGISTRY.map(r => {
+            let imp = r.impact;
+            let lik = r.likelihood;
+            let overriden = false;
+
+            // Financial/Operational directly inherit ERL/TCAR volatility
+            if (r.domain === 'Financial' || r.domain === 'Operational') {
+                imp = dynamicImpact;
+                lik = dynamicLikelihood;
+                overriden = true;
+            }
+            // Brand/Model risk inherits from expected_brand_impact tail-risks
+            else if ((r.domain === 'Model' || r.domain === 'Strategic') && expected_brand_impact > 1000000) {
+                imp = 5; // Fat-tail
+                overriden = true;
+            }
+
+            return {
+                id: r.id,
+                domain: r.domain,
+                description: r.description,
+                likelihood: lik,
+                impact: imp,
+                ce: r.control_effectiveness,
+                score: Math.round(lik * imp * r.control_effectiveness * 10) / 10,
+                is_agentic_override: overriden,
+            };
+        });
+
+        // 5×5 grid rebuilt with Agentic values
+        const grid = [];
+        for (let imp = 5; imp >= 1; imp--) {
+            for (let lik = 1; lik <= 5; lik++) {
+                const cell = scored.filter(r => r.likelihood === lik && r.impact === imp);
+                grid.push({
+                    impact: imp,
+                    likelihood: lik,
+                    inherent_zone:
+                        imp * lik >= 15 ? 'critical' : imp * lik >= 8 ? 'high' : imp * lik >= 4 ? 'medium' : 'low',
+                    risks: cell.map(r => r.id),
+                });
+            }
+        }
+
+        return {
+            title: 'Agentic Risk Heatmap (ERQF v2.0 Sync)',
+            total_risks: scored.length,
+            tcar_reference_usd: total_capital_at_risk,
+            top_10_residual: scored.sort((a, b) => b.score - a.score).slice(0, 10),
+            zones: {
+                critical: scored.filter(r => r.score >= 15).length,
+                high: scored.filter(r => r.score >= 8 && r.score < 15).length,
+                medium: scored.filter(r => r.score >= 4 && r.score < 8).length,
+                low: scored.filter(r => r.score < 4).length,
+            },
+            grid,
             generated_at: new Date().toISOString(),
         };
     }
