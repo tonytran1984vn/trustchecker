@@ -229,7 +229,7 @@ async function loadData() {
     if (_loading) return;
     _loading = true;
     try {
-        const [tl, gov, reg, hm, cm, ra, bd, ct, gap, mat] = await Promise.all([
+        const [tl, gov, reg, hm, cm, ra, bd, ct, gap, mat, attData] = await Promise.all([
             api.get('/hardening/ercm/three-lines').catch(() => ({})),
             api.get('/hardening/ercm/governance-bodies').catch(() => ({})),
             api.get('/hardening/ercm/risk-registry').catch(() => ({})),

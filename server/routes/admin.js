@@ -599,7 +599,7 @@ router.get('/compliance/policies', async (req, res) => {
     try {
         const { action } = req.query;
         let query = `SELECT id, action, version_id, is_active, created_at, created_by,
-                            (SELECT username FROM users WHERE id = created_by) as creator_name
+                            (SELECT username FROM users WHERE id::text = created_by::text) as creator_name
                      FROM compliance_policies 
                      WHERE org_id = 'SYSTEM'
                      ORDER BY is_active DESC, created_at DESC LIMIT 100`;
@@ -607,7 +607,7 @@ router.get('/compliance/policies', async (req, res) => {
 
         if (action) {
             query = `SELECT id, action, version_id, is_active, created_at, created_by, rules_jsonb,
-                            (SELECT username FROM users WHERE id = created_by) as creator_name
+                            (SELECT username FROM users WHERE id::text = created_by::text) as creator_name
                      FROM compliance_policies 
                      WHERE org_id = 'SYSTEM' AND action = ?
                      ORDER BY is_active DESC, created_at DESC LIMIT 100`;

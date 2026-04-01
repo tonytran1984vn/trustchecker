@@ -5,19 +5,28 @@
 import { State } from '../../core/state.js';
 import { icon } from '../../core/icons.js';
 
-const PLAN_PRICES = { free: 0, starter: 99, core: 199, growth: 299, pro: 499, business: 749, enterprise: 5000 };
-const PLAN_COLORS = { free: '#94a3b8', starter: '#06b6d4', core: '#0ea5e9', growth: '#8b5cf6', pro: '#a855f7', business: '#f59e0b', enterprise: '#ef4444' };
+const PLAN_PRICES = { core: 0, pro: 299, enterprise: 5000 };
+const PLAN_COLORS = { core: '#0ea5e9', pro: '#a855f7', enterprise: '#ef4444' };
 const PLAN_GRADIENTS = {
-    free: 'linear-gradient(135deg, #64748b, #94a3b8)',
-    starter: 'linear-gradient(135deg, #06b6d4, #22d3ee)',
     core: 'linear-gradient(135deg, #0284c7, #38bdf8)',
-    growth: 'linear-gradient(135deg, #7c3aed, #a78bfa)',
     pro: 'linear-gradient(135deg, #9333ea, #c084fc)',
-    business: 'linear-gradient(135deg, #d97706, #f59e0b)',
     enterprise: 'linear-gradient(135deg, #dc2626, #f97316)',
 };
-const PLAN_LABELS = { free: 'Free Trial', starter: 'Starter', core: 'Core', growth: 'Growth', pro: 'Pro', business: 'Business', enterprise: 'Enterprise' };
-const PLAN_ICONS = { free: '🆓', starter: '🚀', core: '💎', growth: '⚡', pro: '🔮', business: '🏢', enterprise: '👑' };
+const PLAN_LABELS = { core: 'Core', pro: 'Professional', enterprise: 'Enterprise' };
+const PLAN_ICONS = { core: '💎', pro: '🔮', enterprise: '👑' };
+
+const FEATURE_PRICES = {
+  qr: 0, products: 0, scm_tracking: 99, inventory: 49, support: 199, partners: 49,
+  carbon: 199, risk_radar: 299, ai_forecast: 499, digital_twin: 149, kyc: 249,
+  overclaim: 399, lineage: 499, governance: 299, registry_export: 599, erp_integration: 999, exec_dashboard: 199, ivu_cert: 499,
+  blockchain: 199, nft: 99
+};
+
+const PLAN_DEFAULTS = {
+  core: ['qr', 'products'],
+  pro: ['qr', 'products', 'scm_tracking', 'support', 'partners', 'carbon', 'inventory'],
+  enterprise: ['qr', 'products', 'scm_tracking', 'support', 'partners', 'carbon', 'inventory', 'risk_radar', 'ai_forecast', 'digital_twin', 'blockchain', 'kyc', 'overclaim', 'exec_dashboard'],
+};
 
 export function renderPage() {
     const orgs = State.platformOrgs || [];
@@ -31,27 +40,69 @@ export function renderPage() {
 
     // ── Compute metrics ──
     const planCounts = {};
+    let mrr = 0;
+    let addonMrr = 0;
+    
+    // Evaluate mapped Plan & Add-ons per Org
     orgs.forEach(t => {
-        const p = (t.plan || 'free').toLowerCase();
+        let p = (t.plan || 'core').toLowerCase();
+        // Safe mapping for legacy plans
+        if (!PLAN_PRICES[p] && p !== 'core' && p !== 'pro' && p !== 'enterprise') p = 'core';
         planCounts[p] = (planCounts[p] || 0) + 1;
+        
+        let orgBase = PLAN_PRICES[p] || 0;
+        let orgAddon = 0;
+        if (t.feature_flags) {
+             const defs = PLAN_DEFAULTS[p] || [];
+             Object.entries(t.feature_flags).forEach(([ft, isChecked]) => {
+                 if (isChecked && !defs.includes(ft)) {
+                     orgAddon += (FEATURE_PRICES[ft] || 0);
+                 }
+             });
+        }
+        
+        mrr += (orgBase + orgAddon);
+        addonMrr += orgAddon;
     });
 
-    const mrr = Object.entries(planCounts).reduce((sum, [plan, count]) => sum + (PLAN_PRICES[plan] || 0) * count, 0);
     const arr = mrr * 12;
-    const paidOrgs = orgs.filter(t => (t.plan || 'free') !== 'free').length;
+    const paidOrgs = orgs.filter(t => {
+        let p = (t.plan || 'core').toLowerCase();
+        if (!PLAN_PRICES[p]) p = 'core';
+        return PLAN_PRICES[p] > 0 || (t.feature_flags && Object.keys(t.feature_flags).length > 0);
+    }).length;
     const arpu = paidOrgs > 0 ? Math.round(mrr / paidOrgs) : 0;
     const totalInvoiced = invoices.reduce((s, inv) => s + (parseFloat(inv.amount) || 0), 0);
     const paidInvoices = invoices.filter(i => i.status === 'paid').length;
 
     // Plan distribution
     const planEntries = Object.entries(planCounts).sort((a, b) => (PLAN_PRICES[b[0]] || 0) - (PLAN_PRICES[a[0]] || 0));
-    const revenueByPlan = planEntries.map(([plan, count]) => ({
-        plan, label: PLAN_LABELS[plan] || plan, count,
-        revenue: (PLAN_PRICES[plan] || 0) * count,
-        color: PLAN_COLORS[plan] || '#64748b',
-        gradient: PLAN_GRADIENTS[plan] || PLAN_GRADIENTS.free,
-        icon: PLAN_ICONS[plan] || '📋',
-    }));
+    const revenueByPlan = planEntries.map(([plan, count]) => {
+        // compute total revenue for this CHASSIS (base + addons)
+        const totalForThisPlan = orgs.filter(t => {
+             let p = (t.plan || 'core').toLowerCase();
+             if (!PLAN_PRICES[p]) p = 'core';
+             return p === plan;
+        }).reduce((sum, t) => {
+             let sb = PLAN_PRICES[plan] || 0;
+             let sa = 0;
+             if (t.feature_flags) {
+                 const defs = PLAN_DEFAULTS[plan] || [];
+                 Object.entries(t.feature_flags).forEach(([ft, isChecked]) => {
+                     if (isChecked && !defs.includes(ft)) sa += (FEATURE_PRICES[ft] || 0);
+                 });
+             }
+             return sum + sb + sa;
+        }, 0);
+
+        return {
+            plan, label: PLAN_LABELS[plan] || plan, count,
+            revenue: totalForThisPlan,
+            color: PLAN_COLORS[plan] || '#0ea5e9',
+            gradient: PLAN_GRADIENTS[plan] || PLAN_GRADIENTS.core,
+            icon: PLAN_ICONS[plan] || '💎',
+        };
+    });
     const totalPlanRevenue = revenueByPlan.reduce((s, p) => s + p.revenue, 0) || 1;
 
     // Donut chart segments
@@ -159,7 +210,7 @@ export function renderPage() {
             <div class="rev-kpi-icon">💰</div>
             <div class="rev-kpi-label">Monthly Recurring Revenue</div>
             <div class="rev-kpi-value">$${mrr.toLocaleString()}</div>
-            <div class="rev-kpi-sub">from ${paidOrgs} paid org${paidOrgs !== 1 ? 's' : ''}</div>
+            <div class="rev-kpi-sub" style="color:#059669;font-weight:700">Incl. +$${addonMrr.toLocaleString()} from Premium Add-ons</div>
         </div>
         <div class="rev-kpi arr">
             <div class="rev-kpi-icon">📈</div>

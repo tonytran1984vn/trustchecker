@@ -46,14 +46,13 @@ const SYSTEM_FEATURES = {
     white_label: { default: false },
 };
 
-// 2. Plan Entitlements (Replacing the old flat boolean array)
+// 2. Plan Entitlements (B2B SaaS Contract Packaging)
 const PLAN_ENTITLEMENTS = {
-    free: { qr: { enabled: true, limit: 100 }, products: { enabled: true } },
     core: {
         qr: { enabled: true, limit: 1000 },
         products: { enabled: true },
-        scm_tracking: { enabled: true },
-        support: { enabled: true },
+        scm_tracking: { enabled: false }, // Explicitly disabled for reference
+        carbon: { enabled: false },
     },
     pro: {
         qr: { enabled: true, limit: 25000 },
@@ -61,8 +60,8 @@ const PLAN_ENTITLEMENTS = {
         scm_tracking: { enabled: true },
         support: { enabled: true },
         partners: { enabled: true },
+        carbon: { enabled: true },
         inventory: { enabled: true },
-        risk_radar: { enabled: true },
     },
     enterprise: {
         qr: { enabled: true, limit: -1 }, // Infinity
@@ -70,10 +69,15 @@ const PLAN_ENTITLEMENTS = {
         scm_tracking: { enabled: true },
         support: { enabled: true },
         partners: { enabled: true },
+        carbon: { enabled: true },
         inventory: { enabled: true },
         risk_radar: { enabled: true },
-        carbon: { enabled: true }, // Unmetered
+        ai_forecast: { enabled: true },
         digital_twin: { enabled: true },
+        blockchain: { enabled: true },
+        kyc: { enabled: true },
+        overclaim: { enabled: true },
+        exec_dashboard: { enabled: true },
     },
 };
 
@@ -103,7 +107,7 @@ class EntitlementService {
         }
 
         const fetchPromise = (async () => {
-            let orgPlan = plan || 'free';
+            let orgPlan = plan || 'core';
             let orgFlags = {};
 
             try {
@@ -116,7 +120,7 @@ class EntitlementService {
                 console.error('[Entitlement] DB fetch failed:', e.message);
             }
 
-            const planFeatures = PLAN_ENTITLEMENTS[orgPlan] || PLAN_ENTITLEMENTS['free'];
+            const planFeatures = PLAN_ENTITLEMENTS[orgPlan] || PLAN_ENTITLEMENTS['core'];
             const finalEntitlements = resolveAllEntitlements(SYSTEM_FEATURES, planFeatures, orgFlags);
 
             try {

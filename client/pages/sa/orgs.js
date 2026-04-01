@@ -154,17 +154,42 @@ function timeSince(d) {
 }
 
 const FEATURE_LIST = [
-  { id: 'blockchain', label: 'Blockchain', icon: '⛓', desc: 'Immutable ledger & anchoring' },
-  { id: 'nft', label: 'NFT Certificates', icon: '🎫', desc: 'Digital product certificates' },
-  { id: 'ai_analytics', label: 'AI Analytics', icon: '🤖', desc: 'Anomaly detection & scoring' },
-  { id: 'trustgraph', label: 'Trust Graph', icon: '🕸', desc: 'Network relationship mapping' },
-  { id: 'consortium', label: 'Consortium', icon: '🤝', desc: 'Multi-party verification' },
-  { id: 'digital_twin', label: 'Digital Twin', icon: '🪞', desc: 'Product digital replicas' },
-  { id: 'carbon', label: 'Carbon Tracking', icon: '🌱', desc: 'Emission monitoring & credits' },
-  { id: 'scm', label: 'Supply Chain', icon: '🚚', desc: 'End-to-end logistics tracking' },
-  { id: 'fraud_detection', label: 'Fraud Detection', icon: '🛡', desc: 'Real-time fraud alerts' },
-  { id: 'kyc', label: 'KYC / AML', icon: '🔍', desc: 'Identity & sanctions screening' },
+  // Core Platform
+  { id: 'qr', label: 'QR Traceability', icon: '📱', desc: 'Scan & Trace engine', group: 'core', price: 0, minTier: 'core' },
+  { id: 'products', label: 'Product Catalog', icon: '📦', desc: 'Product information management', group: 'core', price: 0, minTier: 'core' },
+  { id: 'scm_tracking', label: 'Supply Chain Tracking', icon: '🚚', desc: 'End-to-end logistics tracking', group: 'core', price: 99, minTier: 'core' },
+  { id: 'inventory', label: 'Inventory Management', icon: '🏭', desc: 'Warehouse & stock control', group: 'core', price: 49, minTier: 'core' },
+  { id: 'support', label: 'Premium Support', icon: '🎧', desc: 'Enterprise support SLAs', group: 'core', price: 199, minTier: 'core' },
+  { id: 'partners', label: 'Partner Portal', icon: '🤝', desc: 'B2B collaboration platform', group: 'core', price: 49, minTier: 'core' },
+  
+  // Intelligence & Compliance (Requires Pro Base chassis)
+  { id: 'carbon', label: 'Carbon Tracking', icon: '🌱', desc: 'Emission monitoring & credits', group: 'intel', price: 199, minTier: 'pro' },
+  { id: 'risk_radar', label: 'Risk Radar', icon: '🛡', desc: 'Supplier risk assessment scoring', group: 'intel', price: 299, minTier: 'pro' },
+  { id: 'ai_forecast', label: 'AI Forecaster', icon: '🤖', desc: 'Predictive analytics & anomaly', group: 'intel', price: 499, minTier: 'pro' },
+  { id: 'digital_twin', label: 'Digital Twin', icon: '🪞', desc: 'Digital product replicas', group: 'intel', price: 149, minTier: 'pro' },
+  { id: 'kyc', label: 'KYC / AML', icon: '🔍', desc: 'Identity & sanctions screening', group: 'intel', price: 249, minTier: 'pro' },
+  
+  // Enterprise Add-ons (Premium Upsells - Requires Enterprise Base chassis)
+  { id: 'overclaim', label: 'Overclaim Detection', icon: '⚠️', desc: 'Greenwashing anomaly alerts', group: 'premium', price: 399, minTier: 'enterprise' },
+  { id: 'lineage', label: 'Lineage Replay', icon: '⏪', desc: 'What-if simulations & impact replay', group: 'premium', price: 499, minTier: 'enterprise' },
+  { id: 'governance', label: 'Advanced Governance', icon: '🏛', desc: 'Multi-entity SoD & 6-eyes approval', group: 'premium', price: 299, minTier: 'enterprise' },
+  { id: 'registry_export', label: 'Registry Export API', icon: '📤', desc: 'GRI/IFRS S2 & Registry syncing', group: 'premium', price: 599, minTier: 'enterprise' },
+  { id: 'erp_integration', label: 'ERP Integration', icon: '🔌', desc: 'SAP/Oracle automated sync', group: 'premium', price: 999, minTier: 'enterprise' },
+  { id: 'exec_dashboard', label: 'Exec Risk Dashboard', icon: '📈', desc: 'Board-level reporting & metrics', group: 'premium', price: 199, minTier: 'enterprise' },
+  { id: 'ivu_cert', label: 'IVU Premium Audit', icon: '🏅', desc: '3rd-party validation workflows', group: 'premium', price: 499, minTier: 'enterprise' },
+
+  // Distributed Ledger (Requires Pro Base chassis)
+  { id: 'blockchain', label: 'Blockchain Anchoring', icon: '⛓', desc: 'Immutable ledger proof', group: 'ledger', price: 199, minTier: 'pro' },
+  { id: 'nft', label: 'NFT Certificates', icon: '🎫', desc: 'Digital asset minting', group: 'ledger', price: 99, minTier: 'pro' },
 ];
+
+const PLAN_BASE_PRICES = { core: 0, pro: 299, enterprise: 5000 };
+
+const PLAN_DEFAULTS = {
+  core: ['qr', 'products'],
+  pro: ['qr', 'products', 'scm_tracking', 'support', 'partners', 'carbon', 'inventory'],
+  enterprise: ['qr', 'products', 'scm_tracking', 'support', 'partners', 'carbon', 'inventory', 'risk_radar', 'ai_forecast', 'digital_twin', 'blockchain', 'kyc', 'overclaim', 'exec_dashboard'],
+};
 
 function featureFlags(flags) {
   if (!flags || typeof flags !== 'object') return '';
@@ -457,13 +482,11 @@ function renderModal() {
               ${slugStatus === 'checking' ? '<div class="avail-msg avail-check">⏳ Checking...</div>' : slugStatus === 'taken' ? `<div class="avail-msg avail-taken">❌ Slug already taken${slugSuggestions.length ? ' — try:' : ''}</div>${slugSuggestions.length ? '<div class="slug-suggestions">' + slugSuggestions.map(s => `<button type="button" class="slug-chip" onclick="window._saPickSlug('${s}')">${s}</button>`).join('') + '</div>' : ''}` : slugStatus === 'available' ? '<div class="avail-msg avail-ok">✅ Slug available</div>' : ''}
             </div>
             <div class="phx-form-group" style="margin:0">
-              <label class="phx-label" style="font-size:0.7rem;margin-bottom:3px">CIE Tier</label>
+              <label class="phx-label" style="font-size:0.7rem;margin-bottom:3px">Plan</label>
               <select class="phx-input" name="plan" id="ct-plan" style="padding:7px 10px;font-size:0.82rem" onchange="window._planChanged(this.value)">
-                <option value="sme" selected>🏭 SME Exporter ($1.5–3K/mo)</option>
-                <option value="mid_enterprise">🏢 Mid Enterprise ($6–12K/mo)</option>
-                <option value="large_enterprise">👑 Large Enterprise ($18–40K/mo)</option>
-                <option value="buyer">🌐 Multinational Buyer (API)</option>
-                <option value="bank">🏦 Bank / ESG Fund (Scoring)</option>
+                <option value="core" selected>Core ($0/mo)</option>
+                <option value="pro">Pro ($299/mo)</option>
+                <option value="enterprise">Enterprise ($5,000/mo)</option>
               </select>
             </div>
           </div>
@@ -476,203 +499,34 @@ function renderModal() {
             .slug-suggestions{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
             .slug-chip{padding:3px 8px;border-radius:12px;border:1px solid #3b82f6;background:rgba(59,130,246,0.06);color:#3b82f6;font-size:0.62rem;font-weight:600;cursor:pointer;transition:all 0.15s;font-family:monospace}
             .slug-chip:hover{background:#3b82f6;color:#fff}
-            .ff-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
-            .ff-chip{display:flex;align-items:center;gap:4px;padding:5px 10px;border-radius:20px;border:1px solid var(--border,#e2e8f0);cursor:pointer;transition:all 0.15s;font-size:0.72rem;font-weight:500;user-select:none;white-space:nowrap}
-            .ff-chip:hover{background:rgba(59,130,246,0.06);border-color:rgba(59,130,246,0.4)}
-            .ff-chip.checked{background:linear-gradient(135deg,#3b82f6,#2563eb);border-color:#2563eb;color:#fff;font-weight:700;box-shadow:0 2px 8px rgba(59,130,246,0.35);transform:scale(1.03)}
+            .ff-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+            .ff-chip{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:24px;border:1px solid var(--border,#e2e8f0);cursor:pointer;transition:all 0.2s;font-size:0.75rem;font-weight:500;user-select:none;white-space:nowrap;background:var(--bg-secondary)}
+            .ff-chip:hover{border-color:#94a3b8}
+            .ff-chip.checked{background:#fff;border-color:#3b82f6;color:#1e293b;box-shadow:0 1px 3px rgba(59,130,246,0.1)}
+            .ff-chip.override{border-color:#f59e0b;box-shadow:0 0 0 2px rgba(245,158,11,0.2)}
+            .ff-chip.override.checked{background:#fffbeb;color:#92400e}
             .ff-chip input{display:none}
             .addon-label{display:flex;align-items:center;gap:6px;font-size:0.72rem;padding:8px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all 0.15s}
             .addon-label:hover{border-color:#3b82f6;background:rgba(59,130,246,0.04)}
             .addon-label input:checked ~ span{font-weight:700}
             .addon-price{margin-left:auto;font-size:0.65rem;font-weight:600;white-space:nowrap}
           </style>
-          <div style="margin-bottom:4px;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted,#94a3b8)">Feature Modules</div>
-          <div class="ff-chips">
-            ${FEATURE_LIST.map(f => `
-              <label class="ff-chip">
-                <input type="checkbox" name="ff_${f.id}" onchange="this.parentElement.classList.toggle('checked',this.checked)">
-                <span>${f.icon}</span> ${f.label}
-              </label>
-            `).join('')}
+          <div style="margin-bottom:4px;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted,#94a3b8)">Entitlements & Features</div>
+          <div style="font-size:0.65rem;color:var(--text-muted);margin-bottom:12px;line-height:1.4">Toggling an 'Available Upgrade' creates a custom configuration override for this organization.</div>
+          <div id="ff-chips-container">
+            <!-- Rendered by _planChanged -->
+          </div>
+          
+          <div id="ff-price-calc" style="margin:16px 0 10px;padding:12px 16px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;display:flex;justify-content:space-between;align-items:center">
+             <div>
+               <div style="font-size:0.68rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Estimated Cost</div>
+               <div id="calc-breakdown" style="font-size:0.75rem;color:#64748b;margin-top:2px">Core Base + 0 Overrides</div>
+             </div>
+             <div id="calc-total" style="font-size:1.4rem;font-weight:900;color:#1e293b;font-family:'JetBrains Mono',monospace">$0/mo</div>
           </div>
 
-          <!-- CIE Module Configuration -->
-          <div id="addons-config" style="margin-bottom:12px">
-            <div style="background:linear-gradient(135deg,rgba(16,185,129,0.04),rgba(59,130,246,0.04));border:1px solid rgba(16,185,129,0.15);border-radius:12px;padding:14px">
-              <div style="font-size:0.72rem;font-weight:800;color:#10b981;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">🌱 Carbon Integrity Engine</div>
-              <div style="font-size:0.62rem;color:var(--text-muted);margin-bottom:10px" id="cie-tier-desc">SME Exporter · ≤300 staff · ≤50 suppliers · ARPU $25–40K/yr</div>
-
-              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
-                <div class="phx-form-group" style="margin:0">
-                  <label class="phx-label" style="font-size:0.65rem;margin-bottom:2px">Base License</label>
-                  <input class="phx-input" type="text" id="cie-base" style="padding:6px 8px;font-size:0.75rem;color:var(--text-muted)" value="$1,500–3,000/mo" readonly>
-                </div>
-                <div class="phx-form-group" style="margin:0">
-                  <label class="phx-label" style="font-size:0.65rem;margin-bottom:2px">Batch Limit</label>
-                  <select class="phx-input" name="cie_batch" id="cie-batch" style="padding:6px 8px;font-size:0.75rem">
-                    <option value="5000">5,000 batch/yr</option>
-                    <option value="10000">10,000 batch/yr</option>
-                  </select>
-                </div>
-                <div class="phx-form-group" style="margin:0">
-                  <label class="phx-label" style="font-size:0.65rem;margin-bottom:2px">Usage Overage</label>
-                  <input class="phx-input" type="text" id="cie-overage" style="padding:6px 8px;font-size:0.75rem;color:var(--text-muted)" value="$0.30–0.50/batch" readonly>
-                </div>
-              </div>
-
-              <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px">CIE Modules Included</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px" id="cie-modules">
-                <label class="addon-label" style="flex-direction:column;align-items:stretch;gap:2px">
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <input type="checkbox" name="mod_ingestion" checked disabled>
-                    <span style="font-weight:700">📡 Data Ingestion</span>
-                    <span class="addon-price" style="color:#10b981" id="mod-ingestion-p">✓ Included</span>
-                  </div>
-                  <div style="font-size:0.6rem;color:var(--text-muted);padding-left:22px" id="mod-ingestion-d">Scope 1,2,3 · Source integrity hash</div>
-                </label>
-                <label class="addon-label" style="flex-direction:column;align-items:stretch;gap:2px">
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <input type="checkbox" name="mod_emission" checked disabled>
-                    <span style="font-weight:700">🏭 Emission Engine</span>
-                    <span class="addon-price" style="color:#10b981" id="mod-emission-p">✓ Included</span>
-                  </div>
-                  <div style="font-size:0.6rem;color:var(--text-muted);padding-left:22px" id="mod-emission-d">GHG Protocol v4.2 · Per-batch calculation</div>
-                </label>
-                <label class="addon-label" style="flex-direction:column;align-items:stretch;gap:2px">
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <input type="checkbox" name="mod_benchmark" id="chk-benchmark">
-                    <span style="font-weight:700">📊 Benchmark</span>
-                    <span class="addon-price" style="color:#f59e0b" id="mod-benchmark-p">Basic only</span>
-                  </div>
-                  <div style="font-size:0.6rem;color:var(--text-muted);padding-left:22px" id="mod-benchmark-d">Industry comparison · No percentile</div>
-                </label>
-                <label class="addon-label" style="flex-direction:column;align-items:stretch;gap:2px">
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <input type="checkbox" name="mod_passport" checked disabled>
-                    <span style="font-weight:700">📜 Carbon Passport</span>
-                    <span class="addon-price" style="color:#10b981" id="mod-passport-p">✓ Included</span>
-                  </div>
-                  <div style="font-size:0.6rem;color:var(--text-muted);padding-left:22px" id="mod-passport-d">CIP issuance · Basic audit log</div>
-                </label>
-                <label class="addon-label" style="flex-direction:column;align-items:stretch;gap:2px">
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <input type="checkbox" name="mod_overclaim" id="chk-overclaim">
-                    <span style="font-weight:700">⚠️ Overclaim Detection</span>
-                    <span class="addon-price" style="color:#64748b" id="mod-overclaim-p">Not available</span>
-                  </div>
-                  <div style="font-size:0.6rem;color:var(--text-muted);padding-left:22px" id="mod-overclaim-d">Mid Enterprise+ · Risk scoring</div>
-                </label>
-                <label class="addon-label" style="flex-direction:column;align-items:stretch;gap:2px">
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <input type="checkbox" name="mod_lineage" id="chk-lineage">
-                    <span style="font-weight:700">🔍 Lineage Replay</span>
-                    <span class="addon-price" style="color:#64748b" id="mod-lineage-p">Not available</span>
-                  </div>
-                  <div style="font-size:0.6rem;color:var(--text-muted);padding-left:22px" id="mod-lineage-d">Mid Enterprise+ · +$2K/mo add-on</div>
-                </label>
-                <label class="addon-label" style="flex-direction:column;align-items:stretch;gap:2px">
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <input type="checkbox" name="mod_governance" id="chk-governance">
-                    <span style="font-weight:700">🛡️ Governance</span>
-                    <span class="addon-price" style="color:#64748b" id="mod-governance-p">Basic log only</span>
-                  </div>
-                  <div style="font-size:0.6rem;color:var(--text-muted);padding-left:22px" id="mod-governance-d">Full SoD: Mid Enterprise+</div>
-                </label>
-                <label class="addon-label" style="flex-direction:column;align-items:stretch;gap:2px">
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <input type="checkbox" name="mod_blockchain" id="chk-blockchain">
-                    <span style="font-weight:700">⛓️ Blockchain Anchor</span>
-                    <span class="addon-price" style="color:#64748b" id="mod-blockchain-p">Not available</span>
-                  </div>
-                  <div style="font-size:0.6rem;color:var(--text-muted);padding-left:22px" id="mod-blockchain-d">Mid Enterprise+ · Hash anchoring</div>
-                </label>
-                <label class="addon-label" style="flex-direction:column;align-items:stretch;gap:2px">
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <input type="checkbox" name="mod_export" id="chk-export">
-                    <span style="font-weight:700">📤 Export Engine</span>
-                    <span class="addon-price" style="color:#10b981" id="mod-export-p">ESG only</span>
-                  </div>
-                  <div style="font-size:0.6rem;color:var(--text-muted);padding-left:22px" id="mod-export-d">ESG basic · IFRS/GRI: Mid Enterprise+</div>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Enterprise Deal Config (Large + Buyer + Bank) -->
-          <div id="ent-config" style="display:none;margin-bottom:12px">
-            <div style="background:linear-gradient(135deg,rgba(239,68,68,0.06),rgba(249,115,22,0.06));border:1px solid rgba(239,68,68,0.15);border-radius:12px;padding:14px">
-              <div style="font-size:0.72rem;font-weight:800;color:#ef4444;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px" id="ent-config-title">👑 Enterprise Deal Configuration</div>
-
-              <div id="ent-deal-fields" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
-                <div class="phx-form-group" style="margin:0">
-                  <label class="phx-label" style="font-size:0.65rem;margin-bottom:2px">MAC Tier</label>
-                  <select class="phx-input" name="ent_mac" style="padding:6px 8px;font-size:0.75rem">
-                    <option value="none">No commitment</option>
-                    <option value="100k">$100K/yr MAC</option>
-                    <option value="200k">$200K/yr MAC</option>
-                    <option value="500k">$500K/yr MAC</option>
-                    <option value="1m">$1M/yr MAC</option>
-                  </select>
-                </div>
-                <div class="phx-form-group" style="margin:0">
-                  <label class="phx-label" style="font-size:0.65rem;margin-bottom:2px">Monthly Base ($)</label>
-                  <input class="phx-input" type="number" name="ent_monthly" placeholder="18000" min="5000" step="1000" style="padding:6px 8px;font-size:0.75rem">
-                </div>
-                <div class="phx-form-group" style="margin:0">
-                  <label class="phx-label" style="font-size:0.65rem;margin-bottom:2px">Infra Fee</label>
-                  <select class="phx-input" name="ent_infra" style="padding:6px 8px;font-size:0.75rem">
-                    <option value="5000">$5K/mo compute</option>
-                    <option value="10000">$10K/mo compute</option>
-                    <option value="20000">$20K/mo compute</option>
-                  </select>
-                </div>
-              </div>
-
-              <div id="ent-api-fields" style="display:none;margin-bottom:10px">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                  <div class="phx-form-group" style="margin:0">
-                    <label class="phx-label" style="font-size:0.65rem;margin-bottom:2px">Supplier Coverage</label>
-                    <select class="phx-input" name="ent_suppliers" style="padding:6px 8px;font-size:0.75rem">
-                      <option value="100">≤100 suppliers ($200/ea/yr)</option>
-                      <option value="500">≤500 suppliers ($350/ea/yr)</option>
-                      <option value="1000">≤1,000 suppliers ($500/ea/yr)</option>
-                      <option value="unlimited">Unlimited (contract)</option>
-                    </select>
-                  </div>
-                  <div class="phx-form-group" style="margin:0">
-                    <label class="phx-label" style="font-size:0.65rem;margin-bottom:2px">Contract Type</label>
-                    <select class="phx-input" name="ent_contract" style="padding:6px 8px;font-size:0.75rem">
-                      <option value="annual">Annual ($100K–500K/yr)</option>
-                      <option value="multi">Multi-year (discount)</option>
-                      <option value="per_deal">Per-deal scoring</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:6px">Enterprise Add-ons & Services</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
-                <label class="addon-label">
-                  <input type="checkbox" name="svc_ivu"> <span>🔍 IVU Premium Certification ($20K–100K/audit)</span>
-                </label>
-                <label class="addon-label">
-                  <input type="checkbox" name="svc_erp"> <span>🔗 ERP Integration — SAP/Oracle ($50K–150K)</span>
-                </label>
-                <label class="addon-label">
-                  <input type="checkbox" name="svc_stress_test"> <span>📊 Carbon Stress Test ($5K–25K/sim)</span>
-                </label>
-                <label class="addon-label">
-                  <input type="checkbox" name="svc_registry_export"> <span>📤 Registry Export Pack ($3K–10K)</span>
-                </label>
-                <label class="addon-label">
-                  <input type="checkbox" name="svc_exec_dashboard"> <span>📈 Executive Risk Dashboard (+$2K/mo)</span>
-                </label>
-                <label class="addon-label">
-                  <input type="checkbox" name="svc_governance_support"> <span>🎧 Dedicated Governance ($100K/yr)</span>
-                </label>
-              </div>
-            </div>
-          </div>
+          <!-- Initialize chips when modal opens -->
+          <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" onload="window._planChanged(document.getElementById('ct-plan').value)" style="display:none">
 
           <hr class="phx-divider" style="margin:10px 0">
           <div style="margin-bottom:6px;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted,#94a3b8)">Company Admin Account</div>
@@ -725,183 +579,192 @@ window._saDoCreate = (form) => {
   const d = new FormData(form);
   const slug = d.get('slug');
   const adminUsername = slug.replace(/-/g, '_') + '_admin';
-  const feature_flags = {};
-  FEATURE_LIST.forEach(f => { feature_flags[f.id] = !!d.get('ff_' + f.id); });
   const plan = d.get('plan');
+  const defaults = PLAN_DEFAULTS[plan] || [];
+  
+  const feature_flags = {};
+  FEATURE_LIST.forEach(f => { 
+    const isChecked = !!d.get('ff_' + f.id);
+    const isDefault = defaults.includes(f.id);
+    // Only capture exceptions / overrides
+    if (isChecked !== isDefault) {
+      feature_flags[f.id] = isChecked;
+    }
+  });
+
   const payload = {
     name: d.get('name'), slug, plan, feature_flags,
     admin_username: adminUsername, admin_email: d.get('admin_email'), admin_password: d.get('admin_password')
   };
 
-  // CIE modules for all tiers
-  payload.cie_config = {
-    tier: plan,
-    modules: {
-      ingestion: true,
-      emission: true,
-      benchmark: !!d.get('mod_benchmark'),
-      passport: true,
-      overclaim: !!d.get('mod_overclaim'),
-      lineage: !!d.get('mod_lineage'),
-      governance: !!d.get('mod_governance'),
-      blockchain: !!d.get('mod_blockchain'),
-      export: !!d.get('mod_export'),
-    },
-    batch_limit: d.get('cie_batch') || '5000',
-  };
-  // Enable carbon tracking feature flag
-  feature_flags.carbon_tracking = true;
-
-  // Enterprise deal config (large_enterprise, buyer, bank)
-  if (['large_enterprise', 'buyer', 'bank'].includes(plan)) {
-    payload.enterprise_config = {
-      mac_tier: d.get('ent_mac') || 'none',
-      monthly_base: parseInt(d.get('ent_monthly')) || 18000,
-      infra_fee: d.get('ent_infra') || '5000',
-      supplier_coverage: d.get('ent_suppliers') || '',
-      contract_type: d.get('ent_contract') || 'annual',
-      services: {
-        ivu_certification: !!d.get('svc_ivu'),
-        erp_integration: !!d.get('svc_erp'),
-        stress_test: !!d.get('svc_stress_test'),
-        registry_export: !!d.get('svc_registry_export'),
-        exec_dashboard: !!d.get('svc_exec_dashboard'),
-        governance_support: !!d.get('svc_governance_support'),
-      },
-    };
-  }
   createOrg(payload);
 };
 
-// Dynamic plan change — 5-tier CIE pricing
-const CIE_TIERS = {
-  sme: {
-    desc: 'SME Exporter · ≤300 staff · ≤50 suppliers · ARPU $25–40K/yr',
-    base: '$1,500–3,000/mo', batch: ['5000:5,000 batch/yr', '10000:10,000 batch/yr'], overage: '$0.30–0.50/batch',
-    mods: {
-      ingestion: ['✓ Included', 'Scope 1,2,3 · Source integrity hash'],
-      emission: ['✓ Included', 'GHG Protocol v4.2 · Per-batch calc'],
-      benchmark: ['Basic only', 'Industry comparison · No percentile', false],
-      passport: ['✓ Included', 'CIP issuance · Basic audit log'],
-      overclaim: ['Not available', 'Mid Enterprise+ · Risk scoring', true],
-      lineage: ['Not available', 'Mid Enterprise+ · +$2K/mo add-on', true],
-      governance: ['Basic log only', 'Full SoD: Mid Enterprise+', false],
-      blockchain: ['Not available', 'Mid Enterprise+ · Hash anchoring', true],
-      export: ['ESG only', 'ESG basic · IFRS/GRI: Mid Enterprise+', false],
-    },
-    showEnt: false,
-  },
-  mid_enterprise: {
-    desc: 'Mid Enterprise · 300–2K staff · 50–500 suppliers · ARPU $100–200K/yr',
-    base: '$6,000–12,000/mo', batch: ['25000:25,000 batch/yr', '50000:50,000 batch/yr'], overage: '$0.20–0.35/batch',
-    mods: {
-      ingestion: ['✓ Included', 'Multi-source · Duplicate detection'],
-      emission: ['✓ Included', 'Unlimited products · Scope 3 visibility'],
-      benchmark: ['✓ Percentile', 'Industry rank · Overclaim alert', false],
-      passport: ['✓ Included', 'Full CIP · Compliance approval flow'],
-      overclaim: ['✓ Risk Score', 'Carbon Risk Score · Fraud signals', false],
-      lineage: ['+$2K/mo', 'Replay simulation · Impact analysis', false],
-      governance: ['✓ Full SoD', 'Governance workflow · Approval chain', false],
-      blockchain: ['✓ Anchor', 'Hash-only · Polygon', false],
-      export: ['✓ IFRS/GRI', 'ESG + IFRS S2 + GRI 302/305', false],
-    },
-    showEnt: false,
-  },
-  large_enterprise: {
-    desc: 'Large Enterprise · >2K staff · >500 suppliers · ARPU $300K–1.2M/yr',
-    base: '$18,000–40,000/mo', batch: ['unlimited:Unlimited batch'], overage: '$5K–20K/mo infra',
-    mods: {
-      ingestion: ['✓ Full', 'Multi-entity · All scopes'],
-      emission: ['✓ Unlimited', 'Multi-plant · Node complexity'],
-      benchmark: ['✓ Premium', 'Deep industry benchmark · Ranking', false],
-      passport: ['✓ Full', 'Multi-entity CIP · Advanced SoD'],
-      overclaim: ['✓ Full Engine', 'Anomaly detection · Auto-escalate', false],
-      lineage: ['✓ Included', 'Deep replay · What-if simulation', false],
-      governance: ['✓ Advanced', 'Multi-entity SoD · 6-eyes override', false],
-      blockchain: ['✓ Included', 'Full anchoring · Verification API', false],
-      export: ['✓ Full + API', 'All formats + Registry API + Custom', false],
-    },
-    showEnt: true, entTitle: '👑 Large Enterprise Deal Configuration',
-  },
-  buyer: {
-    desc: 'Multinational Buyer · Supplier carbon risk coverage · Highest margin · API model',
-    base: '$200–500/supplier/yr', batch: ['api:API-based'], overage: 'Contract pricing',
-    mods: {
-      ingestion: ['✓ Supplier Feed', 'Supplier carbon data ingestion'],
-      emission: ['— N/A', 'Buyer does not calculate', true],
-      benchmark: ['✓ Supplier Rank', 'Supplier carbon scoring', false],
-      passport: ['— Read Only', 'Read supplier CIPs', true],
-      overclaim: ['✓ Core Product', 'Overclaim detection · Risk heatmap', false],
-      lineage: ['✓ Supplier Trail', 'Supplier emission lineage', false],
-      governance: ['✓ Procurement', 'Procurement API integration', false],
-      blockchain: ['✓ Verify', 'Verify supplier proof anchors', false],
-      export: ['✓ Scope 3', 'Scope 3 risk heatmap · Procurement API', false],
-    },
-    showEnt: true, entTitle: '🌐 Buyer Contract Configuration',
-  },
-  bank: {
-    desc: 'Bank / ESG Fund · Carbon due diligence scoring · $2K–10K/deal or $150–400K/yr',
-    base: '$2,000–10,000/deal', batch: ['scoring:Deal-based scoring'], overage: '$150–400K/yr unlimited',
-    mods: {
-      ingestion: ['— N/A', 'Bank does not ingest data', true],
-      emission: ['— N/A', 'Bank does not calculate', true],
-      benchmark: ['✓ Due Diligence', 'Carbon integrity scoring', false],
-      passport: ['✓ Verify', 'Verify counterparty CIPs', false],
-      overclaim: ['✓ Core Product', 'Greenwashing probability · Risk', false],
-      lineage: ['✓ Deal Trail', 'Deal-level carbon defensibility', false],
-      governance: ['✓ Compliance', 'Audit-grade defensibility report', false],
-      blockchain: ['✓ Verify', 'Verify proof anchors', false],
-      export: ['✓ Deal Report', 'Carbon defensibility report · PDF/API', false],
-    },
-    showEnt: true, entTitle: '🏦 Bank / ESG Fund Contract',
-  },
-};
-
-window._planChanged = (plan) => {
-  const tier = CIE_TIERS[plan];
-  if (!tier) return;
-  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-
-  // Tier description + base pricing
-  set('cie-tier-desc', tier.desc);
-  setVal('cie-base', tier.base);
-  setVal('cie-overage', tier.overage);
-
-  // Batch selector
-  const batchEl = document.getElementById('cie-batch');
-  if (batchEl) {
-    batchEl.innerHTML = tier.batch.map(b => {
-      const [v, l] = b.split(':');
-      return `<option value="${v}">${l}</option>`;
-    }).join('');
-  }
-
-  // Module availability
-  const modNames = ['ingestion', 'emission', 'benchmark', 'passport', 'overclaim', 'lineage', 'governance', 'blockchain', 'export'];
-  modNames.forEach(m => {
-    const info = tier.mods[m];
-    if (!info) return;
-    set('mod-' + m + '-p', info[0]);
-    set('mod-' + m + '-d', info[1]);
-    const priceEl = document.getElementById('mod-' + m + '-p');
-    if (priceEl) {
-      const isOk = info[0].startsWith('✓');
-      const isNa = info[0].startsWith('—') || info[0] === 'Not available';
-      priceEl.style.color = isOk ? '#10b981' : isNa ? '#64748b' : '#f59e0b';
+window._saCalcDynamicPrice = () => {
+  const planSelect = document.getElementById('ct-plan');
+  if (!planSelect) return;
+  
+  const checkedFeatureIds = new Set();
+  FEATURE_LIST.forEach(f => {
+    const cb = document.querySelector(`input[name="ff_${f.id}"]`);
+    if (cb && cb.checked) {
+      checkedFeatureIds.add(f.id);
     }
   });
 
-  // Enterprise deal config visibility
-  const entEl = document.getElementById('ent-config');
-  if (entEl) entEl.style.display = tier.showEnt ? 'block' : 'none';
-  if (tier.entTitle) set('ent-config-title', tier.entTitle);
+  const TIER_RANK = { core: 1, pro: 2, enterprise: 3 };
+  
+  // Enforce Minimum Chassis Requirements
+  let requiredMinimumTier = 'core';
+  checkedFeatureIds.forEach(id => {
+      const feature = FEATURE_LIST.find(f => f.id === id);
+      if (feature && feature.minTier) {
+          if (TIER_RANK[feature.minTier] > TIER_RANK[requiredMinimumTier]) {
+              requiredMinimumTier = feature.minTier;
+          }
+      }
+  });
 
-  // Show/hide enterprise deal fields vs API fields
-  const dealFields = document.getElementById('ent-deal-fields');
-  const apiFields = document.getElementById('ent-api-fields');
-  if (dealFields) dealFields.style.display = plan === 'large_enterprise' ? 'grid' : 'none';
-  if (apiFields) apiFields.style.display = ['buyer', 'bank'].includes(plan) ? 'block' : 'none';
+  let bestPlan = requiredMinimumTier;
+  let bestCost = Infinity;
+  let bestAddons = [];
+  let bestAddonCost = 0;
+
+  // We only evaluate plans that meet the exact minimum required chassis or higher
+  ['core', 'pro', 'enterprise'].forEach(p => {
+      if (TIER_RANK[p] < TIER_RANK[requiredMinimumTier]) return;
+      
+      const defaults = PLAN_DEFAULTS[p] || [];
+      const basePrice = PLAN_BASE_PRICES[p] || 0;
+      let addonCost = 0;
+      let addons = [];
+      
+      checkedFeatureIds.forEach(id => {
+          if (!defaults.includes(id)) {
+              const feature = FEATURE_LIST.find(f => f.id === id);
+              if (feature) {
+                  addonCost += feature.price || 0;
+                  addons.push(id);
+              }
+          }
+      });
+      
+      const totalCost = basePrice + addonCost;
+      // Prefer cheaper total. If equal, prefer the higher tier
+      if (totalCost < bestCost || (totalCost === bestCost && basePrice > (PLAN_BASE_PRICES[bestPlan] || 0))) {
+          bestCost = totalCost;
+          bestPlan = p;
+          bestAddonCost = addonCost;
+          bestAddons = addons;
+      }
+  });
+
+  // Auto-switch UI to the best architectural plan
+  if (planSelect.value !== bestPlan) {
+      planSelect.value = bestPlan;
+      window._planChanged(bestPlan, true);
+      return; 
+  }
+
+  const plan = planSelect.value;
+  // Recalculate based on current actual plan selection in case we didn't auto-switch down
+  const defaults = PLAN_DEFAULTS[plan] || [];
+  let basePrice = PLAN_BASE_PRICES[plan] || 0;
+  let currentAddonCost = 0;
+  let currentAddons = [];
+  checkedFeatureIds.forEach(id => {
+     if (!defaults.includes(id)) {
+         const feat = FEATURE_LIST.find(f => f.id === id);
+         if (feat) { currentAddonCost += feat.price || 0; currentAddons.push(id); }
+     }
+  });
+  const currentTotal = basePrice + currentAddonCost;
+  const addonCount = currentAddons.length;
+
+  const planNames = {core: 'Core', pro: 'Pro', enterprise: 'Enterprise'};
+  const origPrices = {core: 0, pro: 299, enterprise: 5000};
+  
+  for (let i = 0; i < planSelect.options.length; i++) {
+    const pVal = planSelect.options[i].value;
+    planSelect.options[i].text = `${planNames[pVal]} ($${origPrices[pVal].toLocaleString()}/mo)`;
+  }
+  
+  const opt = planSelect.options[planSelect.selectedIndex];
+  if (addonCount > 0) {
+    opt.text = `${planNames[plan]}+ ($${currentTotal.toLocaleString()}/mo)`;
+  }
+  
+  const bd = document.getElementById('calc-breakdown');
+  const tt = document.getElementById('calc-total');
+  if (bd && tt) {
+    if (addonCount > 0) {
+      bd.innerHTML = `<strong>${planNames[plan]}+</strong> base ($${basePrice}) + ${addonCount} add-on(s) ($${currentAddonCost})`;
+      tt.innerHTML = `$${currentTotal.toLocaleString()}<span style="font-size:0.7rem;opacity:0.6">/mo</span>`;
+      tt.style.color = '#3b82f6';
+    } else {
+      let unselectedDefaults = defaults.filter(id => !checkedFeatureIds.has(id));
+      let deductMsg = unselectedDefaults.length > 0 ? `<br><span style="font-size:0.65rem;color:#ef4444;font-style:italic">- ${unselectedDefaults.length} unused feature(s)</span>` : '';
+      bd.innerHTML = `Standard ${planNames[plan]} Plan ($${basePrice})${deductMsg}`;
+      tt.innerHTML = `$${currentTotal.toLocaleString()}<span style="font-size:0.7rem;opacity:0.6">/mo</span>`;
+      tt.style.color = '#1e293b';
+    }
+  }
 };
+
+window._planChanged = (plan, preserveChecks = false) => {
+  const container = document.getElementById('ff-chips-container');
+  if (!container) return;
+  const defaults = PLAN_DEFAULTS[plan] || [];
+  
+  const currentChecked = new Set();
+  if (preserveChecks) {
+      FEATURE_LIST.forEach(f => {
+         const cb = document.querySelector(`input[name="ff_${f.id}"]`);
+         if (cb && cb.checked) currentChecked.add(f.id);
+      });
+      // Ensure the new higher plan's default inclusions are automatically checked for them
+      defaults.forEach(id => currentChecked.add(id));
+  } else {
+      defaults.forEach(id => currentChecked.add(id));
+  }
+
+  const included = FEATURE_LIST.filter(f => defaults.includes(f.id));
+  const addons = FEATURE_LIST.filter(f => !defaults.includes(f.id));
+  
+  const renderChip = (f, isDefault) => {
+    const isChecked = currentChecked.has(f.id);
+    const isOverride = isChecked !== isDefault;
+    return `
+    <label class="ff-chip ${isChecked ? 'checked' : ''} ${isOverride ? 'override' : ''}">
+      <input type="checkbox" name="ff_${f.id}" value="1" ${isChecked ? 'checked' : ''} onchange="this.parentElement.classList.toggle('override', this.checked !== ${isDefault}); this.parentElement.classList.toggle('checked', this.checked); window._saCalcDynamicPrice();">
+      <span style="font-size:1.1rem">${f.icon}</span> 
+      <span style="font-weight:600">${f.label}</span>
+      ${!isDefault && f.price > 0 ? `<span class="addon-price">+$${f.price}</span>` : ''}
+      ${isDefault ? '<span style="color:#10b981;font-weight:800;margin-left:auto">✓</span>' : ''}
+    </label>`;
+  };
+
+  let html = '';
+  
+  if (included.length > 0) {
+    html += `<div style="margin-bottom:8px;font-size:0.65rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">✓ Included in Plan</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+      ${included.map(f => renderChip(f, true)).join('')}
+    </div>`;
+  }
+  
+  if (addons.length > 0) {
+    html += `<div style="margin-bottom:8px;font-size:0.65rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px">➕ Available Upgrades / Add-ons</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+      ${addons.map(f => renderChip(f, false)).join('')}
+    </div>`;
+  }
+
+  container.innerHTML = html;
+  
+  // Calculate price whenever plan changes (and thus chips reset)
+  setTimeout(() => window._saCalcDynamicPrice(), 50);
+};
+
 window._saSuspend = (id) => suspendOrg(id);
 window._saActivate = (id) => activateOrg(id);

@@ -16,6 +16,42 @@ let currentOrgId = null;
 let activeTab = 'overview';
 let showAddUser = false;
 
+const FEATURE_LIST = [
+  // Core Platform
+  { id: 'qr', label: 'QR Traceability', icon: '📱', desc: 'Scan & Trace engine', group: 'core' },
+  { id: 'products', label: 'Product Catalog', icon: '📦', desc: 'Product information management', group: 'core' },
+  { id: 'scm_tracking', label: 'Supply Chain Tracking', icon: '🚚', desc: 'End-to-end logistics tracking', group: 'core' },
+  { id: 'inventory', label: 'Inventory Management', icon: '🏭', desc: 'Warehouse & stock control', group: 'core' },
+  { id: 'support', label: 'Premium Support', icon: '🎧', desc: 'Enterprise support SLAs', group: 'core' },
+  { id: 'partners', label: 'Partner Portal', icon: '🤝', desc: 'B2B collaboration platform', group: 'core' },
+  
+  // Intelligence & Compliance
+  { id: 'carbon', label: 'Carbon Tracking', icon: '🌱', desc: 'Emission monitoring & credits', group: 'intel' },
+  { id: 'risk_radar', label: 'Risk Radar', icon: '🛡', desc: 'Supplier risk assessment scoring', group: 'intel' },
+  { id: 'ai_forecast', label: 'AI Forecaster', icon: '🤖', desc: 'Predictive analytics & anomaly', group: 'intel' },
+  { id: 'digital_twin', label: 'Digital Twin', icon: '🪞', desc: 'Digital product replicas', group: 'intel' },
+  { id: 'kyc', label: 'KYC / AML', icon: '🔍', desc: 'Identity & sanctions screening', group: 'intel' },
+  
+  // Enterprise Add-ons (Premium Upsells)
+  { id: 'overclaim', label: 'Overclaim Detection', icon: '⚠️', desc: 'Greenwashing anomaly alerts', group: 'premium' },
+  { id: 'lineage', label: 'Lineage Replay', icon: '⏪', desc: 'What-if simulations & impact replay', group: 'premium' },
+  { id: 'governance', label: 'Advanced Governance', icon: '🏛', desc: 'Multi-entity SoD & 6-eyes approval', group: 'premium' },
+  { id: 'registry_export', label: 'Registry Export API', icon: '📤', desc: 'GRI/IFRS S2 & Registry syncing', group: 'premium' },
+  { id: 'erp_integration', label: 'ERP Integration', icon: '🔌', desc: 'SAP/Oracle automated sync', group: 'premium' },
+  { id: 'exec_dashboard', label: 'Exec Risk Dashboard', icon: '📈', desc: 'Board-level reporting & metrics', group: 'premium' },
+  { id: 'ivu_cert', label: 'IVU Premium Audit', icon: '🏅', desc: '3rd-party validation workflows', group: 'premium' },
+
+  // Distributed Ledger
+  { id: 'blockchain', label: 'Blockchain Anchoring', icon: '⛓', desc: 'Immutable ledger proof', group: 'ledger' },
+  { id: 'nft', label: 'NFT Certificates', icon: '🎫', desc: 'Digital asset minting', group: 'ledger' },
+];
+
+const PLAN_DEFAULTS = {
+  core: ['qr', 'products'],
+  pro: ['qr', 'products', 'scm_tracking', 'support', 'partners', 'carbon', 'inventory'],
+  enterprise: ['qr', 'products', 'scm_tracking', 'support', 'partners', 'carbon', 'inventory', 'risk_radar', 'ai_forecast', 'digital_twin', 'blockchain', 'kyc', 'overclaim', 'exec_dashboard'],
+};
+
 // ─── Company Role Registry (L1–L4) ──────────────────────────────────────────
 const COMPANY_ROLES = [
   // L3 — Governance
@@ -47,6 +83,7 @@ const PLAN_GRADIENTS = {
   enterprise: 'linear-gradient(135deg,#f97316,#ea580c)', core: 'linear-gradient(135deg,#0ea5e9,#0284c7)',
 };
 const PLAN_COLORS = { free: '#94a3b8', starter: '#0ea5e9', pro: '#8b5cf6', business: '#f59e0b', enterprise: '#f97316', core: '#0ea5e9' };
+const PLAN_LABELS = { core: 'Core', pro: 'Professional', enterprise: 'Enterprise', free: 'Free' };
 const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1'];
 
 async function loadOrg(id) {
@@ -104,6 +141,38 @@ async function addCompanyUser() {
     window.showToast?.(e.message || 'Failed to create user', 'error');
   }
 }
+
+async function toggleFeature(featureId, enabled) {
+  if (!org) return;
+  const currentFlags = org.feature_flags || {};
+  const plan = (org.plan || 'core').toLowerCase();
+  const planDefaults = PLAN_DEFAULTS[plan] || [];
+  const isDefault = planDefaults.includes(featureId);
+  
+  const newFlags = { ...currentFlags };
+  if (enabled === isDefault) {
+    // Reverting to default plan state
+    delete newFlags[featureId];
+  } else {
+    // Adding an explicit override
+    newFlags[featureId] = enabled;
+  }
+  
+  // Optimistic update
+  org.feature_flags = newFlags;
+  window.render();
+  
+  try {
+    await API.put(`/platform/orgs/${org.id}`, { feature_flags: newFlags });
+    window.showToast?.(`Feature override ${enabled ? 'applied' : 'removed'}`, 'success');
+  } catch (e) {
+    // Revert on failure
+    org.feature_flags = currentFlags;
+    window.render();
+    window.showToast?.('Failed to apply feature override: ' + e.message, 'error');
+  }
+}
+
 
 export function renderPage() {
   const id = State.pageParams?.orgId;
@@ -171,10 +240,10 @@ export function renderPage() {
       .tdt-kv-v{font-weight:600}
 
       .tdt-flags{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-      .tdt-flag{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;border:1px solid var(--border);font-size:0.78rem;transition:all 0.15s}
+      .tdt-flag{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;border:1px solid var(--border);font-size:0.78rem;transition:all 0.15s;cursor:pointer}
       .tdt-flag:hover{background:rgba(148,163,184,0.04)}
       .tdt-flag-on{border-left:3px solid #10b981}
-      .tdt-flag-off{border-left:3px solid var(--border);opacity:0.5}
+      .tdt-flag-off{border-left:3px solid var(--border);opacity:0.75}
 
       .tdt-utable{width:100%;border-collapse:collapse}
       .tdt-utable th{text-align:left;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);padding:10px 14px;border-bottom:1px solid var(--border)}
@@ -215,7 +284,7 @@ export function renderPage() {
             <div class="tdt-hero-meta">
               <span class="tdt-hero-tag">${esc(org.slug || '')}</span>
               <span><span class="tdt-hero-dot" style="background:${status === 'active' ? '#4ade80' : '#fbbf24'}"></span> ${status}</span>
-              <span>${plan.toUpperCase()} Plan</span>
+              <span>${PLAN_LABELS[plan] || plan.toUpperCase()} Plan</span>
               <span>Created ${created}</span>
             </div>
           </div>
@@ -231,7 +300,7 @@ export function renderPage() {
       <div class="tdt-stats">
         <div class="tdt-stat"><div class="tdt-stat-val" style="color:#3b82f6">${orgUsers.length}</div><div class="tdt-stat-label">Users</div></div>
         <div class="tdt-stat"><div class="tdt-stat-val" style="color:#10b981">${enabledFlags}</div><div class="tdt-stat-label">Features Active</div></div>
-        <div class="tdt-stat"><div class="tdt-stat-val" style="color:${pColor}">${plan}</div><div class="tdt-stat-label">Current Plan</div></div>
+        <div class="tdt-stat"><div class="tdt-stat-val" style="color:${pColor}">${PLAN_LABELS[plan] || plan.toUpperCase()}</div><div class="tdt-stat-label">Current Plan</div></div>
         <div class="tdt-stat"><div class="tdt-stat-val" style="color:${statusColor}">${status === 'active' ? '✓' : '⚠'}</div><div class="tdt-stat-label">Status</div></div>
       </div>
 
@@ -273,7 +342,7 @@ function renderOverview() {
         <div class="tdt-card-b">
           <div class="tdt-kv"><span class="tdt-kv-l">Name</span><span class="tdt-kv-v">${esc(org.name)}</span></div>
           <div class="tdt-kv"><span class="tdt-kv-l">Slug</span><span class="tdt-kv-v" style="font-family:'JetBrains Mono',monospace">${esc(org.slug || '')}</span></div>
-          <div class="tdt-kv"><span class="tdt-kv-l">Plan</span><span class="tdt-kv-v">${plan}</span></div>
+          <div class="tdt-kv"><span class="tdt-kv-l">Plan</span><span class="tdt-kv-v">${PLAN_LABELS[plan] || plan.toUpperCase()}</span></div>
           <div class="tdt-kv"><span class="tdt-kv-l">Status</span><span class="tdt-kv-v">${org.status || 'active'}</span></div>
           <div class="tdt-kv"><span class="tdt-kv-l">Created</span><span class="tdt-kv-v">${created}</span></div>
           <div class="tdt-kv"><span class="tdt-kv-l">Updated</span><span class="tdt-kv-v">${updated}</span></div>
@@ -282,15 +351,46 @@ function renderOverview() {
         </div>
       </div>
       <div class="tdt-card">
-        <div class="tdt-card-h">${icon('settings', 14)} Feature Flags <span style="margin-left:auto;font-size:0.65rem;color:var(--text-muted)">${flags.filter(([, v]) => v).length}/${flags.length}</span></div>
+        <div class="tdt-card-h">
+          ${icon('settings', 14)} Feature Config Overrides
+          <span style="margin-left:auto;font-size:0.65rem;color:var(--text-muted);font-weight:400;text-transform:none">Plan: <strong>${PLAN_LABELS[plan] || plan.toUpperCase()}</strong></span>
+        </div>
         <div class="tdt-card-b">
-          ${flags.length === 0
-      ? '<div style="text-align:center;color:var(--text-muted);padding:24px;font-size:0.78rem">No features configured</div>'
-      : `<div class="tdt-flags">${flags.map(([k, v]) => `
-              <div class="tdt-flag ${v ? 'tdt-flag-on' : 'tdt-flag-off'}">
-                <span style="width:8px;height:8px;border-radius:50%;background:${v ? '#10b981' : '#94a3b8'};flex-shrink:0;display:inline-block"></span>
-                <span style="font-weight:600;text-transform:capitalize">${k.replace(/_/g, ' ')}</span>
-              </div>`).join('')}</div>`}
+          <div class="tdt-flags">
+            ${FEATURE_LIST.map(f => {
+              const planDefaults = PLAN_DEFAULTS[plan] || [];
+              const isDefault = planDefaults.includes(f.id);
+              const hasOverride = org.feature_flags && typeof org.feature_flags[f.id] !== 'undefined';
+              const isEffectiveOn = hasOverride ? org.feature_flags[f.id] : isDefault;
+              
+              let tagHtml = '';
+              if (hasOverride) {
+                tagHtml = isEffectiveOn 
+                  ? '<span style="font-size:0.6rem;padding:2px 6px;border-radius:4px;background:#fef3c7;color:#92400e;font-weight:700">➕ Added (Override)</span>'
+                  : '<span style="font-size:0.6rem;padding:2px 6px;border-radius:4px;background:#fee2e2;color:#991b1b;font-weight:700">➖ Removed (Override)</span>';
+              } else if (isDefault) {
+                tagHtml = '<span style="font-size:0.6rem;color:#10b981;font-weight:700">✓ Included in Plan</span>';
+              }
+              
+              return `
+              <div class="tdt-flag ${isEffectiveOn ? 'tdt-flag-on' : 'tdt-flag-off'}" style="${hasOverride ? 'border-color:#f59e0b;' : ''}" onclick="window._saToggleOrgFeature('${f.id}', ${!isEffectiveOn})">
+                <span style="font-size:1.1rem;flex-shrink:0">${f.icon}</span>
+                <div style="flex:1">
+                  <div style="font-weight:700;margin-bottom:2px;display:flex;align-items:center;gap:6px">${f.label} ${tagHtml}</div>
+                  <div style="font-size:0.65rem;color:var(--text-muted)">${f.desc}</div>
+                </div>
+                <!-- Toggle Switch -->
+                <label style="position:relative;width:34px;height:20px;cursor:pointer;flex-shrink:0">
+                  <input type="checkbox" ${isEffectiveOn ? 'checked' : ''} style="display:none" onclick="event.stopPropagation(); window._saToggleOrgFeature('${f.id}', this.checked)">
+                  <div style="position:absolute;inset:0;background:${isEffectiveOn ? '#10b981' : '#cbd5e1'};border-radius:10px;transition:0.3s;${hasOverride && isEffectiveOn ? 'background:#f59e0b' : ''}"></div>
+                  <div style="position:absolute;top:2px;left:${isEffectiveOn ? '16px' : '2px'};width:16px;height:16px;background:#fff;border-radius:50%;transition:0.3s;box-shadow:0 1px 2px rgba(0,0,0,0.2)"></div>
+                </label>
+              </div>`;
+            }).join('')}
+          </div>
+          <div style="margin-top:12px;font-size:0.65rem;color:var(--text-muted);text-align:right">
+            <em>Config overrides edit the organization contract explicitly. Toggling a default feature logs it as an explicit override.</em>
+          </div>
         </div>
       </div>
     </div>`;
@@ -384,7 +484,7 @@ function renderBilling() {
     <div class="tdt-grid" style="grid-template-columns:1fr 1fr 1fr">
       <div class="tdt-card"><div class="tdt-card-b" style="text-align:center;padding:24px">
         <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Current Plan</div>
-        <div style="font-size:1.4rem;font-weight:900;color:${pColor};text-transform:uppercase">${plan}</div>
+        <div style="font-size:1.4rem;font-weight:900;color:${pColor};text-transform:uppercase">${PLAN_LABELS[plan] || plan}</div>
       </div></div>
       <div class="tdt-card"><div class="tdt-card-b" style="text-align:center;padding:24px">
         <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Monthly Cost</div>
@@ -417,3 +517,4 @@ window._saDetailActivate = doActivate;
 window._cuShowModal = () => { showAddUser = true; window.render(); };
 window._cuHideModal = () => { showAddUser = false; window.render(); };
 window._cuCreate = addCompanyUser;
+window._saToggleOrgFeature = toggleFeature;
