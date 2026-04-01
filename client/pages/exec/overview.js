@@ -199,7 +199,12 @@ function renderCCS() {
         </table>
       </div>` : ''}
 
-      ${exp.monte_carlo_v3 ? `
+      ${exp.monte_carlo_v3 ? (() => {
+        const mc = exp.monte_carlo_v3;
+        const fmtW = v => (v * 100).toFixed(2);
+        const fmtE = v => Math.abs(parseFloat(v)).toFixed(1);
+        const fmtPct = v => (parseFloat(v) * 100).toFixed(2);
+        return `
       <!-- ═══ Monte Carlo V3 Dual-Shock ═══ -->
       <div class="exec-card" style="margin-top:0.75rem;border-color:rgba(239,68,68,0.3);background:linear-gradient(180deg, rgba(239,68,68,0.05) 0%, transparent 100%)">
         <h3 style="color:#ef4444">${icon('alertTriangle', 18)} Fat-Tail Valuation Shock (Monte Carlo v3.0)
@@ -209,20 +214,20 @@ function renderCCS() {
           <!-- P50 Base -->
           <div style="background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.08)">
             <div style="font-size:0.75rem;opacity:0.6;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">P50 (Median Expected)</div>
-            <div style="font-size:1.25rem;font-weight:700;color:#f59e0b">${fmtMoney(exp.monte_carlo_v3.p50_evd)} <span style="font-size:0.75rem;font-weight:500;opacity:0.8">EVD</span></div>
+            <div style="font-size:1.25rem;font-weight:700;color:#f59e0b">${fmtMoney(mc.p50_evd)} <span style="font-size:0.75rem;font-weight:500;opacity:0.8">EVD</span></div>
             <div style="font-size:0.75rem;margin-top:6px;display:flex;justify-content:space-between">
-              <span>WACC Premium: <span style="color:#ef4444">+${exp.monte_carlo_v3.p50_wacc_shock}%</span></span>
-              <span>ESG Drop: <span style="color:#ef4444">-${exp.monte_carlo_v3.p50_esg_drop}%</span></span>
+              <span>WACC Premium: <span style="color:#ef4444">+${fmtW(mc.p50_wacc_shock)}%</span></span>
+              <span>ESG Drop: <span style="color:#ef4444">-${fmtE(mc.p50_esg_drop)} pts</span></span>
             </div>
           </div>
           
           <!-- P95 Severe -->
           <div style="background:rgba(249,115,22,0.05);padding:12px;border-radius:8px;border:1px solid rgba(249,115,22,0.2)">
             <div style="font-size:0.75rem;color:#f97316;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">P95 (Severe Contagion)</div>
-            <div style="font-size:1.25rem;font-weight:700;color:#f97316">${fmtMoney(exp.monte_carlo_v3.p95_evd)} <span style="font-size:0.75rem;font-weight:500;opacity:0.8">EVD</span></div>
+            <div style="font-size:1.25rem;font-weight:700;color:#f97316">${fmtMoney(mc.p95_evd)} <span style="font-size:0.75rem;font-weight:500;opacity:0.8">EVD</span></div>
             <div style="font-size:0.75rem;margin-top:6px;display:flex;justify-content:space-between">
-              <span>WACC Premium: <span style="color:#f97316">+${exp.monte_carlo_v3.p95_wacc_shock}%</span></span>
-              <span>ESG Drop: <span style="color:#f97316">-${exp.monte_carlo_v3.p95_esg_drop}%</span></span>
+              <span>WACC Premium: <span style="color:#f97316">+${fmtW(mc.p95_wacc_shock)}%</span></span>
+              <span>ESG Drop: <span style="color:#f97316">-${fmtE(mc.p95_esg_drop)} pts</span></span>
             </div>
           </div>
           
@@ -230,10 +235,10 @@ function renderCCS() {
           <div style="background:rgba(239,68,68,0.1);padding:12px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);position:relative;overflow:hidden">
             <div style="position:absolute;top:6px;right:8px;background:#ef4444;color:#fff;font-size:0.55rem;padding:2px 6px;border-radius:10px;font-weight:700">FAT-TAIL</div>
             <div style="font-size:0.75rem;color:#ef4444;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">P99 (Systemic Ruin)</div>
-            <div style="font-size:1.25rem;font-weight:800;color:#ef4444">${fmtMoney(exp.monte_carlo_v3.p99_evd)} <span style="font-size:0.75rem;font-weight:600;opacity:0.8">EVD</span></div>
+            <div style="font-size:1.25rem;font-weight:800;color:#ef4444">${fmtMoney(mc.p99_evd)} <span style="font-size:0.75rem;font-weight:600;opacity:0.8">EVD</span></div>
             <div style="font-size:0.75rem;margin-top:6px;display:flex;justify-content:space-between">
-              <span>WACC Premium: <span style="color:#ef4444;font-weight:700">+${exp.monte_carlo_v3.p99_wacc_shock}%</span></span>
-              <span>ESG Drop: <span style="color:#ef4444;font-weight:700">-${exp.monte_carlo_v3.p99_esg_drop}%</span></span>
+              <span>WACC Premium: <span style="color:#ef4444;font-weight:700">+${fmtW(mc.p99_wacc_shock)}%</span></span>
+              <span>ESG Drop: <span style="color:#ef4444;font-weight:700">-${fmtE(mc.p99_esg_drop)} pts</span></span>
             </div>
             <!-- Progress Bar viz -->
             <div style="margin-top:8px;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden">
@@ -242,10 +247,11 @@ function renderCCS() {
           </div>
         </div>
         <div style="margin-top:10px;font-size:0.72rem;color:var(--text-muted);display:flex;justify-content:space-between">
-          <span>Base P(Fraud): ${exp.monte_carlo_v3.base_p_fraud}% · WCRS Baseline: ${exp.monte_carlo_v3.base_wcrs}</span>
-          <span>Last Snapshot: ${timeAgo(exp.monte_carlo_v3.timestamp)}</span>
+          <span>Base P(Fraud): ${fmtPct(mc.base_p_fraud)}% · WCRS Baseline: ${(parseFloat(mc.base_wcrs) * 100).toFixed(1)}%</span>
+          <span>Last Snapshot: ${timeAgo(mc.timestamp)}</span>
         </div>
-      </div>` : ''}
+      </div>`;
+      })() : ''}
 
       ${exp.per_bu && exp.per_bu.length > 0 ? `
       <!-- ═══ Per-BU Detail View (collapsible) ═══ -->
