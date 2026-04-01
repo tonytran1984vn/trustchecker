@@ -201,14 +201,26 @@ function renderCCS() {
 
       ${exp.monte_carlo_v3 ? (() => {
         const mc = exp.monte_carlo_v3;
+        const meta = mc.engine_meta || {};
+        const trend = mc.trend;
         const fmtW = v => (v * 100).toFixed(2);
         const fmtE = v => Math.abs(parseFloat(v)).toFixed(1);
         const fmtPct = v => (parseFloat(v) * 100).toFixed(2);
+        const engineVer = meta.engine_version || '3.0';
+        const dq = meta.data_quality || 'estimated';
+        const dqColor = dq === 'configured' ? '#10b981' : '#f59e0b';
+        const dqLabel = dq === 'configured' ? 'Verified Data' : 'Estimated';
+        const trendArrow = (dir) => dir === 'worsening' ? '↗' : '↘';
+        const trendColor = (dir) => dir === 'worsening' ? '#ef4444' : '#10b981';
+        const denomWarn = meta.denom_warning_pct > 1;
         return `
-      <!-- ═══ Monte Carlo V3 Dual-Shock ═══ -->
+      <!-- ═══ Monte Carlo V3.2 ═══ -->
       <div class="exec-card" style="margin-top:0.75rem;border-color:rgba(239,68,68,0.3);background:linear-gradient(180deg, rgba(239,68,68,0.05) 0%, transparent 100%)">
-        <h3 style="color:#ef4444">${icon('alertTriangle', 18)} Fat-Tail Valuation Shock (Monte Carlo v3.0)
-          <span style="font-size:0.65rem;opacity:0.7;margin-left:6px;font-weight:400;color:var(--text-primary)">Simulating 10,000 dual-shock paths</span>
+        <h3 style="color:#ef4444;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          ${icon('alertTriangle', 18)} Fat-Tail Valuation Shock (Monte Carlo v${engineVer})
+          <span style="font-size:0.55rem;padding:2px 8px;border-radius:10px;background:${dqColor};color:#fff;font-weight:600">${dqLabel}</span>
+          ${denomWarn ? '<span style="font-size:0.55rem;padding:2px 8px;border-radius:10px;background:#f97316;color:#fff;font-weight:600">⚠ DENOM WARNING</span>' : ''}
+          <span style="font-size:0.65rem;opacity:0.7;margin-left:auto;font-weight:400;color:var(--text-primary)">10,000 paths · df=${meta.df || 4} · Cholesky ρ</span>
         </h3>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px">
           <!-- P50 Base -->
@@ -216,39 +228,42 @@ function renderCCS() {
             <div style="font-size:0.75rem;opacity:0.6;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">P50 (Median Expected)</div>
             <div style="font-size:1.25rem;font-weight:700;color:#f59e0b">${fmtMoney(mc.p50_evd)} <span style="font-size:0.75rem;font-weight:500;opacity:0.8">EVD</span></div>
             <div style="font-size:0.75rem;margin-top:6px;display:flex;justify-content:space-between">
-              <span>WACC Premium: <span style="color:#ef4444">+${fmtW(mc.p50_wacc_shock)}%</span></span>
-              <span>ESG Drop: <span style="color:#ef4444">-${fmtE(mc.p50_esg_drop)} pts</span></span>
+              <span>WACC: <span style="color:#ef4444">+${fmtW(mc.p50_wacc_shock)}%</span></span>
+              <span>ESG: <span style="color:#ef4444">-${fmtE(mc.p50_esg_drop)} pts</span></span>
             </div>
           </div>
           
           <!-- P95 Severe -->
           <div style="background:rgba(249,115,22,0.05);padding:12px;border-radius:8px;border:1px solid rgba(249,115,22,0.2)">
-            <div style="font-size:0.75rem;color:#f97316;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">P95 (Severe Contagion)</div>
+            <div style="font-size:0.75rem;color:#f97316;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">P95 (Severe Contagion) ${trend ? '<span style="font-size:0.85rem;color:' + trendColor(trend.p95_direction) + '">' + trendArrow(trend.p95_direction) + '</span>' : ''}</div>
             <div style="font-size:1.25rem;font-weight:700;color:#f97316">${fmtMoney(mc.p95_evd)} <span style="font-size:0.75rem;font-weight:500;opacity:0.8">EVD</span></div>
             <div style="font-size:0.75rem;margin-top:6px;display:flex;justify-content:space-between">
-              <span>WACC Premium: <span style="color:#f97316">+${fmtW(mc.p95_wacc_shock)}%</span></span>
-              <span>ESG Drop: <span style="color:#f97316">-${fmtE(mc.p95_esg_drop)} pts</span></span>
+              <span>WACC: <span style="color:#f97316">+${fmtW(mc.p95_wacc_shock)}%</span></span>
+              <span>ESG: <span style="color:#f97316">-${fmtE(mc.p95_esg_drop)} pts</span></span>
             </div>
+            ${trend ? '<div style="font-size:0.65rem;margin-top:4px;color:' + trendColor(trend.p95_direction) + '">' + (trend.p95_direction === 'improving' ? '↘' : '↗') + ' ' + fmtMoney(Math.abs(trend.p95_delta)) + ' vs prev</div>' : ''}
           </div>
           
           <!-- P99 Ruin -->
           <div style="background:rgba(239,68,68,0.1);padding:12px;border-radius:8px;border:1px solid rgba(239,68,68,0.3);position:relative;overflow:hidden">
             <div style="position:absolute;top:6px;right:8px;background:#ef4444;color:#fff;font-size:0.55rem;padding:2px 6px;border-radius:10px;font-weight:700">FAT-TAIL</div>
-            <div style="font-size:0.75rem;color:#ef4444;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">P99 (Systemic Ruin)</div>
+            <div style="font-size:0.75rem;color:#ef4444;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600">P99 (Systemic Ruin) ${trend ? '<span style="font-size:0.85rem;color:' + trendColor(trend.p99_direction) + '">' + trendArrow(trend.p99_direction) + '</span>' : ''}</div>
             <div style="font-size:1.25rem;font-weight:800;color:#ef4444">${fmtMoney(mc.p99_evd)} <span style="font-size:0.75rem;font-weight:600;opacity:0.8">EVD</span></div>
             <div style="font-size:0.75rem;margin-top:6px;display:flex;justify-content:space-between">
-              <span>WACC Premium: <span style="color:#ef4444;font-weight:700">+${fmtW(mc.p99_wacc_shock)}%</span></span>
-              <span>ESG Drop: <span style="color:#ef4444;font-weight:700">-${fmtE(mc.p99_esg_drop)} pts</span></span>
+              <span>WACC: <span style="color:#ef4444;font-weight:700">+${fmtW(mc.p99_wacc_shock)}%</span></span>
+              <span>ESG: <span style="color:#ef4444;font-weight:700">-${fmtE(mc.p99_esg_drop)} pts</span></span>
             </div>
-            <!-- Progress Bar viz -->
+            ${trend ? '<div style="font-size:0.65rem;margin-top:4px;color:' + trendColor(trend.p99_direction) + '">' + (trend.p99_direction === 'improving' ? '↘' : '↗') + ' ' + fmtMoney(Math.abs(trend.p99_delta)) + ' vs prev</div>' : ''}
+            <!-- Progress Bar -->
             <div style="margin-top:8px;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden">
                 <div style="width:100%;height:100%;background:linear-gradient(90deg, #f97316 0%, #ef4444 100%)"></div>
             </div>
           </div>
         </div>
-        <div style="margin-top:10px;font-size:0.72rem;color:var(--text-muted);display:flex;justify-content:space-between">
-          <span>Base P(Fraud): ${fmtPct(mc.base_p_fraud)}% · WCRS Baseline: ${(parseFloat(mc.base_wcrs) * 100).toFixed(1)}%</span>
-          <span>Last Snapshot: ${timeAgo(mc.timestamp)}</span>
+        <!-- V3.2: Footer with enriched metadata -->
+        <div style="margin-top:10px;font-size:0.72rem;color:var(--text-muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px">
+          <span>P(Fraud): ${fmtPct(mc.base_p_fraud)}% · WCRS: ${(parseFloat(mc.base_wcrs) * 100).toFixed(1)}%${meta.evd_ratio_p99 ? ' · EV@Risk(P99): ' + (meta.evd_ratio_p99 * 100).toFixed(1) + '%' : ''}</span>
+          <span>Last: ${timeAgo(mc.timestamp)}</span>
         </div>
       </div>`;
       })() : ''}

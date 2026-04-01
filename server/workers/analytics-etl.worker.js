@@ -327,9 +327,22 @@ const predictiveWorker = new Worker(
             const financials = settings.financials || {};
             const fcf = parseFloat(financials.fcf) || 50000000;
             const wacc_0 = parseFloat(financials.wacc_0) || 0.08;
-            const g = Math.max(0.01, parseFloat(financials.g) || 0.02); // Guard growth rate
+            const g = Math.max(0.01, parseFloat(financials.g) || 0.02);
 
-            // C. Simulate: Run Monte Carlo V3.0
+            // V3.2: Per-industry degrees of freedom (heavier tails for life-critical)
+            let df = 4; // default
+            if (
+                ['pharmaceutical', 'aviation', 'nuclear_energy', 'blood_vaccine', 'life_medical_device'].includes(
+                    industry
+                )
+            ) {
+                df = 3; // Heavier fat-tail for life-critical industries
+            }
+
+            // V3.2: Data quality flag
+            const data_quality = financials.fcf && financials.wacc_0 ? 'configured' : 'estimated';
+
+            // C. Simulate: Run Monte Carlo V3.2
             const simParams = {
                 basePFraud,
                 baseWCRS,
@@ -340,12 +353,13 @@ const predictiveWorker = new Worker(
                 wacc_0,
                 g,
                 lambda_esg: 0.0005,
-                df: 4,
+                df,
                 volP,
                 volW,
                 volM,
                 volMacro,
                 gamma,
+                data_quality,
             };
 
             const results = runMonteCarloESGSimulation(simParams, 10000);
@@ -358,12 +372,14 @@ const predictiveWorker = new Worker(
                 id, org_id, base_p_fraud, base_wcrs,
                 p50_esg_drop, p50_wacc_shock, p50_evd,
                 p95_esg_drop, p95_wacc_shock, p95_evd,
-                p99_esg_drop, p99_wacc_shock, p99_evd
+                p99_esg_drop, p99_wacc_shock, p99_evd,
+                engine_meta
             ) VALUES (
                 $1, $2, $3, $4,
                 $5, $6, $7,
                 $8, $9, $10,
-                $11, $12, $13
+                $11, $12, $13,
+                $14
             )
         `,
                 [
@@ -380,6 +396,7 @@ const predictiveWorker = new Worker(
                     results.P99.dropESG,
                     results.P99.shockWACC,
                     results.P99.evd,
+                    JSON.stringify(results.meta || {}),
                 ]
             );
 

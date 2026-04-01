@@ -214,12 +214,9 @@ function calculateEVD(fcf, wacc_0, deltaWACC, g = 0.02) {
 }
 
 /**
- * 5. Monte Carlo V3.1 Agentic Simulation Engine
- * Runs N iterations with:
- * - Student-t fat-tail noise (df=4)
- * - Cholesky-correlated risk factors (systemic risk modeling)
- * - Piecewise WACC shock (tolerance/crisis zones)
- * - Dual-shock ESG amplification
+ * 5. Monte Carlo V3.2 Agentic Simulation Engine
+ * V3.1: Cholesky correlation, piecewise WACC, dual-shock ESG
+ * V3.2: Per-industry df, confidence bands (P25/P75), denominator warnings, data quality
  */
 function runMonteCarloESGSimulation(baseParams, iterations = 10000) {
     const {
@@ -238,34 +235,36 @@ function runMonteCarloESGSimulation(baseParams, iterations = 10000) {
         volM = 0.5,
         volMacro = 0.005,
         gamma = 0,
-        alpha = 2.0, // V3.1: Dual-shock amplification factor
-        // V3.1: Cholesky correlation coefficients
-        rho_pw = 0.4, // Fraud ↔ Compliance correlation
-        rho_pm = 0.3, // Fraud ↔ Leak magnitude correlation
-        rho_macro = 0.2, // Fraud ↔ Macro shock correlation
+        alpha = 2.0,
+        rho_pw = 0.4,
+        rho_pm = 0.3,
+        rho_macro = 0.2,
+        // V3.2: Data quality tracking
+        data_quality = 'estimated', // 'configured' if org has financials set
     } = baseParams;
 
     const results = [];
     const effectiveZeta = zeta * (1 + gamma);
 
-    // V3.1: Precompute Cholesky orthogonal coefficients
+    // Cholesky orthogonal coefficients
     const cW = Math.sqrt(Math.max(1 - rho_pw * rho_pw, 0.01));
     const cM = Math.sqrt(Math.max(1 - rho_pm * rho_pm, 0.01));
     const cMacro = Math.sqrt(Math.max(1 - rho_macro * rho_macro, 0.01));
 
-    // Baseline Enterprise Value for ratio calculation
+    // Baseline Enterprise Value
     const baselineDenom = Math.max(wacc_0 - g, 0.001);
     const baselineEV = fcf / baselineDenom;
 
+    // V3.2: Track denominator warnings
+    let denomWarnings = 0;
+
     for (let i = 0; i < iterations; i++) {
-        // V3.1: Generate independent Student-t draws
         const z1 = generateStudentT(df);
         const z2 = generateStudentT(df);
         const z3 = generateStudentT(df);
         const z4 = generateStudentT(df);
 
-        // V3.1: Cholesky-correlated noise — when fraud spikes, compliance
-        // and macro conditions tend to worsen simultaneously (systemic risk)
+        // Cholesky-correlated noise
         const noiseP = z1 * volP;
         const noiseW = (rho_pw * z1 + cW * z2) * volW;
         const noiseM = (rho_pm * z1 + cM * z3) * volM;
@@ -280,6 +279,10 @@ function runMonteCarloESGSimulation(baseParams, iterations = 10000) {
         const shockWACC = calculateWACCShock(dropESG, lambda_esg);
         const evd = calculateEVD(fcf, simWaccBase, shockWACC, g);
 
+        // V3.2: Track denominator warnings
+        const shockedDenom = simWaccBase + shockWACC - g;
+        if (shockedDenom < 0.01) denomWarnings++;
+
         results.push({ dropESG, shockWACC, evd });
     }
 
@@ -288,21 +291,36 @@ function runMonteCarloESGSimulation(baseParams, iterations = 10000) {
 
     const p99Index = Math.floor(iterations * 0.01);
     const p95Index = Math.floor(iterations * 0.05);
+    const p75Index = Math.floor(iterations * 0.25);
     const p50Index = Math.floor(iterations * 0.5);
+    const p25Index = Math.floor(iterations * 0.75);
 
     return {
         P50: results[p50Index],
         P95: results[p95Index],
         P99: results[p99Index],
-        // V3.1: Enhanced metadata
+        // V3.2: Confidence band (P25–P75 range around median)
+        P25: results[p25Index],
+        P75: results[p75Index],
         meta: {
+            engine_version: '3.2',
             iterations,
+            df,
             baseline_ev: baselineEV,
             evd_ratio_p95: baselineEV > 0 ? results[p95Index].evd / baselineEV : 0,
             evd_ratio_p99: baselineEV > 0 ? results[p99Index].evd / baselineEV : 0,
             max_evd: results[0].evd,
             correlation_model: 'cholesky',
             wacc_model: 'piecewise_3zone',
+            data_quality,
+            // V3.2: Denominator warning — % of paths where WACC-g < 0.01
+            denom_warning_pct: Math.round((denomWarnings / iterations) * 10000) / 100,
+            // V3.2: Confidence band width (uncertainty measure)
+            confidence_band_evd: {
+                p25: results[p25Index].evd,
+                p75: results[p75Index].evd,
+                iqr: results[p25Index].evd - results[p75Index].evd, // InterQuartile Range
+            },
         },
     };
 }

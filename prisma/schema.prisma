@@ -661,6 +661,9 @@ model RiskAnalyticSnapshot {
   p99WaccShock Float @map("p99_wacc_shock")
   p99Evd       Float @map("p99_evd")
 
+  // V3.2: Engine metadata (data_quality, confidence bands, denominator warnings)
+  engineMeta   Json  @default("{}") @map("engine_meta")
+
   @@index([orgId, timestamp])
   @@map("risk_analytic_snapshots")
 }

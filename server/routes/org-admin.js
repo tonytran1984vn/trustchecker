@@ -2290,6 +2290,7 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             orgInfo,
             dailyScanBreakdown,
             mcSnapshot,
+            mcPrevSnapshot,
         ] = await Promise.all([
             // Products overview
             db.get(
@@ -2385,8 +2386,12 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
                     ORDER BY scan_date DESC LIMIT 1000`,
                 [tid]
             ),
-            // Monte Carlo V3 snapshot
+            // Monte Carlo V3.2 snapshots: current + 7-day-old for trend
             db.get(`SELECT * FROM risk_analytic_snapshots WHERE org_id = $1 ORDER BY timestamp DESC LIMIT 1`, [tid]),
+            db.get(
+                `SELECT p95_evd, p99_evd, timestamp FROM risk_analytic_snapshots WHERE org_id = $1 AND timestamp < NOW() - INTERVAL '6 hours' ORDER BY timestamp DESC LIMIT 1`,
+                [tid]
+            ),
         ]);
 
         const s30 = scanStats30d || {};
@@ -2513,7 +2518,29 @@ router.get('/owner/ccs/exposure', requireExecutiveAccess(), async (req, res) => 
             },
             supply_chain: { events: parseInt(supplyEvents?.total) || 0, scri: SCRI },
             geo_risk: geoRisk,
-            monte_carlo_v3: mcSnapshot || null,
+            monte_carlo_v3: mcSnapshot
+                ? {
+                      ...mcSnapshot,
+                      // V3.2: Historical trend (compare with previous snapshot)
+                      trend: mcPrevSnapshot
+                          ? {
+                                prev_p95_evd: parseFloat(mcPrevSnapshot.p95_evd),
+                                prev_p99_evd: parseFloat(mcPrevSnapshot.p99_evd),
+                                p95_delta: parseFloat(mcSnapshot.p95_evd) - parseFloat(mcPrevSnapshot.p95_evd),
+                                p99_delta: parseFloat(mcSnapshot.p99_evd) - parseFloat(mcPrevSnapshot.p99_evd),
+                                p95_direction:
+                                    parseFloat(mcSnapshot.p95_evd) > parseFloat(mcPrevSnapshot.p95_evd)
+                                        ? 'worsening'
+                                        : 'improving',
+                                p99_direction:
+                                    parseFloat(mcSnapshot.p99_evd) > parseFloat(mcPrevSnapshot.p99_evd)
+                                        ? 'worsening'
+                                        : 'improving',
+                                prev_timestamp: mcPrevSnapshot.timestamp,
+                            }
+                          : null,
+                  }
+                : null,
             category_exposure: (categoryBreakdown || []).map(c => ({
                 category: c.category,
                 products: parseInt(c.products),
