@@ -1,0 +1,51 @@
+groups:
+- name: agentic_governance_alerts
+  rules:
+
+  # 1. NETWORK IMPACT THRESHOLD (CRITICAL)
+  # Alert if the autonomous freeze affects more than 2% of the network
+  - alert: AgenticNetworkImpactHigh
+    expr: agentic_network_impact_peak_pct > 2
+    for: 1m
+    labels:
+      severity: critical
+      team: risk_committee
+    annotations:
+      summary: "Agentic AI Network Impact exceeded 2%"
+      description: "The autonomous agent has frozen {{ $value }}% of the network. Immediate human intervention required. Consider flipping AGENTIC_KILL_SWITCH."
+
+  # 2. CASCADE DEPTH ALERT
+  # Alert if the freeze jumps more than 2 tiers deep in the supply chain
+  - alert: AgenticCascadeDepthWarning
+    expr: agentic_cascade_depth_max > 2
+    for: 1m
+    labels:
+      severity: warning
+      team: risk_committee
+    annotations:
+      summary: "Agentic Freezes are cascading (Depth > 2)"
+      description: "Sub-tier suppliers are being systematically affected by Level 1/2 containments. Deep systemic risk possible."
+
+  # 3. FALSE POSITIVE RATE (DRIFT)
+  # Alert if >3% of Agentic Actions are manually overridden/vetoed by the Risk Committee
+  - alert: AgenticFalsePositiveDrift
+    expr: rate(agentic_veto_overrides_total[1h]) / rate(agentic_containments_issued_total[1h]) > 0.03
+    for: 15m
+    labels:
+      severity: warning
+      team: ai_engineering
+    annotations:
+      summary: "Agentic AI False Positive Rate > 3%"
+      description: "The Risk Committee is overriding more than 3% of agentic proposals. The model threshold (TI > 75) might be drifting or failing to generalize."
+
+  # 4. CONTAINMENT SPIKE ANOMALY
+  # Alert if containments jump 2x over the 24h baseline rolling average
+  - alert: AgenticContainmentSpike
+    expr: rate(agentic_containments_issued_total[5m]) > 2 * avg_over_time(rate(agentic_containments_issued_total[5m])[24h:1m])
+    for: 5m
+    labels:
+      severity: critical
+      team: risk_committee
+    annotations:
+      summary: "Spike in Agentic Containments (2x Baseline)"
+      description: "The agent is issuing containments at an anomalous speed. Verify if an external shock is happening or if integration data is corrupted."

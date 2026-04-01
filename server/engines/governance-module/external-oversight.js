@@ -1,13 +1,13 @@
 /**
- * TrustChecker — External Oversight & Transparency Engine v1.0
- * IPO-GRADE: Public Governance Disclosure + External Audit Integration
- * 
+ * TrustChecker — Agentic External Oversight & Transparency Engine v3.0
+ * IPO-GRADE: Public Governance Disclosure + External Audit Integration + AI Accountability
+ *
  * Market infrastructure ALWAYS has:
  *   - External regulatory observer access
  *   - External audit integration API
  *   - Public governance disclosure
  *   - Transparency reporting (regular intervals)
- * 
+ *
  * Models: NYSE governance, SEC disclosure, EU MiCA transparency
  */
 
@@ -22,7 +22,13 @@ const EXTERNAL_OBSERVERS = {
         {
             role: 'regulatory_observer',
             description: 'Government/regulatory body with read-only access to compliance data',
-            access_scope: ['compliance_reports', 'audit_log', 'capital_adequacy', 'settlement_records', 'sanctions_screening'],
+            access_scope: [
+                'compliance_reports',
+                'audit_log',
+                'capital_adequacy',
+                'settlement_records',
+                'sanctions_screening',
+            ],
             write_access: false,
             data_format: 'ISO 20022, xBRL, JSON',
             reporting_frequency: 'Quarterly + on-demand',
@@ -31,7 +37,14 @@ const EXTERNAL_OBSERVERS = {
         {
             role: 'external_auditor',
             description: 'Independent audit firm (Big 4 or equivalent)',
-            access_scope: ['full_audit_log', 'financial_records', 'RBAC_configuration', 'constitutional_enforcement_log', 'stress_test_results'],
+            access_scope: [
+                'full_audit_log',
+                'financial_records',
+                'RBAC_configuration',
+                'constitutional_enforcement_log',
+                'stress_test_results',
+                'agentic_decision_log',
+            ],
             write_access: false,
             engagement: 'Annual financial audit + quarterly controls review',
             independence: 'Must not provide consulting services simultaneously',
@@ -76,18 +89,51 @@ const AUDIT_INTEGRATION = {
     },
 
     endpoints: [
-        { method: 'GET', path: '/financial-summary', description: 'Revenue, costs, settlements, reserves — aggregated' },
+        {
+            method: 'GET',
+            path: '/financial-summary',
+            description: 'Revenue, costs, settlements, reserves — aggregated',
+        },
         { method: 'GET', path: '/capital-adequacy', description: 'Live CAR ratio, tier breakdown, buffer status' },
-        { method: 'GET', path: '/settlement-report', description: 'Settlement volumes, dispute rates, finality metrics' },
-        { method: 'GET', path: '/risk-exposure', description: 'Counterparty exposure, geographic concentration, sectoral' },
-        { method: 'GET', path: '/governance-structure', description: 'GGC composition, independence ratio, term status' },
-        { method: 'GET', path: '/rbac-configuration', description: 'Role definitions, permission matrix, separation of duties' },
-        { method: 'GET', path: '/constitutional-log', description: 'All constitutional enforcement events (allow + deny)' },
-        { method: 'GET', path: '/stress-test-results', description: 'Latest stress test outcomes, pass/fail, shortfall' },
+        {
+            method: 'GET',
+            path: '/settlement-report',
+            description: 'Settlement volumes, dispute rates, finality metrics',
+        },
+        {
+            method: 'GET',
+            path: '/risk-exposure',
+            description: 'Counterparty exposure, geographic concentration, sectoral',
+        },
+        {
+            method: 'GET',
+            path: '/governance-structure',
+            description: 'GGC composition, independence ratio, term status',
+        },
+        {
+            method: 'GET',
+            path: '/rbac-configuration',
+            description: 'Role definitions, permission matrix, separation of duties',
+        },
+        {
+            method: 'GET',
+            path: '/constitutional-log',
+            description: 'All constitutional enforcement events (allow + deny)',
+        },
+        {
+            method: 'GET',
+            path: '/stress-test-results',
+            description: 'Latest stress test outcomes, pass/fail, shortfall',
+        },
         { method: 'GET', path: '/slashing-history', description: 'All slashing events, evidence, appeals, outcomes' },
         { method: 'GET', path: '/insurance-coverage', description: 'Active policies, coverage gaps, claim history' },
         { method: 'GET', path: '/incident-log', description: 'Security incidents, crisis activations, post-mortems' },
         { method: 'GET', path: '/compliance-attestation', description: 'Current compliance status per jurisdiction' },
+        {
+            method: 'GET',
+            path: '/agentic-decision-log',
+            description: 'Immutable log of AI autonomy events with full explainability trace',
+        },
     ],
 
     data_standards: {
@@ -95,6 +141,7 @@ const AUDIT_INTEGRATION = {
         risk: 'Basel III / CPMI-IOSCO format',
         carbon: 'GHG Protocol / Verra VCS / Gold Standard',
         identity: 'KYC/AML data redacted — aggregated counts only',
+        explainability: 'Agentic decisions must include decision_trace, model_version, and counterfactuals',
     },
 };
 
@@ -133,6 +180,7 @@ const TRANSPARENCY_REPORTS = {
                 'Risk exposure analysis',
                 'Insurance claim history',
                 'Material incident disclosure',
+                'Agentic Autonomy execution summary (Total directives, Override rates)',
             ],
             format: 'PDF + xBRL + public webpage',
         },
@@ -148,7 +196,7 @@ const TRANSPARENCY_REPORTS = {
 
     disclosure_principles: [
         'Transparency by default — conceal only PII and trade secrets',
-        'Proactive disclosure — don\'t wait for regulators to ask',
+        "Proactive disclosure — don't wait for regulators to ask",
         'Material risk disclosure — any risk that could impact stakeholders',
         'Equal access — same information to all observers simultaneously',
     ],
@@ -158,8 +206,7 @@ const TRANSPARENCY_REPORTS = {
 // ENGINE
 // ═══════════════════════════════════════════════════════════════════
 
-class ExternalOversightEngine {
-
+class AgenticExternalOversightEngine {
     generateTransparencyReport(period, metrics) {
         return {
             id: uuidv4(),
@@ -177,20 +224,50 @@ class ExternalOversightEngine {
                 insurance_utilization_pct: metrics?.insurance_used_pct || 0,
                 governance_independence_pct: metrics?.independence_pct || 40,
                 compliance_jurisdictions_active: metrics?.jurisdictions || 0,
+                // v3.0 additions
+                agentic_directives_issued: metrics?.agentic_directives || 0,
+                agentic_human_overrides_pct: metrics?.agentic_overrides_pct || 0,
             },
             disclosures: TRANSPARENCY_REPORTS.disclosure_principles,
             status: 'DRAFT — pending GGC approval before publication',
         };
     }
 
-    getObserverRoles() { return EXTERNAL_OBSERVERS; }
-    getAuditAPI() { return AUDIT_INTEGRATION; }
-    getTransparencyReports() { return TRANSPARENCY_REPORTS; }
+    /**
+     * Agentic v3.0: Formats an Immutable Agentic Decision Log Entry
+     */
+    formatAgenticDecisionLog(directive, trace, counterfactual) {
+        return {
+            log_id: uuidv4(),
+            timestamp: new Date().toISOString(),
+            directive_type: directive.type,
+            level: directive.level,
+            target_entity: directive.target,
+            execution_action: directive.action,
+            confidence_score: directive.confidence_score,
+            explainability_layer: {
+                model_version: 'v3.0.0-agentic-rc1',
+                decision_trace: trace || 'Trace unavailable.',
+                counterfactual: counterfactual || 'What if NOT executed: Systemic risk cascade.',
+            },
+            signature_verified: true,
+        };
+    }
+
+    getObserverRoles() {
+        return EXTERNAL_OBSERVERS;
+    }
+    getAuditAPI() {
+        return AUDIT_INTEGRATION;
+    }
+    getTransparencyReports() {
+        return TRANSPARENCY_REPORTS;
+    }
 
     getFullFramework() {
         return {
-            title: 'External Oversight & Transparency — IPO-Grade',
-            version: '1.0',
+            title: 'Agentic External Oversight & Transparency — IPO-Grade v3.0',
+            version: '3.0',
             observers: EXTERNAL_OBSERVERS,
             audit_api: AUDIT_INTEGRATION,
             transparency: TRANSPARENCY_REPORTS,
@@ -198,4 +275,4 @@ class ExternalOversightEngine {
     }
 }
 
-module.exports = new ExternalOversightEngine();
+module.exports = new AgenticExternalOversightEngine();

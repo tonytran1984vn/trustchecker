@@ -1,18 +1,19 @@
 /**
- * TrustChecker — Constitutional RBAC Enforcement Engine v1.0
- * 
+ * TrustChecker — Constitutional RBAC Enforcement Engine v3.0 (Agentic-Grade)
+ *
  * THIS IS THE ENFORCEMENT LAYER.
  * Charters define policy. This engine ENFORCES it in code.
- * 
- * 6 Critical Separations (hardcoded, non-bypassable):
+ *
+ * 7 Critical Separations (hardcoded, non-bypassable):
  *   1. Super Admin ≠ Financial Controller
  *   2. Blockchain Operator ≠ Governance Authority
  *   3. IVU ≠ Weight Setter
  *   4. Risk ≠ Execution
  *   5. Compliance ≠ Economic Allocator
  *   6. Treasury ≠ Policy Maker
- * 
- * Even super_admin CANNOT bypass constitutional constraints.
+ *   7. AI Enforcer ≠ Policy Maker
+ *
+ * Even super_admin or agentic_enforcer CANNOT bypass constitutional constraints.
  */
 
 // ═══════════════════════════════════════════════════════════════════
@@ -21,11 +22,18 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const CONSTITUTIONAL_POWERS = {
-
     // ─── MONETIZATION DOMAIN ──────────────────────────────────────
 
     'monetization.revenue_allocation.view': {
-        allowed: ['super_admin', 'ggc_member', 'risk_committee', 'compliance_officer', 'admin', 'executive'],
+        allowed: [
+            'super_admin',
+            'ggc_member',
+            'risk_committee',
+            'compliance_officer',
+            'admin',
+            'executive',
+            'agentic_enforcer',
+        ],
         denied: [],
         requires: null,
         charter: 'economic_governance',
@@ -48,14 +56,14 @@ const CONSTITUTIONAL_POWERS = {
         notice_days: 14,
     },
     'monetization.validator_incentive.change': {
-        allowed: [],  // NOBODY — formula-driven
+        allowed: [], // NOBODY — formula-driven
         denied: ['super_admin', 'admin', 'ggc_member', 'risk_committee', 'compliance_officer'],
         requires: { type: 'constitutional_amendment' },
         charter: 'economic_governance',
         article: 2,
     },
     'monetization.reserve.withdraw': {
-        allowed: [],   // Dual-key only
+        allowed: [], // Dual-key only
         denied: ['super_admin', 'admin', 'blockchain_operator'],
         requires: { type: 'dual_key', roles: ['risk_committee', 'compliance_officer'] },
         charter: 'economic_governance',
@@ -63,7 +71,7 @@ const CONSTITUTIONAL_POWERS = {
         cooling_hours: 24,
     },
     'monetization.treasury.payout': {
-        allowed: ['compliance_officer'],   // With dual-key
+        allowed: ['compliance_officer'], // With dual-key
         denied: ['super_admin', 'ggc_member', 'blockchain_operator'],
         requires: { type: 'dual_key', roles: ['risk_committee', 'compliance_officer'] },
         charter: 'economic_governance',
@@ -79,7 +87,7 @@ const CONSTITUTIONAL_POWERS = {
     'monetization.sla_credit.calculate': {
         allowed: ['compliance_officer'],
         denied: ['super_admin', 'admin', 'ggc_member'],
-        requires: null,   // Auto engine — no override
+        requires: null, // Auto engine — no override
         charter: 'economic_governance',
         article: 4,
     },
@@ -87,7 +95,15 @@ const CONSTITUTIONAL_POWERS = {
     // ─── NETWORK DOMAIN ──────────────────────────────────────────
 
     'network.validator.view': {
-        allowed: ['super_admin', 'ggc_member', 'risk_committee', 'compliance_officer', 'admin', 'blockchain_operator', 'ivu_validator'],
+        allowed: [
+            'super_admin',
+            'ggc_member',
+            'risk_committee',
+            'compliance_officer',
+            'admin',
+            'blockchain_operator',
+            'ivu_validator',
+        ],
         denied: [],
         requires: null,
         charter: 'network_power',
@@ -123,7 +139,7 @@ const CONSTITUTIONAL_POWERS = {
         article: 2,
     },
     'network.consensus.override': {
-        allowed: [],   // NOBODY — consensus is immutable
+        allowed: [], // NOBODY — consensus is immutable
         denied: ['super_admin', 'admin', 'ggc_member', 'risk_committee', 'blockchain_operator'],
         requires: null,
         charter: 'network_power',
@@ -131,7 +147,7 @@ const CONSTITUTIONAL_POWERS = {
         immutable: true,
     },
     'network.finality.revert': {
-        allowed: [],   // NOBODY
+        allowed: [], // NOBODY
         denied: ['super_admin', 'admin', 'ggc_member', 'risk_committee', 'blockchain_operator'],
         requires: null,
         charter: 'network_power',
@@ -161,7 +177,7 @@ const CONSTITUTIONAL_POWERS = {
         article: 1,
     },
     'network.chain.rewrite': {
-        allowed: [],   // NOBODY
+        allowed: [], // NOBODY
         denied: ['super_admin', 'admin', 'ggc_member', 'blockchain_operator'],
         requires: null,
         charter: 'network_power',
@@ -172,7 +188,7 @@ const CONSTITUTIONAL_POWERS = {
     // ─── CRISIS DOMAIN ───────────────────────────────────────────
 
     'crisis.monitor.activate': {
-        allowed: ['super_admin', 'admin', 'ops_manager', 'risk_officer'],
+        allowed: ['super_admin', 'admin', 'ops_manager', 'risk_officer', 'agentic_enforcer'],
         denied: [],
         requires: null,
         charter: 'crisis_constitution',
@@ -203,7 +219,7 @@ const CONSTITUTIONAL_POWERS = {
         max_duration_hours: 6,
     },
     'crisis.black.activate': {
-        allowed: [],
+        allowed: ['agentic_enforcer'], // Only via explicit Tier 3 FULL_CONTAINMENT Directive
         denied: ['blockchain_operator', 'ivu_validator'],
         requires: { type: 'triple_key', roles: ['super_admin', 'ggc_member', 'compliance_officer'] },
         charter: 'crisis_constitution',
@@ -227,7 +243,7 @@ const CONSTITUTIONAL_POWERS = {
         max_duration_hours: 6,
     },
     'crisis.duration.extend': {
-        allowed: [],   // NOBODY — auto-expire is constitutional
+        allowed: [], // NOBODY — auto-expire is constitutional
         denied: ['super_admin', 'admin', 'ggc_member', 'risk_committee'],
         requires: null,
         charter: 'crisis_constitution',
@@ -235,7 +251,7 @@ const CONSTITUTIONAL_POWERS = {
         immutable: true,
     },
     'crisis.audit_log.override': {
-        allowed: [],   // NOBODY
+        allowed: [], // NOBODY
         denied: ['super_admin', 'admin', 'ggc_member', 'risk_committee', 'blockchain_operator'],
         requires: null,
         charter: 'crisis_constitution',
@@ -260,21 +276,37 @@ const CRITICAL_SEPARATIONS = [
         id: 'SEP-1',
         rule: 'Super Admin ≠ Financial Controller',
         entity: 'super_admin',
-        cannot: ['monetization.revenue_allocation.change', 'monetization.reserve.withdraw', 'monetization.treasury.payout', 'monetization.pricing.change'],
+        cannot: [
+            'monetization.revenue_allocation.change',
+            'monetization.reserve.withdraw',
+            'monetization.treasury.payout',
+            'monetization.pricing.change',
+        ],
         rationale: 'Super Admin has system visibility, not financial control',
     },
     {
         id: 'SEP-2',
         rule: 'Blockchain Operator ≠ Governance Authority',
         entity: 'blockchain_operator',
-        cannot: ['network.validator.admit', 'network.validator.suspend', 'network.validator.slash', 'network.scoring_weights.change', 'network.protocol.upgrade'],
+        cannot: [
+            'network.validator.admit',
+            'network.validator.suspend',
+            'network.validator.slash',
+            'network.scoring_weights.change',
+            'network.protocol.upgrade',
+        ],
         rationale: 'Blockchain Operator maintains chain integrity, does not govern network',
     },
     {
         id: 'SEP-3',
         rule: 'IVU ≠ Weight Setter',
         entity: 'ivu_validator',
-        cannot: ['network.scoring_weights.change', 'network.validator.suspend', 'network.validator.slash', 'network.consensus.override'],
+        cannot: [
+            'network.scoring_weights.change',
+            'network.validator.suspend',
+            'network.validator.slash',
+            'network.consensus.override',
+        ],
         rationale: 'IVU provides scientific oversight, does not set governance parameters',
     },
     {
@@ -288,15 +320,39 @@ const CRITICAL_SEPARATIONS = [
         id: 'SEP-5',
         rule: 'Compliance ≠ Economic Allocator',
         entity: 'compliance_officer',
-        cannot: ['monetization.revenue_allocation.change', 'monetization.pricing.change', 'monetization.validator_incentive.change'],
+        cannot: [
+            'monetization.revenue_allocation.change',
+            'monetization.pricing.change',
+            'monetization.validator_incentive.change',
+        ],
         rationale: 'Compliance enforces rules, does not allocate economics',
     },
     {
         id: 'SEP-6',
         rule: 'Treasury ≠ Policy Maker',
         entity: 'treasury_role',
-        cannot: ['monetization.revenue_allocation.change', 'monetization.pricing.change', 'network.validator.admit', 'network.protocol.upgrade'],
+        cannot: [
+            'monetization.revenue_allocation.change',
+            'monetization.pricing.change',
+            'network.validator.admit',
+            'network.protocol.upgrade',
+        ],
         rationale: 'Treasury executes approved payouts, does not set policy',
+    },
+    {
+        id: 'SEP-7',
+        rule: 'AI Enforcer ≠ Policy Maker',
+        entity: 'agentic_enforcer',
+        cannot: [
+            'monetization.revenue_allocation.change',
+            'monetization.pricing.change',
+            'network.scoring_weights.change',
+            'monetization.reserve.withdraw',
+            'crisis.audit_log.override',
+            'network.validator.suspend',
+        ],
+        rationale:
+            'Agentic AI must execute Containment Directives only based on prescribed models. It cannot modify weights or mutate physical funds independently.',
     },
 ];
 
@@ -305,11 +361,41 @@ const CRITICAL_SEPARATIONS = [
 // ═══════════════════════════════════════════════════════════════════
 
 const CROSS_MAPPING = {
-    monetization: { policy: 'ggc_member', execution: 'dual_key_treasury', oversight: ['risk_committee', 'compliance_officer'], visibility: 'super_admin' },
-    network: { policy: 'ggc_member', execution: 'validator_set', oversight: ['risk_committee'], visibility: 'super_admin' },
-    slashing: { policy: 'risk_committee', execution: 'ggc_member', oversight: ['ivu_validator'], visibility: 'super_admin' },
-    sla: { policy: 'ggc_member', execution: 'auto_engine', oversight: ['compliance_officer'], visibility: 'super_admin' },
-    crisis: { policy: 'crisis_council', execution: 'technical_lead', oversight: ['compliance_officer'], visibility: 'super_admin' },
+    monetization: {
+        policy: 'ggc_member',
+        execution: 'dual_key_treasury',
+        oversight: ['risk_committee', 'compliance_officer'],
+        visibility: 'super_admin',
+        ai_enforcement: 'contained',
+    },
+    network: {
+        policy: 'ggc_member',
+        execution: 'validator_set',
+        oversight: ['risk_committee'],
+        visibility: 'super_admin',
+        ai_enforcement: 'read_only',
+    },
+    slashing: {
+        policy: 'risk_committee',
+        execution: 'ggc_member',
+        oversight: ['ivu_validator'],
+        visibility: 'super_admin',
+        ai_enforcement: 'propose_only',
+    },
+    sla: {
+        policy: 'ggc_member',
+        execution: 'auto_engine',
+        oversight: ['compliance_officer'],
+        visibility: 'super_admin',
+        ai_enforcement: 'auto',
+    },
+    crisis: {
+        policy: 'crisis_council',
+        execution: 'technical_lead',
+        oversight: ['compliance_officer'],
+        visibility: 'super_admin',
+        ai_enforcement: 'tiered_containment',
+    },
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -317,11 +403,10 @@ const CROSS_MAPPING = {
 // ═══════════════════════════════════════════════════════════════════
 
 class ConstitutionalRBACEngine {
-
     /**
      * CORE ENFORCEMENT: Check if a role can perform a constitutional action.
      * This is the function that MUST be called before any charter-governed operation.
-     * 
+     *
      * Returns: { allowed: bool, reason, charter, article, requirements }
      */
     enforce(role, action) {
@@ -469,9 +554,15 @@ class ConstitutionalRBACEngine {
 
     // ─── Getters ──────────────────────────────────────────────────
 
-    getAllPowers() { return CONSTITUTIONAL_POWERS; }
-    getSeparations() { return CRITICAL_SEPARATIONS; }
-    getCrossMapping() { return CROSS_MAPPING; }
+    getAllPowers() {
+        return CONSTITUTIONAL_POWERS;
+    }
+    getSeparations() {
+        return CRITICAL_SEPARATIONS;
+    }
+    getCrossMapping() {
+        return CROSS_MAPPING;
+    }
 
     getDomainPowers(domain) {
         const filtered = {};

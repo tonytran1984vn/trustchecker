@@ -11,11 +11,26 @@ const REQUIRED_VARS = {
     all: [
         { name: 'PORT', default: '4000', description: 'Server port' },
         { name: 'NODE_ENV', default: 'development', description: 'Environment' },
-    ]
+        {
+            name: 'AGENTIC_MODE',
+            default: 'shadow',
+            description: 'Mode for AI Governance Execution (shadow, partial, full)',
+        },
+        {
+            name: 'AGENTIC_KILL_SWITCH',
+            default: 'false',
+            description: 'Emergency kill switch for all autonomous actions',
+        },
+        {
+            name: 'AGENTIC_CANARY_RATE_PCT',
+            default: '5',
+            description: 'Percentage of entities allowed for partial rollout (0-100)',
+        },
+    ],
 };
 
 const DB_MODES = {
-    POSTGRESQL: 'postgresql'
+    POSTGRESQL: 'postgresql',
 };
 
 function validateConfig() {
@@ -65,18 +80,25 @@ function validateConfig() {
         process.exit(1);
     }
 
-    return { dbMode, isProduction, env };
+    const agenticMode = process.env.AGENTIC_MODE || 'shadow';
+    if (!['shadow', 'partial', 'full'].includes(agenticMode)) {
+        errors.push(`AGENTIC_MODE must be one of: shadow, partial, full. (Got: ${agenticMode})`);
+    }
+
+    const agenticKillSwitch = process.env.AGENTIC_KILL_SWITCH === 'true';
+    const agenticCanaryRatePct = parseInt(process.env.AGENTIC_CANARY_RATE_PCT || '5', 10);
+
+    return { dbMode, isProduction, env, agenticMode, agenticKillSwitch, agenticCanaryRatePct };
 }
 
 // Warn if JWT secret is the insecure default (any environment)
 function warnDefaultSecrets() {
     const jwtSecret = process.env.JWT_SECRET;
-    const INSECURE_DEFAULTS = [
-        'trustchecker-secret-key-DEV-ONLY',
-        'trustchecker-secret-change-me',
-    ];
+    const INSECURE_DEFAULTS = ['trustchecker-secret-key-DEV-ONLY', 'trustchecker-secret-change-me'];
     if (!jwtSecret || INSECURE_DEFAULTS.includes(jwtSecret) || jwtSecret.length < 32) {
-        console.warn('⚠️  WARNING: Using default/weak JWT_SECRET — this is INSECURE. Set JWT_SECRET env var (openssl rand -hex 64)');
+        console.warn(
+            '⚠️  WARNING: Using default/weak JWT_SECRET — this is INSECURE. Set JWT_SECRET env var (openssl rand -hex 64)'
+        );
     }
     const encKey = process.env.ENCRYPTION_KEY;
     const INSECURE_ENC_DEFAULTS = ['trustchecker-encryption-key-DEV-ONLY'];
