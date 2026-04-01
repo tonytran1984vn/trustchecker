@@ -259,8 +259,31 @@ const predictiveWorker = new Worker(
             );
 
             const basePFraud = Math.max(0.01, parseFloat(stats.avg_fraud));
-            // Simple mock of WCRS (Compliance Risk Score) based on tier defaults
-            const baseWCRS = org.current_plan === 'enterprise' ? 0.15 : 0.4;
+
+            // WCRS (Compliance Risk Score) — DATA-DRIVEN from compliance_records
+            // Counts non_compliant (weight 1.0) + partial (weight 0.5) as failures
+            const compStats = await db.get(
+                `
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(*) FILTER (WHERE status = 'non_compliant') as non_comp,
+                    COUNT(*) FILTER (WHERE status = 'partial') as partial
+                FROM compliance_records 
+                WHERE entity_type = 'product' 
+                AND entity_id IN (SELECT id FROM products WHERE org_id = $1)
+            `,
+                [org.id]
+            );
+            const baseWCRS =
+                compStats && parseInt(compStats.total) > 0
+                    ? Math.max(
+                          0.05,
+                          (parseInt(compStats.non_comp || 0) + parseInt(compStats.partial || 0) * 0.5) /
+                              parseInt(compStats.total)
+                      )
+                    : org.current_plan === 'enterprise'
+                      ? 0.15
+                      : 0.35; // Fallback with plan-based estimate
 
             let settings = {};
             try {

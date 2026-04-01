@@ -165,9 +165,12 @@ function generateStudentT(df = 4) {
  * @param {Number} zeta - Risk Amplifier (e.g., 100.0)
  * @returns {Number} Negative ESG points [0 .. -100]
  */
-function calculateESGPenalty(p_fraud, wcrs, m_scale = 1.0, kappa = 20.0, zeta = 100.0) {
-    // Delta ESG_G = -k * ln(1 + zeta * P * WCRS * m_scale)
-    const shockTerm = 1 + zeta * p_fraud * wcrs * m_scale;
+function calculateESGPenalty(p_fraud, wcrs, m_scale = 1.0, kappa = 20.0, zeta = 100.0, alpha = 2.0) {
+    // V3.1: Dual-Shock Amplification — when both P_fraud AND WCRS are high,
+    // the interaction term (alpha * P * WCRS) amplifies the penalty nonlinearly.
+    // This models the real-world cascade: fraud + compliance failure = catastrophic ESG event.
+    const dualShockFactor = 1 + alpha * p_fraud * wcrs;
+    const shockTerm = 1 + zeta * p_fraud * wcrs * m_scale * dualShockFactor;
     const penalty = -kappa * Math.log(shockTerm);
 
     // Cap maximum penalty at -100 to prevent theoretical infinity
@@ -181,8 +184,14 @@ function calculateESGPenalty(p_fraud, wcrs, m_scale = 1.0, kappa = 20.0, zeta = 
  * @returns {Number} WACC Increase (e.g., 0.0025 for 0.25%)
  */
 function calculateWACCShock(deltaESG, lambda_esg = 0.0005) {
-    // delta WACC = lambda_ESG * |Delta ESG_G|
-    return lambda_esg * Math.abs(deltaESG);
+    // V3.1: Piecewise 3-Zone WACC Shock — models real capital market behavior:
+    // Zone 1 (Tolerance, |ESG| < 5):  Market ignores minor ESG noise → 30% sensitivity
+    // Zone 2 (Normal, 5-30):          Linear WACC premium → standard sensitivity
+    // Zone 3 (Crisis, > 30):          Rating downgrade cliff → 2.5x multiplier
+    const absESG = Math.abs(deltaESG);
+    if (absESG < 5) return lambda_esg * absESG * 0.3;
+    if (absESG < 30) return lambda_esg * 5 * 0.3 + lambda_esg * (absESG - 5);
+    return lambda_esg * 5 * 0.3 + lambda_esg * 25 + lambda_esg * (absESG - 30) * 2.5;
 }
 
 /**
@@ -205,8 +214,12 @@ function calculateEVD(fcf, wacc_0, deltaWACC, g = 0.02) {
 }
 
 /**
- * 5. Monte Carlo Agentic Simulation Engine
- * Runs N iterations adding Student-t noise to systemic inputs.
+ * 5. Monte Carlo V3.1 Agentic Simulation Engine
+ * Runs N iterations with:
+ * - Student-t fat-tail noise (df=4)
+ * - Cholesky-correlated risk factors (systemic risk modeling)
+ * - Piecewise WACC shock (tolerance/crisis zones)
+ * - Dual-shock ESG amplification
  */
 function runMonteCarloESGSimulation(baseParams, iterations = 10000) {
     const {
@@ -220,41 +233,58 @@ function runMonteCarloESGSimulation(baseParams, iterations = 10000) {
         g = 0.02,
         lambda_esg = 0.0005,
         df = 4,
-        volP = 0.03, // Base Fraud Volatility
-        volW = 0.02, // Compliance Volatility
-        volM = 0.5, // Leak Scale Volatility
-        volMacro = 0.005, // Macro WACC Volatility (50 bps)
-        gamma = 0, // Contagion Factor (amplifier for zeta)
+        volP = 0.03,
+        volW = 0.02,
+        volM = 0.5,
+        volMacro = 0.005,
+        gamma = 0,
+        alpha = 2.0, // V3.1: Dual-shock amplification factor
+        // V3.1: Cholesky correlation coefficients
+        rho_pw = 0.4, // Fraud ↔ Compliance correlation
+        rho_pm = 0.3, // Fraud ↔ Leak magnitude correlation
+        rho_macro = 0.2, // Fraud ↔ Macro shock correlation
     } = baseParams;
 
     const results = [];
-    const effectiveZeta = zeta * (1 + gamma); // Contagion amplifier
+    const effectiveZeta = zeta * (1 + gamma);
+
+    // V3.1: Precompute Cholesky orthogonal coefficients
+    const cW = Math.sqrt(Math.max(1 - rho_pw * rho_pw, 0.01));
+    const cM = Math.sqrt(Math.max(1 - rho_pm * rho_pm, 0.01));
+    const cMacro = Math.sqrt(Math.max(1 - rho_macro * rho_macro, 0.01));
+
+    // Baseline Enterprise Value for ratio calculation
+    const baselineDenom = Math.max(wacc_0 - g, 0.001);
+    const baselineEV = fcf / baselineDenom;
 
     for (let i = 0; i < iterations; i++) {
-        // Add fat-tail noise to variables.
-        const noiseP = generateStudentT(df) * volP;
-        const noiseW = generateStudentT(df) * volW;
-        const noiseM = generateStudentT(df) * volM;
-        const noiseMacro = generateStudentT(df) * volMacro;
+        // V3.1: Generate independent Student-t draws
+        const z1 = generateStudentT(df);
+        const z2 = generateStudentT(df);
+        const z3 = generateStudentT(df);
+        const z4 = generateStudentT(df);
+
+        // V3.1: Cholesky-correlated noise — when fraud spikes, compliance
+        // and macro conditions tend to worsen simultaneously (systemic risk)
+        const noiseP = z1 * volP;
+        const noiseW = (rho_pw * z1 + cW * z2) * volW;
+        const noiseM = (rho_pm * z1 + cM * z3) * volM;
+        const noiseMacro = (rho_macro * z1 + cMacro * z4) * volMacro;
 
         const simPFraud = Math.max(Math.min(basePFraud + noiseP, 1.0), 0.001);
         const simWCRS = Math.max(Math.min(baseWCRS + noiseW, 1.0), 0.001);
         const simMScale = Math.max(m_scale + noiseM, 0.1);
-        const simWaccBase = Math.max(wacc_0 + noiseMacro, g + 0.005); // Ensure bare minimum margin above g
+        const simWaccBase = Math.max(wacc_0 + noiseMacro, g + 0.005);
 
-        const dropESG = calculateESGPenalty(simPFraud, simWCRS, simMScale, kappa, effectiveZeta);
+        const dropESG = calculateESGPenalty(simPFraud, simWCRS, simMScale, kappa, effectiveZeta, alpha);
         const shockWACC = calculateWACCShock(dropESG, lambda_esg);
         const evd = calculateEVD(fcf, simWaccBase, shockWACC, g);
 
-        results.push({
-            dropESG,
-            shockWACC,
-            evd,
-        });
+        results.push({ dropESG, shockWACC, evd });
     }
 
-    // Sort to extract percentiles (Worst case is highest EVD, lowest ESG drop)
-    results.sort((a, b) => b.evd - a.evd); // Descending EVD (Worst first)
+    // Sort descending by EVD (worst case first)
+    results.sort((a, b) => b.evd - a.evd);
 
     const p99Index = Math.floor(iterations * 0.01);
     const p95Index = Math.floor(iterations * 0.05);
@@ -264,6 +294,16 @@ function runMonteCarloESGSimulation(baseParams, iterations = 10000) {
         P50: results[p50Index],
         P95: results[p95Index],
         P99: results[p99Index],
+        // V3.1: Enhanced metadata
+        meta: {
+            iterations,
+            baseline_ev: baselineEV,
+            evd_ratio_p95: baselineEV > 0 ? results[p95Index].evd / baselineEV : 0,
+            evd_ratio_p99: baselineEV > 0 ? results[p99Index].evd / baselineEV : 0,
+            max_evd: results[0].evd,
+            correlation_model: 'cholesky',
+            wacc_model: 'piecewise_3zone',
+        },
     };
 }
 
