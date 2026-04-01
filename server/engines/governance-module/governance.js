@@ -95,6 +95,31 @@ const CONTAINMENT_RATE_LIMITER = {
 };
 
 class AgenticGovernanceEngine {
+    constructor() {
+        this.agenticState = {
+            killSwitchActive: config.agenticKillSwitch,
+            canaryRatePct: config.agenticCanaryRatePct,
+            mode: config.agenticMode,
+        };
+    }
+
+    getAgenticState() {
+        return this.agenticState;
+    }
+
+    toggleKillSwitch(active) {
+        this.agenticState.killSwitchActive = active;
+        return this.agenticState;
+    }
+
+    updateCanaryRate(pct) {
+        const parsed = parseInt(pct, 10);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+            this.agenticState.canaryRatePct = parsed;
+        }
+        return this.agenticState;
+    }
+
     /**
      * Create governance proposal
      */
@@ -196,17 +221,17 @@ class AgenticGovernanceEngine {
             crypto.createHash('md5').update(directive.target).digest('hex').substring(0, 8),
             16
         );
-        const isCanaryEntity = targetHashInt % 100 < config.agenticCanaryRatePct;
+        const isCanaryEntity = targetHashInt % 100 < this.agenticState.canaryRatePct;
 
-        if (config.agenticKillSwitch) {
+        if (this.agenticState.killSwitchActive) {
             action_taken = 'SHADOW_DROPPED';
             console.warn(`[AGENTIC_KILL_SWITCH_ACTIVE] Dropped directive for ${directive.target}`);
-        } else if (!isCanaryEntity && config.agenticMode !== 'full') {
+        } else if (!isCanaryEntity && this.agenticState.mode !== 'full') {
             // Drop non-canary entities in partial or shadow mode
             action_taken = 'SHADOW_DROPPED';
-        } else if (config.agenticMode === 'shadow') {
+        } else if (this.agenticState.mode === 'shadow') {
             action_taken = 'SHADOW_DROPPED';
-        } else if (config.agenticMode === 'partial' && directive.level !== 'SOFT_CONTAINMENT') {
+        } else if (this.agenticState.mode === 'partial' && directive.level !== 'SOFT_CONTAINMENT') {
             action_taken = 'PROPOSED_FOR_HUMAN'; // Needs proposal drafting
         }
 
@@ -219,7 +244,7 @@ class AgenticGovernanceEngine {
             return null;
         }
 
-        if (config.agenticMode === 'partial' && directive.level === 'SOFT_CONTAINMENT' && isCanaryEntity) {
+        if (this.agenticState.mode === 'partial' && directive.level === 'SOFT_CONTAINMENT' && isCanaryEntity) {
             // Level 1: Execute directly without proposal in partial mode for CANARY
             agenticMetrics.logDirectiveEvent(directive, 'partial', 'EXECUTED');
             console.log(`[AGENTIC_PARTIAL_EXECUTE] Canary Soft Containment executed for ${directive.target}`);
@@ -227,7 +252,7 @@ class AgenticGovernanceEngine {
         }
 
         // For Full Mode, or Level 2/3 in Partial mode for CANARY -> Draft Proposal
-        agenticMetrics.logDirectiveEvent(directive, config.agenticMode, 'PROPOSED_FOR_HUMAN');
+        agenticMetrics.logDirectiveEvent(directive, this.agenticState.mode, 'PROPOSED_FOR_HUMAN');
 
         // 4. Draft the proposal with Execute Delay
         const proposalParams = {

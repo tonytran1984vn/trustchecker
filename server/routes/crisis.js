@@ -129,4 +129,25 @@ router.post('/drill', requirePermission('admin:manage'), (req, res) => {
     res.status(201).json(result);
 });
 
+// ─── AGENTIC GOVERNANCE CONTROLS ───────────────────────────────────
+const agenticGovernance = require('../engines/governance-module/governance');
+
+router.get('/agentic-config', requirePermission('admin:manage'), (req, res) => {
+    res.json(agenticGovernance.getAgenticState());
+});
+
+router.post('/agentic-config/toggle-kill-switch', requirePermission('admin:manage'), (req, res) => {
+    const { active } = req.body;
+    if (typeof active !== 'boolean') return res.status(400).json({ error: 'active boolean required' });
+    const state = agenticGovernance.toggleKillSwitch(active);
+    res.json({ status: 'success', state });
+});
+
+router.post('/agentic-config/update-canary', requirePermission('admin:manage'), (req, res) => {
+    const { pct } = req.body;
+    if (pct === undefined) return res.status(400).json({ error: 'pct required' });
+    const state = agenticGovernance.updateCanaryRate(pct);
+    res.json({ status: 'success', state });
+});
+
 module.exports = router;
