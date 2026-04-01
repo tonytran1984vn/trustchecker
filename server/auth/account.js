@@ -24,8 +24,15 @@ router.post('/password', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: 'New password must be at least 12 characters' });
         }
 
-        if (!/[A-Z]/.test(new_password) || !/[a-z]/.test(new_password) || !/[0-9]/.test(new_password) || !/[^A-Za-z0-9]/.test(new_password)) {
-            return res.status(400).json({ error: 'Password must contain uppercase, lowercase, number, and special character' });
+        if (
+            !/[A-Z]/.test(new_password) ||
+            !/[a-z]/.test(new_password) ||
+            !/[0-9]/.test(new_password) ||
+            !/[^A-Za-z0-9]/.test(new_password)
+        ) {
+            return res
+                .status(400)
+                .json({ error: 'Password must contain uppercase, lowercase, number, and special character' });
         }
 
         const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
@@ -46,7 +53,8 @@ router.post('/password', authMiddleware, async (req, res) => {
 
         await db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ?').run(user.id);
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?, ?)')
+        await db
+            .prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?, ?)')
             .run(uuidv4(), user.id, 'PASSWORD_CHANGED', 'user', user.id);
 
         res.json({ message: 'Password changed successfully' });
@@ -59,11 +67,15 @@ router.post('/password', authMiddleware, async (req, res) => {
 // ─── GET /sessions ───────────────────────────────────────────────────────────
 
 router.get('/sessions', authMiddleware, async (req, res) => {
-    const sessions = await db.prepare(`
+    const sessions = await db
+        .prepare(
+            `
         SELECT id, ip_address, user_agent, created_at, last_active
         FROM sessions WHERE user_id = ? AND revoked = 0
         ORDER BY last_active DESC
-    `).all(req.user.id);
+    `
+        )
+        .all(req.user.id);
 
     res.json({ sessions });
 });
@@ -75,12 +87,17 @@ router.post('/revoke', authMiddleware, async (req, res) => {
         const { session_id } = req.body;
 
         if (session_id) {
-            await db.prepare('UPDATE sessions SET revoked = 1 WHERE id = ? AND user_id = ?')
+            await db
+                .prepare('UPDATE sessions SET revoked = 1 WHERE id = ? AND user_id = ?')
                 .run(session_id, req.user.id);
-            await db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ? AND id IN (SELECT id FROM refresh_tokens WHERE user_id = ?)')
+            await db
+                .prepare(
+                    'UPDATE refresh_tokens SET revoked = 1 WHERE user_id = ? AND id IN (SELECT id FROM refresh_tokens WHERE user_id = ?)'
+                )
                 .run(req.user.id, req.user.id);
         } else {
-            await db.prepare('UPDATE sessions SET revoked = 1 WHERE user_id = ? AND id != ?')
+            await db
+                .prepare('UPDATE sessions SET revoked = 1 WHERE user_id = ? AND id != ?')
                 .run(req.user.id, req.user.session_id || '');
         }
 
@@ -94,29 +111,47 @@ router.post('/revoke', authMiddleware, async (req, res) => {
 // ─── GET /me ─────────────────────────────────────────────────────────────────
 
 router.get('/me', authMiddleware, async (req, res) => {
-    const user = await db.prepare(
-        'SELECT id, username, email, role, company, mfa_enabled, created_at, last_login, org_id FROM users WHERE id = ?'
-    ).get(req.user.id);
+    const user = await db
+        .prepare(
+            'SELECT id, username, email, role, company, mfa_enabled, created_at, last_login, org_id FROM users WHERE id = ?'
+        )
+        .get(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     let org = null;
     let orgFlags = {};
     if (user.org_id) {
         try {
-            org = await db.prepare(
-                'SELECT id, name, slug, plan, schema_name, settings, feature_flags FROM organizations WHERE id = ?'
-            ).get(user.org_id);
+            org = await db
+                .prepare(
+                    'SELECT id, name, slug, plan, schema_name, settings, feature_flags FROM organizations WHERE id = ?'
+                )
+                .get(user.org_id);
             if (org && org.feature_flags) {
-                try { orgFlags = typeof org.feature_flags === 'string' ? JSON.parse(org.feature_flags) : org.feature_flags; } catch (_) { }
+                try {
+                    orgFlags =
+                        typeof org.feature_flags === 'string' ? JSON.parse(org.feature_flags) : org.feature_flags;
+                } catch (_) {}
             }
-        } catch (_) { /* org table may not exist */ }
+        } catch (_) {
+            /* org table may not exist */
+        }
     }
 
-    const { getFeaturesForPlan } = require('../middleware/featureGate');
+    let getFeaturesForPlan;
+    try {
+        const featureGate = require('../middleware/middleware/featureGate');
+        getFeaturesForPlan = featureGate.getFeaturesForPlan || (() => []);
+    } catch (e) {
+        getFeaturesForPlan = () => [];
+    }
     const { safeParse } = require('../utils/safe-json');
     const plan = org?.plan || user.plan || 'free';
-    const features = getFeaturesForPlan(plan);
-    const planFlags = features.reduce((acc, f) => { acc[f] = true; return acc; }, {});
+    const features = getFeaturesForPlan(plan) || [];
+    const planFlags = features.reduce((acc, f) => {
+        acc[f] = true;
+        return acc;
+    }, {});
 
     // Merge: plan-based features + org-level flags (org flags override)
     const mergedFlags = { ...planFlags, ...orgFlags };
@@ -136,9 +171,11 @@ router.get('/me', authMiddleware, async (req, res) => {
 // ─── GET /users (admin only) ─────────────────────────────────────────────────
 
 router.get('/users', authMiddleware, requireRole('admin'), async (req, res) => {
-    const users = await db.prepare(
-        'SELECT id, username, email, role, company, mfa_enabled, created_at, last_login FROM users ORDER BY created_at DESC'
-    ).all();
+    const users = await db
+        .prepare(
+            'SELECT id, username, email, role, company, mfa_enabled, created_at, last_login FROM users ORDER BY created_at DESC'
+        )
+        .all();
     res.json({ users });
 });
 
@@ -157,7 +194,10 @@ router.put('/users/:id/role', authMiddleware, requireRole('admin'), async (req, 
 
         await db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, req.params.id);
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
             .run(uuidv4(), req.user.id, 'ROLE_CHANGED', 'user', req.params.id, JSON.stringify({ new_role: role }));
 
         res.json({ message: `Role updated to ${role}` });
@@ -180,9 +220,21 @@ router.post('/forgot-password', async (req, res) => {
         const resetToken = crypto.randomBytes(32).toString('hex');
         const resetExpiry = new Date(Date.now() + 3600000).toISOString();
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), user.id, 'PASSWORD_RESET_REQUESTED', 'user', user.id,
-                JSON.stringify({ token_hash: crypto.createHash('sha256').update(resetToken).digest('hex'), expires: resetExpiry }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                user.id,
+                'PASSWORD_RESET_REQUESTED',
+                'user',
+                user.id,
+                JSON.stringify({
+                    token_hash: crypto.createHash('sha256').update(resetToken).digest('hex'),
+                    expires: resetExpiry,
+                })
+            );
 
         // SEC-1: Token removed from logs — use audit_log token_hash for debugging
         if (process.env.NODE_ENV !== 'production') {
@@ -203,8 +255,15 @@ router.post('/reset-password', async (req, res) => {
         const { token, new_password } = req.body;
         if (!token || !new_password) return res.status(400).json({ error: 'Token and new_password required' });
         if (new_password.length < 12) return res.status(400).json({ error: 'Password must be at least 12 characters' });
-        if (!/[A-Z]/.test(new_password) || !/[a-z]/.test(new_password) || !/[0-9]/.test(new_password) || !/[^A-Za-z0-9]/.test(new_password)) {
-            return res.status(400).json({ error: 'Password must contain uppercase, lowercase, number, and special character' });
+        if (
+            !/[A-Z]/.test(new_password) ||
+            !/[a-z]/.test(new_password) ||
+            !/[0-9]/.test(new_password) ||
+            !/[^A-Za-z0-9]/.test(new_password)
+        ) {
+            return res
+                .status(400)
+                .json({ error: 'Password must contain uppercase, lowercase, number, and special character' });
         }
 
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
@@ -224,7 +283,8 @@ router.post('/reset-password', async (req, res) => {
         const newHash = await bcrypt.hash(new_password, 12);
         await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, resetLog.actor_id);
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?, ?)')
+        await db
+            .prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?, ?)')
             .run(uuidv4(), resetLog.actor_id, 'PASSWORD_RESET_COMPLETED', 'user', resetLog.actor_id);
 
         res.json({ message: 'Password reset successfully' });
@@ -254,8 +314,14 @@ router.put('/profile', authMiddleware, async (req, res) => {
             updates.push('email = ?');
             params.push(email);
         }
-        if (company !== undefined) { updates.push('company = ?'); params.push(company); }
-        if (display_name !== undefined) { updates.push('username = ?'); params.push(display_name); }
+        if (company !== undefined) {
+            updates.push('company = ?');
+            params.push(company);
+        }
+        if (display_name !== undefined) {
+            updates.push('username = ?');
+            params.push(display_name);
+        }
 
         if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
@@ -268,10 +334,23 @@ router.put('/profile', authMiddleware, async (req, res) => {
         params.push(req.user.id);
         await db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
 
-        await db.prepare('INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), req.user.id, 'PROFILE_UPDATED', 'user', req.user.id, JSON.stringify({ fields: updates.map(u => u.split(' = ')[0]) }));
+        await db
+            .prepare(
+                'INSERT INTO audit_log (id, actor_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)'
+            )
+            .run(
+                uuidv4(),
+                req.user.id,
+                'PROFILE_UPDATED',
+                'user',
+                req.user.id,
+                JSON.stringify({ fields: updates.map(u => u.split(' = ')[0]) })
+            );
 
-        const updated = await db.get('SELECT id, username, email, role, company, mfa_enabled, created_at, last_login FROM users WHERE id = ?', [req.user.id]);
+        const updated = await db.get(
+            'SELECT id, username, email, role, company, mfa_enabled, created_at, last_login FROM users WHERE id = ?',
+            [req.user.id]
+        );
         res.json({ message: 'Profile updated', user: updated });
     } catch (err) {
         console.error('Profile update error:', err);

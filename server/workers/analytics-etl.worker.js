@@ -239,7 +239,9 @@ const predictiveWorker = new Worker(
         await db._readyPromise;
 
         // A. Extract: Get all active organizations
-        const orgs = await db.all(`SELECT id, name, current_plan, settings FROM organizations WHERE status = 'active'`);
+        const orgs = await db.all(
+            `SELECT id, name, plan as current_plan, settings FROM organizations WHERE status = 'active'`
+        );
 
         let simulatedCount = 0;
         const alertsToSend = [];

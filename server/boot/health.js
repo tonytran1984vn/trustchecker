@@ -139,7 +139,13 @@ function setupHealth(
         const { cache } = require('../cache');
         const { rateLimiter } = require('../middleware/rateLimiter');
         const { requestLogger: rl } = require('../middleware/security');
-        const { getFeaturesForPlan } = require('../middleware/featureGate');
+        let getFeaturesForPlan;
+        try {
+            const featureGate = require('../middleware/middleware/featureGate');
+            getFeaturesForPlan = featureGate.getFeaturesForPlan || (() => []);
+        } catch (e) {
+            getFeaturesForPlan = () => [];
+        }
 
         const startTime = Date.now();
 
