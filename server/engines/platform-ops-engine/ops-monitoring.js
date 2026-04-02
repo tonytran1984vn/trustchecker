@@ -8,6 +8,8 @@ const IngestionBuffer = require('./ingestion-buffer');
 const predictiveEngine = require('./predictive-intelligence');
 const opsRepo = require('../../data/ops-repository');
 const db = require('../../db'); // P0: Inject DB Dependency
+const { GovernanceRouter } = require('./promotion-engine');
+const { PredictiveModelV1, PredictiveModelV2 } = require('./predictive-intelligence');
 
 // SLO thresholds
 const SLO_THRESHOLDS = {
