@@ -369,14 +369,21 @@ class AgenticGovernanceEngine {
         const updatedVotes = [...proposal.voting.votes, voteRecord];
         const votesFor = updatedVotes.filter(v => v.vote === 'approve').reduce((s, v) => s + v.weight, 0);
         const votesAgainst = updatedVotes.filter(v => v.vote === 'reject').reduce((s, v) => s + v.weight, 0);
-        const totalVoters = updatedVotes.filter(v => v.vote !== 'abstain').length;
+
+        // BUG FIX: Quorum (headcount) MUST include abstentions. Approval Threshold relies only on active votes.
+        const totalParticipants = updatedVotes.length;
 
         let newStatus = 'open';
         let executionWindow = null;
 
-        if (totalVoters >= proposal.type.quorum_required) {
+        // Quorum is total participating entities headcount (including abstentions)
+        if (totalParticipants >= proposal.type.quorum_required) {
             const approvalRate = votesFor / (votesFor + votesAgainst || 1);
-            if (approvalRate >= proposal.type.approval_threshold) {
+
+            // BUG FIX: Segregation of Duties logic check
+            const sodEyesMet = totalParticipants * 2 >= (proposal.voting.sod_eyes_required || 0);
+
+            if (approvalRate >= proposal.type.approval_threshold && sodEyesMet) {
                 newStatus = 'approved';
                 // Time-locked Execution (micro delay)
                 if (proposal.type.execution_delay_mins) {
@@ -393,7 +400,7 @@ class AgenticGovernanceEngine {
             status: newStatus,
             execution_allowed_after: executionWindow,
             voting: { ...proposal.voting, votes: updatedVotes, votes_for: votesFor, votes_against: votesAgainst },
-            quorum_met: totalVoters >= proposal.type.quorum_required,
+            quorum_met: totalParticipants >= proposal.type.quorum_required,
             latest_vote: voteRecord,
         };
     }
