@@ -289,7 +289,7 @@ class IncentiveArchitectureEngine {
     }
 
     calculateNetworkValue(org_count) {
-        const n = org_count || 50;
+        const n = Math.max(0, org_count ?? 50);
         const metcalfe = (n * (n - 1)) / 2;
         const valuePerConnection = 50000; // $50K network value per connection pair
         const adjustedValue = metcalfe * valuePerConnection * 0.001; // Metcalfe discount

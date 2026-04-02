@@ -226,12 +226,15 @@ class EconomicLogicEngine {
     }
 
     analyzeIncentive(participant_type, stake_usd, detection_pct, cheat_gain_usd) {
-        const stake = stake_usd || 10000;
-        const detection = (detection_pct || 92) / 100;
-        const gain = cheat_gain_usd || 500;
+        const stake = stake_usd ?? 10000;
+        const detection = (detection_pct ?? 92) / 100;
+        const gain = cheat_gain_usd ?? 500;
         const expectedLoss = detection * stake;
         const expectedCheatValue = gain - expectedLoss;
-        const safetyMargin = stake / (gain / detection);
+        let safetyMargin = Infinity;
+        if (gain > 0 && detection > 0) {
+            safetyMargin = stake / (gain / detection);
+        }
         return {
             participant: participant_type || 'validator',
             stake_usd: stake,
@@ -239,7 +242,7 @@ class EconomicLogicEngine {
             cheat_gain_usd: gain,
             expected_cheat_value_usd: Math.round(expectedCheatValue),
             honesty_is_dominant: expectedCheatValue < 0,
-            safety_margin: parseFloat(safetyMargin.toFixed(1)) + 'x',
+            safety_margin: (safetyMargin === Infinity ? 'Infinity' : parseFloat(safetyMargin.toFixed(1))) + 'x',
             recommendation:
                 expectedCheatValue < 0
                     ? 'Incentive compatible — honesty is strictly dominant'

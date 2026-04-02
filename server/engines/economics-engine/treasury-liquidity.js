@@ -215,21 +215,21 @@ class TreasuryLiquidityEngine {
             opex_30d: 150000,
             regulatory: 20000,
         };
-        const h = hqla || defaults;
-        const o = outflows || defaults;
+        const h = hqla ?? defaults;
+        const o = outflows ?? defaults;
 
         const adjustedHQLA =
-            (h.level_1 || 0) +
-            (h.level_2a || 0) * (1 - LCR_MODEL.hqla_categories.level_2a.haircut_pct / 100) +
-            (h.level_2b || 0) * (1 - LCR_MODEL.hqla_categories.level_2b.haircut_pct / 100);
+            (h.level_1 ?? 0) +
+            (h.level_2a ?? 0) * (1 - LCR_MODEL.hqla_categories.level_2a.haircut_pct / 100) +
+            (h.level_2b ?? 0) * (1 - LCR_MODEL.hqla_categories.level_2b.haircut_pct / 100);
 
         const totalOutflows =
-            (o.settlements || 0) +
-            (o.stake_returns || 0) * 0.5 +
-            (o.sla_credits || 0) +
-            (o.deductibles || 0) +
-            (o.opex_30d || 0) +
-            (o.regulatory || 0) * 0.5;
+            (o.settlements ?? 0) +
+            (o.stake_returns ?? 0) * 0.5 +
+            (o.sla_credits ?? 0) +
+            (o.deductibles ?? 0) +
+            (o.opex_30d ?? 0) +
+            (o.regulatory ?? 0) * 0.5;
 
         const lcr_pct = totalOutflows > 0 ? (adjustedHQLA / totalOutflows) * 100 : 999;
 
@@ -278,7 +278,7 @@ class TreasuryLiquidityEngine {
             ob.dividends,
         ];
 
-        let remaining = available_cash || 500000;
+        let remaining = available_cash ?? 500000;
         const allocation = [];
         const emergencyModeActive = remaining < ob.settlements + ob.regulatory + ob.opex; // Cannot even fund priorities 1-3
 
@@ -305,8 +305,8 @@ class TreasuryLiquidityEngine {
         }
 
         return {
-            available_cash: available_cash || 500000,
-            total_obligations: values.reduce((s, v) => s + (v || 0), 0),
+            available_cash: available_cash ?? 500000,
+            total_obligations: values.reduce((s, v) => s + (v ?? 0), 0),
             allocation,
             remaining_after_waterfall: Math.round(remaining),
             agentic_emergency_mode: emergencyModeActive,

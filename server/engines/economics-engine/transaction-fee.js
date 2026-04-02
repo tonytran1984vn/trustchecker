@@ -105,10 +105,11 @@ class TransactionFeeEngine {
 
     // ─── Calculate fee for a given volume ─────────────────────────
 
-    calculateFee(type, volume) {
+    calculateFee(type, rawVolume) {
         const schedule = FEE_SCHEDULE[type];
         if (!schedule) return { error: `Unknown transaction type: ${type}`, available: Object.keys(FEE_SCHEDULE) };
 
+        const volume = Math.max(0, rawVolume);
         let remaining = volume;
         let totalCost = 0;
         const breakdown = [];

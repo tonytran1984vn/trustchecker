@@ -344,12 +344,12 @@ class EconomicRiskEngine {
         external_credit,
         engagement_score
     ) {
-        const ts = trust_score || 70;
-        const pay = payment_on_time_pct || 90;
-        const settle = settlement_success_pct || 95;
-        const years = Math.min(years_in_business || 3, 20);
-        const ext = external_credit || 60;
-        const engage = engagement_score || 50;
+        const ts = trust_score ?? 70;
+        const pay = payment_on_time_pct ?? 90;
+        const settle = settlement_success_pct ?? 95;
+        const years = Math.min(years_in_business ?? 3, 20);
+        const ext = external_credit ?? 60;
+        const engage = engagement_score ?? 50;
 
         const score = ts * 0.25 + pay * 0.2 + settle * 0.2 + Math.min(years * 5, 100) * 0.15 + ext * 0.1 + engage * 0.1;
         const rounded = parseFloat(Math.min(score, 100).toFixed(1));
