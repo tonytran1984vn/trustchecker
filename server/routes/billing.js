@@ -110,8 +110,8 @@ router.get('/plan', authMiddleware, async (req, res) => {
         let orgData = null;
 
         if (orgId) {
-            orgData = await db.get('SELECT current_plan, name FROM organizations WHERE id = $1', [orgId]);
-            if (orgData?.current_plan) currentPlanName = orgData.current_plan;
+            orgData = await db.get('SELECT plan, name FROM organizations WHERE id = $1', [orgId]);
+            if (orgData?.plan) currentPlanName = orgData.plan;
         }
 
         const tier = PLAN_TIERS[currentPlanName] || PLAN_TIERS.free;
@@ -136,8 +136,10 @@ router.get('/usage', authMiddleware, async (req, res) => {
         // Determine plan limits
         let planName = 'free';
         if (orgId) {
-            const org = await db.get('SELECT current_plan FROM organizations WHERE id = $1', [orgId]);
-            if (org?.current_plan) planName = org.current_plan;
+            try {
+                const org = await db.get('SELECT plan FROM organizations WHERE id = $1', [orgId]);
+                if (org?.plan) planName = org.plan;
+            } catch (_) {} // organizations table may lack 'plan' column
         }
         const tier = PLAN_TIERS[planName] || PLAN_TIERS.free;
 
