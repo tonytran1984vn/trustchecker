@@ -18,11 +18,8 @@ async function load() {
         D = arch || {};
         agentic = ag && ag.mode ? ag : agentic;
         loaded = true;
-        // Trigger a re-render if we are in this view
-        const el = document.getElementById('sa-main-content');
-        if (el && document.querySelector('.sa-page.kill-switch-page')) {
-            el.innerHTML = renderPage();
-        }
+        // Trigger global re-render (works in both standalone and workspace tab)
+        if (window.render) window.render();
     } catch (e) {
         console.error(e);
     }
@@ -33,9 +30,7 @@ window.toggleAgenticKS = async function(active) {
     try {
         const res = await API.post('/crisis/agentic-config/toggle-kill-switch', { active });
         agentic.killSwitchActive = res.state.killSwitchActive;
-        // re-render the section or full page
-        const el = document.getElementById('sa-main-content');
-        if (el) el.innerHTML = renderPage();
+        if (window.render) window.render();
     } catch(e) {
         alert('Failed to toggle kill switch: ' + e.message);
     }

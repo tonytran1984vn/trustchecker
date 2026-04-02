@@ -11,6 +11,8 @@ import { showToast } from '../../components/toast.js';
 import { renderPage as renderServices } from './services-status.js';
 // Tab 2: lazy
 const lazyIncidents = () => import('./incidents.js').then(m => m.renderPage());
+// Tab: Kill Switch (Agentic Controls)
+const lazyKillSwitch = () => import('../infra/kill-switch.js').then(m => m.renderPage());
 
 // ── BFF Bundle API Loading (1 call replaces 3) ──────────────────
 if (!window._saOpsCache) window._saOpsCache = {};
@@ -770,6 +772,7 @@ export function renderPage() {
     if (isSA) {
         tabs.push({ id: 'features', label: 'Feature Flags', icon: icon('settings', 14), render: renderFeatureFlags });
         tabs.push({ id: 'notifications', label: 'Notifications', icon: icon('bell', 14), render: renderNotifications });
+        tabs.push({ id: 'kill-switch', label: 'Kill Switch', icon: icon('alertTriangle', 14), render: lazyKillSwitch });
     }
     tabs.push({ id: 'general', label: 'General', icon: icon('settings', 14), render: renderGeneral });
     return renderWorkspace({

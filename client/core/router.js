@@ -311,6 +311,7 @@ const PAGE_LOADERS = {
     // ─── Infrastructure Engines (Section 16-23) ─────────
     'infra-revenue-gov': () => import('../pages/infra/revenue-governance.js'),
     'infra-kill-switch': () => import('../pages/infra/kill-switch.js'),
+    'sa-kill-switch': () => import('../pages/infra/kill-switch.js'),
     'infra-economic-logic': () => import('../pages/infra/economic-logic.js'),
     'infra-forensic-logic': () => import('../pages/infra/forensic-logic.js'),
     'infra-jurisdiction-logic': () => import('../pages/infra/jurisdiction-logic.js'),
