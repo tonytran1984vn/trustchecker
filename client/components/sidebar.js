@@ -290,6 +290,7 @@ const SUPERADMIN_NAV = [
   { id: 'sa-governance', icon: icon('shield'), label: 'Governance' },
   { id: 'sa-financial', icon: icon('barChart'), label: 'Financial' },
   { id: 'sa-operations', icon: icon('server'), label: 'Operations' },
+  { id: 'sa-predictive-ops', icon: icon('workflow'), label: 'Predictive Ops' },
   { id: 'sa-carbon', icon: icon('globe'), label: 'Carbon / CIE' },
 ];
 
