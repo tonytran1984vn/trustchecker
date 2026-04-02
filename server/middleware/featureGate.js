@@ -21,12 +21,17 @@ const db = require('../db');
 function requireFeature(feature) {
     return async (req, res, next) => {
         // Platform admin bypass
-        if (req.user && req.user.role === 'admin' && req.user.user_type === 'platform') return next();
+        if (
+            req.user &&
+            (req.user.role === 'admin' || req.user.role === 'super_admin') &&
+            req.user.user_type === 'platform'
+        )
+            return next();
 
         const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
 
         if (!orgId) {
-            if (req.user && req.user.role === 'admin') return next();
+            if (req.user && (req.user.role === 'admin' || req.user.role === 'super_admin')) return next();
             // Orphaned context logic
             return res.status(403).json({ error: 'Orphaned user without entitlement' });
         }
