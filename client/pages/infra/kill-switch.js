@@ -62,7 +62,7 @@ export function render() {
     load();
     const sw = D.switches?.switches || D.kill_switches?.switches || D.switches || []; 
     const cb = D.circuit_breakers?.breakers || D.circuit_breakers || []; 
-    const esc2 = D.escalation?.ladder || D.escalation || [];
+    const esc2 = D.escalation?.levels || D.escalation?.ladder || D.escalation || [];
     
     const cooldownBadge = agentic.cooldownActive
         ? `<span style="font-size:0.68rem; padding:2px 8px; border-radius:12px; background:#f59e0b22; color:#f59e0b; font-weight:bold; margin-left:8px;">\u23F3 COOLDOWN ACTIVE</span>`
@@ -120,15 +120,15 @@ export function render() {
     </div>
     <div class="sa-card" style="margin-bottom:16px"><h3 style="margin:0 0 10px;color:#f1f5f9">\uD83D\uDED1 Classic Kill Switches</h3>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px">
-        ${(Array.isArray(sw) ? sw : Object.entries(sw).map(([k, v]) => ({ id: k, ...(typeof v === 'object' ? v : { description: v }) }))).map(s => `<div style="padding:10px;background:#0f172a;border-radius:8px;border-left:3px solid #ef4444"><div style="color:#ef4444;font-weight:700;font-size:0.78rem">${esc(s.id || s.name || 'Switch')}</div><div style="color:#94a3b8;font-size:0.68rem;margin-top:4px">${esc(s.description || s.trigger || '')}</div>${s.authority ? `<div style="color:#f59e0b;font-size:0.65rem;margin-top:2px">Authority: ${esc(s.authority)}</div>` : ''}</div>`).join('') || '<div style="color:#64748b;padding:10px">Loading...</div>'}
+        ${(Array.isArray(sw) ? sw : Object.entries(sw).map(([k, v]) => ({ id: k, ...(typeof v === 'object' ? v : { description: v }) }))).map(s => `<div style="padding:10px;background:#0f172a;border-radius:8px;border-left:3px solid #ef4444"><div style="color:#ef4444;font-weight:700;font-size:0.78rem">${esc(s.id || '')} ${esc(s.name || 'Switch')}</div><div style="color:#94a3b8;font-size:0.68rem;margin-top:4px">${esc(s.scope || s.description || s.trigger || '')}</div>${s.duration ? `<div style="color:#f59e0b;font-size:0.65rem;margin-top:2px">${esc(s.duration)}</div>` : ''}</div>`).join('') || '<div style="color:#64748b;padding:10px">Loading...</div>'}
         </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div class="sa-card"><h3 style="margin:0 0 10px;color:#f1f5f9">\u26A1 Circuit Breakers</h3>
-            ${(Array.isArray(cb) ? cb : Object.entries(cb).map(([k, v]) => ({ id: k, ...(typeof v === 'object' ? v : { description: v }) }))).map(b => `<div style="padding:6px;background:#0f172a;border-radius:4px;margin-bottom:4px;border-left:3px solid #f59e0b"><div style="color:#f1f5f9;font-weight:600;font-size:0.72rem">${esc(b.id || b.name || 'Breaker')}</div><div style="color:#64748b;font-size:0.68rem">${esc(b.trigger || b.description || '')}</div></div>`).join('') || '<div style="color:#64748b;padding:10px">Loading...</div>'}
+            ${(Array.isArray(cb) ? cb : Object.entries(cb).map(([k, v]) => ({ id: k, ...(typeof v === 'object' ? v : { description: v }) }))).map(b => `<div style="padding:6px;background:#0f172a;border-radius:4px;margin-bottom:4px;border-left:3px solid #f59e0b"><div style="color:#f1f5f9;font-weight:600;font-size:0.72rem">${esc(b.id || b.name || 'Breaker')}</div><div style="color:#64748b;font-size:0.68rem">${esc(b.metric || b.trigger || b.description || '')} ${b.threshold ? '→ ' + esc(b.threshold) : ''}</div>${b.action ? `<div style="color:#f59e0b;font-size:0.62rem;margin-top:2px">${esc(b.action)}</div>` : ''}</div>`).join('') || '<div style="color:#64748b;padding:10px">Loading...</div>'}
         </div>
         <div class="sa-card"><h3 style="margin:0 0 10px;color:#f1f5f9">\uD83D\uDCF6 Escalation Ladder</h3>
-            ${(Array.isArray(esc2) ? esc2 : Object.entries(esc2).map(([k, v]) => ({ tier: k, ...(typeof v === 'object' ? v : { action: v }) }))).map((e, i) => `<div style="padding:6px;background:#0f172a;border-radius:4px;margin-bottom:4px;border-left:3px solid #3b82f6"><div style="color:#3b82f6;font-weight:600;font-size:0.72rem">Tier ${i + 1}: ${esc(e.tier || e.name || '')}</div><div style="color:#64748b;font-size:0.68rem">${esc(e.action || e.description || '')}</div></div>`).join('') || '<div style="color:#64748b;padding:10px">Loading...</div>'}
+            ${(Array.isArray(esc2) ? esc2 : Object.entries(esc2).map(([k, v]) => ({ tier: k, ...(typeof v === 'object' ? v : { action: v }) }))).map((e, i) => `<div style="padding:6px;background:#0f172a;border-radius:4px;margin-bottom:4px;border-left:3px solid #3b82f6"><div style="color:#3b82f6;font-weight:600;font-size:0.72rem">${esc(e.level || e.tier || e.name || 'Tier ' + (i+1))}</div><div style="color:#64748b;font-size:0.68rem">${esc(e.description || e.action || '')}</div>${e.response_time ? `<div style="color:#94a3b8;font-size:0.62rem;margin-top:2px">SLA: ${esc(e.response_time)}</div>` : ''}</div>`).join('') || '<div style="color:#64748b;padding:10px">Loading...</div>'}
         </div>
     </div>
 </div>
