@@ -3,9 +3,14 @@ const router = express.Router();
 const db = require('../db');
 const { authMiddleware, requireRole } = require('../auth');
 const logger = require('../lib/logger');
-const { promotionEngine } = require('../engines/platform-ops-engine/promotion-engine');
-const { governanceEngine } = require('../engines/platform-ops-engine/governance-engine');
+const { AutoPromotionEngine, GovernanceRouter } = require('../engines/platform-ops-engine/promotion-engine');
+const { GovernanceEngine } = require('../engines/platform-ops-engine/governance-engine');
 const { v4: uuidv4 } = require('uuid');
+
+// Singleton instances
+const promotionEngine = new AutoPromotionEngine(db);
+const governanceRouter = new GovernanceRouter();
+const governanceEngine = new GovernanceEngine();
 
 router.use(authMiddleware);
 // Enforce strict Super Admin isolation for predictive control plane
@@ -19,12 +24,12 @@ router.use((req, res, next) => {
 // ─── CANARY & KILL SWITCH ──────────────────────────────────────────
 router.get('/canary/status', async (req, res) => {
     try {
-        const state = promotionEngine.getGovernanceState();
+        const state = await governanceRouter.syncState(db);
         res.json({
-            mode: state.mode,
-            kill_switch_engaged: state.kill_switch_engaged,
-            active_model: state.active_model_id,
-            canary_model: state.canary_model_id,
+            mode: state.mode || 'STABLE',
+            kill_switch_engaged: state.kill_switch_engaged || false,
+            active_model: state.active_model || 'PredictiveModelV1',
+            canary_model: state.canary_model || null,
             total_traffic: 100,
             canary_percentage: state.mode === 'CANARY' ? 5 : 0,
         });
@@ -36,14 +41,24 @@ router.get('/canary/status', async (req, res) => {
 
 router.post('/canary/kill-switch', async (req, res) => {
     try {
-        const result = await promotionEngine.engageKillSwitch(
-            req.user.id,
-            req.body.reason || 'Emergency manual override'
+        await promotionEngine.triggerKillSwitch();
+        // Force sync state cache
+        governanceRouter.cacheTime = 0;
+        const newState = await governanceRouter.syncState(db);
+        logger.warn(
+            `[OpsIntel] KILL SWITCH engaged by user ${req.user.id}: ${req.body.reason || 'Emergency manual override'}`
         );
-        res.json({ success: true, message: 'Kill Switch Engaged', state: result });
+        res.json({
+            success: true,
+            message: 'Kill Switch Engaged — all models rolled back to rule-based V1',
+            state: {
+                mode: newState.mode,
+                kill_switch_engaged: newState.kill_switch_engaged,
+            },
+        });
     } catch (e) {
         logger.error('[OpsIntel] Canary Kill Switch Error:', e);
-        res.status(500).json({ error: 'Failed to engage kill switch' });
+        res.status(500).json({ error: 'Failed to engage kill switch: ' + e.message });
     }
 });
 
@@ -65,7 +80,14 @@ router.get('/proposals', async (req, res) => {
 router.post('/proposals/:id/approve', async (req, res) => {
     try {
         const { id } = req.params;
-        const result = await governanceEngine.approveAction(id, req.user.id);
+        // Record the approval
+        await db.run(`INSERT INTO action_approvals (proposal_id, approved_by, decision) VALUES ($1, $2, $3)`, [
+            id,
+            req.user.id,
+            'APPROVE',
+        ]);
+        // Resolve the process (check policy, execute if auto/enough approvals)
+        const result = await governanceEngine.resolveProcess(id);
         res.json(result);
     } catch (e) {
         logger.error('[OpsIntel] Proposal Approve Error:', e);
