@@ -423,7 +423,15 @@ export function renderPage() {
         // Initialize page event handlers if module exports initPage()
         if (typeof mod.initPage === 'function') mod.initPage();
         // Only re-render if we're still on that page
-        if (State.page === page) render();
+        if (State.page === page) {
+            // Targeted DOM patch: update only page-body, not full app (prevents sidebar/header flicker)
+            const pageBody = document.querySelector('.page-body');
+            if (pageBody) {
+                pageBody.innerHTML = mod.renderPage();
+            } else {
+                render();
+            }
+        }
     }).catch(err => {
         console.error(`[router] Failed to load page module: ${page}`, err);
         const app = document.getElementById('app');

@@ -28,7 +28,13 @@ export async function preload() {
         data = { canary: {}, proposals: [], diffs: { diffs: [], stats: [] }, policyStats: [] };
     }
     loading = false;
-    if (typeof window.render === 'function') window.render();
+    // Targeted DOM patch — only update page content, NOT full app (prevents sidebar/header flicker)
+    const pageBody = document.querySelector('.page-body');
+    if (pageBody && State.page === 'sa-predictive-ops') {
+        pageBody.innerHTML = renderPage();
+    } else if (typeof window.render === 'function') {
+        window.render();
+    }
 }
 
 window.opsApprove = async function(id) {
