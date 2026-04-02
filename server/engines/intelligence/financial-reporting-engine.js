@@ -1,10 +1,10 @@
 /**
  * TrustChecker — Financial Reporting Engine v1.0
  * IPO-GRADE: IFRS-Ready Consolidated Financial Reporting
- * 
+ *
  * IPO requires IFRS-compliant financial engine.
  * Revenue mix (SaaS + settlement + staking) needs proper recognition.
- * 
+ *
  * Standards: IFRS 15 (Revenue), IFRS 9 (Financial Instruments),
  *            IFRS 16 (Leases), IAS 37 (Provisions), IAS 38 (Intangibles)
  */
@@ -90,7 +90,8 @@ const DEFERRED_LIABILITIES = {
             description: 'Prepaid subscriptions and annual licenses',
             measurement: 'Remaining pro-rata value of unfulfilled performance obligation',
             balance_sheet: 'Current liability (< 12 months) or Non-current (> 12 months)',
-            example: '$100K annual subscription paid Jan 1 → Dec 31 remaining = $100K deferred → $8.3K released monthly',
+            example:
+                '$100K annual subscription paid Jan 1 → Dec 31 remaining = $100K deferred → $8.3K released monthly',
         },
         {
             type: 'Settlement Reserve Liability',
@@ -128,14 +129,54 @@ const DEFERRED_LIABILITIES = {
 
 const IFRS_MAP = {
     standards_applicable: [
-        { standard: 'IFRS 15', title: 'Revenue from Contracts with Customers', applies_to: 'All revenue streams', critical: true },
-        { standard: 'IFRS 9', title: 'Financial Instruments', applies_to: 'Staking yields, settlement guarantees, insurance receivables', critical: true },
-        { standard: 'IFRS 16', title: 'Leases', applies_to: 'Cloud infrastructure, office space, node hardware leases', critical: false },
-        { standard: 'IAS 37', title: 'Provisions, Contingent Liabilities', applies_to: 'SLA credits, dispute provisions, settlement reserves', critical: true },
-        { standard: 'IAS 38', title: 'Intangible Assets', applies_to: 'IP, algorithms, Trust Graph, development costs', critical: true },
-        { standard: 'IFRS 3', title: 'Business Combinations', applies_to: 'Future acquisitions, post-IPO M&A', critical: false },
-        { standard: 'IAS 36', title: 'Impairment of Assets', applies_to: 'Goodwill (post-acquisition), capitalized development', critical: false },
-        { standard: 'IFRS 7', title: 'Financial Instruments: Disclosures', applies_to: 'Settlement exposure, counterparty risk', critical: true },
+        {
+            standard: 'IFRS 15',
+            title: 'Revenue from Contracts with Customers',
+            applies_to: 'All revenue streams',
+            critical: true,
+        },
+        {
+            standard: 'IFRS 9',
+            title: 'Financial Instruments',
+            applies_to: 'Staking yields, settlement guarantees, insurance receivables',
+            critical: true,
+        },
+        {
+            standard: 'IFRS 16',
+            title: 'Leases',
+            applies_to: 'Cloud infrastructure, office space, node hardware leases',
+            critical: false,
+        },
+        {
+            standard: 'IAS 37',
+            title: 'Provisions, Contingent Liabilities',
+            applies_to: 'SLA credits, dispute provisions, settlement reserves',
+            critical: true,
+        },
+        {
+            standard: 'IAS 38',
+            title: 'Intangible Assets',
+            applies_to: 'IP, algorithms, Trust Graph, development costs',
+            critical: true,
+        },
+        {
+            standard: 'IFRS 3',
+            title: 'Business Combinations',
+            applies_to: 'Future acquisitions, post-IPO M&A',
+            critical: false,
+        },
+        {
+            standard: 'IAS 36',
+            title: 'Impairment of Assets',
+            applies_to: 'Goodwill (post-acquisition), capitalized development',
+            critical: false,
+        },
+        {
+            standard: 'IFRS 7',
+            title: 'Financial Instruments: Disclosures',
+            applies_to: 'Settlement exposure, counterparty risk',
+            critical: true,
+        },
     ],
 
     development_cost_capitalization: {
@@ -190,8 +231,20 @@ const FINANCIAL_STATEMENTS = {
     },
 
     balance_sheet_highlights: {
-        assets: ['Cash & equivalents', 'Settlement receivables', 'Capitalized development costs', 'IP assets', 'Insurance receivables'],
-        liabilities: ['Deferred revenue', 'Settlement reserve', 'SLA credit provision', 'Staking escrow', 'Insurance claim provision'],
+        assets: [
+            'Cash & equivalents',
+            'Settlement receivables',
+            'Capitalized development costs',
+            'IP assets',
+            'Insurance receivables',
+        ],
+        liabilities: [
+            'Deferred revenue',
+            'Settlement reserve',
+            'SLA credit provision',
+            'Staking escrow',
+            'Insurance claim provision',
+        ],
         equity: ['Share capital', 'Retained earnings', 'Share premium (post-IPO)'],
     },
 };
@@ -201,7 +254,6 @@ const FINANCIAL_STATEMENTS = {
 // ═══════════════════════════════════════════════════════════════════
 
 class FinancialReportingEngine {
-
     recognizeRevenue(stream_id, contract_value, period_months, months_elapsed) {
         const stream = REVENUE_STREAMS.streams.find(s => s.id === stream_id);
         if (!stream) return { error: `Unknown stream: ${stream_id}` };
@@ -224,48 +276,87 @@ class FinancialReportingEngine {
             contract_value,
             recognized_revenue: Math.round(recognized * 100) / 100,
             deferred_revenue: Math.round(deferred * 100) / 100,
-            recognition_pct: parseFloat(((recognized / contract_value) * 100).toFixed(1)),
+            recognition_pct: contract_value > 0 ? parseFloat(((recognized / contract_value) * 100).toFixed(1)) : null,
+            revenue_flag: contract_value > 0 ? null : 'NO_CONTRACT_VALUE',
             period: `${months_elapsed} of ${period_months} months`,
         };
     }
 
     generateConsolidatedPL(period, revenue_data) {
         const defaults = {
-            saas: 200000, transaction_fees: 150000, settlement: 100000,
-            staking: 30000, certification: 50000, api_licensing: 20000,
-            cloud: 80000, validator_costs: 40000, settlement_processing: 20000,
-            support: 30000, rnd: 120000, sales: 60000, ga: 50000,
-            depreciation: 25000, insurance: 15000, regulatory: 10000,
+            saas: 200000,
+            transaction_fees: 150000,
+            settlement: 100000,
+            staking: 30000,
+            certification: 50000,
+            api_licensing: 20000,
+            cloud: 80000,
+            validator_costs: 40000,
+            settlement_processing: 20000,
+            support: 30000,
+            rnd: 120000,
+            sales: 60000,
+            ga: 50000,
+            depreciation: 25000,
+            insurance: 15000,
+            regulatory: 10000,
         };
         const d = revenue_data || defaults;
 
-        const totalRevenue = (d.saas || 0) + (d.transaction_fees || 0) + (d.settlement || 0) + (d.staking || 0) + (d.certification || 0) + (d.api_licensing || 0);
+        const totalRevenue =
+            (d.saas || 0) +
+            (d.transaction_fees || 0) +
+            (d.settlement || 0) +
+            (d.staking || 0) +
+            (d.certification || 0) +
+            (d.api_licensing || 0);
         const cogs = (d.cloud || 0) + (d.validator_costs || 0) + (d.settlement_processing || 0) + (d.support || 0);
         const grossProfit = totalRevenue - cogs;
-        const opex = (d.rnd || 0) + (d.sales || 0) + (d.ga || 0) + (d.depreciation || 0) + (d.insurance || 0) + (d.regulatory || 0);
+        const opex =
+            (d.rnd || 0) +
+            (d.sales || 0) +
+            (d.ga || 0) +
+            (d.depreciation || 0) +
+            (d.insurance || 0) +
+            (d.regulatory || 0);
         const operatingIncome = grossProfit - opex;
 
         return {
             period,
             revenue: {
-                saas_subscription: d.saas, transaction_fees: d.transaction_fees, carbon_settlement: d.settlement,
-                staking_validation: d.staking, certification: d.certification, api_licensing: d.api_licensing,
+                saas_subscription: d.saas,
+                transaction_fees: d.transaction_fees,
+                carbon_settlement: d.settlement,
+                staking_validation: d.staking,
+                certification: d.certification,
+                api_licensing: d.api_licensing,
                 total: totalRevenue,
             },
             cost_of_revenue: { total: cogs },
             gross_profit: grossProfit,
-            gross_margin_pct: parseFloat(((grossProfit / totalRevenue) * 100).toFixed(1)),
+            // INVARIANT: 0% margin and undefined margin are distinct financial states
+            gross_margin_pct: totalRevenue > 0 ? parseFloat(((grossProfit / totalRevenue) * 100).toFixed(1)) : null,
             operating_expenses: { total: opex },
             operating_income: operatingIncome,
-            operating_margin_pct: parseFloat(((operatingIncome / totalRevenue) * 100).toFixed(1)),
+            operating_margin_pct:
+                totalRevenue > 0 ? parseFloat(((operatingIncome / totalRevenue) * 100).toFixed(1)) : null,
+            revenue_flag: totalRevenue > 0 ? null : 'NO_REVENUE',
             ifrs_compliant: true,
         };
     }
 
-    getRevenueStreams() { return REVENUE_STREAMS; }
-    getDeferredLiabilities() { return DEFERRED_LIABILITIES; }
-    getIFRSMap() { return IFRS_MAP; }
-    getStatementStructure() { return FINANCIAL_STATEMENTS; }
+    getRevenueStreams() {
+        return REVENUE_STREAMS;
+    }
+    getDeferredLiabilities() {
+        return DEFERRED_LIABILITIES;
+    }
+    getIFRSMap() {
+        return IFRS_MAP;
+    }
+    getStatementStructure() {
+        return FINANCIAL_STATEMENTS;
+    }
 
     getFullFramework() {
         return {

@@ -159,11 +159,12 @@ const EXPOSURE_TRACKING = {
     },
 };
 
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 // ENGINE
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
 
-// In-memory state for real-time tracking
+// FIX BUG-02: In-memory state with version counter for optimistic concurrency
+// All reads snapshot the state to isolate from concurrent mutations
 let _currentState = {
     tier1_capital: 500000,
     tier2_capital: 200000,
@@ -171,11 +172,13 @@ let _currentState = {
     pending_settlements: 500000,
     carbon_positions: 200000,
     last_updated: new Date().toISOString(),
+    _version: 0,
 };
 
 class AgenticRealtimeCAREngine {
     calculateLiveCAR(state) {
-        const s = state || _currentState;
+        // FIX BUG-02: Snapshot state to prevent mid-calculation mutation from concurrent requests
+        const s = state ? { ...state } : { ..._currentState };
         const totalCapital = s.tier1_capital + s.tier2_capital;
 
         const riskWeightedExposure = EXPOSURE_TRACKING.exposure_categories.reduce((total, cat) => {
@@ -186,6 +189,14 @@ class AgenticRealtimeCAREngine {
         const rwe = riskWeightedExposure || s.total_exposure * 0.35;
         const car_pct = rwe > 0 ? (totalCapital / rwe) * 100 : 100;
 
+        // DOMAIN INVARIANT: CAR is a ratio of capital/exposure — cannot be negative
+        // Negative values indicate corrupted state that must fail loudly
+        if (car_pct < 0 || !isFinite(car_pct)) {
+            throw new Error(
+                `CAR invariant violation: car_pct=${car_pct}, totalCapital=${totalCapital}, rwe=${rwe}. State may be corrupted.`
+            );
+        }
+
         // Determine status
         let status = 'UNKNOWN';
         let action = '';
@@ -195,6 +206,12 @@ class AgenticRealtimeCAREngine {
                 action = threshold.action;
                 break;
             }
+        }
+
+        // FIX BUG-03: If CAR is below all thresholds (<4%), it's catastrophically under-capitalized
+        if (status === 'UNKNOWN') {
+            status = CAR_MODEL.thresholds.black.label;
+            action = CAR_MODEL.thresholds.black.action;
         }
 
         // Dynamic buffer
@@ -235,7 +252,13 @@ class AgenticRealtimeCAREngine {
     }
 
     updateExposure(updates) {
-        _currentState = { ..._currentState, ...updates, last_updated: new Date().toISOString() };
+        // FIX BUG-02: Increment version counter for optimistic concurrency
+        _currentState = {
+            ..._currentState,
+            ...updates,
+            last_updated: new Date().toISOString(),
+            _version: (_currentState._version || 0) + 1,
+        };
         return this.calculateLiveCAR();
     }
 

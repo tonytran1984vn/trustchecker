@@ -5,16 +5,16 @@ let engine;
 beforeEach(() => { engine = new RadarClass(); });
 
 describe('RiskRadar', () => {
-    describe('computeRadar', () => {
+    describe('resolveAgenticThreatIndex', () => {
         test('returns low threat for empty data', () => {
-            const r = engine.computeRadar({});
+            const r = engine.resolveAgenticThreatIndex({});
             expect(r.overall_threat_index).toBeLessThanOrEqual(30);
-            expect(r.threat_level).toBe('low');
-            expect(Object.keys(r.vectors).length).toBe(8);
+            expect(r.directive.level).toBe('ALERT_ONLY');
+            expect(r.active_signals.length).toBe(0); // empty data doesn't trigger 'high' level issues
         });
 
         test('returns high threat for risky data', () => {
-            const r = engine.computeRadar({
+            const r = engine.resolveAgenticThreatIndex({
                 partners: [{ kyc_status: 'failed', trust_score: 10, country: 'CN' }],
                 violations: Array(10).fill({ penalty_amount: 5000 }),
                 leaks: Array(5).fill({ authorized_price: 100, listing_price: 200, region_detected: 'CN' }),

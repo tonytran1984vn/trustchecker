@@ -66,6 +66,11 @@ class AgenticScmAI {
             // Update seasonal component
             seasonalComponents[i % seasonLength] = gamma * (data[i] / (level || 1)) + (1 - gamma) * s;
 
+            // FIX BUG-06: Numerical stability — if any intermediate becomes NaN/Infinity, reset to baseline
+            if (!isFinite(level)) level = data[i] || 0;
+            if (!isFinite(trend)) trend = 0;
+            if (!isFinite(seasonalComponents[i % seasonLength])) seasonalComponents[i % seasonLength] = 1;
+
             fitted.push(Math.max(0, (prevLevel + trend) * s));
         }
 
@@ -515,7 +520,10 @@ class AgenticScmAI {
                 break;
             }
             case 'quality_recall': {
-                const recallPct = 0.15 + Math.random() * 0.1;
+                // FIX BUG-12: Deterministic recall % — derived from scenario inputs, not Math.random()
+                // RULE: "Anything auditable must be deterministic"
+                const recallSeed = (current_inventory * 7 + duration_days * 13 + avg_order_value * 3) % 100;
+                const recallPct = 0.15 + (recallSeed / 100) * 0.1; // deterministic 15-25% range
                 const unitsRecalled = Math.round(current_inventory * recallPct);
 
                 impact = {
@@ -524,6 +532,7 @@ class AgenticScmAI {
                     brand_damage_score: recallPct > 0.2 ? 'severe' : 'moderate',
                     recovery_weeks: Math.ceil(duration_days / 7) + 2,
                     severity: 'critical',
+                    _deterministic_seed: recallSeed, // Audit trail: reproducible
                 };
 
                 agentic_directives.push({ action: 'QUARANTINE_AFFECTED_BATCHES', units: unitsRecalled });

@@ -179,7 +179,7 @@ describe('CarbonCreditMintingEngine', () => {
         });
 
         test('blocks self-approve without SoD', () => {
-            const r = engine.transferCredit(mockCredit, 'new', { id: 'a1' }, []);
+            const r = engine.transferCredit(mockCredit, 'new', { id: 'a1', org_id: 'org1' }, []);
             expect(r.error).toContain('SoD');
         });
     });

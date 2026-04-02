@@ -124,36 +124,36 @@ describe('AdvancedScmAI', () => {
         });
     });
 
-    describe('whatIfSimulation', () => {
+    describe('resolveAgenticScenarioDirectives', () => {
         test('simulates partner failure', () => {
-            const r = engine.whatIfSimulation({ type: 'partner_failure' });
+            const r = engine.resolveAgenticScenarioDirectives({ type: 'partner_failure' });
             expect(r.impact.revenue_at_risk).toBeDefined();
             expect(r.impact.recovery_days).toBeDefined();
         });
 
         test('critical severity without backup partners', () => {
-            const r = engine.whatIfSimulation({ type: 'partner_failure' }, { total_partners: 5, redundant_partners: 0 });
+            const r = engine.resolveAgenticScenarioDirectives({ type: 'partner_failure' }, { total_partners: 5, redundant_partners: 0 });
             expect(r.impact.severity).toBe('critical');
         });
 
         test('simulates route blocked', () => {
-            const r = engine.whatIfSimulation({ type: 'route_blocked', duration_days: 14 });
+            const r = engine.resolveAgenticScenarioDirectives({ type: 'route_blocked', duration_days: 14 });
             expect(r.impact.reroute_cost).toBeGreaterThan(0);
         });
 
         test('simulates demand spike', () => {
-            const r = engine.whatIfSimulation({ type: 'demand_spike', demand_spike_pct: 200, duration_days: 7 }, { current_inventory: 100, daily_demand: 50 });
+            const r = engine.resolveAgenticScenarioDirectives({ type: 'demand_spike', demand_spike_pct: 200, duration_days: 7 }, { current_inventory: 100, daily_demand: 50 });
             expect(r.impact.spiked_daily_demand).toBe(150);
         });
 
         test('simulates quality recall', () => {
-            const r = engine.whatIfSimulation({ type: 'quality_recall' });
+            const r = engine.resolveAgenticScenarioDirectives({ type: 'quality_recall' });
             expect(r.impact.severity).toBe('critical');
             expect(r.impact.units_recalled).toBeGreaterThan(0);
         });
 
         test('returns error for unknown type', () => {
-            const r = engine.whatIfSimulation({ type: 'alien_invasion' });
+            const r = engine.resolveAgenticScenarioDirectives({ type: 'alien_invasion' });
             expect(r.impact.error).toContain('Unknown');
         });
     });

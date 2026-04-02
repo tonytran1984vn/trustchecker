@@ -93,28 +93,28 @@ describe('CIE Engine', () => {
         });
     });
 
-    describe('assessRisk', () => {
+    describe('resolveAgenticCIPAssessor', () => {
         test('returns low risk for good data', () => {
-            const result = cie.assessRisk({ data_integrity_pct: 98, supplier_trust_score: 90, benchmark_deviation_pct: 5, historical_stability: 95, method_confidence: 98, governance_quality: 95 });
+            const result = cie.resolveAgenticCIPAssessor({ data_integrity_pct: 98, supplier_trust_score: 90, benchmark_deviation_pct: 5, historical_stability: 95, method_confidence: 98, governance_quality: 95 });
             expect(result.composite_risk).toBeLessThan(70);
             expect(result.action).toBe('approved');
         });
 
         test('blocks approval for high risk', () => {
-            const result = cie.assessRisk({ data_integrity_pct: 20, supplier_trust_score: 10, benchmark_deviation_pct: 5, historical_stability: 10, method_confidence: 30, governance_quality: 20 });
+            const result = cie.resolveAgenticCIPAssessor({ data_integrity_pct: 20, supplier_trust_score: 10, benchmark_deviation_pct: 5, historical_stability: 10, method_confidence: 30, governance_quality: 20 });
             expect(result.composite_risk).toBeGreaterThanOrEqual(70);
             expect(result.action).not.toBe('approved');
         });
 
         test('uses default values', () => {
-            const result = cie.assessRisk({});
+            const result = cie.resolveAgenticCIPAssessor({});
             expect(result.composite_risk).toBeDefined();
             expect(result.factors).toBeDefined();
         });
 
         test('emergency freeze above 95', () => {
-            const result = cie.assessRisk({ data_integrity_pct: 1, supplier_trust_score: 1, benchmark_deviation_pct: 1, historical_stability: 1, method_confidence: 1, governance_quality: 1 });
-            expect(result.action).toBe('emergency_freeze');
+            const result = cie.resolveAgenticCIPAssessor({ data_integrity_pct: 1, supplier_trust_score: 1, benchmark_deviation_pct: 1, historical_stability: 1, method_confidence: 1, governance_quality: 1 });
+            expect(result.action).toBe('frozen_pending_audit');
         });
     });
 

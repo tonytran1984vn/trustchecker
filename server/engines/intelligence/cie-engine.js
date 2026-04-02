@@ -283,7 +283,9 @@ function resolveAgenticCIPAssessor(passportData) {
     let agentic_directive = null;
     const overclaim_pct = passportData.overclaim_pct || 0;
 
-    // Evaluate Risk using Tiered Auto-Containment matrix
+    // FIX BUG-11: Risk dominance hierarchy — evaluate by severity, not by special case
+    // Order: emergency_freeze > auto_escalate > block_approval > overclaim
+    // RULE: "Special cases cannot override global risk"
     if (compositeRisk >= RISK_THRESHOLDS.emergency_freeze) {
         action = 'frozen_pending_audit';
         agentic_directive = {
@@ -295,7 +297,16 @@ function resolveAgenticCIPAssessor(passportData) {
             details: 'Composite risk exceeds emergency freeze threshold. Outbound blocked, inbound review allowed.',
             ttl: '72h',
         };
+    } else if (compositeRisk >= RISK_THRESHOLDS.auto_escalate) {
+        action = 'auto_escalate';
+        // If overclaim also detected at this risk level, add it to the escalation context
+        if (overclaim_pct > RISK_THRESHOLDS.overclaim_alert_pct) {
+            action = 'auto_escalate_with_overclaim';
+        }
+    } else if (compositeRisk >= RISK_THRESHOLDS.block_approval) {
+        action = 'block_approval';
     } else if (overclaim_pct > RISK_THRESHOLDS.overclaim_alert_pct) {
+        // Overclaim only triggers soft containment when composite risk is below block threshold
         action = 'liquidity_haircut_and_downgrade';
         agentic_directive = {
             type: 'CONTAINMENT_DIRECTIVE',
@@ -303,13 +314,9 @@ function resolveAgenticCIPAssessor(passportData) {
             target: passportData.id || 'CARBON_PASSPORT',
             action: 'LIQUIDITY_HAIRCUT',
             confidence_score: 0.85,
-            details: `Overclaim detected at ${overclaim_pct}%. Applying liquidity haircut and certificate downgrade. Freeze explicitly bypassed.`,
+            details: `Overclaim detected at ${overclaim_pct}%. Applying liquidity haircut and certificate downgrade.`,
             ttl: '168h', // 7 days review window
         };
-    } else if (compositeRisk >= RISK_THRESHOLDS.auto_escalate) {
-        action = 'auto_escalate';
-    } else if (compositeRisk >= RISK_THRESHOLDS.block_approval) {
-        action = 'block_approval';
     }
 
     return {

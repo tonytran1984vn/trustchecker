@@ -1,12 +1,12 @@
 /**
  * TrustChecker — Network Topology Engine v1.0
  * Distributed Validator Network: Node Registration, Health, Consensus, Peer Discovery
- * 
+ *
  * Architecture: Hub-and-Spoke with Regional Clusters
  *   - Hub: TrustChecker Platform (orchestrator)
  *   - Spokes: Validator nodes (verification, carbon settlement, blockchain seals)
  *   - Regional Clusters: geographic grouping for latency optimization
- * 
+ *
  * Consensus Model: Proof-of-Trust (PoT)
  *   - Validators stake reputation, not tokens
  *   - Trust score = f(uptime, accuracy, volume, response_time)
@@ -24,7 +24,7 @@ const NODE_TYPES = {
     validator: {
         name: 'Validator Node',
         description: 'Validates product authenticity, carbon settlements, blockchain seals',
-        min_stake: 1000,       // reputation points
+        min_stake: 1000, // reputation points
         capabilities: ['qr_verification', 'carbon_settlement', 'blockchain_seal'],
         sla: { uptime: 99.5, response_ms: 500 },
     },
@@ -71,13 +71,13 @@ const REGIONS = {
 // ═══════════════════════════════════════════════════════════════════
 
 const CONSENSUS = {
-    min_validators: 3,         // minimum validators per round (BFT: 2f+1)
-    max_validators: 7,         // cap for performance
-    quorum_pct: 67,            // 2/3 agreement needed
-    round_timeout_ms: 5000,    // max time for consensus round
-    slash_threshold: 3,        // consecutive failures → slash
-    reward_per_round: 0.01,    // reputation points per successful round
-    slash_per_failure: 0.05,   // reputation penalty per failure
+    min_validators: 3, // minimum validators per round (BFT: 2f+1)
+    max_validators: 7, // cap for performance
+    quorum_pct: 67, // 2/3 agreement needed
+    round_timeout_ms: 5000, // max time for consensus round
+    slash_threshold: 3, // consecutive failures → slash
+    reward_per_round: 0.01, // reputation points per successful round
+    slash_per_failure: 0.05, // reputation penalty per failure
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -86,9 +86,9 @@ const CONSENSUS = {
 
 class NetworkTopologyEngine {
     constructor() {
-        this.nodes = new Map();            // node_id → node
-        this.peers = new Map();            // node_id → Set<peer_id>
-        this.consensusRounds = [];         // history
+        this.nodes = new Map(); // node_id → node
+        this.peers = new Map(); // node_id → Set<peer_id>
+        this.consensusRounds = []; // history
         this.networkStats = { total_rounds: 0, successful: 0, failed: 0 };
     }
 
@@ -115,8 +115,8 @@ class NetworkTopologyEngine {
             endpoint,
             operator_id,
             api_key_hash: crypto.createHash('sha256').update(apiKey).digest('hex'),
-            status: 'pending',        // pending → active → suspended → decommissioned
-            trust_score: 100,         // starts at 100, adjusted by performance
+            status: 'pending', // pending → active → suspended → decommissioned
+            trust_score: 100, // starts at 100, adjusted by performance
             reputation: typeDef.min_stake,
             capabilities: typeDef.capabilities,
             health: {
@@ -157,7 +157,9 @@ class NetworkTopologyEngine {
         node.health.last_heartbeat = new Date().toISOString();
 
         // Auto-peer with same-region nodes
-        const regionPeers = this._getRegionNodes(node.region).filter(n => n.node_id !== nodeId && n.status === 'active');
+        const regionPeers = this._getRegionNodes(node.region).filter(
+            n => n.node_id !== nodeId && n.status === 'active'
+        );
         for (const peer of regionPeers) {
             this.peers.get(nodeId)?.add(peer.node_id);
             this.peers.get(peer.node_id)?.add(nodeId);
@@ -189,8 +191,8 @@ class NetworkTopologyEngine {
 
         // Check SLA compliance
         const typeDef = NODE_TYPES[node.node_type];
-        const slaOk = (node.health.uptime_pct >= typeDef.sla.uptime) &&
-            (node.health.avg_response_ms <= typeDef.sla.response_ms);
+        const slaOk =
+            node.health.uptime_pct >= typeDef.sla.uptime && node.health.avg_response_ms <= typeDef.sla.response_ms;
 
         return {
             status: 'ok',
@@ -282,7 +284,9 @@ class NetworkTopologyEngine {
 
         // Select validators: active + matching capability + highest trust
         const eligible = Array.from(this.nodes.values())
-            .filter(n => n.status === 'active' && n.node_type === 'validator' && n.capabilities.includes(verification_type))
+            .filter(
+                n => n.status === 'active' && n.node_type === 'validator' && n.capabilities.includes(verification_type)
+            )
             .sort((a, b) => b.trust_score - a.trust_score)
             .slice(0, CONSENSUS.max_validators);
 
@@ -295,8 +299,11 @@ class NetworkTopologyEngine {
             };
         }
 
-        const selected = eligible.slice(0, Math.max(CONSENSUS.min_validators, Math.min(eligible.length, CONSENSUS.max_validators)));
-        const quorumNeeded = Math.ceil(selected.length * CONSENSUS.quorum_pct / 100);
+        const selected = eligible.slice(
+            0,
+            Math.max(CONSENSUS.min_validators, Math.min(eligible.length, CONSENSUS.max_validators))
+        );
+        const quorumNeeded = Math.ceil((selected.length * CONSENSUS.quorum_pct) / 100);
 
         // Simulate consensus (in production: actual async verification)
         const votes = selected.map(v => ({
@@ -346,6 +353,11 @@ class NetworkTopologyEngine {
                     node.status = 'suspended';
                     node.suspension_reason = 'Consecutive consensus failures';
                 }
+            } else if (vote.vote === 'approve' && !consensus) {
+                // FIX BUG-07: Neutral/minor positive update for validators doing the right thing in a failed round
+                // Prevents bias accumulation where only validators in successful rounds gain trust
+                node.trust_score = Math.min(100, node.trust_score + CONSENSUS.reward_per_round * 0.5);
+                node.reputation += CONSENSUS.reward_per_round * 0.5;
             }
         }
 
@@ -410,13 +422,17 @@ class NetworkTopologyEngine {
             return Date.now() - new Date(n.health.last_heartbeat).getTime() > 120000; // >2 min stale
         });
 
-        const successRate = this.networkStats.total_rounds > 0
-            ? Math.round((this.networkStats.successful / this.networkStats.total_rounds) * 100)
-            : 100;
+        const successRate =
+            this.networkStats.total_rounds > 0
+                ? Math.round((this.networkStats.successful / this.networkStats.total_rounds) * 100)
+                : 100;
 
-        const health = avgTrust > 80 && avgUptime > 99 && staleNodes.length === 0 ? 'healthy'
-            : avgTrust > 60 && avgUptime > 95 ? 'degraded'
-                : 'critical';
+        const health =
+            avgTrust > 80 && avgUptime > 99 && staleNodes.length === 0
+                ? 'healthy'
+                : avgTrust > 60 && avgUptime > 95
+                  ? 'degraded'
+                  : 'critical';
 
         return {
             status: health,
@@ -451,15 +467,23 @@ class NetworkTopologyEngine {
         }));
     }
 
-    getNode(nodeId) { return this.nodes.get(nodeId) || null; }
+    getNode(nodeId) {
+        return this.nodes.get(nodeId) || null;
+    }
 
     getConsensusHistory(limit = 20) {
         return this.consensusRounds.slice(-limit).reverse();
     }
 
-    getNodeTypes() { return NODE_TYPES; }
-    getRegions() { return REGIONS; }
-    getConsensusParams() { return CONSENSUS; }
+    getNodeTypes() {
+        return NODE_TYPES;
+    }
+    getRegions() {
+        return REGIONS;
+    }
+    getConsensusParams() {
+        return CONSENSUS;
+    }
 
     // ─── Helpers ──────────────────────────────────────────────────
 
