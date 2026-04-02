@@ -124,7 +124,7 @@ class AgenticGovernanceEngine {
 
         // SEC-1: Audit log
         this._logAudit('kill_switch_toggled', { previous, current: active, actorId, actorRole });
-        return this.agenticState;
+        return this.getAgenticState();
     }
 
     updateCanaryRate(pct, actorId = 'unknown', actorRole = 'unknown') {
@@ -137,7 +137,7 @@ class AgenticGovernanceEngine {
 
         // SEC-1: Audit log
         this._logAudit('canary_rate_updated', { previous, current: parsed, actorId, actorRole });
-        return this.agenticState;
+        return this.getAgenticState();
     }
 
     // ALGO-1: Daily seed rotation for fair canary distribution

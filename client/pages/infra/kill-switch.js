@@ -30,7 +30,8 @@ window.toggleAgenticKS = async function(active) {
         const res = await API.post('/crisis/agentic-config/toggle-kill-switch', { active });
         agentic.killSwitchActive = res.state.killSwitchActive;
         agentic.killSwitchCooldownUntil = res.state.killSwitchCooldownUntil;
-        agentic.cooldownActive = !active && !!res.state.killSwitchCooldownUntil;
+        agentic.cooldownActive = res.state.cooldownActive || false;
+        agentic.canarySeed = res.state.canarySeed || agentic.canarySeed;
         if (window.render) window.render();
     } catch(e) {
         alert('Failed to toggle kill switch: ' + e.message);
@@ -45,6 +46,7 @@ window.updateCanaryRate = async function(pct) {
             return;
         }
         agentic.canaryRatePct = res.state.canaryRatePct;
+        agentic.canarySeed = res.state.canarySeed || agentic.canarySeed;
         document.getElementById('canaryVal').innerText = agentic.canaryRatePct + '%';
     } catch(e) {
         alert('Failed to update canary rate: ' + e.message);
