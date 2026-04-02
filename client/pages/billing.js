@@ -6,6 +6,35 @@ import { API } from '../core/api.js';
 import { showToast } from '../components/toast.js';
 import { navigate } from '../core/router.js';
 
+const PLAN_DEFAULTS = {
+    core: ['qr', 'products'],
+    pro: ['qr', 'products', 'scm_tracking', 'support', 'partners', 'carbon', 'inventory'],
+    enterprise: ['qr', 'products', 'scm_tracking', 'support', 'partners', 'carbon', 'inventory', 'risk_radar', 'ai_forecast', 'digital_twin', 'blockchain', 'kyc', 'overclaim', 'exec_dashboard'],
+};
+
+const FEATURE_LIST = [
+    { id: 'qr', label: 'QR Traceability', icon: '📱', price: 0, minTier: 'core' },
+    { id: 'products', label: 'Product Catalog', icon: '📦', price: 0, minTier: 'core' },
+    { id: 'scm_tracking', label: 'Supply Chain Tracking', icon: '🚚', price: 99, minTier: 'core' },
+    { id: 'inventory', label: 'Inventory Management', icon: '🏭', price: 49, minTier: 'core' },
+    { id: 'support', label: 'Premium Support', icon: '🎧', price: 199, minTier: 'core' },
+    { id: 'partners', label: 'Partner Portal', icon: '🤝', price: 49, minTier: 'core' },
+    { id: 'carbon', label: 'Carbon Tracking', icon: '🌱', price: 199, minTier: 'pro' },
+    { id: 'risk_radar', label: 'Risk Radar', icon: '🛡', price: 299, minTier: 'pro' },
+    { id: 'ai_forecast', label: 'AI Forecaster', icon: '🤖', price: 499, minTier: 'pro' },
+    { id: 'digital_twin', label: 'Digital Twin', icon: '🪞', price: 149, minTier: 'pro' },
+    { id: 'kyc', label: 'KYC / AML', icon: '🔍', price: 249, minTier: 'pro' },
+    { id: 'overclaim', label: 'Overclaim Detection', icon: '⚠️', price: 399, minTier: 'enterprise' },
+    { id: 'lineage', label: 'Lineage Replay', icon: '⏪', price: 499, minTier: 'enterprise' },
+    { id: 'governance', label: 'Advanced Governance', icon: '🏛', price: 299, minTier: 'enterprise' },
+    { id: 'registry_export', label: 'Registry Export API', icon: '📤', price: 599, minTier: 'enterprise' },
+    { id: 'erp_integration', label: 'ERP Integration', icon: '🔌', price: 999, minTier: 'enterprise' },
+    { id: 'exec_dashboard', label: 'Exec Risk Dashboard', icon: '📈', price: 199, minTier: 'enterprise' },
+    { id: 'ivu_cert', label: 'IVU Premium Audit', icon: '🏅', price: 499, minTier: 'enterprise' },
+    { id: 'blockchain', label: 'Blockchain Anchoring', icon: '⛓', price: 199, minTier: 'pro' },
+    { id: 'nft', label: 'NFT Certificates', icon: '🎫', price: 99, minTier: 'pro' },
+];
+
 export function renderPage() {
   const d = State.billingData;
   if (!d) return '<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-text">Loading Billing…</div></div>';
@@ -43,6 +72,34 @@ export function renderPage() {
         const isCurrent = plan?.slug === key;
         const displayName = isCurrent ? plan.name : p.name;
         const displayPrice = isCurrent ? plan.price_monthly : p.price_monthly;
+        
+        const TIER_RANK = { core: 1, pro: 2, enterprise: 3 };
+        const defaults = PLAN_DEFAULTS[key] || [];
+        const includedFeatures = FEATURE_LIST.filter(f => defaults.includes(f.id));
+        
+        const myActiveIds = new Set(isCurrent && plan.active_features ? plan.active_features : defaults);
+        const myActiveAddons = isCurrent && plan.addons ? plan.addons.map(a => a.id) : [];
+        const activeAddonFeatures = FEATURE_LIST.filter(f => myActiveAddons.includes(f.id));
+        
+        const availableFeatures = FEATURE_LIST.filter(f => {
+            if (myActiveIds.has(f.id)) return false;
+            return TIER_RANK[f.minTier] <= TIER_RANK[key];
+        });
+
+        const renderChip = (f, type) => {
+            const isActive = type === 'included' || type === 'active_addon';
+            const color = isActive ? '#3b82f6' : 'var(--text-muted)';
+            const bg = isActive ? '#eff6ff' : 'transparent';
+            const border = isActive ? '#bfdbfe' : 'var(--border)';
+            return `
+            <div style="display:inline-flex;align-items:center;padding:4px 10px;border:1px solid ${border};background:${bg};border-radius:20px;font-size:0.7rem;margin:3px 2px;white-space:nowrap;color:${color}">
+              <span style="font-size:0.8rem;margin-right:5px">${f.icon}</span> 
+              <span style="font-weight:500">${f.label}</span>
+              ${isActive ? '<span style="color:#10b981;font-weight:900;margin-left:4px;font-size:0.75rem">✓</span>' : `<span style="opacity:0.8;font-size:0.65rem;margin-left:6px;font-weight:800;color:var(--text-muted)">+$${f.price}</span>`}
+            </div>
+            `;
+        };
+
         return `
         <div class="card" style="border:${isCurrent ? '2px solid ' + planColors[key] : '1px solid var(--border)'};cursor:${isCurrent ? 'default' : 'pointer'};position:relative;display:flex;flex-direction:column;" onclick="${!isCurrent && State.user?.role === 'admin' ? `upgradePlan('${key}')` : ''}">
           ${isCurrent ? '<div style="position:absolute;top:8px;right:8px;font-size:0.65rem;background:var(--emerald);color:#000;padding:2px 8px;border-radius:99px;font-weight:700">CURRENT</div>' : ''}
@@ -55,14 +112,33 @@ export function renderPage() {
               <div style="margin-top:12px;font-size:0.7rem;color:var(--text-muted);border-top:1px dashed var(--border);padding-top:12px;text-align:left">
                 <div style="font-weight:600;margin-bottom:6px;color:var(--text);display:flex;justify-content:space-between"><span>Base Plan</span><span>$${plan.base_price}/mo</span></div>
                 <div style="font-weight:600;margin-bottom:6px;color:var(--text);display:flex;justify-content:space-between"><span>Active Add-ons</span><span style="color:var(--cyan)">+$${plan.addon_cost}/mo</span></div>
-                ${plan.addons.map(a => `<div style="display:flex;justify-content:space-between;padding:2px 0;opacity:0.8"><span>+ ${a.label}</span><span>$${a.price}</span></div>`).join('')}
               </div>
             ` : ''}
 
-            <div style="margin-top:auto;padding-top:12px;text-align:left;border-top:${isCurrent && plan.addons?.length > 0 ? '1px dashed var(--border)' : '1px dashed var(--border)'};font-size:0.72rem;color:var(--text-muted);">
-              <div>📱 ${(p.limits?.scans ?? p.scan_limit ?? 0) < 0 ? 'Unlimited' : (p.limits?.scans ?? p.scan_limit ?? 0).toLocaleString()} scans</div>
-              <div>🔌 ${(p.limits?.api_calls ?? p.api_limit ?? 0) < 0 ? 'Unlimited' : (p.limits?.api_calls ?? p.api_limit ?? 0).toLocaleString()} API calls</div>
-              <div>💾 ${(p.limits?.storage_mb ?? p.storage_mb ?? 0) < 0 ? 'Unlimited' : (p.limits?.storage_mb ?? p.storage_mb ?? 0).toLocaleString()} MB storage</div>
+            <!-- Features Chips Section -->
+            <div style="margin-top:16px;text-align:left">
+                <div style="font-size:0.65rem;color:var(--text-muted);font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">✓ Included in Plan</div>
+                <div style="display:flex;flex-wrap:wrap">
+                    ${includedFeatures.map(f => renderChip(f, 'included')).join('')}
+                </div>
+
+                ${activeAddonFeatures.length > 0 ? `
+                <div style="font-size:0.65rem;color:#3b82f6;font-weight:700;margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">★ Active Upgrades</div>
+                <div style="display:flex;flex-wrap:wrap">
+                    ${activeAddonFeatures.map(f => renderChip(f, 'active_addon')).join('')}
+                </div>
+                ` : ''}
+
+                ${availableFeatures.length > 0 ? `
+                <div style="font-size:0.65rem;color:var(--text-muted);font-weight:700;margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">+ Available Upgrades</div>
+                <div style="display:flex;flex-wrap:wrap">
+                    ${availableFeatures.map(f => renderChip(f, 'available')).join('')}
+                </div>
+                ` : ''}
+            </div>
+
+            <div style="margin-top:auto;padding-top:12px;text-align:left;border-top:1px dashed var(--border);font-size:0.72rem;color:var(--text-muted);margin-top:16px">
+              <div>📱 ${(p.limits?.scans ?? p.scan_limit ?? 0) < 0 ? 'Unlimited' : (p.limits?.scans ?? p.scan_limit ?? 0).toLocaleString()} scans &nbsp; | &nbsp; 🔌 ${(p.limits?.api_calls ?? p.api_limit ?? 0) < 0 ? 'Unlimited' : (p.limits?.api_calls ?? p.api_limit ?? 0).toLocaleString()} API &nbsp; | &nbsp; 💾 ${(p.limits?.storage_mb ?? p.storage_mb ?? 0) < 0 ? 'Unlimited' : (p.limits?.storage_mb ?? p.storage_mb ?? 0).toLocaleString()} MB</div>
             </div>
           </div>
         </div>
