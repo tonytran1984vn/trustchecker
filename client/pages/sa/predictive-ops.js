@@ -55,6 +55,51 @@ window.opsEngageKillSwitch = async function() {
     } catch (e) { alert('Kill switch engagement failed: ' + e.message); }
 };
 
+export function initPage() {
+    if (!document.getElementById('predictive-ops-style')) {
+        const style = document.createElement('style');
+        style.id = 'predictive-ops-style';
+        style.innerHTML = `
+        .cockpit { font-family: 'Inter', var(--font-primary, sans-serif); color: #e2e8f0; }
+        .cp-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
+        .cp-title { font-size:1.6rem; font-weight:800; display:flex; align-items:center; gap:12px; color:#fff; text-transform:uppercase; letter-spacing:1px; }
+        .cp-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px; }
+        .cp-card { background:#0f172a; border:1px solid #1e293b; border-radius:12px; overflow:hidden; position:relative; box-shadow:0 8px 32px rgba(0,0,0,0.5); }
+        .cp-card::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; background:linear-gradient(90deg, #3b82f6, #0ea5e9); }
+        .cp-card.danger::before { background:linear-gradient(90deg, #ef4444, #b91c1c); }
+        .cp-card.amber::before { background:linear-gradient(90deg, #f59e0b, #d97706); }
+        .cp-card-hd { padding:16px 20px; border-bottom:1px solid #1e293b; display:flex; justify-content:space-between; align-items:center; }
+        .cp-card-label { font-size:0.8rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:1px; }
+        .cp-card-bd { padding:20px; }
+        .ks-container { display:flex; align-items:center; justify-content:space-between; }
+        .ks-status { text-align:center; flex:1; }
+        .ks-dial { width:120px; height:120px; border-radius:50%; border:12px solid #10b981; display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:1.4rem; font-weight:900; color:#fff; font-family:'JetBrains Mono',monospace; text-shadow:0 0 10px #10b981; transition:all 0.3s; }
+        .ks-dial.engaged { border-color:#ef4444; text-shadow:0 0 10px #ef4444; }
+        .ks-btn { background:#b91c1c; color:#fff; border:none; padding:16px 32px; border-radius:8px; font-weight:800; font-size:1rem; cursor:pointer; text-transform:uppercase; box-shadow:0 4px 15px rgba(239,68,68,0.4); border-bottom:4px solid #7f1d1d; transition:all 0.1s; }
+        .ks-btn:hover { background:#dc2626; transform:translateY(2px); border-bottom-width:2px; margin-top:2px; }
+        .ks-btn:active { transform:translateY(4px); border-bottom-width:0px; margin-top:4px; }
+        .prop-item { background:#1e293b; padding:14px; border-radius:8px; margin-bottom:12px; border-left:4px solid #3b82f6; display:flex; justify-content:space-between; align-items:center; }
+        .prop-item.high { border-left-color:#ef4444; }
+        .prop-item.medium { border-left-color:#f59e0b; }
+        .prop-act { font-weight:700; color:#fff; font-family:'JetBrains Mono',monospace; }
+        .prop-cause { font-size:0.75rem; color:#94a3b8; margin-top:4px; }
+        .btn-sm { padding:6px 14px; border-radius:6px; font-size:0.7rem; font-weight:700; cursor:pointer; text-transform:uppercase; border:none; }
+        .bs-appr { background:rgba(16,185,129,0.15); color:#34d399; }
+        .bs-appr:hover { background:rgba(16,185,129,0.3); }
+        .bs-rej { background:rgba(239,68,68,0.15); color:#f87171; }
+        .bs-rej:hover { background:rgba(239,68,68,0.3); }
+        .tbl { width:100%; border-collapse:collapse; font-size:0.75rem; }
+        .tbl th { text-align:left; padding:8px 0; color:#64748b; font-weight:600; text-transform:uppercase; border-bottom:1px solid #1e293b; }
+        .tbl td { padding:10px 0; border-bottom:1px solid #1e293b; color:#cbd5e1; font-family:'JetBrains Mono',monospace; }
+        .dt-drift { color:#fbbf24; }
+        .dt-regression { color:#ef4444; }
+        .dt-match { color:#94a3b8; }
+        .dt-improve { color:#34d399; }
+        `;
+        document.head.appendChild(style);
+    }
+}
+
 export function renderPage() {
     const role = State?.user?.active_role || State?.user?.role || '';
     const userType = State?.user?.user_type || '';
@@ -70,52 +115,6 @@ export function renderPage() {
     const ks = d.canary.kill_switch_engaged;
 
     return `
-    <style>
-        .cockpit { font-family: 'Inter', var(--font-primary, sans-serif); color: #e2e8f0; }
-        .cp-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
-        .cp-title { font-size:1.6rem; font-weight:800; display:flex; align-items:center; gap:12px; color:#fff; text-transform:uppercase; letter-spacing:1px; }
-        
-        .cp-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px; }
-        
-        /* Tactical Card */
-        .cp-card { background:#0f172a; border:1px solid #1e293b; border-radius:12px; overflow:hidden; position:relative; box-shadow:0 8px 32px rgba(0,0,0,0.5); }
-        .cp-card::before { content:''; position:absolute; top:0; left:0; right:0; height:4px; background:linear-gradient(90deg, #3b82f6, #0ea5e9); }
-        .cp-card.danger::before { background:linear-gradient(90deg, #ef4444, #b91c1c); }
-        .cp-card.amber::before { background:linear-gradient(90deg, #f59e0b, #d97706); }
-        
-        .cp-card-hd { padding:16px 20px; border-bottom:1px solid #1e293b; display:flex; justify-content:space-between; align-items:center; }
-        .cp-card-label { font-size:0.8rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:1px; }
-        .cp-card-bd { padding:20px; }
-        
-        /* Kill Switch */
-        .ks-container { display:flex; align-items:center; justify-content:space-between; }
-        .ks-status { text-align:center; flex:1; }
-        .ks-dial { width:120px; height:120px; border-radius:50%; border:12px solid ${ks ? '#ef4444' : '#10b981'}; display:flex; align-items:center; justify-content:center; margin:0 auto; font-size:1.4rem; font-weight:900; color:#fff; font-family:'JetBrains Mono',monospace; text-shadow:0 0 10px ${ks ? '#ef4444' : '#10b981'}; transition:all 0.3s; }
-        .ks-btn { background:#b91c1c; color:#fff; border:none; padding:16px 32px; border-radius:8px; font-weight:800; font-size:1rem; cursor:pointer; text-transform:uppercase; box-shadow:0 4px 15px rgba(239,68,68,0.4); border-bottom:4px solid #7f1d1d; transition:all 0.1s; }
-        .ks-btn:hover { background:#dc2626; transform:translateY(2px); border-bottom-width:2px; margin-top:2px; }
-        .ks-btn:active { transform:translateY(4px); border-bottom-width:0px; margin-top:4px; }
-        
-        /* Proposals */
-        .prop-item { background:#1e293b; padding:14px; border-radius:8px; margin-bottom:12px; border-left:4px solid #3b82f6; display:flex; justify-content:space-between; align-items:center; }
-        .prop-item.high { border-left-color:#ef4444; }
-        .prop-item.medium { border-left-color:#f59e0b; }
-        .prop-act { font-weight:700; color:#fff; font-family:'JetBrains Mono',monospace; }
-        .prop-cause { font-size:0.75rem; color:#94a3b8; margin-top:4px; }
-        .btn-sm { padding:6px 14px; border-radius:6px; font-size:0.7rem; font-weight:700; cursor:pointer; text-transform:uppercase; border:none; }
-        .bs-appr { background:rgba(16,185,129,0.15); color:#34d399; }
-        .bs-appr:hover { background:rgba(16,185,129,0.3); }
-        .bs-rej { background:rgba(239,68,68,0.15); color:#f87171; }
-        .bs-rej:hover { background:rgba(239,68,68,0.3); }
-        
-        /* Diff Log */
-        .tbl { width:100%; border-collapse:collapse; font-size:0.75rem; }
-        .tbl th { text-align:left; padding:8px 0; color:#64748b; font-weight:600; text-transform:uppercase; border-bottom:1px solid #1e293b; }
-        .tbl td { padding:10px 0; border-bottom:1px solid #1e293b; color:#cbd5e1; font-family:'JetBrains Mono',monospace; }
-        .dt-drift { color:#fbbf24; }
-        .dt-regression { color:#ef4444; }
-        .dt-match { color:#94a3b8; }
-        .dt-improve { color:#34d399; }
-    </style>
 
     <div class="cockpit">
         <div class="cp-header">
@@ -130,7 +129,7 @@ export function renderPage() {
                 <div class="cp-card-bd ks-container">
                     <div class="ks-status">
                         <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:10px;text-transform:uppercase">Routing Traffic</div>
-                        <div class="ks-dial">${ks ? '0%' : (d.canary.canary_percentage + '%')}</div>
+                        <div class="ks-dial ${ks ? 'engaged' : ''}">${ks ? '0%' : (d.canary.canary_percentage + '%')}</div>
                         <div style="margin-top:12px;font-size:0.8rem;color:${ks ? '#ef4444' : '#34d399'};font-weight:700;">${ks ? 'P0 LOCKOUT ENGAGED' : 'STANDARD AUTONOMY'}</div>
                     </div>
                     <div style="text-align:right">
