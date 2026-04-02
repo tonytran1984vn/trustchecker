@@ -4,7 +4,7 @@
  * Canary and Blue/Green deployment orchestration.
  * Health-check based routing, auto-rollback on error threshold,
  * deployment history, and version tagging.
- * 
+ *
  * Admin-only endpoints:
  *   POST /api/deploy/canary     — set canary weight
  *   POST /api/deploy/switch     — blue/green switch
@@ -24,7 +24,7 @@ const state = {
     // Current active deployment
     active: {
         version: DEPLOYMENT_VERSION,
-        slot: 'blue',           // 'blue' or 'green'
+        slot: 'blue', // 'blue' or 'green'
         startedAt: new Date().toISOString(),
         status: 'healthy',
     },
@@ -32,13 +32,13 @@ const state = {
     // Canary configuration
     canary: {
         enabled: false,
-        weight: 0,              // 0-100 (% of traffic to canary)
+        weight: 0, // 0-100 (% of traffic to canary)
         version: null,
         startedAt: null,
         errorCount: 0,
         requestCount: 0,
-        errorThreshold: 5,      // auto-rollback if error rate exceeds 5%
-        maxErrorCount: 50,      // absolute error count trigger
+        errorThreshold: 5, // auto-rollback if error rate exceeds 5%
+        maxErrorCount: 50, // absolute error count trigger
     },
 
     // Deployment history
@@ -46,8 +46,8 @@ const state = {
 
     // SLO tracking for auto-rollback decisions
     slo: {
-        errorBudget: 0.01,      // 1% error budget
-        latencyP99: 2000,       // 2s p99 latency budget
+        errorBudget: 0.01, // 1% error budget
+        latencyP99: 2000, // 2s p99 latency budget
     },
 };
 
@@ -66,7 +66,10 @@ function deploymentMiddleware(req, res, next) {
 
     // Canary routing
     if (state.canary.enabled && state.canary.version) {
-        const roll = Math.random() * 100;
+        const crypto = require('crypto');
+        const hashTarget = req.headers['x-forwarded-for'] || req.ip || Math.random().toString();
+        const roll = parseInt(crypto.createHash('md5').update(hashTarget).digest('hex').substring(0, 8), 16) % 100;
+
         if (roll < state.canary.weight) {
             // This request is routed to canary
             res.setHeader('X-Deploy-Version', state.canary.version);
@@ -95,16 +98,13 @@ function checkAutoRollback() {
     const { canary } = state;
     if (!canary.enabled) return;
 
-    const errorRate = canary.requestCount > 0
-        ? (canary.errorCount / canary.requestCount) * 100
-        : 0;
+    const errorRate = canary.requestCount > 0 ? (canary.errorCount / canary.requestCount) * 100 : 0;
 
     // Trigger rollback if error rate exceeds threshold
-    if (
-        (canary.requestCount >= 10 && errorRate > canary.errorThreshold) ||
-        canary.errorCount >= canary.maxErrorCount
-    ) {
-        console.error(`[Deploy] 🚨 Auto-rollback triggered! Error rate: ${errorRate.toFixed(1)}% (${canary.errorCount}/${canary.requestCount})`);
+    if ((canary.requestCount >= 10 && errorRate > canary.errorThreshold) || canary.errorCount >= canary.maxErrorCount) {
+        console.error(
+            `[Deploy] 🚨 Auto-rollback triggered! Error rate: ${errorRate.toFixed(1)}% (${canary.errorCount}/${canary.requestCount})`
+        );
         rollbackCanary('auto-rollback: error threshold exceeded');
     }
 }
@@ -120,9 +120,10 @@ function rollbackCanary(reason = 'manual') {
         canaryStats: {
             errorCount: state.canary.errorCount,
             requestCount: state.canary.requestCount,
-            errorRate: state.canary.requestCount > 0
-                ? ((state.canary.errorCount / state.canary.requestCount) * 100).toFixed(2) + '%'
-                : '0%',
+            errorRate:
+                state.canary.requestCount > 0
+                    ? ((state.canary.errorCount / state.canary.requestCount) * 100).toFixed(2) + '%'
+                    : '0%',
         },
     });
 
@@ -164,9 +165,10 @@ function addHistory(entry) {
 function registerDeployRoutes(router, requireRole) {
     // GET /api/deploy/status
     router.get('/deploy/status', requireRole('admin'), (req, res) => {
-        const canaryErrorRate = state.canary.requestCount > 0
-            ? ((state.canary.errorCount / state.canary.requestCount) * 100).toFixed(2)
-            : '0.00';
+        const canaryErrorRate =
+            state.canary.requestCount > 0
+                ? ((state.canary.errorCount / state.canary.requestCount) * 100).toFixed(2)
+                : '0.00';
 
         res.json({
             active: state.active,
@@ -256,7 +258,9 @@ function registerDeployRoutes(router, requireRole) {
             performedBy: req.user?.email || 'admin',
         });
 
-        console.log(`[Deploy] 🔄 Blue/Green switch: ${oldSlot}(v${previousVersion}) → ${newSlot}(v${state.active.version})`);
+        console.log(
+            `[Deploy] 🔄 Blue/Green switch: ${oldSlot}(v${previousVersion}) → ${newSlot}(v${state.active.version})`
+        );
 
         res.json({
             message: `Switched from ${oldSlot} to ${newSlot}`,
@@ -319,9 +323,10 @@ function registerDeployRoutes(router, requireRole) {
         const canaryStats = {
             requestCount: state.canary.requestCount,
             errorCount: state.canary.errorCount,
-            errorRate: state.canary.requestCount > 0
-                ? ((state.canary.errorCount / state.canary.requestCount) * 100).toFixed(2) + '%'
-                : '0%',
+            errorRate:
+                state.canary.requestCount > 0
+                    ? ((state.canary.errorCount / state.canary.requestCount) * 100).toFixed(2) + '%'
+                    : '0%',
         };
 
         // Switch to canary version
@@ -368,6 +373,11 @@ function registerDeployRoutes(router, requireRole) {
 module.exports = {
     deploymentMiddleware,
     registerDeployRoutes,
-    getDeploymentState: () => ({ ...state, active: { ...state.active }, canary: { ...state.canary }, slo: { ...state.slo } }),
+    getDeploymentState: () => ({
+        ...state,
+        active: { ...state.active },
+        canary: { ...state.canary },
+        slo: { ...state.slo },
+    }),
     getActiveVersion: () => state.active.version,
 };

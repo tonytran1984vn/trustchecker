@@ -132,18 +132,24 @@ router.post('/drill', requirePermission('admin:manage'), (req, res) => {
 // ─── AGENTIC GOVERNANCE CONTROLS ───────────────────────────────────
 const agenticGovernance = require('../engines/governance-module/governance');
 
-// SEC-3: Simple in-memory rate limiter for kill switch toggles
-const _ksRateLimit = { count: 0, windowStart: Date.now() };
+// SEC-3: Per-actor in-memory rate limiter for kill switch toggles
+const _ksRateLimit = new Map();
 const KS_MAX_TOGGLES_PER_MIN = 6;
 
-function checkKsRateLimit() {
+function checkKsRateLimit(actorId) {
     const now = Date.now();
-    if (now - _ksRateLimit.windowStart > 60000) {
-        _ksRateLimit.count = 0;
-        _ksRateLimit.windowStart = now;
+    if (!_ksRateLimit.has(actorId)) {
+        _ksRateLimit.set(actorId, { count: 1, windowStart: now });
+        return true;
     }
-    _ksRateLimit.count++;
-    return _ksRateLimit.count <= KS_MAX_TOGGLES_PER_MIN;
+    const record = _ksRateLimit.get(actorId);
+    if (now - record.windowStart > 60000) {
+        record.count = 1;
+        record.windowStart = now;
+        return true;
+    }
+    record.count++;
+    return record.count <= KS_MAX_TOGGLES_PER_MIN;
 }
 
 router.get('/agentic-config', requirePermission('admin:manage'), (req, res) => {
@@ -154,12 +160,13 @@ router.post('/agentic-config/toggle-kill-switch', requirePermission('admin:manag
     const { active } = req.body;
     if (typeof active !== 'boolean') return res.status(400).json({ error: 'active boolean required' });
 
+    const actorId = req.user?.id || req.user?.email || req.ip;
+
     // SEC-3: Rate limit check
-    if (!checkKsRateLimit()) {
-        return res.status(429).json({ error: 'Too many toggle requests. Max 6 per minute.' });
+    if (!checkKsRateLimit(actorId)) {
+        return res.status(429).json({ error: 'Too many toggle requests from your account. Max 6 per minute.' });
     }
 
-    const actorId = req.user?.id || req.user?.email || 'unknown';
     const actorRole = req.user?.role || 'unknown';
     const state = agenticGovernance.toggleKillSwitch(active, actorId, actorRole);
     res.json({ status: 'success', state });
