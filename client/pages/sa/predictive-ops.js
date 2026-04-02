@@ -156,7 +156,7 @@ export function renderPage() {
         return `<div class="empty-state">🔒 Institutional Access Denied. Super Admin only.</div>`;
     }
 
-    if (!loading && (Date.now() - lastLoad > 15000)) { preload(); }
+    if (!loading && (Date.now() - lastLoad > 60000)) { preload(); }
     if (loading && !data) return `<div style="display:flex;align-items:center;justify-content:center;padding:80px;flex-direction:column;gap:16px">
         <div style="width:48px;height:48px;border:4px solid var(--border);border-top-color:var(--cyan);border-radius:50%;animation:spin 0.8s linear infinite"></div>
         <p style="color:var(--text-secondary);font-size:0.85rem">Loading Ops Cockpit...</p>

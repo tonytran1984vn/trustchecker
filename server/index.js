@@ -125,6 +125,8 @@ const apiLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many requests, please try again later' },
+    // Skip rate limiting for critical governance endpoints (already auth-gated)
+    skip: req => req.path.startsWith('/ops-intelligence'),
 });
 // v9.5.0: API Versioning — /api/v1/* forwards to /api/*
 app.use('/api/v1', (req, res, next) => {
