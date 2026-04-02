@@ -53,6 +53,153 @@ router.post('/webhook', async (req, res) => {
     }
 });
 
+// ─── GET /plan — Current plan + available plans ──────────────────────────────
+router.get('/plan', authMiddleware, async (req, res) => {
+    try {
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
+        let currentPlan = 'free';
+        let orgData = null;
+
+        if (orgId) {
+            orgData = await db.get('SELECT current_plan, name FROM organizations WHERE id = $1', [orgId]);
+            if (orgData?.current_plan) currentPlan = orgData.current_plan;
+        }
+
+        // Available plans for the pricing display
+        const available_plans = [
+            {
+                name: 'Free',
+                slug: 'free',
+                price: 0,
+                currency: 'USD',
+                interval: 'month',
+                features: ['5 Products', '100 Scans/mo', 'Basic Dashboard', 'Email Support'],
+            },
+            {
+                name: 'Pro',
+                slug: 'pro',
+                price: 49,
+                currency: 'USD',
+                interval: 'month',
+                features: [
+                    'Unlimited Products',
+                    '10,000 Scans/mo',
+                    'Advanced Analytics',
+                    'API Access',
+                    'Priority Support',
+                ],
+            },
+            {
+                name: 'Enterprise',
+                slug: 'enterprise',
+                price: 199,
+                currency: 'USD',
+                interval: 'month',
+                features: [
+                    'Unlimited Everything',
+                    'Custom Integrations',
+                    'SLA 99.9%',
+                    'Dedicated Support',
+                    'SSO',
+                    'Audit Logs',
+                ],
+            },
+        ];
+
+        res.json({
+            plan: currentPlan,
+            org_name: orgData?.name || null,
+            available_plans,
+        });
+    } catch (err) {
+        console.error('GET /billing/plan error:', err);
+        res.json({ plan: 'free', available_plans: [] });
+    }
+});
+
+// ─── GET /usage — Current billing period usage ──────────────────────────────
+router.get('/usage', authMiddleware, async (req, res) => {
+    try {
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
+        const now = new Date();
+        const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
+        const period = {
+            start: periodStart,
+            end: periodEnd,
+            label: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+        };
+
+        let usage = { scans: 0, products: 0, api_calls: 0 };
+
+        if (orgId) {
+            try {
+                const scanCount = await db.get(
+                    `SELECT COUNT(*) as c FROM scan_events WHERE org_id = $1 AND scanned_at >= $2`,
+                    [orgId, periodStart]
+                );
+                const productCount = await db.get(`SELECT COUNT(*) as c FROM products WHERE org_id = $1`, [orgId]);
+                usage = { scans: scanCount?.c || 0, products: productCount?.c || 0, api_calls: 0 };
+            } catch (_) {}
+        } else {
+            // Platform/admin — aggregate counts
+            try {
+                const scanCount = await db.get(`SELECT COUNT(*) as c FROM scan_events WHERE scanned_at >= $1`, [
+                    periodStart,
+                ]);
+                const productCount = await db.get(`SELECT COUNT(*) as c FROM products`);
+                usage = { scans: scanCount?.c || 0, products: productCount?.c || 0, api_calls: 0 };
+            } catch (_) {}
+        }
+
+        res.json({ period, usage });
+    } catch (err) {
+        console.error('GET /billing/usage error:', err);
+        res.json({ period: null, usage: {} });
+    }
+});
+
+// ─── GET /invoices — Invoice history ─────────────────────────────────────────
+router.get('/invoices', authMiddleware, async (req, res) => {
+    try {
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
+        let invoices = [];
+
+        if (orgId) {
+            try {
+                const mapping = await db.get('SELECT stripe_customer_id FROM stripe_mappings WHERE org_id = $1', [
+                    orgId,
+                ]);
+                if (mapping?.stripe_customer_id) {
+                    const stripeInvoices = await stripe.invoices.list({
+                        customer: mapping.stripe_customer_id,
+                        limit: 20,
+                    });
+                    invoices = stripeInvoices.data.map(inv => ({
+                        id: inv.id,
+                        number: inv.number,
+                        amount: (inv.amount_due || 0) / 100,
+                        currency: inv.currency,
+                        status: inv.status,
+                        created: new Date(inv.created * 1000).toISOString(),
+                        paid_at: inv.status_transitions?.paid_at
+                            ? new Date(inv.status_transitions.paid_at * 1000).toISOString()
+                            : null,
+                        pdf_url: inv.invoice_pdf,
+                    }));
+                }
+            } catch (stripeErr) {
+                console.warn('[billing/invoices] Stripe fetch failed:', stripeErr.message);
+            }
+        }
+
+        res.json({ invoices });
+    } catch (err) {
+        console.error('GET /billing/invoices error:', err);
+        res.json({ invoices: [] });
+    }
+});
+
 /**
  * Endpoint: POST /api/v1/billing/subscribe
  * Creates a Stripe Checkout session combining the Base Plan with Metered Addons.
