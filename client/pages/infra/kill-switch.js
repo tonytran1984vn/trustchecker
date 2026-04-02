@@ -60,7 +60,7 @@ export function initPage() {
 
 export function render() {
     load();
-    const sw = D.kill_switches?.switches || D.kill_switches || []; 
+    const sw = D.switches?.switches || D.kill_switches?.switches || D.switches || []; 
     const cb = D.circuit_breakers?.breakers || D.circuit_breakers || []; 
     const esc2 = D.escalation?.ladder || D.escalation || [];
     
