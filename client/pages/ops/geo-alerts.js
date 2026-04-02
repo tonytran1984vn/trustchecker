@@ -64,7 +64,12 @@ window._viewGeoAlert = function(idx) {
   document.body.appendChild(modal);
 };
 
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
   if (_alerts) return;
   try {
     const res = await API.get('/ops/data/geo-alerts');
@@ -108,8 +113,16 @@ async function load() {
         _stObj: ST[a.status] || ST.open,
       };
     });
-  } catch (e) { _alerts = []; }
+  } catch (e) {
+        _loading = false; _alerts = []; }
   if (typeof window.render === 'function') window.render();
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 load();
 

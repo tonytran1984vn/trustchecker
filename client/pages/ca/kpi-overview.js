@@ -256,15 +256,28 @@ function renderAlertTrend(weeks) {
     <div style="font-size:0.55rem;color:var(--text-muted);text-align:center;margin-top:3px"><span style="color:#ef4444">■</span> Created · <span style="color:#22c55e">■</span> Resolved</div>`;
 }
 
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
   try {
     _d = await api.get('/org-admin/governance/kpi-overview');
     const el = document.getElementById('main-content');
     if (el) el.innerHTML = renderPage();
   } catch (e) {
+        _loading = false;
     console.error('[CRCE]', e);
     _err = 'Failed to load CRCE data. Please try again later.';
     const el = document.getElementById('main-content');
     if (el) el.innerHTML = renderPage();
   }
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }

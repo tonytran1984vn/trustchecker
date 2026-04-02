@@ -3,9 +3,21 @@ import { State } from '../../core/state.js';
 import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 import { escapeHTML as esc, escapeObj } from '../../utils/escape.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
     const h = { 'Authorization': 'Bearer ' + State.token };
     D = await API.get('/upgrade-gov/framework').catch(() => ({}));
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 export function render() {
     load(); const cls = D.classification || {}; const cab = D.cab_process || {}; const rb = D.rollback || {}; const ver = D.version_governance || D.versioning || {};

@@ -2,7 +2,12 @@
 import { State } from '../../core/state.js';
 import { API } from '../../core/api.js'; import { icon } from '../../core/icons.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [keys, usage, marketplace, tiers] = await Promise.all([
         API.get('/api-economy/keys').catch(() => ({})),
@@ -11,6 +16,13 @@ async function load() {
         API.get('/api-economy/tiers').catch(() => ({}))
     ]);
     D = { keys, usage, marketplace, tiers };
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 export function render() {
     load(); return `
@@ -36,4 +48,5 @@ export function render() {
 }
 export function renderPage() { return render(); }
 window.apiShowKey = () => { document.getElementById('ak-modal').style.display = 'flex'; };
-window.apiGenKey = async () => { try { const r = await API.post('/api-economy/keys', { app_name: document.getElementById('ak-name').value, tier: document.getElementById('ak-tier').value }); const el = document.getElementById('ak-res'); el.style.display = 'block'; el.innerHTML = r.api_key ? `<div style="color:#10b981;font-weight:700"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Key: ${r.api_key}</div><div style="color:#f59e0b;margin-top:4px">Secret: ${r.api_secret}</div><div style="color:#ef4444;font-size:0.68rem;margin-top:4px"><span class="status-icon status-warn" aria-label="Warning">!</span> Save secret now — not shown again</div>` : `<div style="color:#ef4444">${r.error || 'Failed'}</div>`; } catch (e) { document.getElementById('ak-res').style.display = 'block'; document.getElementById('ak-res').innerHTML = `<div style="color:#ef4444">${e.message}</div>`; } };
+window.apiGenKey = async () => { try { const r = await API.post('/api-economy/keys', { app_name: document.getElementById('ak-name').value, tier: document.getElementById('ak-tier').value }); const el = document.getElementById('ak-res'); el.style.display = 'block'; el.innerHTML = r.api_key ? `<div style="color:#10b981;font-weight:700"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> Key: ${r.api_key}</div><div style="color:#f59e0b;margin-top:4px">Secret: ${r.api_secret}</div><div style="color:#ef4444;font-size:0.68rem;margin-top:4px"><span class="status-icon status-warn" aria-label="Warning">!</span> Save secret now — not shown again</div>` : `<div style="color:#ef4444">${r.error || 'Failed'}</div>`; } catch (e) {
+        _loading = false; document.getElementById('ak-res').style.display = 'block'; document.getElementById('ak-res').innerHTML = `<div style="color:#ef4444">${e.message}</div>`; } };

@@ -7,9 +7,10 @@ import { escapeHTML as esc, escapeObj } from '../../utils/escape.js';
 let D = {};
 let agentic = { mode: 'shadow', killSwitchActive: false, canaryRatePct: 5, canarySeed: '', cooldownActive: false };
 let loaded = false;
-
+let _loading = false;
 async function load() {
-    if (loaded) return;
+    if (loaded || _loading) return;
+    _loading = true;
     try {
         const [arch, ag] = await Promise.all([
             API.get('/killswitch/architecture').catch(() => ({})),
@@ -18,8 +19,10 @@ async function load() {
         D = arch || {};
         agentic = ag && ag.mode ? ag : agentic;
         loaded = true;
+        _loading = false;
         if (window.render) window.render();
     } catch (e) {
+        _loading = false;
         console.error(e);
     }
 }

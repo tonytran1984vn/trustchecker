@@ -2,7 +2,12 @@
 import { State } from '../../core/state.js';
 import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [trust, transparency, carbon] = await Promise.all([
         API.get('/reputation/trust-score').catch(() => ({})),
@@ -19,6 +24,13 @@ function gauge(val, color, label, grade) {
         </div>
         <div style="color:${color};font-weight:700;font-size:14px;margin-top:6px">${grade}</div>
     </div>`;
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 export function render() {
     load(); const t = D.trust; const ti = D.transparency; const ci = D.carbon; return `

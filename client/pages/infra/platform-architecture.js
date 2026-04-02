@@ -2,7 +2,12 @@
 import { State } from '../../core/state.js';
 import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [reg, dep, api, crit, cx, iso] = await Promise.all([
         API.get('/hardening/platform/module-registry').catch(() => ({})),
@@ -13,6 +18,13 @@ async function load() {
         API.get('/hardening/platform/isolation').catch(() => ({}))
     ]);
     D = { reg, dep, api, crit, cx, iso };
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 const cc = c => c === 'core' ? '#ef4444' : c === 'extended' ? '#3b82f6' : '#10b981';
 const cl = c => c === 'core' ? 'CORE' : c === 'extended' ? 'EXTENDED' : 'TOOLING';

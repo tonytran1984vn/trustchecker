@@ -2,7 +2,12 @@
 import { State } from '../../core/state.js';
 import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [health, incidents, runbooks, boundary] = await Promise.all([
         API.get('/ops/health').catch(() => ({})),
@@ -11,6 +16,13 @@ async function load() {
         API.get('/ops/boundary').catch(() => ({}))
     ]);
     D = { health, incidents, runbooks, boundary };
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 const sevColor = s => s === 'critical' ? '#ef4444' : s === 'warning' || s === 'degraded' ? '#f59e0b' : '#10b981';
 export function render() {

@@ -6,7 +6,12 @@ import { icon } from '../../core/icons.js';
 import { API } from '../../core/api.js';
 
 let _recalls = null;
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
   if (_recalls) return;
   try {
     const res = await API.get('/ops/data/recall-history');
@@ -19,8 +24,16 @@ async function load() {
       resolution: r.resolution || '—',
       date: r.created_at ? new Date(r.created_at).toLocaleDateString() : '—',
     }));
-  } catch (e) { _recalls = []; }
+  } catch (e) {
+        _loading = false; _recalls = []; }
   if (typeof window.render === 'function') window.render();
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 load();
 

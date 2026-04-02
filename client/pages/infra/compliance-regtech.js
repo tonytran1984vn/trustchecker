@@ -3,9 +3,15 @@ import { State, render as rerender } from '../../core/state.js';
 import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 let D = {};
 let _loaded = false;
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
     if (_loaded) return;
     _loaded = true;
+        _loading = false;
     const [report, frameworks, gaps, cbam] = await Promise.all([
         API.get('/compliance-regtech/report').catch(() => ({})),
         API.get('/compliance-regtech/frameworks').catch(() => ({})),
@@ -14,6 +20,13 @@ async function load() {
     ]);
     D = { report, frameworks, gaps, cbam };
     if (typeof window.render === 'function') window.render();
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 export function render() {
     if (!_loaded) load();

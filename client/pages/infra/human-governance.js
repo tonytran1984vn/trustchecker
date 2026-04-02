@@ -3,9 +3,21 @@ import { State } from '../../core/state.js';
 import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 import { escapeHTML as esc, escapeObj } from '../../utils/escape.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
     const h = { 'Authorization': 'Bearer ' + State.token };
     D = await API.get('/human-gov/framework').catch(() => ({}));
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 export function render() {
     load(); const ins = D.insider_collusion || {}; const ggc = D.ggc_capture || {}; const bd = D.board_management || {}; const fr = D.founder_roadmap || {}; const comp = D.compensation_coi || {};

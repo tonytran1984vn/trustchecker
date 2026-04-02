@@ -3,12 +3,24 @@ import { State } from '../../core/state.js';
 import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 import { escapeHTML as esc, escapeObj } from '../../utils/escape.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [map] = await Promise.all([
         API.get('/revenue-gov/map').catch(() => ({})),
     ]);
     D = map;
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 export function render() {
     load(); const p = D.pricing_authority || {}; const s = D.settlement_control || {}; const f = D.fee_governance || {};

@@ -2,13 +2,25 @@
 import { State } from '../../core/state.js';
 import { API } from '../../core/api.js'; import { icon } from '../../core/icons.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [proposals, roles] = await Promise.all([
         API.get('/governance/proposals').catch(() => ({})),
         API.get('/governance/roles').catch(() => ({}))
     ]);
     D = { proposals, roles };
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 export function render() {
     load(); const p = D.proposals; return `
@@ -35,4 +47,5 @@ export function render() {
 }
 export function renderPage() { return render(); }
 window.govShowNew = () => { document.getElementById('gov-modal').style.display = 'flex'; };
-window.govCreate = async () => { try { const r = await API.post('/governance/proposals', { type: document.getElementById('gov-type').value, title: document.getElementById('gov-title').value, description: document.getElementById('gov-desc').value }); const el = document.getElementById('gov-res'); el.style.display = 'block'; el.innerHTML = r.proposal_id ? `<div style="color:#10b981;font-weight:700"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> ${r.proposal_id}</div>` : `<div style="color:#ef4444">${r.error || 'Failed'}</div>`; } catch (e) { document.getElementById('gov-res').style.display = 'block'; document.getElementById('gov-res').innerHTML = `<div style="color:#ef4444">${e.message}</div>`; } };
+window.govCreate = async () => { try { const r = await API.post('/governance/proposals', { type: document.getElementById('gov-type').value, title: document.getElementById('gov-title').value, description: document.getElementById('gov-desc').value }); const el = document.getElementById('gov-res'); el.style.display = 'block'; el.innerHTML = r.proposal_id ? `<div style="color:#10b981;font-weight:700"><span class="status-icon status-pass" aria-label="Pass"><span class="status-icon status-pass" aria-label="Pass">✓</span></span> ${r.proposal_id}</div>` : `<div style="color:#ef4444">${r.error || 'Failed'}</div>`; } catch (e) {
+        _loading = false; document.getElementById('gov-res').style.display = 'block'; document.getElementById('gov-res').innerHTML = `<div style="color:#ef4444">${e.message}</div>`; } };

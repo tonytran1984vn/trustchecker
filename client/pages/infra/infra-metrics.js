@@ -3,9 +3,21 @@ import { State } from '../../core/state.js';
 import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 import { escapeHTML as esc, escapeObj } from '../../utils/escape.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
     const h = { 'Authorization': 'Bearer ' + State.token };
     D = await API.get('/infra-metrics/framework').catch(() => ({}));
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 function scoreColor(s) { if (s >= 80) return '#10b981'; if (s >= 60) return '#f59e0b'; return '#ef4444'; }
 export function render() {

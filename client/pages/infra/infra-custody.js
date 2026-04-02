@@ -2,7 +2,12 @@
 import { State } from '../../core/state.js';
 import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [sec, keys, dr, sop, boundary] = await Promise.all([
         API.get('/infra-custody/security').catch(() => ({})),
@@ -12,6 +17,13 @@ async function load() {
         API.get('/infra-custody/boundary').catch(() => ({}))
     ]);
     D = { sec, keys, dr, sop, boundary };
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 export function render() {
     load(); const s = D.sec; const sp = D.sop; return `

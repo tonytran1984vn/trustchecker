@@ -2,7 +2,12 @@
 import { State } from '../../core/state.js';
 import { API } from '../../core/api.js';import { icon } from '../../core/icons.js';
 let D = {};
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
     const h = { 'Authorization': 'Bearer ' + State.token };
     const [ra, breach, bd, charter, plan, exposure, capital, mat] = await Promise.all([
         API.get('/hardening/institutional/risk-appetite').catch(() => ({})),
@@ -15,6 +20,13 @@ async function load() {
         API.get('/hardening/institutional/maturity').catch(() => ({}))
     ]);
     D = { ra, breach, bd, charter, plan, exposure, capital, mat };
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 const rc = r => r === 'red' ? '#ef4444' : r === 'amber' ? '#f59e0b' : '#10b981';
 const gc = g => g === 'Strong' || g === 'Adequate' ? '#10b981' : g === 'Watch' ? '#f59e0b' : '#ef4444';

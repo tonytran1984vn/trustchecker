@@ -9,7 +9,12 @@ import { API } from '../../core/api.js';
 const ACCENT = '#0d9488';
 let _mismatches = null;
 
+let _loading = false;
+let _loaded = false;
 async function load() {
+    if (_loading || _loaded) return;
+    _loading = true;
+    try {
   if (_mismatches) return;
   try {
     const res = await API.get('/ops/data/mismatch-alerts');
@@ -29,8 +34,16 @@ async function load() {
       };
     });
     window._mmData = _mismatches;
-  } catch (e) { _mismatches = []; }
+  } catch (e) {
+        _loading = false; _mismatches = []; }
   if (typeof window.render === 'function') window.render();
+        _loaded = true;
+        if (window.render) window.render();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        _loading = false;
+    }
 }
 load();
 
