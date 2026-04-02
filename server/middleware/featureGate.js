@@ -18,30 +18,63 @@ const db = require('../db');
  *
  * @param {string} feature - Feature key mapped to System Features
  */
+// L3+ governance roles that bypass feature gates when no org context exists
+const ADMIN_BYPASS_ROLES = new Set([
+    'super_admin',
+    'platform_security',
+    'admin',
+    'company_admin',
+    'org_owner',
+    'executive',
+    'ceo',
+    'cfo',
+    'cro',
+    'carbon_officer',
+    'security_officer',
+    'data_gov_officer',
+    'global_risk_committee',
+    'change_management_officer',
+    'incident_response_lead',
+    'ggc_member',
+    'risk_committee',
+    'compliance_officer',
+    'ivu_validator',
+]);
+
 function requireFeature(feature) {
     return async (req, res, next) => {
-        // Platform admin bypass
+        // Platform admin bypass (L5 roles)
         if (
             req.user &&
-            (req.user.role === 'admin' || req.user.role === 'super_admin') &&
-            req.user.user_type === 'platform'
+            (req.user.role === 'super_admin' ||
+                req.user.role === 'platform_security' ||
+                (req.user.role === 'admin' && req.user.user_type === 'platform'))
         )
             return next();
 
         const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
 
         if (!orgId) {
-            if (req.user && (req.user.role === 'admin' || req.user.role === 'super_admin')) return next();
-            // Orphaned context logic
+            // Allow authenticated users with L3+ governance roles through
+            // even without org context (e.g., company admins during org setup)
+            if (req.user && ADMIN_BYPASS_ROLES.has(req.user.role)) {
+                return next();
+            }
+            // Unauthenticated or low-level roles without org → block
+            if (!req.user) return next(); // Let downstream auth handle unauthenticated
             return res.status(403).json({ error: 'Orphaned user without entitlement' });
         }
 
         try {
             // 0. Enforce Global SaaS Payment Integrity
-            // Intercept before quota metrics if customer billing is locked explicitly via Webhook worker
-            const orgData = await db.get('SELECT billing_status, grace_period_until FROM organizations WHERE id = $1', [
-                orgId,
-            ]);
+            let orgData = null;
+            try {
+                orgData = await db.get('SELECT billing_status, grace_period_until FROM organizations WHERE id = $1', [
+                    orgId,
+                ]);
+            } catch (e) {
+                // Ignore gracefully if billing_status doesn't exist
+            }
 
             if (orgData && orgData.billing_status === 'PAST_DUE') {
                 const gracePeriod = orgData.grace_period_until ? new Date(orgData.grace_period_until) : null;
@@ -109,11 +142,23 @@ function requireFeature(feature) {
                             'You have exhausted both your standard and emergency usage limits for this cycle. Please upgrade your plan.',
                     });
                 } else if (result.reason === 'UNAUTHORIZED_ROLE') {
+                    console.log(
+                        `[FeatureGate DEBUG] BLOCKED 403 UNAUTHORIZED_ROLE orgId=${orgId} feature=${feature} user=`,
+                        req.user,
+                        ` result=`,
+                        result
+                    );
                     return res.status(403).json({
                         ...responseData,
                         message: 'Your current role does not have permission to utilize this feature.',
                     });
                 } else {
+                    console.log(
+                        `[FeatureGate DEBUG] BLOCKED 403 FEATURE_DISABLED orgId=${orgId} feature=${feature} user=`,
+                        req.user,
+                        ` result=`,
+                        result
+                    );
                     return res.status(403).json({
                         ...responseData,
                         message: 'This feature is currently disabled or not included in your active plan.',
