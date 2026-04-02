@@ -164,6 +164,7 @@ function setupRoutes(app) {
         ['/governance', governanceRoutes],
         ['/ops', opsMonitoringRoutes],
         ['/ops/data', opsDataRoutes],
+        ['/ops-intelligence', require('../routes/ops-intelligence')], // Predictive Ops Cockpit
         ['/infra-custody', infraCustodyRoutes],
         ['/hardening', hardeningRoutes],
         ['/audit-log', auditLogRoutes],

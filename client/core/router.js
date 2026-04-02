@@ -108,6 +108,7 @@ const PAGE_LOADERS = {
 
     // ─── Super Admin (Platform Governance) pages ────────
     'control-tower': () => import('../pages/sa/control-tower.js'),
+    'sa-predictive-ops': () => import('../pages/sa/predictive-ops.js'),
     'sa-orgs': () => import('../pages/sa/orgs.js'),
     'sa-create-org': () => import('../pages/sa/orgs.js'),    // reuse org list (create modal)
     'sa-suspended': () => import('../pages/sa/orgs.js'),        // reuse with filter
