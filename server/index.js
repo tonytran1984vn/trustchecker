@@ -332,6 +332,15 @@ async function boot() {
         console.warn('⚠️  BullMQ worker(s) skipped:', e.message);
     }
 
+    // 9c. Start Crisis/Ops Outbox Worker
+    try {
+        const outboxWorker = require('./workers/outbox-worker');
+        outboxWorker.start();
+        console.log('✅ Outbox Worker started');
+    } catch (e) {
+        console.warn('⚠️  Outbox Worker failed to start:', e.message);
+    }
+
     // 10. Start server
     const PORT = process.env.PORT || 4000;
     server.listen(PORT, '0.0.0.0', () => {

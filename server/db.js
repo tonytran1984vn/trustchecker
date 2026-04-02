@@ -398,58 +398,80 @@ class PrismaBackend {
      *       return { status: 200, body: row };
      *   });
      */
-    async withTransaction(fn) {
+    async withTransaction(fn, maxRetries = 3) {
         const client = await this._pool.connect();
         let released = false;
         const self = this;
+        let attempt = 0;
 
-        try {
-            // Set RLS context (same as _withRLS)
-            const ctx = safeGetContext();
-            const orgId = ctx.orgId || '';
-            if (orgId) {
-                await client.query('SET app.current_org = $1', [orgId]);
-            } else {
-                await client.query("SET app.current_org = ''");
-            }
-
-            await client.query('BEGIN');
-
-            // Transaction-scoped DB interface — all queries on SAME connection
-            const tx = {
-                async get(sql, params = []) {
-                    const t = self._translateSQL(sql);
-                    if (!t) return null;
-                    const result = await client.query(t, params);
-                    return result.rows.length > 0 ? self._convert(result.rows[0]) : null;
-                },
-                async all(sql, params = []) {
-                    const t = self._translateSQL(sql);
-                    if (!t) return [];
-                    const result = await client.query(t, params);
-                    return result.rows.map(r => self._convert(r));
-                },
-                async run(sql, params = []) {
-                    const t = self._translateSQL(sql);
-                    if (!t) return;
-                    await client.query(t, params);
-                },
-            };
-
-            const result = await fn(tx);
-            await client.query('COMMIT');
-            return result;
-        } catch (e) {
+        while (attempt < maxRetries) {
             try {
-                await client.query('ROLLBACK');
-            } catch (_) {
-                /* already rolled back */
-            }
-            throw e;
-        } finally {
-            if (!released) {
+                // Set RLS context (same as _withRLS)
+                const ctx = safeGetContext();
+                const orgId = ctx.orgId || '';
+                if (orgId) {
+                    await client.query('SET app.current_org = $1', [orgId]);
+                } else {
+                    await client.query("SET app.current_org = ''");
+                }
+
+                // UTC Clock Integrity Guard
+                await client.query("SET timezone = 'UTC'");
+
+                await client.query('BEGIN');
+
+                // Transaction-scoped DB interface — all queries on SAME connection
+                const tx = {
+                    async get(sql, params = []) {
+                        const t = self._translateSQL(sql);
+                        if (!t) return null;
+                        const result = await client.query(t, params);
+                        return result.rows.length > 0 ? self._convert(result.rows[0]) : null;
+                    },
+                    async all(sql, params = []) {
+                        const t = self._translateSQL(sql);
+                        if (!t) return [];
+                        const result = await client.query(t, params);
+                        return result.rows.map(r => self._convert(r));
+                    },
+                    async run(sql, params = []) {
+                        const t = self._translateSQL(sql);
+                        if (!t) return;
+                        await client.query(t, params);
+                    },
+                };
+
+                const result = await fn(tx);
+                await client.query('COMMIT');
+
+                // Success, cleanup connection and return
                 client.release();
                 released = true;
+                return result;
+            } catch (e) {
+                try {
+                    await client.query('ROLLBACK');
+                } catch (_) {
+                    /* already rolled back */
+                }
+
+                // 40P01 = deadlock_detected, 40001 = serialization_failure
+                if (e.code === '40P01' || e.code === '40001') {
+                    attempt++;
+                    if (attempt >= maxRetries) {
+                        if (!released) client.release();
+                        throw new Error(`Transaction failed after ${maxRetries} deadlocks: ` + e.message);
+                    }
+                    // Exponential backoff: 50ms, 100ms...
+                    const backoff = Math.pow(2, attempt) * 25;
+                    console.warn(
+                        `[DB] Deadlock detected. Retrying transaction (Attempt ${attempt}/${maxRetries}) in ${backoff}ms...`
+                    );
+                    await new Promise(res => setTimeout(res, backoff));
+                } else {
+                    if (!released) client.release();
+                    throw e; // Non-retryable error
+                }
             }
         }
     }

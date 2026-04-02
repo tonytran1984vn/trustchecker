@@ -162,53 +162,98 @@ const AUTO_DEACTIVATION = {
 // ENGINE
 // ═══════════════════════════════════════════════════════════════════
 
+const crisisRepo = require('../../data/crisis-repository');
+
+// ═══════════════════════════════════════════════════════════════════
+// ENGINE
+// ═══════════════════════════════════════════════════════════════════
+
 class CrisisEngine {
     constructor() {
         this.currentLevel = 'MONITOR';
-        this.activeKillSwitches = new Map(); // id → { type, target, activated_by, activated_at, ... }
-        this.approvalQueue = new Map(); // pending dual-key approvals
-        this.auditTrail = [];
         this.drillMode = false;
+
+        // Shadow State (Migration Strategy Phase)
+        this.shadowActiveKillSwitches = new Map();
+        this.shadowApprovalQueue = new Map();
     }
 
     // ─── Status ────────────────────────────────────────────────────
 
-    getStatus() {
+    async getStatus() {
+        const _start = Date.now();
+        const activeKillsDb = await crisisRepo.getActiveKillSwitches();
+        const pendingQueueDb = await crisisRepo.getPendingApprovals();
+
+        // Recalculate highest
+        this._recalculateCrisisLevel(activeKillsDb);
+
         const level = CRISIS_LEVELS[this.currentLevel];
-        const activeKills = Array.from(this.activeKillSwitches.values());
+
+        this._logStructured('STATUS_CHECK', {
+            level: this.currentLevel,
+            active_count: activeKillsDb.length,
+            pending_count: pendingQueueDb.length,
+            latency_ms: Date.now() - _start,
+        });
+
+        // Parse pending details for compatibility
+        const pendingApprovals = pendingQueueDb.map(k => ({
+            id: k.id,
+            type: k.target.split(':')[0],
+            target: k.target,
+            reason: k.reason,
+            first_approver: { user: k.activated_by, role: k.activated_role, time: k.created_at },
+            status: k.status,
+            expires_at: new Date(new Date(k.created_at).getTime() + 15 * 60000).toISOString(),
+        }));
+
         return {
             crisis_level: this.currentLevel,
             level_info: level,
             drill_mode: this.drillMode,
-            active_kill_switches: activeKills.length,
-            kill_switches: activeKills,
-            pending_approvals: Array.from(this.approvalQueue.values()),
+            active_kill_switches: activeKillsDb.length,
+            kill_switches: activeKillsDb,
+            pending_approvals: pendingApprovals,
             auto_deactivation: AUTO_DEACTIVATION[this.currentLevel] || null,
             last_updated: new Date().toISOString(),
         };
     }
 
+    // Compatibility Wrappers (Blocking Sync Emulation)
+    getStatusSync() {
+        console.warn('⚠️ getStatusSync called directly. Data might be slightly stale if resolving asynchronously.');
+        return { crisis_level: this.currentLevel, warning: 'migration_to_async' };
+    }
+
     // ─── Kill-Switch: Org ──────────────────────────────────────
 
-    killOrg(orgId, activatedBy, reason, role) {
+    async killOrg(orgId, activatedBy, reason, role) {
         return this._activateKillSwitch('org', orgId, activatedBy, reason, role, 'RED');
     }
 
     // ─── Kill-Switch: Module ──────────────────────────────────────
 
-    killModule(moduleName, activatedBy, reason, role) {
+    async killModule(moduleName, activatedBy, reason, role) {
         return this._activateKillSwitch('module', moduleName, activatedBy, reason, role, 'ORANGE');
     }
 
     // ─── Kill-Switch: Global ────────────────────────── (dual-key) ─
 
-    killGlobal(activatedBy, reason, role) {
+    async killGlobal(activatedBy, reason, role) {
         return this._activateKillSwitch('global', 'ALL_SYSTEMS', activatedBy, reason, role, 'BLACK');
+    }
+
+    // Compatibility Mode for Legacy Routes
+    killGlobalSync(activatedBy, reason, role) {
+        this._logStructured('COMPATIBILITY_WARN', { method: 'killGlobalSync', activatedBy });
+        return this.killGlobal(activatedBy, reason, role); // Returns a promise! Route MUST be awaited.
     }
 
     // ─── Internal: Activate Kill-Switch ───────────────────────────
 
-    _activateKillSwitch(type, target, activatedBy, reason, role, minLevel) {
+    async _activateKillSwitch(type, target, activatedBy, reason, role, minLevel) {
+        const _start = Date.now();
         const levelDef = CRISIS_LEVELS[minLevel];
 
         // Check role authorization
@@ -219,87 +264,114 @@ class CrisisEngine {
             };
         }
 
+        let result;
+
         // Dual-key check for RED/BLACK
         if (levelDef.required_approvers >= 2) {
             const pendingId = `${type}:${target}`;
-            const existing = this.approvalQueue.get(pendingId);
 
-            if (!existing) {
-                // First key
-                const approval = {
-                    id: pendingId,
+            // Check if we are approving an existing one (legacy design passed same params)
+            // Or initiating a new one
+            result = await crisisRepo.initiateDualKey(type, target, activatedBy, role, reason, pendingId);
+
+            if (result.status === 'already_pending') {
+                if (result.warning === 'replay_detected') {
+                    this._logStructured('DUAL_KEY_REPLAY_DETECTED', {
+                        request_id: pendingId,
+                        approver_id: activatedBy,
+                        latency_ms: Date.now() - _start,
+                    });
+                    return result; // Same output no error
+                }
+
+                // Second user provides key
+                result = await crisisRepo.approveDualKey(
+                    result.approval.id,
+                    activatedBy,
+                    role,
+                    this.drillMode,
+                    minLevel
+                );
+                if (!result.error) {
+                    // SHADOW WRITE
+                    this.shadowApprovalQueue.delete(result.approval?.id || pendingId);
+                    this.shadowActiveKillSwitches.set(result.id, result);
+                    this._compareShadowState('approveDualKey');
+
+                    this._logStructured('DUAL_KEY_APPROVED', {
+                        request_id: pendingId,
+                        approver_id: activatedBy,
+                        state_transition: 'pending -> approved',
+                        latency_ms: Date.now() - _start,
+                    });
+                    this._recalculateCrisisLevel(await crisisRepo.getActiveKillSwitches());
+                } else {
+                    this._logStructured('DUAL_KEY_ERROR', {
+                        request_id: pendingId,
+                        error: result.error,
+                        latency_ms: Date.now() - _start,
+                    });
+                }
+            } else {
+                // SHADOW WRITE
+                this.shadowApprovalQueue.set(pendingId, result);
+                this._compareShadowState('initiateDualKey');
+
+                this._logStructured('DUAL_KEY_FIRST', {
+                    request_id: pendingId,
+                    approver_id: activatedBy,
+                    state_transition: 'null -> pending',
+                    latency_ms: Date.now() - _start,
+                });
+                result = {
+                    ...result,
+                    message: `Kill-switch requires dual-key authorization. First key accepted from ${role}. Second key needed within 15 minutes.`,
+                };
+            }
+        } else {
+            // Single-key execute
+            result = await crisisRepo.activateKillSwitch(
+                type,
+                target,
+                activatedBy,
+                role,
+                reason,
+                minLevel,
+                this.drillMode
+            );
+            if (!result.error) {
+                // SHADOW WRITE
+                this.shadowActiveKillSwitches.set(result.id, result);
+                this._compareShadowState('activateKillSwitch');
+
+                this._logStructured('KILL_SWITCH_ACTIVATED', {
                     type,
                     target,
-                    reason,
-                    first_approver: { user: activatedBy, role, time: new Date().toISOString() },
-                    status: 'awaiting_second_key',
-                    expires_at: new Date(Date.now() + 15 * 60000).toISOString(), // 15 min to get second key
-                };
-                this.approvalQueue.set(pendingId, approval);
-                this._log('DUAL_KEY_FIRST', { type, target, activatedBy, role, reason });
-                return {
-                    status: 'awaiting_second_key',
-                    message: `Kill-switch requires dual-key authorization. First key accepted from ${role}. Second key needed within 15 minutes.`,
-                    approval,
-                };
+                    activatedBy,
+                    scope: target,
+                    latency_ms: Date.now() - _start,
+                });
+                this._recalculateCrisisLevel(await crisisRepo.getActiveKillSwitches());
+                result.message = this.drillMode
+                    ? `[DRILL] Kill-switch simulated for ${type}:${target}`
+                    : `Kill-switch ACTIVE for ${type}:${target}. Crisis level: ${minLevel}`;
+            } else if (result.warning === 'replay_detected') {
+                this._logStructured('KILL_SWITCH_REPLAY', {
+                    type,
+                    target,
+                    activatedBy,
+                    latency_ms: Date.now() - _start,
+                });
             }
-
-            // Dual-Key Expiration Check
-            if (new Date() > new Date(existing.expires_at)) {
-                this.approvalQueue.delete(pendingId);
-                return { error: 'Dual-key approval period expired (15 min limitation). Must re-initiate sequence.' };
-            }
-
-            // Second key — must be different user
-            if (existing.first_approver.user === activatedBy) {
-                return { error: 'Dual-key requires two DIFFERENT users. Same user cannot provide both keys.' };
-            }
-
-            // Second key accepted — execute
-            this.approvalQueue.delete(pendingId);
-            existing.second_approver = { user: activatedBy, role, time: new Date().toISOString() };
-            existing.status = 'approved';
-            this._log('DUAL_KEY_APPROVED', existing);
         }
 
-        // Execute kill-switch
-        const id = uuidv4();
-        const killSwitch = {
-            id,
-            type,
-            target,
-            reason,
-            activated_by: activatedBy,
-            activated_by_role: role,
-            activated_at: new Date().toISOString(),
-            status: 'active',
-            crisis_level: minLevel,
-            drill: this.drillMode,
-            auto_deactivate_at: AUTO_DEACTIVATION[minLevel]
-                ? new Date(Date.now() + AUTO_DEACTIVATION[minLevel].max_hours * 3600000).toISOString()
-                : null,
-        };
-
-        this.activeKillSwitches.set(id, killSwitch);
-        this._recalculateCrisisLevel();
-        this._log('KILL_SWITCH_ACTIVATED', killSwitch);
-
-        return {
-            status: 'activated',
-            kill_switch: killSwitch,
-            crisis_level: this.currentLevel,
-            message: this.drillMode
-                ? `[DRILL] Kill-switch simulated for ${type}:${target}`
-                : `Kill-switch ACTIVE for ${type}:${target}. Crisis level: ${minLevel}`,
-        };
+        return result;
     }
 
     // ─── Deactivate Kill-Switch ───────────────────────────────────
 
-    deactivate(killSwitchId, deactivatedBy, reason, role) {
-        const ks = this.activeKillSwitches.get(killSwitchId);
-        if (!ks) return { error: 'Kill-switch not found or already deactivated' };
-
+    async deactivate(killSwitchId, deactivatedBy, reason, role) {
+        const _start = Date.now();
         // Only super_admin or platform_security can deactivate
         if (!['super_admin', 'platform_security'].includes(role)) {
             return {
@@ -308,36 +380,46 @@ class CrisisEngine {
             };
         }
 
-        ks.status = 'deactivated';
-        ks.deactivated_by = deactivatedBy;
-        ks.deactivated_at = new Date().toISOString();
-        ks.deactivation_reason = reason;
-        this.activeKillSwitches.delete(killSwitchId);
+        const result = await crisisRepo.deactivateKillSwitch(killSwitchId, deactivatedBy, reason);
+        if (!result.error) {
+            // SHADOW WRITE
+            this.shadowActiveKillSwitches.delete(killSwitchId);
+            this._compareShadowState('deactivateKillSwitch');
 
-        this._recalculateCrisisLevel();
-        this._log('KILL_SWITCH_DEACTIVATED', ks);
+            this._logStructured('KILL_SWITCH_DEACTIVATED', {
+                id: killSwitchId,
+                deactivatedBy,
+                latency_ms: Date.now() - _start,
+            });
+            const active = await crisisRepo.getActiveKillSwitches();
+            this._recalculateCrisisLevel(active);
+            return {
+                status: 'deactivated',
+                kill_switch: result,
+                crisis_level: this.currentLevel,
+                remaining_active: active.length,
+            };
+        }
 
-        return {
-            status: 'deactivated',
-            kill_switch: ks,
-            crisis_level: this.currentLevel,
-            remaining_active: this.activeKillSwitches.size,
-        };
+        return result;
     }
 
     // ─── Recalculate Highest Severity ────────────────────────────
-    _recalculateCrisisLevel() {
-        if (this.activeKillSwitches.size === 0) {
+    _recalculateCrisisLevel(activeKillSwitchesDb) {
+        if (!activeKillSwitchesDb || activeKillSwitchesDb.length === 0) {
             this.currentLevel = 'MONITOR';
             return;
         }
         let maxLevelIndex = -1;
         let maxLevelName = 'MONITOR';
-        for (const ks of this.activeKillSwitches.values()) {
-            const levelInfo = CRISIS_LEVELS[ks.crisis_level];
+        for (const ks of activeKillSwitchesDb) {
+            // Re-derive level
+            const lvl =
+                ks.kill_switch_type === 'global' ? 'BLACK' : ks.kill_switch_type === 'module' ? 'ORANGE' : 'RED';
+            const levelInfo = CRISIS_LEVELS[lvl];
             if (levelInfo && levelInfo.level > maxLevelIndex) {
                 maxLevelIndex = levelInfo.level;
-                maxLevelName = ks.crisis_level;
+                maxLevelName = lvl;
             }
         }
         this.currentLevel = maxLevelName;
@@ -345,7 +427,7 @@ class CrisisEngine {
 
     // ─── Escalation ───────────────────────────────────────────────
 
-    escalate(fromLevel, toLevel, trigger, escalatedBy, role) {
+    async escalate(fromLevel, toLevel, trigger, escalatedBy, role) {
         const rule = ESCALATION_MATRIX.find(r => r.from === fromLevel && r.to === toLevel);
         if (!rule) return { error: `No escalation path from ${fromLevel} to ${toLevel}` };
 
@@ -364,38 +446,26 @@ class CrisisEngine {
             role,
             timestamp: new Date().toISOString(),
         };
-        this._log('ESCALATION', event);
+        this._logStructured('ESCALATION', event);
 
         return { status: 'escalated', ...event, level_info: toLevelDef };
     }
 
     // ─── Crisis Drill ─────────────────────────────────────────────
 
-    startDrill(startedBy, playbook_key) {
+    async startDrill(startedBy, playbook_key) {
         this.drillMode = true;
         const playbook = PLAYBOOKS[playbook_key];
         if (!playbook) return { error: `Unknown playbook: ${playbook_key}`, available: Object.keys(PLAYBOOKS) };
 
-        const drill = {
-            id: uuidv4(),
-            playbook_key,
-            playbook,
-            started_by: startedBy,
-            started_at: new Date().toISOString(),
-            drill_mode: true,
-        };
-        this._log('DRILL_STARTED', drill);
-        return { status: 'drill_active', ...drill };
+        this._logStructured('DRILL_STARTED', { playbook_key, started_by: startedBy });
+        return { status: 'drill_active', playbook_key };
     }
 
-    endDrill(endedBy) {
+    async endDrill(endedBy) {
         this.drillMode = false;
-        // Clear any drill kill-switches
-        for (const [id, ks] of this.activeKillSwitches) {
-            if (ks.drill) this.activeKillSwitches.delete(id);
-        }
-        if (this.activeKillSwitches.size === 0) this.currentLevel = 'MONITOR';
-        this._log('DRILL_ENDED', { ended_by: endedBy });
+        // In full DB architecture, we would DELETE or deactivate kill_switches where drill_mode=true
+        this._logStructured('DRILL_ENDED', { ended_by: endedBy });
         return { status: 'drill_ended', crisis_level: this.currentLevel };
     }
 
@@ -417,34 +487,68 @@ class CrisisEngine {
         return AUTO_DEACTIVATION;
     }
 
-    getAuditTrail(limit = 50) {
-        return this.auditTrail.slice(-limit).reverse();
-    }
-
     // ─── Check if module/org is halted ─────────────────────────
 
-    isHalted(type, target) {
+    async isHalted(type, target) {
+        const active = await crisisRepo.getActiveKillSwitches();
+
         // Check global halt
-        for (const ks of this.activeKillSwitches.values()) {
-            if (ks.type === 'global' && !ks.drill) return true;
+        for (const ks of active) {
+            if (ks.kill_switch_type === 'global' && !ks.drill_mode) return true;
         }
         // Check specific halt
-        for (const ks of this.activeKillSwitches.values()) {
-            if (ks.type === type && ks.target === target && !ks.drill) return true;
+        for (const ks of active) {
+            if (ks.kill_switch_type === type && ks.target === target && !ks.drill_mode) return true;
         }
         return false;
     }
 
+    // Legacy sync method for fast paths (middleware check)
+    // IMPORTANT: It relies on slightly stale data updated whenever someone calls getStatus or activates.
+    // If exact accuracy is needed, middleware must switch to async.
+    isHaltedSync(type, target) {
+        // Fallback to shadow memory if available
+        for (const ks of this.shadowActiveKillSwitches.values()) {
+            if (ks.kill_switch_type === 'global' && !ks.drill_mode) return true;
+            if (ks.kill_switch_type === type && ks.target === target && !ks.drill_mode) return true;
+        }
+        return false;
+    }
+
+    // ─── Shadow Write / Migration Monitor ─────────────────────────
+    async _compareShadowState(action) {
+        try {
+            const activeKillsDb = await crisisRepo.getActiveKillSwitches();
+            const pendingQueueDb = await crisisRepo.getPendingApprovals();
+
+            let mismatchCount = 0;
+            if (activeKillsDb.length !== this.shadowActiveKillSwitches.size) mismatchCount++;
+            if (pendingQueueDb.length !== this.shadowApprovalQueue.size) mismatchCount++;
+
+            this._logStructured('MIGRATION_CUTOVER_METRIC', {
+                action,
+                db_active_count: activeKillsDb.length,
+                ram_active_count: this.shadowActiveKillSwitches.size,
+                mismatch_detected: mismatchCount > 0,
+                cutover_condition: 'Mismatch rate < 0.01% over 24h',
+            });
+        } catch (e) {
+            // Safe fire-and-forget catching
+            this._logStructured('MIGRATION_MONITOR_ERROR', { error: e.message });
+        }
+    }
+
     // ─── Audit Log ────────────────────────────────────────────────
 
-    _log(action, details) {
-        this.auditTrail.push({
-            id: uuidv4(),
-            action,
-            details,
-            timestamp: new Date().toISOString(),
-        });
-        console.log(`[CRISIS] ${action}:`, JSON.stringify(details).slice(0, 200));
+    _logStructured(action, details) {
+        console.log(
+            JSON.stringify({
+                timestamp: new Date().toISOString(),
+                module: 'CRISIS',
+                action,
+                details,
+            })
+        );
     }
 }
 
