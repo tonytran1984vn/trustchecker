@@ -73,13 +73,6 @@ function validateConfig() {
         warnings.forEach(w => console.warn(`⚠️  ${w}`));
     }
 
-    if (errors.length > 0) {
-        console.error('\n❌ Configuration errors:');
-        errors.forEach(e => console.error(`   • ${e}`));
-        console.error('\nSee .env.example for required variables.\n');
-        process.exit(1);
-    }
-
     const agenticMode = process.env.AGENTIC_MODE || 'shadow';
     if (!['shadow', 'partial', 'full'].includes(agenticMode)) {
         errors.push(`AGENTIC_MODE must be one of: shadow, partial, full. (Got: ${agenticMode})`);
@@ -87,6 +80,13 @@ function validateConfig() {
 
     const agenticKillSwitch = process.env.AGENTIC_KILL_SWITCH === 'true';
     const agenticCanaryRatePct = parseInt(process.env.AGENTIC_CANARY_RATE_PCT || '5', 10);
+
+    if (errors.length > 0) {
+        console.error('\n❌ Configuration errors:');
+        errors.forEach(e => console.error(`   • ${e}`));
+        console.error('\nSee .env.example for required variables.\n');
+        process.exit(1);
+    }
 
     return { dbMode, isProduction, env, agenticMode, agenticKillSwitch, agenticCanaryRatePct };
 }

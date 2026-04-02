@@ -132,6 +132,20 @@ router.post('/drill', requirePermission('admin:manage'), (req, res) => {
 // ─── AGENTIC GOVERNANCE CONTROLS ───────────────────────────────────
 const agenticGovernance = require('../engines/governance-module/governance');
 
+// SEC-3: Simple in-memory rate limiter for kill switch toggles
+const _ksRateLimit = { count: 0, windowStart: Date.now() };
+const KS_MAX_TOGGLES_PER_MIN = 6;
+
+function checkKsRateLimit() {
+    const now = Date.now();
+    if (now - _ksRateLimit.windowStart > 60000) {
+        _ksRateLimit.count = 0;
+        _ksRateLimit.windowStart = now;
+    }
+    _ksRateLimit.count++;
+    return _ksRateLimit.count <= KS_MAX_TOGGLES_PER_MIN;
+}
+
 router.get('/agentic-config', requirePermission('admin:manage'), (req, res) => {
     res.json(agenticGovernance.getAgenticState());
 });
@@ -139,15 +153,42 @@ router.get('/agentic-config', requirePermission('admin:manage'), (req, res) => {
 router.post('/agentic-config/toggle-kill-switch', requirePermission('admin:manage'), (req, res) => {
     const { active } = req.body;
     if (typeof active !== 'boolean') return res.status(400).json({ error: 'active boolean required' });
-    const state = agenticGovernance.toggleKillSwitch(active);
+
+    // SEC-3: Rate limit check
+    if (!checkKsRateLimit()) {
+        return res.status(429).json({ error: 'Too many toggle requests. Max 6 per minute.' });
+    }
+
+    const actorId = req.user?.id || req.user?.email || 'unknown';
+    const actorRole = req.user?.role || 'unknown';
+    const state = agenticGovernance.toggleKillSwitch(active, actorId, actorRole);
     res.json({ status: 'success', state });
 });
 
 router.post('/agentic-config/update-canary', requirePermission('admin:manage'), (req, res) => {
     const { pct } = req.body;
     if (pct === undefined) return res.status(400).json({ error: 'pct required' });
-    const state = agenticGovernance.updateCanaryRate(pct);
-    res.json({ status: 'success', state });
+
+    const actorId = req.user?.id || req.user?.email || 'unknown';
+    const actorRole = req.user?.role || 'unknown';
+    const result = agenticGovernance.updateCanaryRate(pct, actorId, actorRole);
+
+    // BUG-5: If updateCanaryRate returns an error, send 400 instead of success
+    if (result.error) {
+        return res.status(400).json(result);
+    }
+    res.json({ status: 'success', state: result });
+});
+
+// SEC-1: Audit trail endpoint for agentic control events
+router.get('/agentic-config/audit', requirePermission('audit:view'), (req, res) => {
+    const limit = parseInt(req.query.limit) || 50;
+    const events = agenticGovernance.getAuditLog(limit);
+    res.json({
+        title: 'Agentic Control Audit Trail',
+        total: events.length,
+        events,
+    });
 });
 
 module.exports = router;

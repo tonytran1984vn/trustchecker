@@ -100,24 +100,71 @@ class AgenticGovernanceEngine {
             killSwitchActive: config.agenticKillSwitch,
             canaryRatePct: config.agenticCanaryRatePct,
             mode: config.agenticMode,
+            killSwitchCooldownUntil: null, // ALGO-2: Cooldown timestamp
         };
+        this.auditLog = []; // SEC-1: In-memory audit trail for agentic controls
     }
 
     getAgenticState() {
-        return this.agenticState;
+        return {
+            ...this.agenticState,
+            canarySeed: this._getCanarySeed(), // Expose current seed for transparency
+            cooldownActive: this._isCooldownActive(),
+        };
     }
 
-    toggleKillSwitch(active) {
+    toggleKillSwitch(active, actorId = 'unknown', actorRole = 'unknown') {
+        const previous = this.agenticState.killSwitchActive;
         this.agenticState.killSwitchActive = active;
+
+        // ALGO-2: When deactivating kill switch, enforce 5-min cooldown
+        if (previous && !active) {
+            this.agenticState.killSwitchCooldownUntil = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+        }
+
+        // SEC-1: Audit log
+        this._logAudit('kill_switch_toggled', { previous, current: active, actorId, actorRole });
         return this.agenticState;
     }
 
-    updateCanaryRate(pct) {
+    updateCanaryRate(pct, actorId = 'unknown', actorRole = 'unknown') {
         const parsed = parseInt(pct, 10);
-        if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
-            this.agenticState.canaryRatePct = parsed;
+        if (isNaN(parsed) || parsed < 0 || parsed > 100) {
+            return { error: `Invalid canary rate: ${pct}. Must be 0-100.`, state: this.agenticState };
         }
+        const previous = this.agenticState.canaryRatePct;
+        this.agenticState.canaryRatePct = parsed;
+
+        // SEC-1: Audit log
+        this._logAudit('canary_rate_updated', { previous, current: parsed, actorId, actorRole });
         return this.agenticState;
+    }
+
+    // ALGO-1: Daily seed rotation for fair canary distribution
+    _getCanarySeed() {
+        return new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+    }
+
+    // ALGO-2: Check if kill switch cooldown is still active
+    _isCooldownActive() {
+        if (!this.agenticState.killSwitchCooldownUntil) return false;
+        return new Date(this.agenticState.killSwitchCooldownUntil) > new Date();
+    }
+
+    // SEC-1: Internal audit logger
+    _logAudit(action, details) {
+        this.auditLog.push({
+            action,
+            ...details,
+            timestamp: new Date().toISOString(),
+        });
+        // Keep last 500 entries
+        if (this.auditLog.length > 500) this.auditLog = this.auditLog.slice(-500);
+        console.log(`[AGENTIC_AUDIT] ${action}:`, JSON.stringify(details));
+    }
+
+    getAuditLog(limit = 50) {
+        return this.auditLog.slice(-limit).reverse();
     }
 
     /**
@@ -215,31 +262,46 @@ class AgenticGovernanceEngine {
 
         // 3. Canary Filter & Kill Switch Gate
         let action_taken = 'EXECUTED';
+        let drop_reason = null;
 
-        // Canary Hashing Strategy logic
+        // ALGO-1: Daily seed rotation — entity assignment changes daily for fairness
+        const canarySeed = this._getCanarySeed();
         const targetHashInt = parseInt(
-            crypto.createHash('md5').update(directive.target).digest('hex').substring(0, 8),
+            crypto
+                .createHash('md5')
+                .update(directive.target + ':' + canarySeed)
+                .digest('hex')
+                .substring(0, 8),
             16
         );
         const isCanaryEntity = targetHashInt % 100 < this.agenticState.canaryRatePct;
 
         if (this.agenticState.killSwitchActive) {
             action_taken = 'SHADOW_DROPPED';
+            drop_reason = 'KILL_SWITCH_ACTIVE';
             console.warn(`[AGENTIC_KILL_SWITCH_ACTIVE] Dropped directive for ${directive.target}`);
-        } else if (!isCanaryEntity && this.agenticState.mode !== 'full') {
-            // Drop non-canary entities in partial or shadow mode
+        } else if (this._isCooldownActive()) {
+            // ALGO-2: Cooldown buffer — block execution for 5 min after kill switch deactivation
             action_taken = 'SHADOW_DROPPED';
+            drop_reason = 'KILL_SWITCH_COOLDOWN';
+            console.warn(
+                `[AGENTIC_COOLDOWN] Kill switch cooldown active until ${this.agenticState.killSwitchCooldownUntil}`
+            );
+        } else if (!isCanaryEntity && this.agenticState.mode !== 'full') {
+            action_taken = 'SHADOW_DROPPED';
+            drop_reason = 'NON_CANARY_ENTITY';
         } else if (this.agenticState.mode === 'shadow') {
             action_taken = 'SHADOW_DROPPED';
+            drop_reason = 'SHADOW_MODE';
         } else if (this.agenticState.mode === 'partial' && directive.level !== 'SOFT_CONTAINMENT') {
-            action_taken = 'PROPOSED_FOR_HUMAN'; // Needs proposal drafting
+            action_taken = 'PROPOSED_FOR_HUMAN';
         }
 
         // Execution Check
         if (action_taken === 'SHADOW_DROPPED') {
-            agenticMetrics.logDirectiveEvent(directive, 'shadow', 'SHADOW_DROPPED');
+            agenticMetrics.logDirectiveEvent(directive, this.agenticState.mode, 'SHADOW_DROPPED');
             console.log(
-                `[AGENTIC_SHADOW] Level: ${directive.level} | Target: ${directive.target} | Action: ${directive.action}. Dropped to log.`
+                `[AGENTIC_SHADOW] Reason: ${drop_reason} | Level: ${directive.level} | Target: ${directive.target} | Seed: ${canarySeed}`
             );
             return null;
         }

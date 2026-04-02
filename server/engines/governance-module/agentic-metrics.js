@@ -15,6 +15,7 @@ class AgenticMetrics {
             rollback_triggers: 0,
             veto_overrides: 0,
             proposals_drafted: 0,
+            rate_limit_hits: 0,
         };
         this.confidence_sum = 0;
         this.confidence_count = 0;
