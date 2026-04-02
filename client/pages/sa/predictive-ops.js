@@ -14,18 +14,29 @@ export async function preload() {
     if (loading) return;
     loading = true;
     try {
-        const [canary, proposals, diffs, policyStats] = await Promise.all([
+        const results = await Promise.allSettled([
             API.get('/ops-intelligence/canary/status'),
             API.get('/ops-intelligence/proposals'),
             API.get('/ops-intelligence/diffs'),
             API.get('/ops-intelligence/policy-stats'),
         ]);
 
-        data = { canary: canary.value || canary, proposals: proposals?.value?.proposals || proposals?.proposals || [], diffs: diffs?.value || diffs || {}, policyStats: policyStats?.value?.stats || policyStats?.stats || [] };
+        const val = (r, fallback) => r.status === 'fulfilled' ? r.value : fallback;
+        const canary = val(results[0], {});
+        const proposals = val(results[1], { proposals: [] });
+        const diffs = val(results[2], { diffs: [], stats: [] });
+        const policyStats = val(results[3], { stats: [] });
+
+        data = {
+            canary: canary.value || canary,
+            proposals: proposals?.value?.proposals || proposals?.proposals || [],
+            diffs: diffs?.value || diffs || {},
+            policyStats: policyStats?.value?.stats || policyStats?.stats || []
+        };
         lastLoad = Date.now();
     } catch (e) {
         console.error('[OpsCockpit] Error loading data', e);
-        data = { canary: {}, proposals: [], diffs: { diffs: [], stats: [] }, policyStats: [] };
+        data = data || { canary: {}, proposals: [], diffs: { diffs: [], stats: [] }, policyStats: [] };
     }
     loading = false;
     // Targeted DOM patch — only update page content, NOT full app (prevents sidebar/header flicker)
