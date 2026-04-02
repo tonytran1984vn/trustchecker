@@ -1,10 +1,10 @@
 /**
  * Carbon Factor Service v1.0
  * Manages emission factors from DB with version tracking.
- * 
+ *
  * Uses the unified db API (db.run, db.all, db.get) which works
  * PostgreSQL via Prisma.
- * 
+ *
  * Each factor has version history, source attribution, and confidence score.
  */
 /**
@@ -69,7 +69,7 @@ async function loadFactors(category = null) {
             ...r,
             factor_value: Number(r.factor_value),
             confidence_score: Number(r.confidence_score),
-            version: Number(r.version)
+            version: Number(r.version),
         }));
     } catch (e) {
         console.warn('[FactorService] Load error, returning empty:', e.message);
@@ -93,15 +93,19 @@ async function getFactor(category, factorKey) {
                 source: row.source,
                 confidence: Number(row.confidence_score),
                 version: Number(row.version),
-                id: row.id
+                id: row.id,
             };
         }
-    } catch (_) { }
+    } catch (_) {}
     return null; // Caller should fall back to hardcoded
 }
 
 // ─── Update factor with version tracking ─────────────────────────────────────
 async function updateFactor(id, updates, userId) {
+    if (!updates || typeof updates !== 'object') {
+        throw new Error('Updates payload required and must be an object');
+    }
+
     await initFactorTable();
 
     // Get current factor
@@ -111,9 +115,7 @@ async function updateFactor(id, updates, userId) {
     }
 
     // Supersede old version
-    await db.run(
-        `UPDATE emission_factors SET superseded_at = NOW() WHERE id = ?`, [id]
-    );
+    await db.run(`UPDATE emission_factors SET superseded_at = NOW() WHERE id = ?`, [id]);
 
     // Create new version
     const newId = uuidv4();
@@ -132,7 +134,7 @@ async function updateFactor(id, updates, userId) {
             updates.methodology ?? old.methodology,
             updates.confidence_score ?? old.confidence_score,
             newVersion,
-            userId || 'system'
+            userId || 'system',
         ]
     );
 
@@ -142,7 +144,7 @@ async function updateFactor(id, updates, userId) {
         version: newVersion,
         factor_key: old.factor_key,
         old_value: Number(old.factor_value),
-        new_value: Number(updates.factor_value ?? old.factor_value)
+        new_value: Number(updates.factor_value ?? old.factor_value),
     };
 }
 
@@ -160,7 +162,7 @@ async function getFactorHistory(category, factorKey) {
             ...r,
             factor_value: Number(r.factor_value),
             confidence_score: Number(r.confidence_score),
-            version: Number(r.version)
+            version: Number(r.version),
         }));
     } catch (e) {
         return [];
@@ -213,5 +215,5 @@ module.exports = {
     getFactor,
     updateFactor,
     getFactorHistory,
-    seedFactors
+    seedFactors,
 };

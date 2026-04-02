@@ -1,12 +1,12 @@
 /**
  * TrustChecker — Entity Structuring Engine v1.0
  * INFRASTRUCTURE LAYER: Nasdaq/ICE/Moody's-Grade Legal Separation
- * 
+ *
  * Infrastructure ≠ one company.
  * Nasdaq = Nasdaq Inc (holding) + exchange + clearing + data services.
  * ICE = ICE Inc + NYSE + ICE Clear + ICE Data Services.
  * TrustChecker must separate: data operator, market operator, settlement operator, validation arm.
- * 
+ *
  * Also: external trust validation layer (independence from founder)
  */
 
@@ -15,12 +15,24 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const ENTITY_ARCHITECTURE = {
-    title: 'Entity Structure — Comparable to Nasdaq/ICE/Moody\'s',
+    title: "Entity Structure — Comparable to Nasdaq/ICE/Moody's",
 
     comparables: {
-        nasdaq: { holding: 'Nasdaq Inc', exchange: 'Nasdaq Stock Market LLC', clearing: 'Nasdaq Clearing AB', data: 'Nasdaq Global Data Services', technology: 'Nasdaq Market Technology' },
-        ice: { holding: 'Intercontinental Exchange Inc', exchange: 'NYSE', clearing: 'ICE Clear US/Europe', data: 'ICE Data Services', carbon: 'ICE Futures (carbon contracts)' },
-        moodys: { holding: 'Moody\'s Corp', ratings: 'Moody\'s Investors Service', analytics: 'Moody\'s Analytics' },
+        nasdaq: {
+            holding: 'Nasdaq Inc',
+            exchange: 'Nasdaq Stock Market LLC',
+            clearing: 'Nasdaq Clearing AB',
+            data: 'Nasdaq Global Data Services',
+            technology: 'Nasdaq Market Technology',
+        },
+        ice: {
+            holding: 'Intercontinental Exchange Inc',
+            exchange: 'NYSE',
+            clearing: 'ICE Clear US/Europe',
+            data: 'ICE Data Services',
+            carbon: 'ICE Futures (carbon contracts)',
+        },
+        moodys: { holding: "Moody's Corp", ratings: "Moody's Investors Service", analytics: "Moody's Analytics" },
     },
 
     trustchecker_entities: [
@@ -29,7 +41,7 @@ const ENTITY_ARCHITECTURE = {
             type: 'Holding Company',
             jurisdiction: 'Singapore',
             function: 'Group holding, IP ownership, strategic decisions, capital allocation',
-            comparable: 'Nasdaq Inc / ICE Inc / Moody\'s Corp',
+            comparable: "Nasdaq Inc / ICE Inc / Moody's Corp",
             assets: ['IP portfolio', 'Brand', 'Group capital', 'Board governance'],
             revenue: 'IP licensing (5-8% royalty from operating entities) + dividends from subsidiaries',
             regulated: false,
@@ -40,7 +52,7 @@ const ENTITY_ARCHITECTURE = {
             type: 'Operating Company (Platform)',
             jurisdiction: 'Singapore',
             function: 'Platform development, SaaS operations, API services, AI/ML models',
-            comparable: 'Nasdaq Market Technology / Moody\'s Analytics',
+            comparable: "Nasdaq Market Technology / Moody's Analytics",
             assets: ['Technology platform', 'Engineering team', 'Customer relationships'],
             revenue: 'SaaS subscriptions + API access fees + data licensing',
             regulated: true,
@@ -65,12 +77,13 @@ const ENTITY_ARCHITECTURE = {
             type: 'Rating / Validation Arm',
             jurisdiction: 'Switzerland (Zürich)',
             function: 'Trust score methodology, validation framework, IVU coordination, model governance',
-            comparable: 'Moody\'s Investors Service / S&P Global Ratings',
+            comparable: "Moody's Investors Service / S&P Global Ratings",
             assets: ['Scoring methodology IP', 'Validator network', 'Historical score database'],
             revenue: 'Validation fees (per verification) + methodology licensing',
             regulated: true,
             regulator: 'FINMA (third-party assessment — advisory capacity)',
-            separation: 'Methodological independence from Technology Pte Ltd. Scoring cannot be influenced by commercial pressure.',
+            separation:
+                'Methodological independence from Technology Pte Ltd. Scoring cannot be influenced by commercial pressure.',
             independence: [
                 'Chief Methodology Officer reports to independent board committee, NOT CEO',
                 'Revenue from validation fees ≠ influenced by specific score outcomes',
@@ -92,25 +105,29 @@ const ENTITY_ARCHITECTURE = {
             entity: 'TrustChecker Data Compliance Ltd',
             type: 'Data Controller',
             jurisdiction: 'Ireland (Dublin)',
-            function: 'GDPR data controller, privacy management, data subject requests, cross-border transfer oversight',
+            function:
+                'GDPR data controller, privacy management, data subject requests, cross-border transfer oversight',
             comparable: 'Separate data entity (common in US tech with EU operations)',
             assets: ['EU personal data', 'Privacy infrastructure', 'DPO function'],
-            revenue: 'Inter-entity data processing fees (arm\'s length)',
+            revenue: "Inter-entity data processing fees (arm's length)",
             regulated: true,
             regulator: 'DPC Ireland (GDPR Lead Supervisory Authority)',
-            separation: 'EU personal data NEVER leaves this entity\'s control. Other entities get anonymized/aggregated data only.',
+            separation:
+                "EU personal data NEVER leaves this entity's control. Other entities get anonymized/aggregated data only.",
         },
         {
             entity: 'Capital Reserve Trust',
             type: 'Bankruptcy-Remote Trust',
             jurisdiction: 'Singapore',
-            function: 'Hold capital reserves independent of operating entities. Loss absorption. Survive entity failure.',
+            function:
+                'Hold capital reserves independent of operating entities. Loss absorption. Survive entity failure.',
             comparable: 'Clearing house guarantee fund structures',
             assets: ['Cash + government bonds', 'Insurance policies'],
             revenue: 'Investment returns on reserve assets (conservative: government bonds only)',
             regulated: false,
             trustee: 'Independent professional trustee (Big 4 affiliated)',
-            separation: 'ABSOLUTE — no operating entity can access directly. Drawdown requires GGC + Risk Committee + Trustee triple approval.',
+            separation:
+                'ABSOLUTE — no operating entity can access directly. Drawdown requires GGC + Risk Committee + Trustee triple approval.',
         },
     ],
 };
@@ -128,7 +145,7 @@ const INTER_ENTITY = {
             type: 'IP License Agreement',
             terms: 'IP royalty 5-8% of Technology revenue. Exclusive license for platform operation.',
             governing_law: 'Singapore',
-            transfer_pricing: 'Arm\'s length (OECD). Benchmarked against comparable tech licenses.',
+            transfer_pricing: "Arm's length (OECD). Benchmarked against comparable tech licenses.",
         },
         {
             between: 'Technology Pte Ltd → Settlement GmbH',
@@ -178,7 +195,12 @@ const EXTERNAL_TRUST = {
         {
             layer: 'Independent Assurance Partner',
             description: 'Big 4 audit firm providing annual financial + operational audit',
-            scope: ['Financial statements (IFRS)', 'Capital adequacy (CAR/LCR verification)', 'Governance compliance (charter adherence)', 'Technology controls (SOC 2 Type II)'],
+            scope: [
+                'Financial statements (IFRS)',
+                'Capital adequacy (CAR/LCR verification)',
+                'Governance compliance (charter adherence)',
+                'Technology controls (SOC 2 Type II)',
+            ],
             frequency: 'Annual (financial), Continuous (SOC 2 monitoring)',
             cost_estimate: '$200K-$500K/year',
             public_output: 'Audit opinion published in annual report',
@@ -186,7 +208,12 @@ const EXTERNAL_TRUST = {
         {
             layer: 'Third-Party Validator Network',
             description: 'Validators independent of platform — no employment, no equity, no management relationship',
-            requirements: ['Minimum 60% of validators must be third-party entities', 'No single validator > 10% of network capacity', 'Geographic distribution across ≥ 3 jurisdictions', 'Independent SLA monitoring'],
+            requirements: [
+                'Minimum 60% of validators must be third-party entities',
+                'No single validator > 10% of network capacity',
+                'Geographic distribution across ≥ 3 jurisdictions',
+                'Independent SLA monitoring',
+            ],
             governance: 'Validator admission committee (3 members: 1 platform, 1 existing validator, 1 independent)',
         },
         {
@@ -207,7 +234,7 @@ const EXTERNAL_TRUST = {
             layer: 'Rating Layer',
             description: 'External credit/operational rating from independent agency',
             target_ratings: [
-                'S&P/Moody\'s credit rating for Settlement GmbH (target: BBB- at IPO)',
+                "S&P/Moody's credit rating for Settlement GmbH (target: BBB- at IPO)",
                 'SOC 2 Type II certification for Technology Pte Ltd',
                 'ISAE 3402 for Capital Reserve Trust (controls over financial reporting)',
                 'ISO 27001 for all entities handling data',
@@ -233,12 +260,24 @@ const EXTERNAL_TRUST = {
 // ═══════════════════════════════════════════════════════════════════
 
 class EntityStructuringEngine {
-    getEntityArchitecture() { return ENTITY_ARCHITECTURE; }
-    getInterEntity() { return INTER_ENTITY; }
-    getExternalTrust() { return EXTERNAL_TRUST; }
+    getEntityArchitecture() {
+        return ENTITY_ARCHITECTURE;
+    }
+    getInterEntity() {
+        return INTER_ENTITY;
+    }
+    getExternalTrust() {
+        return EXTERNAL_TRUST;
+    }
 
     getEntity(name) {
-        return ENTITY_ARCHITECTURE.trustchecker_entities.find(e => e.entity.toLowerCase().includes(name.toLowerCase())) || null;
+        if (!name) return null;
+        const searchName = String(name).toLowerCase();
+        return (
+            ENTITY_ARCHITECTURE.trustchecker_entities.find(
+                e => e.entity && e.entity.toLowerCase().includes(searchName)
+            ) || null
+        );
     }
 
     getFullFramework() {

@@ -189,7 +189,7 @@ router.post(
             try {
                 const lrgf = require('../engines/regulatory-engine').lrgf;
                 const { withTransaction } = require('../middleware/transaction');
-                governance = lrgf.processEvent(
+                governance = await lrgf.processEvent(
                     { event_type, product_id, batch_id, org_id: req.user.orgId, idempotency_key: `scm-${id}` },
                     {
                         source: 'scm-tracking',

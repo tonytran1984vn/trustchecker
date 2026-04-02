@@ -92,6 +92,10 @@ class RiskReserveEngine {
     // ─── Contribute to reserves from transaction revenue ──────────
 
     contribute(totalTxRevenue, breakdown = {}) {
+        if (typeof totalTxRevenue !== 'number' || isNaN(totalTxRevenue) || totalTxRevenue <= 0) {
+            return { error: 'Invalid revenue amount. Must be a positive number greater than zero.' };
+        }
+
         const contributions = {};
         let totalContributed = 0;
 
@@ -123,6 +127,10 @@ class RiskReserveEngine {
     // ─── File a claim against a reserve ───────────────────────────
 
     fileClaim(reserveId, amount, reason, claimant, evidence = null) {
+        if (typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
+            return { error: 'Claim amount must be a positive number greater than zero.' };
+        }
+
         const policy = RESERVE_POLICY[reserveId];
         if (!policy) return { error: `Invalid reserve: ${reserveId}`, available: Object.keys(RESERVE_POLICY) };
 

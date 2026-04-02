@@ -79,7 +79,12 @@ router.post('/sa/request', requirePermission('admin:manage'), (req, res) => {
 
 // POST /sa/approve — Approve/reject SA action
 router.post('/sa/approve', requirePermission('compliance:review'), (req, res) => {
-    const result = saConstraints.processApproval(req.body.request_id, { ...req.body, approver_id: req.user?.id });
+    const approverPayload = {
+        ...req.body,
+        approver_id: req.user?.id,
+        role: req.user?.role, // FORCE SERVER-SIDE SECURITY
+    };
+    const result = saConstraints.processApproval(req.body.request_id, approverPayload);
     if (result.error) return res.status(400).json(result);
     res.json(result);
 });

@@ -1,7 +1,7 @@
 /**
  * TrustChecker — Crisis Governance Engine v1.0
  * Kill-Switch Controller + Crisis Level Classification + Escalation Matrix
- * 
+ *
  * Features:
  *   - Kill-switch: per-org, per-module, or system-wide halt
  *   - 5 Crisis Levels: MONITOR → YELLOW → ORANGE → RED → BLACK
@@ -19,39 +19,49 @@ const { v4: uuidv4 } = require('uuid');
 
 const CRISIS_LEVELS = {
     MONITOR: {
-        level: 0, name: 'Monitor', color: '#22c55e',
+        level: 0,
+        name: 'Monitor',
+        color: '#22c55e',
         description: 'Normal operations — all systems within SLO',
         auto_actions: [],
         required_approvers: 0,
     },
     YELLOW: {
-        level: 1, name: 'Yellow Alert', color: '#eab308',
+        level: 1,
+        name: 'Yellow Alert',
+        color: '#eab308',
         description: 'Elevated risk detected — monitoring intensified',
         auto_actions: ['increase_logging', 'notify_ops'],
         required_approvers: 1,
         allowed_roles: ['super_admin', 'ops_manager', 'platform_security'],
     },
     ORANGE: {
-        level: 2, name: 'Orange Alert', color: '#f97316',
+        level: 2,
+        name: 'Orange Alert',
+        color: '#f97316',
         description: 'Active threat — partial service restriction may be needed',
         auto_actions: ['increase_logging', 'notify_ops', 'restrict_new_registrations'],
         required_approvers: 1,
         allowed_roles: ['super_admin', 'ops_manager', 'platform_security'],
     },
     RED: {
-        level: 3, name: 'Red — Kill-Switch Engaged', color: '#ef4444',
+        level: 3,
+        name: 'Red — Kill-Switch Engaged',
+        color: '#ef4444',
         description: 'Critical breach — targeted kill-switch active, services suspended',
         auto_actions: ['halt_target', 'notify_all_stakeholders', 'lock_audit_log'],
         required_approvers: 2,
         allowed_roles: ['super_admin', 'platform_security'],
     },
     BLACK: {
-        level: 4, name: 'Black — Full System Halt', color: '#000000',
+        level: 4,
+        name: 'Black — Full System Halt',
+        color: '#000000',
         description: 'Catastrophic — all operations halted, war room active',
         auto_actions: ['halt_all', 'notify_all_stakeholders', 'lock_audit_log', 'activate_war_room'],
         required_approvers: 2,
         allowed_roles: ['super_admin'],
-    }
+    },
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -76,7 +86,8 @@ const ESCALATION_MATRIX = [
 
 const PLAYBOOKS = {
     data_breach: {
-        name: 'Data Breach Response', severity: 'RED',
+        name: 'Data Breach Response',
+        severity: 'RED',
         steps: [
             { seq: 1, action: 'Activate kill-switch for affected org', role: 'platform_security', sla_min: 5 },
             { seq: 2, action: 'Isolate affected database partitions', role: 'ops_manager', sla_min: 10 },
@@ -85,10 +96,11 @@ const PLAYBOOKS = {
             { seq: 5, action: 'External security audit engagement', role: 'super_admin', sla_min: 120 },
             { seq: 6, action: 'Remediation and patch deployment', role: 'developer', sla_min: 240 },
             { seq: 7, action: 'Post-mortem and regulatory report', role: 'compliance_officer', sla_min: 4320 },
-        ]
+        ],
     },
     service_outage: {
-        name: 'Service Outage Response', severity: 'ORANGE',
+        name: 'Service Outage Response',
+        severity: 'ORANGE',
         steps: [
             { seq: 1, action: 'Confirm outage scope and severity', role: 'ops_manager', sla_min: 5 },
             { seq: 2, action: 'Engage failover / DR systems', role: 'ops_manager', sla_min: 10 },
@@ -96,10 +108,11 @@ const PLAYBOOKS = {
             { seq: 4, action: 'Root cause identification', role: 'developer', sla_min: 60 },
             { seq: 5, action: 'Service restoration', role: 'developer', sla_min: 120 },
             { seq: 6, action: 'Post-incident review', role: 'ops_manager', sla_min: 1440 },
-        ]
+        ],
     },
     supply_chain_compromise: {
-        name: 'Supply Chain Integrity Breach', severity: 'RED',
+        name: 'Supply Chain Integrity Breach',
+        severity: 'RED',
         steps: [
             { seq: 1, action: 'Freeze all pending certifications', role: 'risk_officer', sla_min: 5 },
             { seq: 2, action: 'Kill-switch on affected supply chain module', role: 'platform_security', sla_min: 10 },
@@ -107,20 +120,22 @@ const PLAYBOOKS = {
             { seq: 4, action: 'Notify regulatory bodies (EU CBAM)', role: 'compliance_officer', sla_min: 60 },
             { seq: 5, action: 'Full chain-of-custody re-verification', role: 'scm_analyst', sla_min: 480 },
             { seq: 6, action: 'Remediation report + evidence pack', role: 'auditor', sla_min: 2880 },
-        ]
+        ],
     },
     financial_fraud: {
-        name: 'Financial Fraud Detection', severity: 'RED',
+        name: 'Financial Fraud Detection',
+        severity: 'RED',
         steps: [
             { seq: 1, action: 'Suspend billing for affected accounts', role: 'super_admin', sla_min: 5 },
             { seq: 2, action: 'Transaction forensics analysis', role: 'auditor', sla_min: 30 },
             { seq: 3, action: 'Kill-switch on billing module', role: 'platform_security', sla_min: 10 },
             { seq: 4, action: 'Contact payment processor', role: 'super_admin', sla_min: 60 },
             { seq: 5, action: 'Legal review and SAR filing', role: 'compliance_officer', sla_min: 1440 },
-        ]
+        ],
     },
     insider_threat: {
-        name: 'Insider Threat Response', severity: 'BLACK',
+        name: 'Insider Threat Response',
+        severity: 'BLACK',
         steps: [
             { seq: 1, action: 'Revoke all sessions for suspect account', role: 'platform_security', sla_min: 2 },
             { seq: 2, action: 'Full system kill-switch', role: 'super_admin', sla_min: 5 },
@@ -128,8 +143,8 @@ const PLAYBOOKS = {
             { seq: 4, action: 'Legal counsel engagement', role: 'super_admin', sla_min: 60 },
             { seq: 5, action: 'Credential rotation and re-auth all users', role: 'platform_security', sla_min: 120 },
             { seq: 6, action: 'Regulatory notification', role: 'compliance_officer', sla_min: 4320 },
-        ]
-    }
+        ],
+    },
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -151,7 +166,7 @@ class CrisisEngine {
     constructor() {
         this.currentLevel = 'MONITOR';
         this.activeKillSwitches = new Map(); // id → { type, target, activated_by, activated_at, ... }
-        this.approvalQueue = new Map();      // pending dual-key approvals
+        this.approvalQueue = new Map(); // pending dual-key approvals
         this.auditTrail = [];
         this.drillMode = false;
     }
@@ -198,7 +213,10 @@ class CrisisEngine {
 
         // Check role authorization
         if (levelDef.allowed_roles && !levelDef.allowed_roles.includes(role)) {
-            return { error: `Role '${role}' not authorized for ${minLevel} kill-switch`, required_roles: levelDef.allowed_roles };
+            return {
+                error: `Role '${role}' not authorized for ${minLevel} kill-switch`,
+                required_roles: levelDef.allowed_roles,
+            };
         }
 
         // Dual-key check for RED/BLACK
@@ -210,7 +228,9 @@ class CrisisEngine {
                 // First key
                 const approval = {
                     id: pendingId,
-                    type, target, reason,
+                    type,
+                    target,
+                    reason,
                     first_approver: { user: activatedBy, role, time: new Date().toISOString() },
                     status: 'awaiting_second_key',
                     expires_at: new Date(Date.now() + 15 * 60000).toISOString(), // 15 min to get second key
@@ -222,6 +242,12 @@ class CrisisEngine {
                     message: `Kill-switch requires dual-key authorization. First key accepted from ${role}. Second key needed within 15 minutes.`,
                     approval,
                 };
+            }
+
+            // Dual-Key Expiration Check
+            if (new Date() > new Date(existing.expires_at)) {
+                this.approvalQueue.delete(pendingId);
+                return { error: 'Dual-key approval period expired (15 min limitation). Must re-initiate sequence.' };
             }
 
             // Second key — must be different user
@@ -239,11 +265,15 @@ class CrisisEngine {
         // Execute kill-switch
         const id = uuidv4();
         const killSwitch = {
-            id, type, target, reason,
+            id,
+            type,
+            target,
+            reason,
             activated_by: activatedBy,
             activated_by_role: role,
             activated_at: new Date().toISOString(),
             status: 'active',
+            crisis_level: minLevel,
             drill: this.drillMode,
             auto_deactivate_at: AUTO_DEACTIVATION[minLevel]
                 ? new Date(Date.now() + AUTO_DEACTIVATION[minLevel].max_hours * 3600000).toISOString()
@@ -251,7 +281,7 @@ class CrisisEngine {
         };
 
         this.activeKillSwitches.set(id, killSwitch);
-        this.currentLevel = minLevel;
+        this._recalculateCrisisLevel();
         this._log('KILL_SWITCH_ACTIVATED', killSwitch);
 
         return {
@@ -272,7 +302,10 @@ class CrisisEngine {
 
         // Only super_admin or platform_security can deactivate
         if (!['super_admin', 'platform_security'].includes(role)) {
-            return { error: `Role '${role}' cannot deactivate kill-switches`, required_roles: ['super_admin', 'platform_security'] };
+            return {
+                error: `Role '${role}' cannot deactivate kill-switches`,
+                required_roles: ['super_admin', 'platform_security'],
+            };
         }
 
         ks.status = 'deactivated';
@@ -281,11 +314,7 @@ class CrisisEngine {
         ks.deactivation_reason = reason;
         this.activeKillSwitches.delete(killSwitchId);
 
-        // De-escalate if no more active kill-switches
-        if (this.activeKillSwitches.size === 0) {
-            this.currentLevel = 'MONITOR';
-        }
-
+        this._recalculateCrisisLevel();
         this._log('KILL_SWITCH_DEACTIVATED', ks);
 
         return {
@@ -294,6 +323,24 @@ class CrisisEngine {
             crisis_level: this.currentLevel,
             remaining_active: this.activeKillSwitches.size,
         };
+    }
+
+    // ─── Recalculate Highest Severity ────────────────────────────
+    _recalculateCrisisLevel() {
+        if (this.activeKillSwitches.size === 0) {
+            this.currentLevel = 'MONITOR';
+            return;
+        }
+        let maxLevelIndex = -1;
+        let maxLevelName = 'MONITOR';
+        for (const ks of this.activeKillSwitches.values()) {
+            const levelInfo = CRISIS_LEVELS[ks.crisis_level];
+            if (levelInfo && levelInfo.level > maxLevelIndex) {
+                maxLevelIndex = levelInfo.level;
+                maxLevelName = ks.crisis_level;
+            }
+        }
+        this.currentLevel = maxLevelName;
     }
 
     // ─── Escalation ───────────────────────────────────────────────
@@ -310,8 +357,11 @@ class CrisisEngine {
         this.currentLevel = toLevel;
         const event = {
             id: uuidv4(),
-            from: fromLevel, to: toLevel, trigger,
-            escalated_by: escalatedBy, role,
+            from: fromLevel,
+            to: toLevel,
+            trigger,
+            escalated_by: escalatedBy,
+            role,
             timestamp: new Date().toISOString(),
         };
         this._log('ESCALATION', event);
@@ -351,11 +401,21 @@ class CrisisEngine {
 
     // ─── Getters ──────────────────────────────────────────────────
 
-    getEscalationMatrix() { return ESCALATION_MATRIX; }
-    getPlaybooks() { return PLAYBOOKS; }
-    getPlaybook(key) { return PLAYBOOKS[key] || null; }
-    getCrisisLevels() { return CRISIS_LEVELS; }
-    getAutoDeactivationPolicy() { return AUTO_DEACTIVATION; }
+    getEscalationMatrix() {
+        return ESCALATION_MATRIX;
+    }
+    getPlaybooks() {
+        return PLAYBOOKS;
+    }
+    getPlaybook(key) {
+        return PLAYBOOKS[key] || null;
+    }
+    getCrisisLevels() {
+        return CRISIS_LEVELS;
+    }
+    getAutoDeactivationPolicy() {
+        return AUTO_DEACTIVATION;
+    }
 
     getAuditTrail(limit = 50) {
         return this.auditTrail.slice(-limit).reverse();

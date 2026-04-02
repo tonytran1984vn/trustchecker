@@ -1,7 +1,7 @@
 /**
  * TrustChecker — Legal Entity Architecture Engine v1.0
  * IPO-GRADE: Entity Separation Map + Regulatory Classification
- * 
+ *
  * System architecture is strong, but legal architecture must be mapped.
  * Market infrastructure operators ALWAYS separate:
  *   - Governance entity (board, policy)
@@ -9,7 +9,7 @@
  *   - Risk/Capital entity (reserves, insurance)
  *   - Data entity (GDPR jurisdiction)
  *   - IP entity (patents, trademarks)
- * 
+ *
  * Models: ICE/NYSE structure, CME Group, DTCC, Moody's
  */
 
@@ -121,12 +121,42 @@ const RELATIONSHIPS = {
     ],
 
     agreements: [
-        { from: 'IP Ltd', to: 'Technology Pte Ltd', type: 'IP License Agreement', terms: 'Royalty basis: 5-8% of revenue' },
-        { from: 'IP Ltd', to: 'Settlement GmbH', type: 'IP License Agreement', terms: 'Royalty basis: 3-5% of settlement fees' },
-        { from: 'Technology Pte Ltd', to: 'Settlement GmbH', type: 'Technology Services Agreement', terms: 'Platform access + SLA' },
-        { from: 'Technology Pte Ltd', to: 'Node Operations Ltd', type: 'Node Operation Agreement', terms: 'Infrastructure SLA' },
-        { from: 'Settlement GmbH', to: 'Capital Reserve Trust', type: 'Reserve Funding Agreement', terms: 'Mandatory reserve contributions' },
-        { from: 'Data Compliance Ltd', to: 'Technology Pte Ltd', type: 'Data Processing Agreement', terms: 'GDPR Article 28 compliant' },
+        {
+            from: 'IP Ltd',
+            to: 'Technology Pte Ltd',
+            type: 'IP License Agreement',
+            terms: 'Royalty basis: 5-8% of revenue',
+        },
+        {
+            from: 'IP Ltd',
+            to: 'Settlement GmbH',
+            type: 'IP License Agreement',
+            terms: 'Royalty basis: 3-5% of settlement fees',
+        },
+        {
+            from: 'Technology Pte Ltd',
+            to: 'Settlement GmbH',
+            type: 'Technology Services Agreement',
+            terms: 'Platform access + SLA',
+        },
+        {
+            from: 'Technology Pte Ltd',
+            to: 'Node Operations Ltd',
+            type: 'Node Operation Agreement',
+            terms: 'Infrastructure SLA',
+        },
+        {
+            from: 'Settlement GmbH',
+            to: 'Capital Reserve Trust',
+            type: 'Reserve Funding Agreement',
+            terms: 'Mandatory reserve contributions',
+        },
+        {
+            from: 'Data Compliance Ltd',
+            to: 'Technology Pte Ltd',
+            type: 'Data Processing Agreement',
+            terms: 'GDPR Article 28 compliant',
+        },
     ],
 };
 
@@ -136,8 +166,18 @@ const RELATIONSHIPS = {
 
 const REGULATORY_MAP = {
     entities_requiring_license: [
-        { entity: 'Settlement GmbH', license: 'MiCA CASP License', jurisdiction: 'EU', status: 'Required before carbon settlement goes live' },
-        { entity: 'Settlement GmbH', license: 'BaFin Crypto Custody License', jurisdiction: 'Germany', status: 'Required' },
+        {
+            entity: 'Settlement GmbH',
+            license: 'MiCA CASP License',
+            jurisdiction: 'EU',
+            status: 'Required before carbon settlement goes live',
+        },
+        {
+            entity: 'Settlement GmbH',
+            license: 'BaFin Crypto Custody License',
+            jurisdiction: 'Germany',
+            status: 'Required',
+        },
         { entity: 'Vietnam Co Ltd', license: 'E-commerce License', jurisdiction: 'Vietnam', status: 'Required' },
         { entity: 'Data Compliance Ltd', license: 'GDPR Registration', jurisdiction: 'EU/Ireland', status: 'Required' },
     ],
@@ -166,18 +206,46 @@ const IPO_REQUIREMENTS = {
         { requirement: 'Clear holding/subsidiary structure', status: 'DESIGNED', entity: 'Holdings Ltd' },
         { requirement: 'IP isolated in separate entity', status: 'DESIGNED', entity: 'IP Ltd' },
         { requirement: 'Regulated activities in licensed entity', status: 'DESIGNED', entity: 'Settlement GmbH' },
-        { requirement: 'Transfer pricing documentation', status: 'NEEDED', note: 'Arms-length pricing for all inter-entity transactions' },
+        {
+            requirement: 'Transfer pricing documentation',
+            status: 'NEEDED',
+            note: 'Arms-length pricing for all inter-entity transactions',
+        },
         { requirement: 'Consolidated financial statements (IFRS)', status: 'NEEDED', note: 'Audited by Big 4' },
         { requirement: 'SOX/SOC2 compliance', status: 'NEEDED', note: 'For US listing consideration' },
-        { requirement: 'Board independence (majority independent)', status: 'DESIGNED', note: 'GGC 40% independent minimum maps to board' },
-        { requirement: 'Risk committee with financial expertise', status: 'DESIGNED', note: 'Mapped to risk_committee role' },
-        { requirement: 'External auditor appointed', status: 'DESIGNED', note: 'External oversight engine defines rotation policy' },
+        {
+            requirement: 'Board independence (majority independent)',
+            status: 'DESIGNED',
+            note: 'GGC 40% independent minimum maps to board',
+        },
+        {
+            requirement: 'Risk committee with financial expertise',
+            status: 'DESIGNED',
+            note: 'Mapped to risk_committee role',
+        },
+        {
+            requirement: 'External auditor appointed',
+            status: 'DESIGNED',
+            note: 'External oversight engine defines rotation policy',
+        },
     ],
 
     listing_considerations: [
-        { exchange: 'SGX (Singapore)', advantage: 'Asia hub, IP regime, carbon market', requirements: 'SGX Mainboard or Catalist rules' },
-        { exchange: 'LSE (London)', advantage: 'Carbon/ESG investor base', requirements: 'FCA listing rules, UK Corporate Governance Code' },
-        { exchange: 'NASDAQ', advantage: 'Technology company valuation premium', requirements: 'SEC registration, SOX compliance' },
+        {
+            exchange: 'SGX (Singapore)',
+            advantage: 'Asia hub, IP regime, carbon market',
+            requirements: 'SGX Mainboard or Catalist rules',
+        },
+        {
+            exchange: 'LSE (London)',
+            advantage: 'Carbon/ESG investor base',
+            requirements: 'FCA listing rules, UK Corporate Governance Code',
+        },
+        {
+            exchange: 'NASDAQ',
+            advantage: 'Technology company valuation premium',
+            requirements: 'SEC registration, SOX compliance',
+        },
     ],
 };
 
@@ -186,26 +254,59 @@ const IPO_REQUIREMENTS = {
 // ═══════════════════════════════════════════════════════════════════
 
 class LegalEntityEngine {
-
-    getEntityMap() { return ENTITY_MAP; }
-    getRelationships() { return RELATIONSHIPS; }
-    getRegulatoryMap() { return REGULATORY_MAP; }
-    getIPORequirements() { return IPO_REQUIREMENTS; }
+    getEntityMap() {
+        return ENTITY_MAP;
+    }
+    getRelationships() {
+        return RELATIONSHIPS;
+    }
+    getRegulatoryMap() {
+        return REGULATORY_MAP;
+    }
+    getIPORequirements() {
+        return IPO_REQUIREMENTS;
+    }
 
     getEntityByName(name) {
-        const allEntities = [ENTITY_MAP.holding_company, ...ENTITY_MAP.operating_entities, ...ENTITY_MAP.specialized_entities];
-        return allEntities.find(e => e.name.toLowerCase().includes(name.toLowerCase())) || null;
+        if (!name) return null;
+        const searchName = String(name).toLowerCase();
+        const allEntities = [
+            ENTITY_MAP.holding_company,
+            ...ENTITY_MAP.operating_entities,
+            ...ENTITY_MAP.specialized_entities,
+        ];
+        return allEntities.find(e => e.name && e.name.toLowerCase().includes(searchName)) || null;
     }
 
     getRingFencingAnalysis() {
         return {
             principles: REGULATORY_MAP.ring_fencing_principles,
             critical_isolation_points: [
-                { boundary: 'Settlement ↔ Technology', risk: 'Technology liability reaching settlement reserves', protection: 'Capital Reserve Trust (bankruptcy-remote)' },
-                { boundary: 'Operations ↔ IP', risk: 'Operating creditors seizing IP', protection: 'Separate IP entity, license agreements' },
-                { boundary: 'Settlement ↔ Node Ops', risk: 'Node compromise affecting settlement funds', protection: 'Separate legal entity, separate infrastructure' },
-                { boundary: 'Global ↔ Vietnam', risk: 'Local jurisdiction claims affecting global structure', protection: 'Local entity with limited assets' },
-                { boundary: 'Operations ↔ Data/GDPR', risk: 'GDPR fines contaminating operating capital', protection: 'Ring-fenced Data Compliance entity' },
+                {
+                    boundary: 'Settlement ↔ Technology',
+                    risk: 'Technology liability reaching settlement reserves',
+                    protection: 'Capital Reserve Trust (bankruptcy-remote)',
+                },
+                {
+                    boundary: 'Operations ↔ IP',
+                    risk: 'Operating creditors seizing IP',
+                    protection: 'Separate IP entity, license agreements',
+                },
+                {
+                    boundary: 'Settlement ↔ Node Ops',
+                    risk: 'Node compromise affecting settlement funds',
+                    protection: 'Separate legal entity, separate infrastructure',
+                },
+                {
+                    boundary: 'Global ↔ Vietnam',
+                    risk: 'Local jurisdiction claims affecting global structure',
+                    protection: 'Local entity with limited assets',
+                },
+                {
+                    boundary: 'Operations ↔ Data/GDPR',
+                    risk: 'GDPR fines contaminating operating capital',
+                    protection: 'Ring-fenced Data Compliance entity',
+                },
             ],
         };
     }
@@ -214,7 +315,7 @@ class LegalEntityEngine {
         return {
             title: 'Legal Entity Architecture — IPO-Grade',
             version: '1.0',
-            models: ['ICE/NYSE', 'CME Group', 'DTCC', 'Moody\'s'],
+            models: ['ICE/NYSE', 'CME Group', 'DTCC', "Moody's"],
             entity_map: ENTITY_MAP,
             relationships: RELATIONSHIPS,
             regulatory: REGULATORY_MAP,

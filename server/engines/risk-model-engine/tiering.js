@@ -1,7 +1,7 @@
 /**
  * TrustChecker — Model Risk Tiering & Capital Impact Engine v1.0
  * CRITICAL: Infrastructure-level models need materiality classification
- * 
+ *
  * Not all models are equal. Revenue-impacting models need:
  *   - Higher validation frequency
  *   - Independent review
@@ -24,10 +24,30 @@ const MODEL_TIERS = {
             capital_reserve_pct: 2,
             regulatory_disclosure: 'Required — model methodology + performance disclosed in annual report',
             models: [
-                { name: 'Dynamic Pricing Algorithm', revenue_sensitivity: 'HIGH — directly sets transaction fees', shutdown_impact: '100% of variable pricing revenue', capital_at_risk_usd: 150000 },
-                { name: 'Carbon Credit Valuation', revenue_sensitivity: 'HIGH — affects settlement value + fees', shutdown_impact: 'Carbon settlement revenue halted', capital_at_risk_usd: 100000 },
-                { name: 'Counterparty Risk Scoring', revenue_sensitivity: 'MEDIUM — affects counterparty limits → volume', shutdown_impact: 'Conservative fallback limits applied', capital_at_risk_usd: 75000 },
-                { name: 'Settlement Netting Engine', revenue_sensitivity: 'HIGH — optimizes settlement flows', shutdown_impact: 'Gross settlement (higher cost, same revenue)', capital_at_risk_usd: 50000 },
+                {
+                    name: 'Dynamic Pricing Algorithm',
+                    revenue_sensitivity: 'HIGH — directly sets transaction fees',
+                    shutdown_impact: '100% of variable pricing revenue',
+                    capital_at_risk_usd: 150000,
+                },
+                {
+                    name: 'Carbon Credit Valuation',
+                    revenue_sensitivity: 'HIGH — affects settlement value + fees',
+                    shutdown_impact: 'Carbon settlement revenue halted',
+                    capital_at_risk_usd: 100000,
+                },
+                {
+                    name: 'Counterparty Risk Scoring',
+                    revenue_sensitivity: 'MEDIUM — affects counterparty limits → volume',
+                    shutdown_impact: 'Conservative fallback limits applied',
+                    capital_at_risk_usd: 75000,
+                },
+                {
+                    name: 'Settlement Netting Engine',
+                    revenue_sensitivity: 'HIGH — optimizes settlement flows',
+                    shutdown_impact: 'Gross settlement (higher cost, same revenue)',
+                    capital_at_risk_usd: 50000,
+                },
             ],
         },
         {
@@ -39,11 +59,36 @@ const MODEL_TIERS = {
             capital_reserve_pct: 1,
             regulatory_disclosure: 'Summary methodology disclosed',
             models: [
-                { name: 'Trust Score (IVU)', risk_sensitivity: 'HIGH — affects entity reputation + transaction eligibility', shutdown_impact: 'Scores frozen at T-1, manual review required', capital_at_risk_usd: 30000 },
-                { name: 'Fraud Detection', risk_sensitivity: 'HIGH — missed fraud = settlement loss', shutdown_impact: 'All transactions flagged for manual review', capital_at_risk_usd: 50000 },
-                { name: 'AML/KYC Scoring', risk_sensitivity: 'CRITICAL — regulatory compliance', shutdown_impact: 'New onboarding halted, existing accounts unaffected', capital_at_risk_usd: 25000 },
-                { name: 'Supply Chain Integrity Score', risk_sensitivity: 'MEDIUM — affects verification confidence', shutdown_impact: 'Manual verification fallback', capital_at_risk_usd: 15000 },
-                { name: 'Stress Test Models', risk_sensitivity: 'MEDIUM — affects capital planning', shutdown_impact: 'Use previous period results + conservative buffer', capital_at_risk_usd: 0 },
+                {
+                    name: 'Trust Score (IVU)',
+                    risk_sensitivity: 'HIGH — affects entity reputation + transaction eligibility',
+                    shutdown_impact: 'Scores frozen at T-1, manual review required',
+                    capital_at_risk_usd: 30000,
+                },
+                {
+                    name: 'Fraud Detection',
+                    risk_sensitivity: 'HIGH — missed fraud = settlement loss',
+                    shutdown_impact: 'All transactions flagged for manual review',
+                    capital_at_risk_usd: 50000,
+                },
+                {
+                    name: 'AML/KYC Scoring',
+                    risk_sensitivity: 'CRITICAL — regulatory compliance',
+                    shutdown_impact: 'New onboarding halted, existing accounts unaffected',
+                    capital_at_risk_usd: 25000,
+                },
+                {
+                    name: 'Supply Chain Integrity Score',
+                    risk_sensitivity: 'MEDIUM — affects verification confidence',
+                    shutdown_impact: 'Manual verification fallback',
+                    capital_at_risk_usd: 15000,
+                },
+                {
+                    name: 'Stress Test Models',
+                    risk_sensitivity: 'MEDIUM — affects capital planning',
+                    shutdown_impact: 'Use previous period results + conservative buffer',
+                    capital_at_risk_usd: 0,
+                },
             ],
         },
         {
@@ -55,11 +100,27 @@ const MODEL_TIERS = {
             capital_reserve_pct: 0,
             regulatory_disclosure: 'Not required',
             models: [
-                { name: 'Network Topology Visualization', impact: 'Dashboard only', shutdown_impact: 'Dashboard shows static view' },
+                {
+                    name: 'Network Topology Visualization',
+                    impact: 'Dashboard only',
+                    shutdown_impact: 'Dashboard shows static view',
+                },
                 { name: 'Revenue Forecasting', impact: 'Planning only', shutdown_impact: 'Use spreadsheet model' },
-                { name: 'Validator Performance Analytics', impact: 'Reporting only', shutdown_impact: 'Reports delayed' },
-                { name: 'Market TAM Estimation', impact: 'Investor narrative', shutdown_impact: 'Use last published figures' },
-                { name: 'Carbon Market Trend Analysis', impact: 'Advisory only', shutdown_impact: 'No operational impact' },
+                {
+                    name: 'Validator Performance Analytics',
+                    impact: 'Reporting only',
+                    shutdown_impact: 'Reports delayed',
+                },
+                {
+                    name: 'Market TAM Estimation',
+                    impact: 'Investor narrative',
+                    shutdown_impact: 'Use last published figures',
+                },
+                {
+                    name: 'Carbon Market Trend Analysis',
+                    impact: 'Advisory only',
+                    shutdown_impact: 'No operational impact',
+                },
             ],
         },
     ],
@@ -73,12 +134,48 @@ const REVENUE_SENSITIVITY = {
     title: 'Model Revenue Sensitivity — What happens if this model is wrong?',
 
     scenarios: [
-        { model: 'Dynamic Pricing', error_type: 'Overprices by 10%', revenue_impact: '-5% volume decline', customer_impact: 'Churn increase 2%', remediation: 'Immediate rollback + 30-day credit' },
-        { model: 'Dynamic Pricing', error_type: 'Underprices by 10%', revenue_impact: '-10% fee revenue', customer_impact: 'None (benefit)', remediation: 'Correct pricing + absorb loss' },
-        { model: 'Carbon Valuation', error_type: 'Overvalues by 15%', revenue_impact: '-15% settlement correction', customer_impact: 'Dispute increase', remediation: 'Settlement reserve covers gap' },
-        { model: 'Counterparty Risk', error_type: 'Under-estimates risk', revenue_impact: 'Default loss not covered', customer_impact: 'Settlement failure', remediation: 'Insurance claim + reserve drawdown' },
-        { model: 'Fraud Detection', error_type: 'False negative rate up 5%', revenue_impact: 'Potential fraud loss increase', customer_impact: 'Trust erosion', remediation: 'Model retrain + manual review backlog' },
-        { model: 'Trust Score (IVU)', error_type: 'Score inflation detected', revenue_impact: 'Indirect — volume increase is artificial', customer_impact: 'Trust in platform eroded', remediation: 'Score freeze + recalibration + disclosure' },
+        {
+            model: 'Dynamic Pricing',
+            error_type: 'Overprices by 10%',
+            revenue_impact: '-5% volume decline',
+            customer_impact: 'Churn increase 2%',
+            remediation: 'Immediate rollback + 30-day credit',
+        },
+        {
+            model: 'Dynamic Pricing',
+            error_type: 'Underprices by 10%',
+            revenue_impact: '-10% fee revenue',
+            customer_impact: 'None (benefit)',
+            remediation: 'Correct pricing + absorb loss',
+        },
+        {
+            model: 'Carbon Valuation',
+            error_type: 'Overvalues by 15%',
+            revenue_impact: '-15% settlement correction',
+            customer_impact: 'Dispute increase',
+            remediation: 'Settlement reserve covers gap',
+        },
+        {
+            model: 'Counterparty Risk',
+            error_type: 'Under-estimates risk',
+            revenue_impact: 'Default loss not covered',
+            customer_impact: 'Settlement failure',
+            remediation: 'Insurance claim + reserve drawdown',
+        },
+        {
+            model: 'Fraud Detection',
+            error_type: 'False negative rate up 5%',
+            revenue_impact: 'Potential fraud loss increase',
+            customer_impact: 'Trust erosion',
+            remediation: 'Model retrain + manual review backlog',
+        },
+        {
+            model: 'Trust Score (IVU)',
+            error_type: 'Score inflation detected',
+            revenue_impact: 'Indirect — volume increase is artificial',
+            customer_impact: 'Trust in platform eroded',
+            remediation: 'Score freeze + recalibration + disclosure',
+        },
     ],
 };
 
@@ -88,12 +185,36 @@ const REVENUE_SENSITIVITY = {
 
 const SHUTDOWN_CRITERIA = {
     criteria: [
-        { criterion: 'Accuracy degradation', threshold: '>10% decline from validation benchmark', action: 'Flag for review, shutdown if not resolved in 7 days' },
-        { criterion: 'Bias detection', threshold: 'Statistical bias detected in protected classes', action: 'Immediate shutdown + investigation' },
-        { criterion: 'Data quality failure', threshold: '>5% missing/corrupt input data', action: 'Fallback to conservative defaults' },
-        { criterion: 'Adversarial manipulation', threshold: 'Any confirmed manipulation attempt', action: 'Immediate shutdown + forensic review' },
-        { criterion: 'Regulatory non-compliance', threshold: 'Model output violates regulatory requirement', action: 'Immediate shutdown + compliance review' },
-        { criterion: 'Operator override', threshold: 'Risk Committee formal decision', action: 'Shutdown with documented rationale' },
+        {
+            criterion: 'Accuracy degradation',
+            threshold: '>10% decline from validation benchmark',
+            action: 'Flag for review, shutdown if not resolved in 7 days',
+        },
+        {
+            criterion: 'Bias detection',
+            threshold: 'Statistical bias detected in protected classes',
+            action: 'Immediate shutdown + investigation',
+        },
+        {
+            criterion: 'Data quality failure',
+            threshold: '>5% missing/corrupt input data',
+            action: 'Fallback to conservative defaults',
+        },
+        {
+            criterion: 'Adversarial manipulation',
+            threshold: 'Any confirmed manipulation attempt',
+            action: 'Immediate shutdown + forensic review',
+        },
+        {
+            criterion: 'Regulatory non-compliance',
+            threshold: 'Model output violates regulatory requirement',
+            action: 'Immediate shutdown + compliance review',
+        },
+        {
+            criterion: 'Operator override',
+            threshold: 'Risk Committee formal decision',
+            action: 'Shutdown with documented rationale',
+        },
     ],
 
     fallback_procedures: {
@@ -138,12 +259,21 @@ const MODEL_GOVERNANCE = {
 // ═══════════════════════════════════════════════════════════════════
 
 class ModelRiskTieringEngine {
-    getModelTiers() { return MODEL_TIERS; }
-    getRevenueSensitivity() { return REVENUE_SENSITIVITY; }
-    getShutdownCriteria() { return SHUTDOWN_CRITERIA; }
-    getModelGovernance() { return MODEL_GOVERNANCE; }
+    getModelTiers() {
+        return MODEL_TIERS;
+    }
+    getRevenueSensitivity() {
+        return REVENUE_SENSITIVITY;
+    }
+    getShutdownCriteria() {
+        return SHUTDOWN_CRITERIA;
+    }
+    getModelGovernance() {
+        return MODEL_GOVERNANCE;
+    }
 
     getModelByName(name) {
+        if (!name || typeof name !== 'string') return null;
         for (const tier of MODEL_TIERS.tiers) {
             const model = tier.models.find(m => m.name.toLowerCase().includes(name.toLowerCase()));
             if (model) return { tier: tier.tier, tier_name: tier.name, ...model };

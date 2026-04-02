@@ -66,14 +66,14 @@ const CONTROL_TYPES = {
 // Owner: IT | Control Type: Preventive
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ingestEvent(eventData, sourceMetadata = {}) {
+async function ingestEvent(eventData, sourceMetadata = {}) {
     const eventId = uuidv4();
     const timestamp = new Date().toISOString();
 
     // Idempotency check
     const idempotencyKey = eventData.idempotency_key || null;
     if (idempotencyKey) {
-        const existing = db.prepare('SELECT id FROM lrgf_events WHERE idempotency_key = ?').get(idempotencyKey);
+        const existing = await db.prepare('SELECT id FROM lrgf_events WHERE idempotency_key = ?').get(idempotencyKey);
         if (existing) {
             return { duplicate: true, existing_event_id: existing.id };
         }
@@ -106,7 +106,7 @@ function ingestEvent(eventData, sourceMetadata = {}) {
     };
 
     // Immutable audit log
-    db.run(
+    await db.run(
         `
         INSERT INTO lrgf_events (
             id, event_type, source, org_id, idempotency_key,
@@ -147,7 +147,7 @@ function ingestEvent(eventData, sourceMetadata = {}) {
 // Owner: SCM (Line 1) | Control Type: Preventive automated
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function validateRoute(eventId, routeData) {
+async function validateRoute(eventId, routeData) {
     const violations = [];
 
     // Geo-fence check
@@ -191,7 +191,7 @@ function validateRoute(eventId, routeData) {
     }
 
     // Log validation result
-    db.run(
+    await db.run(
         `
         INSERT INTO lrgf_validations (id, event_id, violation_count, violations, validated_at)
         VALUES (?, ?, ?, ?, NOW())
@@ -214,7 +214,7 @@ function validateRoute(eventId, routeData) {
 // Control Type: Automated preventive + model governance
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function scoreRisk(eventId, factors) {
+async function scoreRisk(eventId, factors) {
     const weights = MODEL_REGISTRY.weights;
     const decay = MODEL_REGISTRY.decay_factor;
 
@@ -240,7 +240,7 @@ function scoreRisk(eventId, factors) {
     const ers = Math.min(100, Math.round(rawScore * 100));
 
     // Drift monitoring — compare to historical average
-    const historicalAvg = db.get(`
+    const historicalAvg = await db.get(`
         SELECT AVG(ers_score) as avg_ers FROM lrgf_risk_scores
         WHERE created_at > NOW() - INTERVAL '30 days'
     `);
@@ -250,7 +250,7 @@ function scoreRisk(eventId, factors) {
 
     // Audit artifact: score record with model version
     const scoreId = uuidv4();
-    db.run(
+    await db.run(
         `
         INSERT INTO lrgf_risk_scores (
             id, event_id, ers_score, model_version, weight_hash,
@@ -286,7 +286,7 @@ function scoreRisk(eventId, factors) {
 // Owner: Threshold config → Risk Committee, Execution → System
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function decide(scoreResult) {
+async function decide(scoreResult) {
     const ers = scoreResult.ers;
     let action, sla, escalation_level;
 
@@ -311,7 +311,7 @@ function decide(scoreResult) {
     const decisionId = uuidv4();
     const slaDeadline = sla ? new Date(Date.now() + parseSLA(sla)).toISOString() : null;
 
-    db.run(
+    await db.run(
         `
         INSERT INTO lrgf_decisions (
             id, score_id, event_id, ers_score, action, sla,
@@ -338,7 +338,7 @@ function decide(scoreResult) {
 /**
  * Override a decision — requires 4-eyes (2 approvers from different roles)
  */
-function overrideDecision(decisionId, overrideData, approvers) {
+async function overrideDecision(decisionId, overrideData, approvers) {
     // Validate 4-eyes rule
     if (!approvers || approvers.length < 2) {
         return { error: '4-eyes rule: minimum 2 approvers required' };
@@ -351,6 +351,15 @@ function overrideDecision(decisionId, overrideData, approvers) {
         return { error: '4-eyes rule: approvers must have different roles' };
     }
 
+    // CEO Freeze Restriction
+    const originalDecision = await db.get('SELECT action FROM lrgf_decisions WHERE id = ?', [decisionId]);
+    if (originalDecision && originalDecision.action === 'LOCK_CEO_NOTIFY') {
+        const hasExecutive = approvers.some(a => ['admin', 'executive', 'super_admin'].includes(a.role));
+        if (!hasExecutive) {
+            return { error: 'Constitutional constraint: Cannot release LOCK_CEO_NOTIFY without executive approval' };
+        }
+    }
+
     // Must have justification
     if (!overrideData.justification || overrideData.justification.length < 20) {
         return { error: 'Override justification required (minimum 20 characters)' };
@@ -359,7 +368,7 @@ function overrideDecision(decisionId, overrideData, approvers) {
     const overrideId = uuidv4();
 
     // Immutable override record
-    db.run(
+    await db.run(
         `
         INSERT INTO lrgf_overrides (
             id, decision_id, override_type, justification,
@@ -381,7 +390,7 @@ function overrideDecision(decisionId, overrideData, approvers) {
     );
 
     // Update decision
-    db.run(
+    await db.run(
         `
         UPDATE lrgf_decisions SET override_applied = 1, action = ? WHERE id = ?
     `,
@@ -402,7 +411,7 @@ function overrideDecision(decisionId, overrideData, approvers) {
 // Line 3: Internal Audit (triggered by conditions)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function assignCase(decision) {
+async function assignCase(decision) {
     if (decision.action === 'LOG') {
         return { case_id: null, assigned: false, reason: 'Below threshold' };
     }
@@ -432,9 +441,9 @@ function assignCase(decision) {
     }
 
     // Check if Line 3 should be triggered
-    const line3Trigger = checkLine3Trigger(decision);
+    const line3Trigger = await checkLine3Trigger(decision);
 
-    db.run(
+    await db.run(
         `
         INSERT INTO lrgf_cases (
             id, decision_id, event_id, assigned_line, assigned_role,
@@ -471,9 +480,9 @@ function assignCase(decision) {
 /**
  * Check if Line 3 (Internal Audit) should be triggered.
  */
-function checkLine3Trigger(decision) {
+async function checkLine3Trigger(decision) {
     // Override frequency > 3 in 7 days
-    const recentOverrides = db.get(`
+    const recentOverrides = await db.get(`
         SELECT COUNT(*) as c FROM lrgf_overrides
         WHERE created_at > NOW() - INTERVAL '7 days'
     `);
@@ -483,7 +492,7 @@ function checkLine3Trigger(decision) {
     if (decision.ers >= 90) return true;
 
     // Drift > 0.5
-    const drift = db.get(
+    const drift = await db.get(
         `
         SELECT drift_index FROM lrgf_risk_scores WHERE event_id = ?
     `,
@@ -499,15 +508,15 @@ function checkLine3Trigger(decision) {
 // Control Type: Preventive cryptographic | Owner: System (Zone B)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function freezeEvidence(caseId) {
+async function freezeEvidence(caseId) {
     // Gather all evidence for this case
-    const caseData = db.get('SELECT * FROM lrgf_cases WHERE id = ?', [caseId]);
+    const caseData = await db.get('SELECT * FROM lrgf_cases WHERE id = ?', [caseId]);
     if (!caseData) return { error: 'Case not found' };
 
-    const eventData = db.get('SELECT * FROM lrgf_events WHERE id = ?', [caseData.event_id]);
-    const scoreData = db.get('SELECT * FROM lrgf_risk_scores WHERE event_id = ?', [caseData.event_id]);
-    const decisionData = db.get('SELECT * FROM lrgf_decisions WHERE id = ?', [caseData.decision_id]);
-    const overrides = db.all('SELECT * FROM lrgf_overrides WHERE decision_id = ?', [caseData.decision_id]);
+    const eventData = await db.get('SELECT * FROM lrgf_events WHERE id = ?', [caseData.event_id]);
+    const scoreData = await db.get('SELECT * FROM lrgf_risk_scores WHERE event_id = ?', [caseData.event_id]);
+    const decisionData = await db.get('SELECT * FROM lrgf_decisions WHERE id = ?', [caseData.decision_id]);
+    const overrides = await db.all('SELECT * FROM lrgf_overrides WHERE decision_id = ?', [caseData.decision_id]);
 
     // Build evidence package
     const evidencePackage = {
@@ -522,7 +531,9 @@ function freezeEvidence(caseId) {
     };
 
     // Hash chain: link to previous evidence hash
-    const prevHash = db.prepare('SELECT evidence_hash FROM lrgf_evidence_chain ORDER BY created_at DESC LIMIT 1').get();
+    const prevHash = await db
+        .prepare('SELECT evidence_hash FROM lrgf_evidence_chain ORDER BY created_at DESC LIMIT 1')
+        .get();
 
     const chainInput = JSON.stringify({
         prev_hash: prevHash?.evidence_hash || '0'.repeat(64),
@@ -539,7 +550,7 @@ function freezeEvidence(caseId) {
     };
 
     const chainId = uuidv4();
-    db.run(
+    await db.run(
         `
         INSERT INTO lrgf_evidence_chain (
             id, case_id, evidence_hash, prev_hash, evidence_package,
@@ -557,7 +568,7 @@ function freezeEvidence(caseId) {
     );
 
     // Lock case — no modification allowed
-    db.run('UPDATE lrgf_cases SET status = ? WHERE id = ?', ['frozen', caseId]);
+    await db.run('UPDATE lrgf_cases SET status = ? WHERE id = ?', ['frozen', caseId]);
 
     // Trust Graph: Create snapshot at evidence freeze
     let graphSnapshot = null;
@@ -591,7 +602,7 @@ function freezeEvidence(caseId) {
 // Owner: Cryptographic control (Zone B) | No PII on-chain
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function anchorBlockchain(evidenceResult, triggerReason) {
+async function anchorBlockchain(evidenceResult, triggerReason) {
     const validTriggers = [
         'high_risk_batch_lock',
         'carbon_credit_impact',
@@ -614,7 +625,7 @@ function anchorBlockchain(evidenceResult, triggerReason) {
 
     const anchorHash = crypto.createHash('sha256').update(JSON.stringify(anchorData)).digest('hex');
 
-    db.run(
+    await db.run(
         `
         INSERT INTO lrgf_blockchain_anchors (
             id, evidence_chain_id, anchor_hash, anchor_data,
@@ -638,51 +649,51 @@ function anchorBlockchain(evidenceResult, triggerReason) {
 // Monthly dashboard for CEO / Board / Audit Committee
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function reportExposure(orgId) {
+async function reportExposure(orgId) {
     const period = '30 days';
 
     const metrics = {
         anomaly_rate:
-            db.get(`
+            (await db.get(`
             SELECT COUNT(*) as c FROM lrgf_decisions
             WHERE action != 'LOG' AND decided_at > NOW() - CAST(period || ' days' AS INTERVAL)
-        `)?.c || 0,
+        `)?.c) || 0,
 
         total_events:
-            db.get(`
+            (await db.get(`
             SELECT COUNT(*) as c FROM lrgf_events
             WHERE created_at > NOW() - CAST(period || ' days' AS INTERVAL)
-        `)?.c || 0,
+        `)?.c) || 0,
 
         lock_count:
-            db.get(`
+            (await db.get(`
             SELECT COUNT(*) as c FROM lrgf_decisions
             WHERE action = 'LOCK_CEO_NOTIFY' AND decided_at > NOW() - CAST(period || ' days' AS INTERVAL)
-        `)?.c || 0,
+        `)?.c) || 0,
 
         override_count:
-            db.get(`
+            (await db.get(`
             SELECT COUNT(*) as c FROM lrgf_overrides
             WHERE created_at > NOW() - CAST(period || ' days' AS INTERVAL)
-        `)?.c || 0,
+        `)?.c) || 0,
 
         avg_drift:
-            db.get(`
+            (await db.get(`
             SELECT AVG(drift_index) as avg FROM lrgf_risk_scores
             WHERE created_at > NOW() - CAST(period || ' days' AS INTERVAL)
-        `)?.avg || 0,
+        `)?.avg) || 0,
 
         frozen_cases:
-            db.get(`
+            (await db.get(`
             SELECT COUNT(*) as c FROM lrgf_cases
             WHERE status = 'frozen' AND created_at > NOW() - CAST(period || ' days' AS INTERVAL)
-        `)?.c || 0,
+        `)?.c) || 0,
 
         sla_breaches:
-            db.get(`
+            (await db.get(`
             SELECT COUNT(*) as c FROM lrgf_cases
             WHERE sla_deadline < NOW() AND status = 'open'
-        `)?.c || 0,
+        `)?.c) || 0,
     };
 
     const totalEvents = metrics.total_events || 1;
@@ -706,30 +717,30 @@ function reportExposure(orgId) {
 // FULL FLOW — Process a logistics event through all 8 steps
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function processEvent(eventData, sourceMetadata = {}, riskFactors = {}) {
+async function processEvent(eventData, sourceMetadata = {}, riskFactors = {}) {
     // Step 1: Ingest
-    const ingestion = ingestEvent(eventData, sourceMetadata);
+    const ingestion = await ingestEvent(eventData, sourceMetadata);
     if (ingestion.duplicate) return { duplicate: true, ...ingestion };
 
     // Step 2: Validate route
-    const validation = validateRoute(ingestion.event_id, {
+    const validation = await validateRoute(ingestion.event_id, {
         geo_lat: sourceMetadata.latitude,
         geo_lng: sourceMetadata.longitude,
         ...eventData,
     });
 
     // Step 3: Score risk
-    const score = scoreRisk(ingestion.event_id, {
+    const score = await scoreRisk(ingestion.event_id, {
         ...riskFactors,
         // Boost score if route violations found
         velocity_anomaly: (riskFactors.velocity_anomaly || 0) + validation.violations.length * 0.1,
     });
 
     // Step 4: Decision
-    const decision = decide(score);
+    const decision = await decide(score);
 
     // Step 5: Case assignment (if action required)
-    const caseResult = assignCase(decision);
+    const caseResult = await assignCase(decision);
 
     // Data Lineage: Record full 5-layer GDLI chain
     let gdli = null;
