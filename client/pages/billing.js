@@ -12,8 +12,8 @@ export function renderPage() {
 
   const plan = d.plan;
   const usage = d.usage;
-  const planColors = { free: 'var(--text-muted)', starter: 'var(--cyan)', pro: 'var(--violet)', business: 'var(--amber)', enterprise: 'var(--amber)' };
-  const planIcons = { free: '🆓', starter: '🚀', pro: '⚡', business: '🏗️', enterprise: '🏢' };
+  const planColors = { core: 'var(--cyan)', free: 'var(--text-muted)', starter: 'var(--cyan)', pro: 'var(--violet)', business: 'var(--amber)', enterprise: 'var(--amber)' };
+  const planIcons = { core: '🏠', free: '🆓', starter: '🚀', pro: '⚡', business: '🏗️', enterprise: '🏢' };
 
   const usageBar = (used, limit, label) => {
     const isUnlimited = limit === '∞' || limit < 0;

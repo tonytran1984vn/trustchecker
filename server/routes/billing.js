@@ -53,75 +53,183 @@ router.post('/webhook', async (req, res) => {
     }
 });
 
-// ─── Plan tier definitions ──────────────────────────────────────────────────
-const PLAN_TIERS = {
-    free: {
-        name: 'Free',
-        slug: 'free',
-        price_monthly: 0,
-        scan_limit: 100,
-        api_limit: 500,
-        storage_mb: 100,
-        limits: { scans: 100, api_calls: 500, storage_mb: 100 },
-    },
-    starter: {
-        name: 'Starter',
-        slug: 'starter',
-        price_monthly: 19,
-        scan_limit: 2000,
-        api_limit: 5000,
-        storage_mb: 1000,
-        limits: { scans: 2000, api_calls: 5000, storage_mb: 1000 },
-    },
-    pro: {
-        name: 'Pro',
-        slug: 'pro',
-        price_monthly: 49,
-        scan_limit: 10000,
-        api_limit: 50000,
-        storage_mb: 5000,
-        limits: { scans: 10000, api_calls: 50000, storage_mb: 5000 },
-    },
-    business: {
-        name: 'Business',
-        slug: 'business',
-        price_monthly: 99,
-        scan_limit: 50000,
-        api_limit: 200000,
-        storage_mb: 20000,
-        limits: { scans: 50000, api_calls: 200000, storage_mb: 20000 },
-    },
-    enterprise: {
-        name: 'Enterprise',
-        slug: 'enterprise',
-        price_monthly: 199,
-        scan_limit: -1,
-        api_limit: -1,
-        storage_mb: -1,
-        limits: { scans: -1, api_calls: -1, storage_mb: -1 },
-    },
+// ══════════════════════════════════════════════════════════════════════════════
+// Dynamic Pricing Engine — mirrors client/pages/sa/orgs.js exactly
+// Formula: Total MRR = Base_Price[plan] + Σ(addon.price for features NOT in PLAN_DEFAULTS)
+// ══════════════════════════════════════════════════════════════════════════════
+
+const PLAN_BASE_PRICES = { core: 0, pro: 299, enterprise: 5000 };
+
+const PLAN_DEFAULTS = {
+    core: ['qr', 'products'],
+    pro: ['qr', 'products', 'scm_tracking', 'support', 'partners', 'carbon', 'inventory'],
+    enterprise: [
+        'qr',
+        'products',
+        'scm_tracking',
+        'support',
+        'partners',
+        'carbon',
+        'inventory',
+        'risk_radar',
+        'ai_forecast',
+        'digital_twin',
+        'blockchain',
+        'kyc',
+        'overclaim',
+        'exec_dashboard',
+    ],
 };
 
-// ─── GET /plan — Current plan + available plans ──────────────────────────────
+const FEATURE_LIST = [
+    // Core Platform
+    { id: 'qr', label: 'QR Traceability', icon: '📱', price: 0, minTier: 'core' },
+    { id: 'products', label: 'Product Catalog', icon: '📦', price: 0, minTier: 'core' },
+    { id: 'scm_tracking', label: 'Supply Chain Tracking', icon: '🚚', price: 99, minTier: 'core' },
+    { id: 'inventory', label: 'Inventory Management', icon: '🏭', price: 49, minTier: 'core' },
+    { id: 'support', label: 'Premium Support', icon: '🎧', price: 199, minTier: 'core' },
+    { id: 'partners', label: 'Partner Portal', icon: '🤝', price: 49, minTier: 'core' },
+    // Intelligence & Compliance (Requires Pro)
+    { id: 'carbon', label: 'Carbon Tracking', icon: '🌱', price: 199, minTier: 'pro' },
+    { id: 'risk_radar', label: 'Risk Radar', icon: '🛡', price: 299, minTier: 'pro' },
+    { id: 'ai_forecast', label: 'AI Forecaster', icon: '🤖', price: 499, minTier: 'pro' },
+    { id: 'digital_twin', label: 'Digital Twin', icon: '🪞', price: 149, minTier: 'pro' },
+    { id: 'kyc', label: 'KYC / AML', icon: '🔍', price: 249, minTier: 'pro' },
+    // Enterprise Add-ons
+    { id: 'overclaim', label: 'Overclaim Detection', icon: '⚠️', price: 399, minTier: 'enterprise' },
+    { id: 'lineage', label: 'Lineage Replay', icon: '⏪', price: 499, minTier: 'enterprise' },
+    { id: 'governance', label: 'Advanced Governance', icon: '🏛', price: 299, minTier: 'enterprise' },
+    { id: 'registry_export', label: 'Registry Export API', icon: '📤', price: 599, minTier: 'enterprise' },
+    { id: 'erp_integration', label: 'ERP Integration', icon: '🔌', price: 999, minTier: 'enterprise' },
+    { id: 'exec_dashboard', label: 'Exec Risk Dashboard', icon: '📈', price: 199, minTier: 'enterprise' },
+    { id: 'ivu_cert', label: 'IVU Premium Audit', icon: '🏅', price: 499, minTier: 'enterprise' },
+    // Distributed Ledger (Requires Pro)
+    { id: 'blockchain', label: 'Blockchain Anchoring', icon: '⛓', price: 199, minTier: 'pro' },
+    { id: 'nft', label: 'NFT Certificates', icon: '🎫', price: 99, minTier: 'pro' },
+];
+
+// Plan limits for usage metering
+const PLAN_LIMITS = {
+    core: { scans: 1000, api_calls: 2000, storage_mb: 500 },
+    pro: { scans: 50000, api_calls: 100000, storage_mb: 10000 },
+    enterprise: { scans: -1, api_calls: -1, storage_mb: -1 }, // unlimited
+};
+
+/**
+ * Compute the dynamic MRR for an organization.
+ * @param {string} planName - 'core' | 'pro' | 'enterprise'
+ * @param {Object} featureFlags - { feature_id: true/false } overrides stored in DB
+ * @param {Object} enterpriseConfig - optional { monthly_base } for custom enterprise pricing
+ * @returns {{ basePrice, addonCost, totalMRR, addons[], planLabel }}
+ */
+function computeMRR(planName, featureFlags, enterpriseConfig) {
+    const plan = ['core', 'pro', 'enterprise'].includes(planName) ? planName : 'core';
+    const basePrice =
+        plan === 'enterprise' && enterpriseConfig?.monthly_base
+            ? enterpriseConfig.monthly_base
+            : PLAN_BASE_PRICES[plan] || 0;
+    const defaults = PLAN_DEFAULTS[plan] || [];
+
+    // Determine which features are active = defaults + overrides
+    const activeFeatures = new Set(defaults);
+    if (featureFlags && typeof featureFlags === 'object') {
+        for (const [id, enabled] of Object.entries(featureFlags)) {
+            if (enabled) activeFeatures.add(id);
+            else activeFeatures.delete(id);
+        }
+    }
+
+    // Calculate addon cost = sum of prices for non-default active features
+    let addonCost = 0;
+    const addons = [];
+    for (const id of activeFeatures) {
+        if (!defaults.includes(id)) {
+            const feat = FEATURE_LIST.find(f => f.id === id);
+            if (feat) {
+                addonCost += feat.price || 0;
+                addons.push({ id: feat.id, label: feat.label, price: feat.price });
+            }
+        }
+    }
+
+    const totalMRR = basePrice + addonCost;
+    const planLabel = addons.length > 0 ? `${plan}+` : plan;
+
+    return { plan, basePrice, addonCost, totalMRR, addons, activeFeatures: [...activeFeatures], planLabel };
+}
+
+// ─── GET /plan — Current plan + available plans + dynamic MRR ────────────────
 router.get('/plan', authMiddleware, async (req, res) => {
     try {
         const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
-        let currentPlanName = 'free';
+        let currentPlanName = 'core';
         let orgData = null;
+        let featureFlags = {};
+        let enterpriseConfig = null;
 
         if (orgId) {
-            orgData = await db.get('SELECT plan, name FROM organizations WHERE id = $1', [orgId]);
-            if (orgData?.plan) currentPlanName = orgData.plan;
+            try {
+                orgData = await db.get('SELECT plan, name, feature_flags, settings FROM organizations WHERE id = $1', [
+                    orgId,
+                ]);
+                if (orgData?.plan) currentPlanName = orgData.plan;
+                if (orgData?.feature_flags) {
+                    featureFlags =
+                        typeof orgData.feature_flags === 'string'
+                            ? JSON.parse(orgData.feature_flags)
+                            : orgData.feature_flags;
+                }
+                if (orgData?.settings) {
+                    const settings =
+                        typeof orgData.settings === 'string' ? JSON.parse(orgData.settings) : orgData.settings;
+                    enterpriseConfig = settings?.enterprise_config || null;
+                }
+            } catch (_) {}
         }
 
-        const tier = PLAN_TIERS[currentPlanName] || PLAN_TIERS.free;
-        const plan = { plan_name: currentPlanName, ...tier, org_name: orgData?.name || null };
-        const available_plans = Object.values(PLAN_TIERS);
+        const mrr = computeMRR(currentPlanName, featureFlags, enterpriseConfig);
+
+        // Build plan object for frontend
+        const plan = {
+            plan_name: mrr.planLabel,
+            name: mrr.planLabel.charAt(0).toUpperCase() + mrr.planLabel.slice(1),
+            slug: mrr.plan,
+            price_monthly: mrr.totalMRR,
+            base_price: mrr.basePrice,
+            addon_cost: mrr.addonCost,
+            addons: mrr.addons,
+            active_features: mrr.activeFeatures,
+            org_name: orgData?.name || null,
+            limits: PLAN_LIMITS[mrr.plan] || PLAN_LIMITS.core,
+            scan_limit: (PLAN_LIMITS[mrr.plan] || PLAN_LIMITS.core).scans,
+            api_limit: (PLAN_LIMITS[mrr.plan] || PLAN_LIMITS.core).api_calls,
+            storage_mb: (PLAN_LIMITS[mrr.plan] || PLAN_LIMITS.core).storage_mb,
+        };
+
+        // Available plans with base prices
+        const available_plans = ['core', 'pro', 'enterprise'].map(slug => ({
+            name: slug.charAt(0).toUpperCase() + slug.slice(1),
+            slug,
+            price_monthly: PLAN_BASE_PRICES[slug],
+            limits: PLAN_LIMITS[slug],
+            scan_limit: PLAN_LIMITS[slug].scans,
+            api_limit: PLAN_LIMITS[slug].api_calls,
+            storage_mb: PLAN_LIMITS[slug].storage_mb,
+        }));
 
         res.json({ plan, available_plans });
     } catch (err) {
         console.error('GET /billing/plan error:', err);
-        res.json({ plan: { plan_name: 'free', ...PLAN_TIERS.free }, available_plans: Object.values(PLAN_TIERS) });
+        const fallback = computeMRR('core', {});
+        res.json({
+            plan: { plan_name: 'core', slug: 'core', price_monthly: 0, limits: PLAN_LIMITS.core },
+            available_plans: ['core', 'pro', 'enterprise'].map(s => ({
+                name: s.charAt(0).toUpperCase() + s.slice(1),
+                slug: s,
+                price_monthly: PLAN_BASE_PRICES[s],
+                limits: PLAN_LIMITS[s],
+            })),
+        });
     }
 });
 
@@ -134,14 +242,14 @@ router.get('/usage', authMiddleware, async (req, res) => {
         const periodLabel = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
         // Determine plan limits
-        let planName = 'free';
+        let planName = 'core';
         if (orgId) {
             try {
                 const org = await db.get('SELECT plan FROM organizations WHERE id = $1', [orgId]);
                 if (org?.plan) planName = org.plan;
-            } catch (_) {} // organizations table may lack 'plan' column
+            } catch (_) {}
         }
-        const tier = PLAN_TIERS[planName] || PLAN_TIERS.free;
+        const limits = PLAN_LIMITS[planName] || PLAN_LIMITS.core;
 
         let scansUsed = 0,
             productsUsed = 0;
@@ -167,9 +275,9 @@ router.get('/usage', authMiddleware, async (req, res) => {
         res.json({
             period: periodLabel,
             usage: {
-                scans: { used: scansUsed, limit: tier.limits.scans },
-                api_calls: { used: 0, limit: tier.limits.api_calls },
-                storage_mb: { used: productsUsed, limit: tier.limits.storage_mb },
+                scans: { used: scansUsed, limit: limits.scans },
+                api_calls: { used: 0, limit: limits.api_calls },
+                storage_mb: { used: productsUsed, limit: limits.storage_mb },
             },
         });
     } catch (err) {
