@@ -33,18 +33,54 @@ export async function preload() {
 
 window.opsApprove = async function(id) {
     if (!confirm('Approve this autonomous action?')) return;
+    
+    // Optimistic DOM update
+    const el = document.getElementById('prop-' + id);
+    if (el) {
+        el.style.transition = 'all 0.3s ease';
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-10px)';
+        setTimeout(() => el.remove(), 300);
+    }
+    if (data && data.proposals) {
+        data.proposals = data.proposals.filter(p => p.id !== id);
+    }
+
     try {
         await API.post(`/ops-intelligence/proposals/${id}/approve`);
-        preload();
-    } catch(e) { alert('Approval failed: ' + e.message); }
+        API.get('/ops-intelligence/proposals', { noCache: true }).then(res => {
+            if (data) data.proposals = res?.value?.proposals || res?.proposals || [];
+        });
+    } catch(e) { 
+        alert('Approval failed: ' + e.message); 
+        if (typeof window.render === 'function') window.render();
+    }
 };
 
 window.opsReject = async function(id) {
     if (!confirm('Reject this proposal?')) return;
+    
+    // Optimistic DOM update
+    const el = document.getElementById('prop-' + id);
+    if (el) {
+        el.style.transition = 'all 0.3s ease';
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-10px)';
+        setTimeout(() => el.remove(), 300);
+    }
+    if (data && data.proposals) {
+        data.proposals = data.proposals.filter(p => p.id !== id);
+    }
+
     try {
         await API.post(`/ops-intelligence/proposals/${id}/reject`);
-        preload();
-    } catch(e) { alert('Rejection failed: ' + e.message); }
+        API.get('/ops-intelligence/proposals', { noCache: true }).then(res => {
+            if (data) data.proposals = res?.value?.proposals || res?.proposals || [];
+        });
+    } catch(e) { 
+        alert('Rejection failed: ' + e.message); 
+        if (typeof window.render === 'function') window.render();
+    }
 };
 
 window.opsEngageKillSwitch = async function() {
@@ -147,7 +183,7 @@ export function renderPage() {
                 <div class="cp-card-bd" style="max-height:220px;overflow-y:auto;padding-right:10px">
                     ${pendingProps.length === 0 ? '<div style="text-align:center;padding:30px;color:#64748b">No active autonomous actions awaiting approval.</div>' : ''}
                     ${pendingProps.map(p => `
-                        <div class="prop-item ${p.risk_tier.toLowerCase()}">
+                        <div class="prop-item ${p.risk_tier.toLowerCase()}" id="prop-${p.id}">
                             <div>
                                 <div class="prop-act">${p.action} <span style="font-size:0.7rem;color:#64748b;background:#0f172a;padding:2px 6px;border-radius:4px;margin-left:6px">${p.risk_tier}</span></div>
                                 <div class="prop-cause">Cause: ${p.root_cause} (Conf: ${Math.round(p.confidence*100)}%)</div>
