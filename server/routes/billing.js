@@ -53,67 +53,75 @@ router.post('/webhook', async (req, res) => {
     }
 });
 
+// ─── Plan tier definitions ──────────────────────────────────────────────────
+const PLAN_TIERS = {
+    free: {
+        name: 'Free',
+        slug: 'free',
+        price_monthly: 0,
+        scan_limit: 100,
+        api_limit: 500,
+        storage_mb: 100,
+        limits: { scans: 100, api_calls: 500, storage_mb: 100 },
+    },
+    starter: {
+        name: 'Starter',
+        slug: 'starter',
+        price_monthly: 19,
+        scan_limit: 2000,
+        api_limit: 5000,
+        storage_mb: 1000,
+        limits: { scans: 2000, api_calls: 5000, storage_mb: 1000 },
+    },
+    pro: {
+        name: 'Pro',
+        slug: 'pro',
+        price_monthly: 49,
+        scan_limit: 10000,
+        api_limit: 50000,
+        storage_mb: 5000,
+        limits: { scans: 10000, api_calls: 50000, storage_mb: 5000 },
+    },
+    business: {
+        name: 'Business',
+        slug: 'business',
+        price_monthly: 99,
+        scan_limit: 50000,
+        api_limit: 200000,
+        storage_mb: 20000,
+        limits: { scans: 50000, api_calls: 200000, storage_mb: 20000 },
+    },
+    enterprise: {
+        name: 'Enterprise',
+        slug: 'enterprise',
+        price_monthly: 199,
+        scan_limit: -1,
+        api_limit: -1,
+        storage_mb: -1,
+        limits: { scans: -1, api_calls: -1, storage_mb: -1 },
+    },
+};
+
 // ─── GET /plan — Current plan + available plans ──────────────────────────────
 router.get('/plan', authMiddleware, async (req, res) => {
     try {
         const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
-        let currentPlan = 'free';
+        let currentPlanName = 'free';
         let orgData = null;
 
         if (orgId) {
             orgData = await db.get('SELECT current_plan, name FROM organizations WHERE id = $1', [orgId]);
-            if (orgData?.current_plan) currentPlan = orgData.current_plan;
+            if (orgData?.current_plan) currentPlanName = orgData.current_plan;
         }
 
-        // Available plans for the pricing display
-        const available_plans = [
-            {
-                name: 'Free',
-                slug: 'free',
-                price: 0,
-                currency: 'USD',
-                interval: 'month',
-                features: ['5 Products', '100 Scans/mo', 'Basic Dashboard', 'Email Support'],
-            },
-            {
-                name: 'Pro',
-                slug: 'pro',
-                price: 49,
-                currency: 'USD',
-                interval: 'month',
-                features: [
-                    'Unlimited Products',
-                    '10,000 Scans/mo',
-                    'Advanced Analytics',
-                    'API Access',
-                    'Priority Support',
-                ],
-            },
-            {
-                name: 'Enterprise',
-                slug: 'enterprise',
-                price: 199,
-                currency: 'USD',
-                interval: 'month',
-                features: [
-                    'Unlimited Everything',
-                    'Custom Integrations',
-                    'SLA 99.9%',
-                    'Dedicated Support',
-                    'SSO',
-                    'Audit Logs',
-                ],
-            },
-        ];
+        const tier = PLAN_TIERS[currentPlanName] || PLAN_TIERS.free;
+        const plan = { plan_name: currentPlanName, ...tier, org_name: orgData?.name || null };
+        const available_plans = Object.values(PLAN_TIERS);
 
-        res.json({
-            plan: currentPlan,
-            org_name: orgData?.name || null,
-            available_plans,
-        });
+        res.json({ plan, available_plans });
     } catch (err) {
         console.error('GET /billing/plan error:', err);
-        res.json({ plan: 'free', available_plans: [] });
+        res.json({ plan: { plan_name: 'free', ...PLAN_TIERS.free }, available_plans: Object.values(PLAN_TIERS) });
     }
 });
 
@@ -123,36 +131,45 @@ router.get('/usage', authMiddleware, async (req, res) => {
         const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
         const now = new Date();
         const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
-        const period = {
-            start: periodStart,
-            end: periodEnd,
-            label: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
-        };
+        const periodLabel = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-        let usage = { scans: 0, products: 0, api_calls: 0 };
+        // Determine plan limits
+        let planName = 'free';
+        if (orgId) {
+            const org = await db.get('SELECT current_plan FROM organizations WHERE id = $1', [orgId]);
+            if (org?.current_plan) planName = org.current_plan;
+        }
+        const tier = PLAN_TIERS[planName] || PLAN_TIERS.free;
 
+        let scansUsed = 0,
+            productsUsed = 0;
         if (orgId) {
             try {
-                const scanCount = await db.get(
+                const sc = await db.get(
                     `SELECT COUNT(*) as c FROM scan_events WHERE org_id = $1 AND scanned_at >= $2`,
                     [orgId, periodStart]
                 );
-                const productCount = await db.get(`SELECT COUNT(*) as c FROM products WHERE org_id = $1`, [orgId]);
-                usage = { scans: scanCount?.c || 0, products: productCount?.c || 0, api_calls: 0 };
+                const pc = await db.get(`SELECT COUNT(*) as c FROM products WHERE org_id = $1`, [orgId]);
+                scansUsed = sc?.c || 0;
+                productsUsed = pc?.c || 0;
             } catch (_) {}
         } else {
-            // Platform/admin — aggregate counts
             try {
-                const scanCount = await db.get(`SELECT COUNT(*) as c FROM scan_events WHERE scanned_at >= $1`, [
-                    periodStart,
-                ]);
-                const productCount = await db.get(`SELECT COUNT(*) as c FROM products`);
-                usage = { scans: scanCount?.c || 0, products: productCount?.c || 0, api_calls: 0 };
+                const sc = await db.get(`SELECT COUNT(*) as c FROM scan_events WHERE scanned_at >= $1`, [periodStart]);
+                const pc = await db.get(`SELECT COUNT(*) as c FROM products`);
+                scansUsed = sc?.c || 0;
+                productsUsed = pc?.c || 0;
             } catch (_) {}
         }
 
-        res.json({ period, usage });
+        res.json({
+            period: periodLabel,
+            usage: {
+                scans: { used: scansUsed, limit: tier.limits.scans },
+                api_calls: { used: 0, limit: tier.limits.api_calls },
+                storage_mb: { used: productsUsed, limit: tier.limits.storage_mb },
+            },
+        });
     } catch (err) {
         console.error('GET /billing/usage error:', err);
         res.json({ period: null, usage: {} });
