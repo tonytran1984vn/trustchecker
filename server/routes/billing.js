@@ -588,6 +588,65 @@ router.post('/upgrade', authMiddleware, requireRole('admin'), async (req, res) =
 });
 
 /**
+ * Endpoint: POST /api/v1/billing/addon/toggle
+ * Modifies an org's feature_flags to dynamically add or remove self-serve add-ons.
+ * Simulates an MRR increase/decrease without prorations for this MVP.
+ */
+router.post('/addon/toggle', authMiddleware, requireRole('admin'), async (req, res) => {
+    try {
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
+        const { feature_id } = req.body;
+
+        if (!feature_id) {
+            return res.status(400).json({ error: 'Missing feature_id parameter' });
+        }
+
+        const org = await db.get('SELECT plan, feature_flags FROM organizations WHERE id = $1', [orgId]);
+        if (!org) {
+            return res.status(404).json({ error: 'Organization not found' });
+        }
+
+        let flags = {};
+        if (org.feature_flags) {
+            flags = typeof org.feature_flags === 'string' ? JSON.parse(org.feature_flags) : org.feature_flags;
+        }
+
+        const planName = org.plan || 'core';
+        const defaults = PLAN_DEFAULTS[planName] || [];
+
+        // Check if feature is in defaults
+        const isDefault = defaults.includes(feature_id);
+
+        // Calculate current state
+        // If it's a default and the flag is explicitly set to false, it's currently removed.
+        // If it's not a default and the flag is true, it's added.
+        let isCurrentlyActive = false;
+        if (isDefault) {
+            isCurrentlyActive = flags[feature_id] !== false;
+        } else {
+            isCurrentlyActive = !!flags[feature_id];
+        }
+
+        // Toggle state
+        const targetState = !isCurrentlyActive;
+
+        // If targetState matches the default, we can just remove the override
+        if (targetState === isDefault) {
+            delete flags[feature_id];
+        } else {
+            flags[feature_id] = targetState;
+        }
+
+        await db.run('UPDATE organizations SET feature_flags = $1 WHERE id = $2', [JSON.stringify(flags), orgId]);
+
+        res.json({ success: true, feature_id, active: targetState });
+    } catch (e) {
+        console.error('Addon Toggle Error:', e.message);
+        res.status(500).json({ error: 'Failed to toggle add-on.' });
+    }
+});
+
+/**
  * Endpoint: POST /api/v1/billing/downgrade
  * Safe Downgrade Flow. Schedules plan transitions strictly at period_end.
  */

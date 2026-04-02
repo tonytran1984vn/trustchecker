@@ -88,11 +88,16 @@ export function renderPage() {
 
         const renderChip = (f, type) => {
             const isActive = type === 'included' || type === 'active_addon';
+            const isToggleable = type === 'active_addon' || type === 'available';
             const color = isActive ? '#3b82f6' : 'var(--text-muted)';
             const bg = isActive ? '#eff6ff' : 'transparent';
             const border = isActive ? '#bfdbfe' : 'var(--border)';
+            const onclickStr = isToggleable ? `onclick="event.stopPropagation(); toggleAddon('${f.id}', ${type === 'active_addon'}, '${f.label}', ${f.price})"` : '';
+            const hoverStr = isToggleable ? `onmouseover="this.style.filter='brightness(0.95)'" onmouseout="this.style.filter='none'"` : '';
+            const cursorStyle = isToggleable ? 'cursor:pointer;transition:all 0.2s;box-shadow:0 1px 2px rgba(0,0,0,0.05)' : '';
+
             return `
-            <div style="display:inline-flex;align-items:center;padding:4px 10px;border:1px solid ${border};background:${bg};border-radius:20px;font-size:0.7rem;margin:3px 2px;white-space:nowrap;color:${color}">
+            <div ${onclickStr} ${hoverStr} style="display:inline-flex;align-items:center;padding:4px 10px;border:1px solid ${border};background:${bg};border-radius:20px;font-size:0.7rem;margin:3px 2px;white-space:nowrap;color:${color};${cursorStyle}">
               <span style="font-size:0.8rem;margin-right:5px">${f.icon}</span> 
               <span style="font-weight:500">${f.label}</span>
               ${isActive ? '<span style="color:#10b981;font-weight:900;margin-left:4px;font-size:0.75rem">✓</span>' : `<span style="opacity:0.8;font-size:0.65rem;margin-left:6px;font-weight:800;color:var(--text-muted)">+$${f.price}</span>`}
@@ -122,15 +127,15 @@ export function renderPage() {
                     ${includedFeatures.map(f => renderChip(f, 'included')).join('')}
                 </div>
 
-                ${activeAddonFeatures.length > 0 ? `
+                ${isCurrent && activeAddonFeatures.length > 0 ? `
                 <div style="font-size:0.65rem;color:#3b82f6;font-weight:700;margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">★ Active Upgrades</div>
                 <div style="display:flex;flex-wrap:wrap">
                     ${activeAddonFeatures.map(f => renderChip(f, 'active_addon')).join('')}
                 </div>
                 ` : ''}
 
-                ${availableFeatures.length > 0 ? `
-                <div style="font-size:0.65rem;color:var(--text-muted);font-weight:700;margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">+ Available Upgrades</div>
+                ${isCurrent && availableFeatures.length > 0 ? `
+                <div style="font-size:0.65rem;color:var(--text-muted);font-weight:700;margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px">+ Available Upgrades (Click to Add)</div>
                 <div style="display:flex;flex-wrap:wrap">
                     ${availableFeatures.map(f => renderChip(f, 'available')).join('')}
                 </div>
@@ -185,13 +190,9 @@ export function renderPage() {
 async function upgradePlan(plan) {
   if (!confirm(`Upgrade to ${plan}? Pending charges will be invoiced.`)) return;
   try {
-    const res = await API.post('/billing/upgrade', { plan_name: plan });
-    if (res.status === 'pending') {
-        showToast(`Upgraded to ${plan} – Prorated Invoice generated for $${res.amount}`, 'warning');
-    } else {
-        showToast(`Upgraded to ${plan} successfully`, 'success');
-    }
-    navigate(window.location.hash.includes('governance') ? 'billing' : window.location.hash);
+    const res = await API.post('/billing/upgrade', { targetPlanName: plan, targetPriceId: 'fake' });
+    showToast(`Upgraded to ${plan} successfully`, 'success');
+    navigate('billing', true);
   } catch (e) { showToast(e.message || 'Upgrade failed', 'error'); }
 }
 
@@ -200,10 +201,20 @@ async function payInvoice(id) {
   try {
     await API.post(`/billing/pay/${id}`);
     showToast('Payment successful, unrestricted access restored.', 'success');
-    navigate(window.location.hash);
+    navigate('billing', true);
   } catch(e) { showToast(e.message || 'Payment failed', 'error'); }
+}
+
+async function toggleAddon(id, currentStatus, label, price) {
+  if (!confirm(`${currentStatus ? 'Remove' : 'Add'} ${label} (${currentStatus ? '-' : '+'}$${price}/mo)? MRR updates will be reflected on the next invoice.`)) return;
+  try {
+    await API.post('/billing/addon/toggle', { feature_id: id });
+    showToast(`${label} ${currentStatus ? 'removed' : 'added'} successfully`, 'success');
+    navigate('billing', true);
+  } catch(e) { showToast(e.message || 'Error updating add-on', 'error'); }
 }
 
 // Window exports for onclick handlers
 window.upgradePlan = upgradePlan;
 window.payInvoice = payInvoice;
+window.toggleAddon = toggleAddon;
