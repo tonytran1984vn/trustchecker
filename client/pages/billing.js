@@ -39,21 +39,34 @@ export function renderPage() {
       </button>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:var(--gap);margin-bottom:var(--gap)">
-      ${(Array.isArray(d.available) ? d.available.map(p => [p.slug || p.name.toLowerCase(), p]) : Object.entries(d.available)).map(([key, p]) => `
-        <div class="card" style="border:${plan?.plan_name === key ? '2px solid ' + planColors[key] : '1px solid var(--border)'};cursor:pointer;position:relative" onclick="${plan?.plan_name !== key && State.user?.role === 'admin' ? `upgradePlan('${key}')` : ''}">
-          ${plan?.plan_name === key ? '<div style="position:absolute;top:8px;right:8px;font-size:0.65rem;background:var(--emerald);color:#000;padding:2px 8px;border-radius:99px;font-weight:700">CURRENT</div>' : ''}
-          <div style="padding:var(--gap);text-align:center">
+      ${(Array.isArray(d.available) ? d.available.map(p => [p.slug || p.name.toLowerCase(), p]) : Object.entries(d.available)).map(([key, p]) => {
+        const isCurrent = plan?.slug === key;
+        const displayName = isCurrent ? plan.name : p.name;
+        const displayPrice = isCurrent ? plan.price_monthly : p.price_monthly;
+        return `
+        <div class="card" style="border:${isCurrent ? '2px solid ' + planColors[key] : '1px solid var(--border)'};cursor:${isCurrent ? 'default' : 'pointer'};position:relative;display:flex;flex-direction:column;" onclick="${!isCurrent && State.user?.role === 'admin' ? `upgradePlan('${key}')` : ''}">
+          ${isCurrent ? '<div style="position:absolute;top:8px;right:8px;font-size:0.65rem;background:var(--emerald);color:#000;padding:2px 8px;border-radius:99px;font-weight:700">CURRENT</div>' : ''}
+          <div style="padding:var(--gap);text-align:center;flex:1;display:flex;flex-direction:column;">
             <div style="font-size:2rem">${planIcons[key]}</div>
-            <div style="font-size:1.1rem;font-weight:700;color:${planColors[key]};margin:8px 0">${p.name}</div>
-            <div style="font-size:1.5rem;font-weight:800">${p.price_monthly != null ? '$' + p.price_monthly : 'Custom'}<span style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">/mo</span></div>
-            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:12px;text-align:left">
+            <div style="font-size:1.1rem;font-weight:700;color:${planColors[key]};margin:8px 0">${displayName}</div>
+            <div style="font-size:1.5rem;font-weight:800">${displayPrice != null ? '$' + displayPrice : 'Custom'}<span style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">/mo</span></div>
+            
+            ${isCurrent && plan.addons?.length > 0 ? `
+              <div style="margin-top:12px;font-size:0.7rem;color:var(--text-muted);border-top:1px dashed var(--border);padding-top:12px;text-align:left">
+                <div style="font-weight:600;margin-bottom:6px;color:var(--text);display:flex;justify-content:space-between"><span>Base Plan</span><span>$${plan.base_price}/mo</span></div>
+                <div style="font-weight:600;margin-bottom:6px;color:var(--text);display:flex;justify-content:space-between"><span>Active Add-ons</span><span style="color:var(--cyan)">+$${plan.addon_cost}/mo</span></div>
+                ${plan.addons.map(a => `<div style="display:flex;justify-content:space-between;padding:2px 0;opacity:0.8"><span>+ ${a.label}</span><span>$${a.price}</span></div>`).join('')}
+              </div>
+            ` : ''}
+
+            <div style="margin-top:auto;padding-top:12px;text-align:left;border-top:${isCurrent && plan.addons?.length > 0 ? '1px dashed var(--border)' : '1px dashed var(--border)'};font-size:0.72rem;color:var(--text-muted);">
               <div>📱 ${(p.limits?.scans ?? p.scan_limit ?? 0) < 0 ? 'Unlimited' : (p.limits?.scans ?? p.scan_limit ?? 0).toLocaleString()} scans</div>
               <div>🔌 ${(p.limits?.api_calls ?? p.api_limit ?? 0) < 0 ? 'Unlimited' : (p.limits?.api_calls ?? p.api_limit ?? 0).toLocaleString()} API calls</div>
               <div>💾 ${(p.limits?.storage_mb ?? p.storage_mb ?? 0) < 0 ? 'Unlimited' : (p.limits?.storage_mb ?? p.storage_mb ?? 0).toLocaleString()} MB storage</div>
             </div>
           </div>
         </div>
-      `).join('')}
+      `;}).join('')}
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)">
