@@ -101,7 +101,8 @@ class GovernanceRouter {
     shouldRouteToCanary(timestampStr) {
         if (this.stateInfo.mode !== 'CANARY' || this.stateInfo.kill_switch_engaged) return false;
 
-        const hashInt = parseInt(crypto.createHash('md5').update(timestampStr).digest('hex').substring(0, 8), 16);
+        const timestampSafe = String(timestampStr);
+        const hashInt = parseInt(crypto.createHash('md5').update(timestampSafe).digest('hex').substring(0, 8), 16);
         return hashInt % 100 < 5; // 5% Canary split
     }
 }
