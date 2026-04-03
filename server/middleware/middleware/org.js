@@ -28,7 +28,7 @@ function orgMiddleware(req, res, next) {
     if (req.user && req.user.orgId) {
         req.orgId = req.user.orgId;
         req.orgSlug = req.user.orgSlug || null;
-        req.orgPlan = req.user.orgPlan || 'free';
+        req.orgPlan = req.user.orgPlan || 'core';
         req.orgSchema = req.user.orgSchema || null; // null = shared schema
     }
     // Set super_admin flag for downstream route convenience
@@ -59,7 +59,6 @@ function orgMiddleware(req, res, next) {
     next();
 }
 
-
 // ─── Require Org — Guard Middleware ───────────────────────────────────────────
 function requireOrg(req, res, next) {
     if (!req.orgId && !req.orgSlug) {
@@ -70,7 +69,6 @@ function requireOrg(req, res, next) {
     }
     next();
 }
-
 
 // ─── Apply RLS to Database Connection ────────────────────────────────────────
 /**
@@ -102,7 +100,6 @@ async function applyOrgContext(db, req) {
         await db.run(`SELECT set_config('app.current_org', $1, true)`, [req.orgId]);
     }
 }
-
 
 // ─── Org-Scoped Query Helper ─────────────────────────────────────────────────
 /**
@@ -142,7 +139,6 @@ function injectOrgFilter(baseQuery, baseParams = [], orgId) {
 
     return { query, params: newParams };
 }
-
 
 module.exports = {
     orgMiddleware,

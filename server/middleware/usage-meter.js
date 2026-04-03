@@ -31,7 +31,7 @@ async function meterUsage(userId, type, count = 1, wss = null) {
 
     // Get current plan
     const plan = await db.get("SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'", [userId]);
-    const planName = plan?.plan_name || 'free';
+    const planName = plan?.plan_name || 'core';
 
     // Get current usage (from cache or DB)
     const currentUsage = await _getCurrentUsage(userId, type, period);
@@ -102,7 +102,7 @@ async function meterUsage(userId, type, count = 1, wss = null) {
 async function getDetailedUsage(userId) {
     const period = new Date().toISOString().substring(0, 7);
     const plan = await db.get("SELECT * FROM billing_plans WHERE user_id = ? AND status = 'active'", [userId]);
-    const planName = plan?.plan_name || 'free';
+    const planName = plan?.plan_name || 'core';
     const planDef = PLANS[planName] || PLANS.free;
 
     const types = ['scans', 'nft_mints', 'carbon_calcs', 'api_calls'];

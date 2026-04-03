@@ -2053,7 +2053,7 @@ router.get('/owner/financial', requireOrgOwner(), async (req, res) => {
 
         res.json({
             plan: {
-                plan_name: orgInfo?.plan || plan.plan_name || 'free',
+                plan_name: orgInfo?.plan || plan.plan_name || 'core',
                 price_monthly: plan.price_monthly || 0,
                 billing_cycle: plan.billing_cycle || 'monthly',
                 sla_level: plan.sla_level || null,
@@ -2220,7 +2220,7 @@ router.get('/owner/compliance', requireOrgOwner(), async (req, res) => {
                 partial: complianceRecords.filter(r => r.status === 'partial').length,
                 non_compliant: complianceRecords.filter(r => r.status !== 'compliant' && r.status !== 'partial').length,
             },
-            org_plan: orgSettings?.plan || 'free',
+            org_plan: orgSettings?.plan || 'core',
         });
     } catch (err) {
         logger.error('[OwnerAPI] Compliance error:', err);
@@ -3497,7 +3497,7 @@ router.get('/owner/ccs/valuation', requireExecutiveAccess(), async (req, res) =>
                 payback_months:
                     platformCost > 0 && evUplift > 0 ? Math.round((platformCost / (evUplift / 12)) * 10) / 10 : 0,
             },
-            org_plan: orgInfo?.plan || 'free',
+            org_plan: orgInfo?.plan || 'core',
         };
         ccsSet(tid, 'valuation', _valResult);
         res.json(_valResult);
@@ -3783,7 +3783,7 @@ router.get('/owner/ccs/performance', requireExecutiveAccess(), async (req, res) 
         if (billingPlan?.price_monthly > 0) {
             platformCost = Math.round(billingPlan.price_monthly * 12);
         } else {
-            const orgPlan = orgInfo?.plan || 'free';
+            const orgPlan = orgInfo?.plan || 'core';
             platformCost = planTierCosts[orgPlan] || 0;
         }
 

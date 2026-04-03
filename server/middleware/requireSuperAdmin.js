@@ -9,9 +9,13 @@ function requireSuperAdmin() {
         if (!req.user) {
             return res.status(401).json({ error: 'Authentication required' });
         }
-        if (req.user.role !== 'super_admin') {
+        const isSuperAdmin = req.user.role === 'super_admin';
+        const isPlatformAdmin =
+            req.user.role === 'platform_admin' || (req.user.role === 'admin' && req.user.user_type === 'platform');
+
+        if (!isSuperAdmin && !isPlatformAdmin) {
             return res.status(403).json({
-                error: 'Super Admin access required',
+                error: 'Super Admin or Platform Admin access required',
                 code: 'SUPER_ADMIN_ONLY',
             });
         }

@@ -73,7 +73,7 @@ export function renderPage() {
             { id: 'profile', label: 'Company Profile', icon: icon('building', 14), render: renderProfile },
             { id: 'security', label: 'Security', icon: icon('lock', 14), render: lazy(() => import('../settings.js')) },
             { id: 'integrations', label: 'API & Integrations', icon: icon('plug', 14), render: lazy(() => import('./integrations.js')) },
-            { id: 'billing', label: 'Billing & Quota', icon: icon('creditCard', 14), render: lazy(() => import('../billing.js')) },
+            { id: 'billing', label: 'Billing & Quota', icon: icon('creditCard', 14), render: lazy(() => import('../billing.js?v=2')) },
         ],
     });
 }

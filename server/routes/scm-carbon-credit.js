@@ -109,7 +109,7 @@ router.post('/pipeline', requirePermission('esg:manage'), async (req, res) => {
                     c.credit_id,
                     c.serial_number,
                     c.status,
-                    c.quantity_tCO2e,
+                    c.quantity_tco2e || c.quantity_tCO2e,
                     c.quantity_kgCO2e,
                     c.vintage_year,
                     c.project.name,
@@ -141,7 +141,7 @@ router.post('/pipeline', requirePermission('esg:manage'), async (req, res) => {
                     req.user?.id,
                     c.credit_id,
                     JSON.stringify({
-                        tCO2e: c.quantity_tCO2e,
+                        tCO2e: c.quantity_tco2e || c.quantity_tCO2e,
                         confidence: c.mrv.confidence_score,
                         uid: c.additionality.reduction_uid?.slice(0, 16),
                     }),
@@ -229,11 +229,18 @@ router.get('/registry', cacheMiddleware(30), async (req, res) => {
         res.json({
             title: 'Carbon Credit Registry (CCME v3.0)',
             total: credits.length,
-            credits: credits.map(c => ({
-                ...c,
-                provenance: JSON.parse(c.provenance || '[]'),
-                retirement_data: c.retirement_data ? JSON.parse(c.retirement_data) : null,
-            })),
+            credits: credits.map(c => {
+                const val = c.quantity_tco2e || c.quantity_tCO2e || 0;
+                // If the value is > 100, it's likely a kgCO2e value seeded incorrectly in the tCO2e column
+                const isKg = val > 100;
+                return {
+                    ...c,
+                    quantity_tCO2e: isKg ? val / 1000 : val,
+                    quantity_kgCO2e: isKg ? val : val * 1000,
+                    provenance: JSON.parse(c.provenance || '[]'),
+                    retirement_data: c.retirement_data ? JSON.parse(c.retirement_data) : null,
+                };
+            }),
         });
     } catch (err) {
         res.status(500).json({ error: 'Registry query failed' });
@@ -257,8 +264,12 @@ router.get('/registry/:creditId', async (req, res) => {
                   credit.simulation_id,
               ])
             : null;
+        const val = credit.quantity_tco2e || credit.quantity_tCO2e || 0;
+        const isKg = val > 100;
         res.json({
             ...credit,
+            quantity_tCO2e: isKg ? val / 1000 : val,
+            quantity_kgCO2e: isKg ? val : val * 1000,
             provenance: JSON.parse(credit.provenance || '[]'),
             retirement_data: credit.retirement_data ? JSON.parse(credit.retirement_data) : null,
             simulation: sim,
@@ -371,7 +382,12 @@ router.get('/balance', async (req, res) => {
         const active = credits.filter(c => c.status === 'minted' || c.status === 'active');
         const retired = credits.filter(c => c.status === 'retired');
         const transferred = credits.filter(c => c.status === 'transferred');
-        const sum = arr => arr.reduce((s, c) => s + (c.quantity_tCO2e || 0), 0);
+        const sum = arr =>
+            arr.reduce((s, c) => {
+                const val = c.quantity_tco2e || c.quantity_tCO2e || 0;
+                // If the value is > 100, it's likely natively kgCO2e that was seeded into tco2e
+                return s + (val > 100 ? val / 1000 : val);
+            }, 0);
 
         const directTCO2e = sum(credits);
 
@@ -450,7 +466,7 @@ router.get('/verify/:creditId', async (req, res) => {
             credit_id: c.credit_id,
             serial_number: c.serial_number,
             status: c.status,
-            quantity_tCO2e: c.quantity_tCO2e,
+            quantity_tCO2e: c.quantity_tco2e || c.quantity_tCO2e,
             vintage_year: c.vintage_year,
             project: c.project_name,
             intervention: c.intervention,
@@ -478,7 +494,7 @@ router.get('/market-stats', cacheMiddleware(60), async (req, res) => {
             const y = c.vintage_year || 'unknown';
             if (!vintages[y]) vintages[y] = { count: 0, tCO2e: 0 };
             vintages[y].count++;
-            vintages[y].tCO2e += c.quantity_tCO2e || 0;
+            vintages[y].tCO2e += c.quantity_tco2e || c.quantity_tCO2e || 0;
         });
 
         const byIntervention = {};
@@ -487,7 +503,7 @@ router.get('/market-stats', cacheMiddleware(60), async (req, res) => {
             byIntervention[t] = (byIntervention[t] || 0) + 1;
         });
 
-        const total_tCO2e = credits.reduce((s, c) => s + (c.quantity_tCO2e || 0), 0);
+        const total_tCO2e = credits.reduce((s, c) => s + (c.quantity_tco2e || c.quantity_tCO2e || 0), 0);
 
         res.json({
             title: 'Carbon Credit Market (CCME v3.0)',
@@ -540,7 +556,7 @@ router.get('/evidence/:creditId', requirePermission('compliance:view'), async (r
         const mockCF = {
             baseline: { mode: 'air', emission_kgCO2e: c.quantity_kgCO2e * 2 },
             actual: { mode: c.intervention, total_kgCO2e: c.quantity_kgCO2e },
-            reduction: { transport_kgCO2e: c.quantity_kgCO2e, tCO2e: c.quantity_tCO2e },
+            reduction: { transport_kgCO2e: c.quantity_kgCO2e, tCO2e: c.quantity_tco2e || c.quantity_tCO2e },
         };
 
         res.json(ccme.generateEvidencePackage(credit, mockMRV, mockAdd, mockCF));

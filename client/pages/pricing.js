@@ -11,9 +11,9 @@ export function renderPage() {
 
   const isAnnual = State.pricingAnnual || false;
   const plans = d.plans;
-  const planOrder = ['free', 'starter', 'pro', 'business', 'enterprise'];
-  const planColors = { free: '#6b7280', starter: '#06b6d4', pro: '#8b5cf6', business: '#f59e0b', enterprise: '#ef4444' };
-  const planIcons = { free: '🆓', starter: '🚀', pro: '⚡', business: '🏢', enterprise: '👑' };
+  const planOrder = ['core', 'pro', 'enterprise'];
+  const planColors = { core: '#06b6d4', pro: '#8b5cf6', enterprise: '#ef4444' };
+  const planIcons = { core: '🚀', pro: '⚡', enterprise: '👑' };
 
   const toggleBilling = () => {
     State.pricingAnnual = !State.pricingAnnual;
@@ -22,7 +22,7 @@ export function renderPage() {
   window._toggleBilling = toggleBilling;
 
   const formatLimit = (v) => v === -1 ? '∞' : (typeof v === 'number' ? v.toLocaleString() : v);
-  const currentPlan = State.billingData?.plan?.plan_name || 'free';
+  const currentPlan = State.billingData?.plan?.plan_name || 'core';
 
   return `
     <div style="max-width:1200px;margin:0 auto">
@@ -147,19 +147,19 @@ export function renderPage() {
             </tr>
             ${[
       ['SLA Guarantee', ...planOrder.map(s => plans[s]?.sla || '—')],
-      ['Support Level', 'Community', 'Email', 'Priority', 'Dedicated', 'Dedicated+Slack'],
-      ['Fraud Detection', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['AI Anomaly Detection', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['Digital Twin', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['Carbon Tracking', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['NFT Certificates', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['Custom Branding', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['SSO / SAML', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['On-Premise', '—', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['GS1 Certified Partner', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['SOC 2 Type II', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['ISO 27001:2022', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['GDPR Compliant', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Support Level', 'Community/Email', 'Priority', 'Dedicated+Slack'],
+      ['Fraud Detection', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['AI Anomaly Detection', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Digital Twin', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Carbon Tracking', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['NFT Certificates', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Custom Branding', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['SSO / SAML', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['On-Premise', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['GS1 Certified Partner', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['SOC 2 Type II', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['ISO 27001:2022', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['GDPR Compliant', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
     ].map(row => `
               <tr>
                 <td style="font-weight:600;font-size:0.8rem">${row[0]}</td>

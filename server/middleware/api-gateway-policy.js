@@ -141,7 +141,7 @@ class APIKeyManager {
         const key = `tc_${crypto.randomBytes(24).toString('hex')}`;
         this._keys.set(key, {
             orgId,
-            plan: options.plan || 'free',
+            plan: options.plan || 'core',
             scopes: options.scopes || ['read'],
             ipWhitelist: new Set(options.ipWhitelist || []),
             ipBlacklist: new Set(options.ipBlacklist || []),
@@ -257,7 +257,7 @@ class APIGateway {
             const isQuotaExempt = quotaExempt.some(p => req.path.startsWith(p));
             if (this.enforceQuota && !isQuotaExempt) {
                 const orgId = req.orgId || req.apiKeyData?.orgId || 'anonymous';
-                const plan = req.apiKeyData?.plan || req.user?.plan || 'free';
+                const plan = req.apiKeyData?.plan || req.user?.plan || 'core';
                 const quotaResult = this.quotaManager.check(orgId, plan);
 
                 // Add quota headers

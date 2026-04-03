@@ -62,7 +62,7 @@ class TokenBucket {
 
 // ─── Org Throttle Configuration ──────────────────────────
 const ORG_LIMITS = {
-    enterprise: { capacity: 100, refillRate: 20 },  // 100 burst, 20/sec sustained
+    enterprise: { capacity: 100, refillRate: 20 }, // 100 burst, 20/sec sustained
     pro: { capacity: 50, refillRate: 10 },
     core: { capacity: 20, refillRate: 5 },
     free: { capacity: 5, refillRate: 1 },
@@ -113,7 +113,7 @@ class WorkerManager extends EventEmitter {
 
     canProcess(job) {
         const orgId = job.data?.orgId || job.data?.context?.orgId;
-        const plan = job.data?.orgPlan || job.data?.context?.orgPlan || 'free';
+        const plan = job.data?.orgPlan || job.data?.context?.orgPlan || 'core';
         const bucket = this._getOrgBucket(orgId, plan);
         return bucket.consume(1);
     }
@@ -124,8 +124,8 @@ class WorkerManager extends EventEmitter {
      */
     static sortByPriority(jobs) {
         return jobs.sort((a, b) => {
-            const pA = PLAN_PRIORITY[a.data?.orgPlan || a.opts?.priority || 'free'] || 10;
-            const pB = PLAN_PRIORITY[b.data?.orgPlan || b.opts?.priority || 'free'] || 10;
+            const pA = PLAN_PRIORITY[a.data?.orgPlan || a.opts?.priority || 'core'] || 10;
+            const pB = PLAN_PRIORITY[b.data?.orgPlan || b.opts?.priority || 'core'] || 10;
             if (pB !== pA) return pB - pA; // Higher priority first
             // Same priority → FIFO by creation time
             return (a.createdAt || 0) - (b.createdAt || 0);
@@ -168,7 +168,7 @@ class WorkerManager extends EventEmitter {
                 config.handler(job),
                 new Promise((_, reject) => {
                     setTimeout(() => reject(new Error('Job timeout')), config.timeout);
-                })
+                }),
             ]);
 
             this._stats.succeeded++;

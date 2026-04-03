@@ -28,7 +28,7 @@ function orgMiddleware(req, res, next) {
     if (req.user && req.user.orgId) {
         req.orgId = req.user.orgId;
         req.orgSlug = req.user.orgSlug || null;
-        req.orgPlan = req.user.orgPlan || 'free';
+        req.orgPlan = req.user.orgPlan || 'core';
         req.orgSchema = req.user.orgSchema || null; // null = shared schema
     }
     // Set super_admin flag for downstream route convenience

@@ -20,7 +20,7 @@ async function loadMetrics() {
         const suspended = orgs.filter(t => t.status === 'suspended').length;
         const totalUsers = orgs.reduce((sum, t) => sum + (parseInt(t.user_count) || 0), 0);
         const planCounts = {};
-        orgs.forEach(t => { const p = (t.plan || 'free').toLowerCase(); planCounts[p] = (planCounts[p] || 0) + 1; });
+        orgs.forEach(t => { const p = (t.plan || 'core').toLowerCase(); planCounts[p] = (planCounts[p] || 0) + 1; });
         metrics = { totalOrgs: orgs.length, activeOrgs: active, suspended, totalUsers, orgs, planCounts };
         lastLoad = Date.now();
 
@@ -63,8 +63,8 @@ export function renderPage() {
     }
 
     const m = metrics || {};
-    const planColors = { free: '#94a3b8', starter: '#0ea5e9', pro: '#8b5cf6', business: '#f59e0b', enterprise: '#f97316', core: '#0ea5e9' };
-    const planLabels = { free: 'Free', starter: 'Starter', pro: 'Pro', business: 'Business', enterprise: 'Enterprise', core: 'Core' };
+    const planColors = { core: '#0ea5e9', pro: '#8b5cf6', enterprise: '#f97316' };
+    const planLabels = { core: 'Core', pro: 'Professional', enterprise: 'Enterprise' };
     const planEntries = Object.entries(m.planCounts || {}).sort((a, b) => b[1] - a[1]);
     const totalPlans = planEntries.reduce((s, e) => s + e[1], 0) || 1;
 
@@ -262,7 +262,7 @@ export function renderPage() {
                         <span style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);text-align:center">●</span>
                     </div>
                     ${(m.orgs || []).map((t, i) => {
-        const plan = (t.plan || 'free').toLowerCase();
+        const plan = (t.plan || 'core').toLowerCase();
         const s = t.status || 'active';
         const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#e11d48'];
         const bg = colors[i % colors.length];

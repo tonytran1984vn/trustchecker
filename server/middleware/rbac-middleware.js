@@ -19,8 +19,12 @@ function requirePerm(permissions) {
             return res.status(401).json({ error: 'Authentication required', code: 'AUTH_REQUIRED' });
         }
 
-        // Super admin bypass
-        if (req.user.role === 'super_admin' || req.user.role === 'platform_admin') {
+        // Super / Platform admin bypass
+        if (
+            req.user.role === 'super_admin' ||
+            req.user.role === 'platform_admin' ||
+            (req.user.role === 'admin' && req.user.user_type === 'platform')
+        ) {
             return next();
         }
 

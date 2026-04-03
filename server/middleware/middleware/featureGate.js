@@ -1,33 +1,30 @@
 /**
  * Feature Gate Middleware — Plan-Based Access Control
- * 
+ *
  * Controls access to modules based on the user's billing plan.
- * Plans: free → core → pro → enterprise (each includes all lower tiers).
- * 
+ * Plans: core → pro → enterprise (each includes all lower tiers).
+ *
  * Usage:
  *   const { requireFeature } = require('../middleware/featureGate');
  *   router.get('/radar', requireFeature('risk_radar'), handler);
  */
 
 // ─── Plan → Feature mapping ────────────────────────────────────────────────
-const PLAN_HIERARCHY = ['free', 'core', 'pro', 'enterprise'];
+const PLAN_HIERARCHY = ['core', 'pro', 'enterprise'];
 
 const FEATURE_PLANS = {
-    // Free tier (basic)
-    products: 'free',
-    qr: 'free',
-    dashboard: 'free',
-
-    // Core tier ($29/mo)
+    // Core tier
+    products: 'core',
+    qr: 'core',
+    dashboard: 'core',
     fraud: 'core',
     reports: 'core',
     scm_tracking: 'core',
+    inventory: 'core',
     support: 'core',
+    partners: 'core',
 
-    // Pro tier ($79/mo)
-    inventory: 'pro',
-    logistics: 'pro',
-    partners: 'pro',
+    // Pro tier ($299/mo)
     ai_forecast: 'pro',
     demand_sensing: 'pro',
     risk_radar: 'pro',
@@ -40,18 +37,25 @@ const FEATURE_PLANS = {
     trust_graph: 'pro',
     what_if: 'pro',
     monte_carlo: 'pro',
+    carbon: 'pro',
+    digital_twin: 'pro',
+    blockchain: 'pro',
+    nft: 'pro',
 
-    // Enterprise tier ($199/mo)
-    carbon: 'enterprise',
-    digital_twin: 'enterprise',
+    // Enterprise tier ($5,000/mo)
     epcis: 'enterprise',
-    blockchain: 'enterprise',
-    nft: 'enterprise',
     branding: 'enterprise',
     wallet: 'enterprise',
     webhooks: 'enterprise',
     integrations: 'enterprise',
     white_label: 'enterprise',
+    overclaim: 'enterprise',
+    erp_integration: 'enterprise',
+    exec_dashboard: 'enterprise',
+    lineage: 'enterprise',
+    governance: 'enterprise',
+    registry_export: 'enterprise',
+    ivu_cert: 'enterprise',
 };
 
 /**
@@ -70,7 +74,7 @@ function getRequiredPlan(feature) {
  * @returns {boolean}
  */
 function hasAccess(userPlan, requiredPlan) {
-    const userLevel = PLAN_HIERARCHY.indexOf(userPlan || 'free');
+    const userLevel = PLAN_HIERARCHY.indexOf(userPlan || 'core');
     const requiredLevel = PLAN_HIERARCHY.indexOf(requiredPlan);
     return userLevel >= requiredLevel;
 }
@@ -78,9 +82,9 @@ function hasAccess(userPlan, requiredPlan) {
 /**
  * Express middleware — gates access to a feature based on user plan.
  * If the user doesn't have access, returns 403 with upgrade info.
- * 
+ *
  * Admin role bypasses all feature gates.
- * 
+ *
  * @param {string} feature - Feature key from FEATURE_PLANS
  */
 function requireFeature(feature) {
@@ -88,7 +92,7 @@ function requireFeature(feature) {
         // Admin always has full access
         if (req.user && req.user.role === 'admin') return next();
 
-        const userPlan = req.user?.plan || 'free';
+        const userPlan = req.user?.plan || 'core';
         const requiredPlan = getRequiredPlan(feature);
 
         if (hasAccess(userPlan, requiredPlan)) {
@@ -102,10 +106,10 @@ function requireFeature(feature) {
             required_plan: requiredPlan,
             upgrade_url: '/billing',
             plans: {
-                core: '$29/mo — Fraud detection, reports, SCM tracking',
-                pro: '$79/mo — AI analytics, risk radar, inventory, logistics',
-                enterprise: '$199/mo — Carbon/ESG, digital twin, EPCIS, blockchain'
-            }
+                core: 'Free — QR traceability, product catalog, SCM, inventory, partners',
+                pro: '$299/mo — Risk radar, carbon, AI analytics, blockchain, NFT, KYC',
+                enterprise: '$5,000/mo — ERP integration, overclaim, governance, lineage, IVU cert',
+            },
         });
     };
 }
@@ -127,5 +131,5 @@ module.exports = {
     getRequiredPlan,
     getFeaturesForPlan,
     FEATURE_PLANS,
-    PLAN_HIERARCHY
+    PLAN_HIERARCHY,
 };

@@ -128,9 +128,9 @@ const PAGE_LOADERS = {
     'sa-services': () => import('../pages/sa/services-status.js'),
     'sa-performance': () => import('../pages/sa/services-status.js'),
     'sa-incidents': () => import('../pages/sa/incidents.js'),
-    'sa-revenue': () => import('../pages/billing.js'),
+    'sa-revenue': () => import('../pages/billing.js?v=2'),
     'sa-plans': () => import('../pages/pricing-admin.js'),
-    'sa-usage': () => import('../pages/billing.js'),
+    'sa-usage': () => import('../pages/billing.js?v=2'),
     'sa-audit': () => import('../pages/audit-view.js'),
     'sa-data-gov': () => import('../pages/sa/data-governance.js'),
     'sa-keys': () => import('../pages/sa/key-management.js'),
@@ -575,11 +575,9 @@ export async function loadPageData(page) {
                 // Static fallback so the page always renders
                 State.pricingData = {
                     plans: {
-                        free: { name: 'Free', slug: 'free', tagline: 'Get started with product verification', price_monthly: 0, price_annual: 0, limits: { scans: 500, api_calls: 1000, storage_mb: 100, nft_mints: 0, carbon_calcs: 0 }, features: ['Basic QR verification', 'Public trust check page'], sla: null, badge: null },
-                        starter: { name: 'Starter', slug: 'starter', tagline: 'For growing brands building trust', price_monthly: 49, price_annual: 470, limits: { scans: 5000, api_calls: 10000, storage_mb: 1024, nft_mints: 10, carbon_calcs: 100 }, features: ['Everything in Free', 'Fraud detection alerts'], sla: '99%', badge: null },
-                        pro: { name: 'Pro', slug: 'pro', tagline: 'Advanced trust infrastructure for scale', price_monthly: 199, price_annual: 1910, limits: { scans: 25000, api_calls: 100000, storage_mb: 10240, nft_mints: 100, carbon_calcs: 1000 }, features: ['Everything in Starter', 'AI anomaly detection'], sla: '99.5%', badge: 'POPULAR' },
-                        business: { name: 'Business', slug: 'business', tagline: 'Full-stack trust for enterprise brands', price_monthly: 499, price_annual: 4790, limits: { scans: 100000, api_calls: 500000, storage_mb: 51200, nft_mints: 500, carbon_calcs: 5000 }, features: ['Everything in Pro', 'Digital twin simulation'], sla: '99.9%', badge: null },
-                        enterprise: { name: 'Enterprise', slug: 'enterprise', tagline: 'Custom deployment with white-glove service', price_monthly: null, price_annual: null, limits: { scans: -1, api_calls: -1, storage_mb: -1, nft_mints: -1, carbon_calcs: -1 }, features: ['Everything in Business', 'On-premise deployment'], sla: '99.95%', badge: null },
+                        core: { name: 'Core', slug: 'core', tagline: 'Unified product verification & tracking', price_monthly: 0, price_annual: 0, limits: { scans: 1000, api_calls: 2000, storage_mb: 500, nft_mints: 0, carbon_calcs: 0 }, features: ['QR Traceability', 'Product Catalog'], sla: '99%', badge: null },
+                        pro: { name: 'Pro', slug: 'pro', tagline: 'Advanced trust infrastructure for scale', price_monthly: 299, price_annual: 2850, limits: { scans: 50000, api_calls: 100000, storage_mb: 10000, nft_mints: 100, carbon_calcs: 1000 }, features: ['Everything in Core', 'Supply Chain Tracking', 'Carbon Tracking', 'Risk Radar'], sla: '99.5%', badge: 'POPULAR' },
+                        enterprise: { name: 'Enterprise', slug: 'enterprise', tagline: 'Custom deployment with white-glove service', price_monthly: 5000, price_annual: 48000, limits: { scans: -1, api_calls: -1, storage_mb: -1, nft_mints: -1, carbon_calcs: -1 }, features: ['Everything in Pro', 'Blockchain Anchoring', 'Overclaim Detection', 'Digital Twin'], sla: '99.95%', badge: null },
                     },
                     usage_pricing: {
                         scans: { name: 'QR Scans', unit: 'scan', tiers: [{ up_to: 1000, price: 0.05 }, { up_to: 10000, price: 0.03 }, { up_to: 50000, price: 0.02 }, { up_to: null, price: 0.01 }] },

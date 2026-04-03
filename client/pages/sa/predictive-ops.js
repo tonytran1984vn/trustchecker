@@ -108,6 +108,14 @@ window.opsEngageKillSwitch = async function() {
     } catch (e) { alert('Kill switch engagement failed: ' + e.message); }
 };
 
+window.opsResetKillSwitch = async function() {
+    if (!confirm('RESET KILL SWITCH\n\nThis will return the system to Standard Autonomy mode.\nAI models may resume canary deployment.\n\nProceed?')) return;
+    try {
+        await API.post('/ops-intelligence/canary/kill-switch/reset', { reason: 'Manual Reset from Dashboard' });
+        preload();
+    } catch (e) { alert('Kill switch reset failed: ' + e.message); }
+};
+
 export function initPage() {
     if (!document.getElementById('predictive-ops-style')) {
         const style = document.createElement('style');
@@ -197,7 +205,7 @@ export function renderPage() {
                         <div style="margin-top:12px;font-size:0.8rem;color:${ks ? 'var(--color-danger-text)' : 'var(--color-success-text)'};font-weight:700;">${ks ? 'P0 LOCKOUT ENGAGED' : 'STANDARD AUTONOMY'}</div>
                     </div>
                     <div style="text-align:right">
-                        ${ks ? '<div style="color:var(--color-danger-text);font-weight:800;font-size:1rem;width:200px">Manual override active. CLI required to reset.</div>' : '<button class="ks-btn" onclick="opsEngageKillSwitch()">Engage P0 Kill Switch</button>'}
+                        ${ks ? '<button class="ks-btn" style="background:var(--color-success,#16a34a);box-shadow:0 4px 15px rgba(22,163,74,0.3)" onclick="opsResetKillSwitch()">Reset Kill Switch</button>' : '<button class="ks-btn" onclick="opsEngageKillSwitch()">Engage P0 Kill Switch</button>'}
                         <div style="margin-top:16px;font-size:0.72rem;color:var(--text-muted);width:200px;line-height:1.5">Halts all AI deployment. Reroutes to deterministic fallback rules instantly.</div>
                     </div>
                 </div>

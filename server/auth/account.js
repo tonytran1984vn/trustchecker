@@ -146,7 +146,7 @@ router.get('/me', authMiddleware, async (req, res) => {
         getFeaturesForPlan = () => [];
     }
     const { safeParse } = require('../utils/safe-json');
-    const plan = org?.plan || user.plan || 'free';
+    const plan = org?.plan || user.plan || 'core';
     const features = getFeaturesForPlan(plan) || [];
     const planFlags = features.reduce((acc, f) => {
         acc[f] = true;

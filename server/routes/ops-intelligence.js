@@ -62,6 +62,27 @@ router.post('/canary/kill-switch', async (req, res) => {
     }
 });
 
+router.post('/canary/kill-switch/reset', async (req, res) => {
+    try {
+        await promotionEngine.resetKillSwitch();
+        // Force sync state cache
+        governanceRouter.cacheTime = 0;
+        const newState = await governanceRouter.syncState(db);
+        logger.warn(`[OpsIntel] KILL SWITCH RESET by user ${req.user.id}: ${req.body.reason || 'Manual reset'}`);
+        res.json({
+            success: true,
+            message: 'Kill Switch Reset — system returned to standard autonomy',
+            state: {
+                mode: newState.mode,
+                kill_switch_engaged: newState.kill_switch_engaged,
+            },
+        });
+    } catch (e) {
+        logger.error('[OpsIntel] Canary Kill Switch Reset Error:', e);
+        res.status(500).json({ error: 'Failed to reset kill switch: ' + e.message });
+    }
+});
+
 // ─── ACTION PROPOSALS ──────────────────────────────────────────────
 router.get('/proposals', async (req, res) => {
     try {
@@ -111,9 +132,9 @@ router.post('/proposals/:id/reject', async (req, res) => {
 router.get('/diffs', async (req, res) => {
     try {
         const diffs = await db.all(
-            `SELECT id, run_id, ts, metric_name, event_type, diff_type, score_delta, created_at
+            `SELECT id, run_id, ts, metric_name, event_type, diff_type, score_delta
              FROM replay_diff_results
-             ORDER BY created_at DESC LIMIT 50`
+             ORDER BY ts DESC LIMIT 50`
         );
         // Stats
         const stats = await db.all(`SELECT diff_type, COUNT(*) as count FROM replay_diff_results GROUP BY diff_type`);
@@ -158,9 +179,9 @@ router.get('/causal-graph', async (req, res) => {
 router.get('/policy-stats', async (req, res) => {
     try {
         const stats = await db.all(
-            `SELECT id, policy_id, sample_size, success_rate, failure_rate, ema_resolution_time_ms, last_cluster_size, updated_at
+            `SELECT policy_id, sample_size, success_rate, failure_rate, avg_improvement, avg_latency
              FROM policy_learning_stats
-             ORDER BY updated_at DESC`
+             ORDER BY policy_id ASC`
         );
         res.json({ stats });
     } catch (e) {

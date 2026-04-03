@@ -41,9 +41,9 @@ class ProductService extends BaseService {
         // Check plan limit
         const org = await this.db.get('SELECT plan FROM organizations WHERE id = $1', [orgId]);
         const count = await this.db.get('SELECT COUNT(*) as cnt FROM products WHERE org_id = $1', [orgId]);
-        const limit = PLAN_LIMITS[org?.plan || 'free'] || 50;
+        const limit = PLAN_LIMITS[org?.plan || 'core'] || 50;
         if ((count?.cnt || 0) >= limit) {
-            throw this.error('PLAN_LIMIT', `Product limit reached (${limit} for ${org?.plan || 'free'} plan)`, 403);
+            throw this.error('PLAN_LIMIT', `Product limit reached (${limit} for ${org?.plan || 'core'} plan)`, 403);
         }
 
         const id = uuidv4();

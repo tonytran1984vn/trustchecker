@@ -86,9 +86,9 @@ class StripeWebhookWorker {
         const orgId = mapping.org_id;
 
         // 2. Ordering Guard (Avoid Out-of-Order Webhook Race Conditions)
-        const orgData = await db.get('SELECT billing_updated_at FROM organizations WHERE id = $1', [orgId]);
-        if (orgData && orgData.billing_updated_at) {
-            const orgUpdated = new Date(orgData.billing_updated_at);
+        const orgData = await db.get('SELECT updated_at FROM organizations WHERE id = $1', [orgId]);
+        if (orgData && orgData.updated_at) {
+            const orgUpdated = new Date(orgData.updated_at);
             const evtTime = new Date(event.created * 1000);
             if (evtTime < orgUpdated) {
                 console.log(
@@ -104,7 +104,7 @@ class StripeWebhookWorker {
                 // Reset Past Due flags to Active
                 await db.run(
                     `UPDATE organizations 
-                     SET billing_status = 'ACTIVE', grace_period_until = NULL, billing_updated_at = CAST($1 AS TIMESTAMP)
+                     SET billing_status = 'ACTIVE', grace_period_until = NULL, updated_at = CAST($1 AS TIMESTAMP)
                      WHERE id = $2`,
                     [eventTimeText, orgId]
                 );
@@ -118,7 +118,7 @@ class StripeWebhookWorker {
                     `UPDATE organizations 
                      SET billing_status = 'PAST_DUE', 
                          grace_period_until = NOW() + INTERVAL '7 days',
-                         billing_updated_at = CAST($1 AS TIMESTAMP)
+                         updated_at = CAST($1 AS TIMESTAMP)
                      WHERE id = $2 AND billing_status != 'PAST_DUE'`,
                     [eventTimeText, orgId]
                 );
@@ -130,7 +130,7 @@ class StripeWebhookWorker {
                 await db.run(
                     `UPDATE organizations 
                      SET billing_status = 'CANCELED', current_plan = 'free', grace_period_until = NULL,
-                         pending_downgrade_plan = NULL, downgrade_at = NULL, billing_updated_at = CAST($1 AS TIMESTAMP)
+                         pending_downgrade_plan = NULL, downgrade_at = NULL, updated_at = CAST($1 AS TIMESTAMP)
                      WHERE id = $2`,
                     [eventTimeText, orgId]
                 );
@@ -145,7 +145,7 @@ class StripeWebhookWorker {
                     `UPDATE organizations 
                      SET current_plan = $1, 
                          pending_downgrade_plan = NULL, downgrade_at = NULL, 
-                         billing_updated_at = CAST($2 AS TIMESTAMP)
+                         updated_at = CAST($2 AS TIMESTAMP)
                      WHERE id = $3`,
                     [targetPlan, eventTimeText, orgId]
                 );
@@ -155,8 +155,80 @@ class StripeWebhookWorker {
 
             case 'checkout.session.completed':
                 const sessionObj = event.data.object;
+                const sessionMetadata = sessionObj.metadata || {};
                 const subId = sessionObj.subscription;
 
+                // ═══ Handle proration payments (one-time) ═══
+                if (sessionMetadata.type === 'plan_upgrade' || sessionMetadata.type === 'addon_toggle') {
+                    const checkoutSessionId = sessionObj.id;
+                    try {
+                        // Find the pending billing invoice
+                        const invoice = await db.get(
+                            `SELECT id, metadata FROM billing_invoices WHERE stripe_checkout_session_id = $1 AND status = 'pending'`,
+                            [checkoutSessionId]
+                        );
+
+                        if (invoice) {
+                            const meta =
+                                typeof invoice.metadata === 'string' ? JSON.parse(invoice.metadata) : invoice.metadata;
+
+                            if (sessionMetadata.type === 'plan_upgrade') {
+                                // Apply the plan upgrade
+                                const newPlan = sessionMetadata.to_plan;
+                                const newFlags = sessionMetadata.new_flags ? JSON.parse(sessionMetadata.new_flags) : {};
+                                const creditUsed = parseInt(sessionMetadata.credit_used || '0', 10);
+
+                                await db.run(
+                                    `UPDATE organizations SET plan = $1, feature_flags = $2, billing_cycle_anchor = COALESCE(billing_cycle_anchor, NOW()), credit_balance_cents = GREATEST(0, COALESCE(credit_balance_cents, 0) - $3) WHERE id = $4`,
+                                    [newPlan, JSON.stringify(newFlags), creditUsed, orgId]
+                                );
+
+                                console.log(
+                                    `🚀 [Webhook] Proration payment confirmed → Org ${orgId}: ${sessionMetadata.from_plan} → ${newPlan}`
+                                );
+                            } else if (sessionMetadata.type === 'addon_toggle') {
+                                // Apply the addon change
+                                const newPlan = sessionMetadata.new_plan;
+                                const newFlags = sessionMetadata.new_flags ? JSON.parse(sessionMetadata.new_flags) : {};
+                                const planUpgraded = sessionMetadata.plan_upgraded === '1';
+                                const creditUsed = parseInt(sessionMetadata.credit_used || '0', 10);
+
+                                if (planUpgraded) {
+                                    await db.run(
+                                        `UPDATE organizations SET plan = $1, feature_flags = $2, billing_cycle_anchor = COALESCE(billing_cycle_anchor, NOW()), credit_balance_cents = GREATEST(0, COALESCE(credit_balance_cents, 0) - $3) WHERE id = $4`,
+                                        [newPlan, JSON.stringify(newFlags), creditUsed, orgId]
+                                    );
+                                } else {
+                                    await db.run(
+                                        `UPDATE organizations SET feature_flags = $1, credit_balance_cents = GREATEST(0, COALESCE(credit_balance_cents, 0) - $2) WHERE id = $3`,
+                                        [JSON.stringify(newFlags), creditUsed, orgId]
+                                    );
+                                }
+
+                                console.log(
+                                    `💳 [Webhook] Addon payment confirmed → Org ${orgId}: feature=${sessionMetadata.feature_id}, plan=${newPlan}`
+                                );
+                            }
+
+                            // Mark invoice as paid
+                            await db.run(`UPDATE billing_invoices SET status = 'paid', paid_at = NOW() WHERE id = $1`, [
+                                invoice.id,
+                            ]);
+                        } else {
+                            console.warn(
+                                `[Webhook] No pending billing_invoice found for checkout session ${checkoutSessionId}`
+                            );
+                        }
+                    } catch (prorationErr) {
+                        console.error(
+                            `[Webhook] Proration checkout processing failed for Org ${orgId}:`,
+                            prorationErr.message
+                        );
+                    }
+                    break;
+                }
+
+                // ═══ Handle subscription checkout (existing logic) ═══
                 if (!subId) break;
 
                 const Stripe = require('stripe');

@@ -55,7 +55,7 @@ function renderContent() {
           <div class="sa-detail-grid">
             ${editField('name', 'Legal Name', o.name || '')}
             ${field('Slug', o.slug || '—')}
-            ${field('Plan', (o.plan || 'free').charAt(0).toUpperCase() + (o.plan || 'free').slice(1))}
+            ${field('Plan', (o.plan || 'core').charAt(0).toUpperCase() + (o.plan || 'core').slice(1))}
             ${field('Status', o.status || 'active')}
             ${editField('industry', 'Industry', settings.industry || '', 'settings')}
             ${editField('country', 'Country', settings.country || '', 'settings')}
@@ -84,7 +84,7 @@ function renderContent() {
           <div class="sa-metric-card sa-metric-gold">
             <div class="sa-metric-icon">${icon('tag', 22)}</div>
             <div class="sa-metric-body">
-              <div class="sa-metric-value">${(o.plan || 'free').charAt(0).toUpperCase() + (o.plan || 'free').slice(1)}</div>
+              <div class="sa-metric-value">${(o.plan || 'core').charAt(0).toUpperCase() + (o.plan || 'core').slice(1)}</div>
               <div class="sa-metric-label">Current Plan</div>
             </div>
           </div>

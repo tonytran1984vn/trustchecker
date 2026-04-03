@@ -78,12 +78,11 @@ const COMPANY_ROLES = [
 
 const ROLE_MAP = Object.fromEntries(COMPANY_ROLES.map(r => [r.id, r]));
 const PLAN_GRADIENTS = {
-  free: 'linear-gradient(135deg,#64748b,#475569)', starter: 'linear-gradient(135deg,#0ea5e9,#0284c7)',
-  pro: 'linear-gradient(135deg,#8b5cf6,#7c3aed)', business: 'linear-gradient(135deg,#f59e0b,#d97706)',
+  pro: 'linear-gradient(135deg,#8b5cf6,#7c3aed)',
   enterprise: 'linear-gradient(135deg,#f97316,#ea580c)', core: 'linear-gradient(135deg,#0ea5e9,#0284c7)',
 };
-const PLAN_COLORS = { free: '#94a3b8', starter: '#0ea5e9', pro: '#8b5cf6', business: '#f59e0b', enterprise: '#f97316', core: '#0ea5e9' };
-const PLAN_LABELS = { core: 'Core', pro: 'Professional', enterprise: 'Enterprise', free: 'Free' };
+const PLAN_COLORS = { core: '#0ea5e9', pro: '#8b5cf6', enterprise: '#f97316' };
+const PLAN_LABELS = { core: 'Core', pro: 'Professional', enterprise: 'Enterprise' };
 const AVATAR_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1'];
 
 async function loadOrg(id) {
@@ -191,7 +190,7 @@ export function renderPage() {
   }
 
   const status = org.status || 'active';
-  const plan = (org.plan || 'free').toLowerCase();
+  const plan = (org.plan || 'core').toLowerCase();
   const pGrad = PLAN_GRADIENTS[plan] || PLAN_GRADIENTS.free;
   const pColor = PLAN_COLORS[plan] || '#94a3b8';
   const statusColor = status === 'active' ? '#10b981' : '#ef4444';
@@ -330,7 +329,7 @@ function renderTab() {
 }
 
 function renderOverview() {
-  const plan = (org.plan || 'free').toLowerCase();
+  const plan = (org.plan || 'core').toLowerCase();
   const created = org.created_at ? new Date(org.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   const updated = org.updated_at ? new Date(org.updated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   const flags = Object.entries(org.feature_flags || {});
@@ -477,18 +476,43 @@ function renderAddUserModal() {
 }
 
 function renderBilling() {
-  const plan = (org?.plan || 'free').toLowerCase();
-  const prices = { free: '$0', starter: '$29', pro: '$99', business: '$249', enterprise: '$499', core: '$49' };
+  const plan = (org?.plan || 'core').toLowerCase();
   const pColor = PLAN_COLORS[plan] || '#94a3b8';
+  const PLAN_BASE_PRICES = { core: 0, pro: 299, enterprise: 5000 };
+  const FEATURE_PRICES = {
+    qr: 0, products: 0, scm_tracking: 99, inventory: 49, support: 199, partners: 49,
+    carbon: 199, risk_radar: 299, ai_forecast: 499, digital_twin: 149, kyc: 249,
+    overclaim: 399, lineage: 499, governance: 299, registry_export: 599,
+    erp_integration: 999, exec_dashboard: 199, ivu_cert: 499, blockchain: 199, nft: 99
+  };
+  
+  // Compute dynamic MRR 
+  const basePrice = PLAN_BASE_PRICES[plan] || 0;
+  const defaults = PLAN_DEFAULTS[plan] || [];
+  let addonCost = 0;
+  const flags = org?.feature_flags || {};
+  Object.entries(flags).forEach(([id, enabled]) => {
+    if (enabled && !defaults.includes(id) && FEATURE_PRICES[id]) {
+      addonCost += FEATURE_PRICES[id];
+    }
+  });
+  const totalMRR = basePrice + addonCost;
+  const creditBalance = (org?.credit_balance_cents || 0) / 100;
+
   return `
-    <div class="tdt-grid" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="tdt-grid" style="grid-template-columns:1fr 1fr 1fr 1fr">
       <div class="tdt-card"><div class="tdt-card-b" style="text-align:center;padding:24px">
         <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Current Plan</div>
         <div style="font-size:1.4rem;font-weight:900;color:${pColor};text-transform:uppercase">${PLAN_LABELS[plan] || plan}</div>
       </div></div>
       <div class="tdt-card"><div class="tdt-card-b" style="text-align:center;padding:24px">
-        <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Monthly Cost</div>
-        <div style="font-size:1.4rem;font-weight:900;font-family:'JetBrains Mono',monospace">${prices[plan] || '—'}<span style="font-size:0.7rem;opacity:0.5">/mo</span></div>
+        <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Monthly MRR</div>
+        <div style="font-size:1.4rem;font-weight:900;font-family:'JetBrains Mono',monospace">$${totalMRR.toLocaleString()}<span style="font-size:0.7rem;opacity:0.5">/mo</span></div>
+        ${addonCost > 0 ? `<div style="font-size:0.65rem;color:var(--text-muted);margin-top:4px">Base: $${basePrice} + Add-ons: $${addonCost}</div>` : ''}
+      </div></div>
+      <div class="tdt-card"><div class="tdt-card-b" style="text-align:center;padding:24px">
+        <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Credit Balance</div>
+        <div style="font-size:1.4rem;font-weight:900;font-family:'JetBrains Mono',monospace;color:${creditBalance > 0 ? '#10b981' : 'var(--text-muted)'}">$${creditBalance.toLocaleString()}</div>
       </div></div>
       <div class="tdt-card"><div class="tdt-card-b" style="text-align:center;padding:24px">
         <div style="font-size:0.68rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Seats Used</div>

@@ -146,7 +146,7 @@ async function generateTokenPair(user, sessionId, options = {}) {
         role: user.role,
         user_type: user.user_type || 'org',
         session_id: sessionId,
-        plan: user.plan || 'free',
+        plan: user.plan || 'core',
     };
 
     if (user.orgId || user.org_id) {

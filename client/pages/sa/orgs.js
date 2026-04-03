@@ -59,7 +59,7 @@ function debouncedCheck() {
   }, 400);
 }
 
-const PLAN_MRR = { free: 0, starter: 99, growth: 299, business: 749, enterprise: 5000 };
+const PLAN_MRR = { core: 0, pro: 299, enterprise: 5000 };
 
 async function loadOrgs() {
   if (loading) return;
@@ -229,7 +229,7 @@ export function renderPage() {
   };
   const totalUsers = orgs.reduce((s, t) => s + (t.user_count || 0), 0);
   const totalMRR = orgs.reduce((s, t) => {
-    const p = (t.plan || 'free').toLowerCase();
+    const p = (t.plan || 'core').toLowerCase();
     if (p === 'enterprise' && t.enterprise_config?.monthly_base) return s + t.enterprise_config.monthly_base;
     return s + (PLAN_MRR[p] || 0);
   }, 0);
@@ -355,9 +355,9 @@ function renderPagination(totalItems) {
 
 function tableRow(t) {
   const status = t.status || 'active';
-  const plan = t.plan || 'free';
+  const plan = t.plan || 'core';
   const initial = (t.name || 'T')[0];
-  const planColors = { enterprise: 'orange', business: 'orange', growth: 'purple', starter: 'blue', free: 'gray', core: 'teal' };
+  const planColors = { enterprise: 'orange', pro: 'purple', core: 'teal' };
   const statusColors = { active: 'green', suspended: 'red', archived: 'gray' };
   const feats = featureFlags(t.feature_flags);
   const featCount = t.feature_flags ? Object.keys(t.feature_flags).filter(k => t.feature_flags[k]).length : 0;

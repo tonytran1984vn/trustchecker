@@ -33,21 +33,21 @@ export const PAGE_FEATURE_MAP = {
 };
 
 export const PLAN_NAMES = {
-    free: 'Free',
-    core: 'Core — $29/mo',
-    pro: 'Pro — $79/mo',
-    enterprise: 'Enterprise — $199/mo',
+    core: 'Core — $0/mo',
+    pro: 'Pro — $299/mo',
+    enterprise: 'Enterprise — $5,000/mo',
 };
 
 export const FEATURE_REQUIRED_PLAN = {
-    products: 'free', qr: 'free', dashboard: 'free',
+    products: 'core', qr: 'core', dashboard: 'core',
     fraud: 'core', reports: 'core', scm_tracking: 'core', support: 'core',
-    inventory: 'pro', logistics: 'pro', partners: 'pro', ai_forecast: 'pro',
+    inventory: 'core', partners: 'core',
+    logistics: 'pro', ai_forecast: 'pro',
     demand_sensing: 'pro', risk_radar: 'pro', anomaly: 'pro', kyc: 'pro',
     compliance: 'pro', evidence: 'pro', sustainability: 'pro',
     leaks: 'pro', trust_graph: 'pro', what_if: 'pro', monte_carlo: 'pro',
-    carbon: 'enterprise', digital_twin: 'enterprise', epcis: 'enterprise',
-    blockchain: 'enterprise', nft: 'enterprise', branding: 'enterprise',
+    carbon: 'pro', digital_twin: 'pro', blockchain: 'pro', nft: 'pro',
+    epcis: 'enterprise', branding: 'enterprise',
     wallet: 'enterprise', webhooks: 'enterprise', integrations: 'enterprise',
     white_label: 'enterprise',
 };
@@ -67,7 +67,7 @@ export async function loadFeatureFlags() {
         const data = await API.get('/auth/me');
         if (data.feature_flags) {
             State.featureFlags = data.feature_flags;
-            State.plan = data.user?.plan || 'free';
+            State.plan = data.user?.plan || 'core';
             State.org = data.user?.org || null;
             localStorage.setItem('tc_features', JSON.stringify(data.feature_flags));
         }

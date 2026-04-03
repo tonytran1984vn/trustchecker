@@ -62,6 +62,12 @@ class AutoPromotionEngine {
         console.warn('⚠️ ENFORCED KILL SWITCH: Predictive Models rolled back to V1 Rule-Based Stable.');
     }
 
+    async resetKillSwitch() {
+        // Reset Kill Switch — return to normal STABLE operations
+        await this.db.run('UPDATE model_governance_state SET kill_switch_engaged = $1 WHERE id = 1', [false]);
+        console.warn('✅ KILL SWITCH RESET: System returned to standard autonomy mode.');
+    }
+
     async promoteCanaryToActive(modelB) {
         await this.db.run(
             'UPDATE model_governance_state SET active_model = $1, mode = $2, canary_model = NULL WHERE id = 1',

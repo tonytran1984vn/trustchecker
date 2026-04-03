@@ -861,7 +861,7 @@ router.get('/certifications/readiness', async (req, res) => {
         const plan = await db.get("SELECT plan_name FROM billing_plans WHERE user_id = ? AND status = 'active'", [
             req.user.id,
         ]);
-        const planName = plan?.plan_name || 'free';
+        const planName = plan?.plan_name || 'core';
 
         const readiness = Object.entries(CERTIFICATIONS).map(([id, cert]) => {
             const isAvailable = cert.available_plans.includes(planName);

@@ -82,7 +82,7 @@ export async function doLogin() {
 
     API.setToken(res.token, res.refresh_token);
     State.user = res.user;
-    State.plan = res.user?.plan || 'free';
+    State.plan = res.user?.plan || 'core';
     localStorage.setItem('tc_user', JSON.stringify(res.user));
     sessionStorage.setItem('tc_user', JSON.stringify(res.user));
 
@@ -111,7 +111,7 @@ export async function doMfaVerify() {
     _mfaToken = null;
     API.setToken(res.token, res.refresh_token);
     State.user = res.user;
-    State.plan = res.user?.plan || 'free';
+    State.plan = res.user?.plan || 'core';
     localStorage.setItem('tc_user', JSON.stringify(res.user));
     sessionStorage.setItem('tc_user', JSON.stringify(res.user));
 

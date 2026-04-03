@@ -606,11 +606,9 @@ async function loadPageData(page) {
         console.warn('[app] Pricing fetch failed, using static fallback:', e.message);
         State.pricingData = {
           plans: {
-            free: { name: 'Free', slug: 'free', tagline: 'Get started with product verification', price_monthly: 0, price_annual: 0, limits: { scans: 500, api_calls: 1000, storage_mb: 100, nft_mints: 0, carbon_calcs: 0 }, features: ['Basic QR verification', 'Public trust check page'], sla: null, badge: null },
-            starter: { name: 'Starter', slug: 'starter', tagline: 'For growing brands building trust', price_monthly: 49, price_annual: 470, limits: { scans: 5000, api_calls: 10000, storage_mb: 1024, nft_mints: 10, carbon_calcs: 100 }, features: ['Everything in Free', 'Fraud detection alerts'], sla: '99%', badge: null },
-            pro: { name: 'Pro', slug: 'pro', tagline: 'Advanced trust infrastructure for scale', price_monthly: 199, price_annual: 1910, limits: { scans: 25000, api_calls: 100000, storage_mb: 10240, nft_mints: 100, carbon_calcs: 1000 }, features: ['Everything in Starter', 'AI anomaly detection'], sla: '99.5%', badge: 'POPULAR' },
-            business: { name: 'Business', slug: 'business', tagline: 'Full-stack trust for enterprise brands', price_monthly: 499, price_annual: 4790, limits: { scans: 100000, api_calls: 500000, storage_mb: 51200, nft_mints: 500, carbon_calcs: 5000 }, features: ['Everything in Pro', 'Digital twin simulation'], sla: '99.9%', badge: null },
-            enterprise: { name: 'Enterprise', slug: 'enterprise', tagline: 'Custom deployment with white-glove service', price_monthly: null, price_annual: null, limits: { scans: -1, api_calls: -1, storage_mb: -1, nft_mints: -1, carbon_calcs: -1 }, features: ['Everything in Business', 'On-premise deployment'], sla: '99.95%', badge: null },
+            core: { name: 'Core', slug: 'core', tagline: 'Unified product verification & tracking', price_monthly: 0, price_annual: 0, limits: { scans: 1000, api_calls: 2000, storage_mb: 500, nft_mints: 0, carbon_calcs: 0 }, features: ['QR Traceability', 'Product Catalog'], sla: '99%', badge: null },
+            pro: { name: 'Pro', slug: 'pro', tagline: 'Advanced trust infrastructure for scale', price_monthly: 299, price_annual: 2850, limits: { scans: 50000, api_calls: 100000, storage_mb: 10000, nft_mints: 100, carbon_calcs: 1000 }, features: ['Everything in Core', 'Supply Chain Tracking', 'Carbon Tracking', 'Risk Radar'], sla: '99.5%', badge: 'POPULAR' },
+            enterprise: { name: 'Enterprise', slug: 'enterprise', tagline: 'Custom deployment with white-glove service', price_monthly: 5000, price_annual: 48000, limits: { scans: -1, api_calls: -1, storage_mb: -1, nft_mints: -1, carbon_calcs: -1 }, features: ['Everything in Pro', 'Blockchain Anchoring', 'Overclaim Detection', 'Digital Twin'], sla: '99.95%', badge: null },
           },
           usage_pricing: {
             scans: { name: 'QR Scans', unit: 'scan', tiers: [{ up_to: 1000, price: 0.05 }, { up_to: 10000, price: 0.03 }, { up_to: 50000, price: 0.02 }, { up_to: null, price: 0.01 }] },
@@ -2726,9 +2724,9 @@ function renderPricingPage() {
 
   const isAnnual = State.pricingAnnual || false;
   const plans = d.plans;
-  const planOrder = ['free', 'starter', 'pro', 'business', 'enterprise'];
-  const planColors = { free: '#6b7280', starter: '#06b6d4', pro: '#8b5cf6', business: '#f59e0b', enterprise: '#ef4444' };
-  const planIcons = { free: '🆓', starter: '🚀', pro: '⚡', business: '🏢', enterprise: '👑' };
+  const planOrder = ['core', 'pro', 'enterprise'];
+  const planColors = { core: '#06b6d4', pro: '#8b5cf6', enterprise: '#ef4444' };
+  const planIcons = { core: '🚀', pro: '⚡', enterprise: '👑' };
 
   const toggleBilling = () => {
     State.pricingAnnual = !State.pricingAnnual;
@@ -2862,19 +2860,19 @@ function renderPricingPage() {
             </tr>
             ${[
       ['SLA Guarantee', ...planOrder.map(s => plans[s]?.sla || '—')],
-      ['Support Level', 'Community', 'Email', 'Priority', 'Dedicated', 'Dedicated+Slack'],
-      ['Fraud Detection', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['AI Anomaly Detection', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['Digital Twin', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['Carbon Tracking', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['NFT Certificates', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['Custom Branding', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['SSO / SAML', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['On-Premise', '—', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['GS1 Certified Partner', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['SOC 2 Type II', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['ISO 27001:2022', '—', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
-      ['GDPR Compliant', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Support Level', 'Community/Email', 'Priority', 'Dedicated+Slack'],
+      ['Fraud Detection', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['AI Anomaly Detection', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Digital Twin', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Carbon Tracking', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['NFT Certificates', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['Custom Branding', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['SSO / SAML', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['On-Premise', '—', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['GS1 Certified Partner', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['SOC 2 Type II', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['ISO 27001:2022', '—', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
+      ['GDPR Compliant', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>', '<span class="status-icon status-pass" aria-label="Pass">✓</span>'],
     ].map(row => `
               <tr>
                 <td style="font-weight:600;font-size:0.8rem">${row[0]}</td>

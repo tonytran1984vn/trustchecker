@@ -285,7 +285,7 @@ router.post('/login', validate(schemas.login), async (req, res) => {
         const response = {
             token: accessToken,
             refresh_token: refreshToken,
-            user: { id: user.id, email: user.email, role: user.role, plan: user.plan || 'free' },
+            user: { id: user.id, email: user.email, role: user.role, plan: user.plan || 'core' },
         };
 
         // Include security warnings in response

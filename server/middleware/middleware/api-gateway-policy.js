@@ -1,6 +1,6 @@
 /**
  * TrustChecker v9.4 — API Gateway Policy Middleware
- * 
+ *
  * Request/response transformation, quota management,
  * API key validation, request validation, response sanitization,
  * and IP whitelist/blacklist per API key.
@@ -71,8 +71,16 @@ class QuotaManager {
 
         return {
             allowed: true,
-            daily: { used: quota.daily.count, limit: limits.dailyLimit, remaining: limits.dailyLimit - quota.daily.count },
-            monthly: { used: quota.monthly.count, limit: limits.monthlyLimit, remaining: limits.monthlyLimit - quota.monthly.count },
+            daily: {
+                used: quota.daily.count,
+                limit: limits.dailyLimit,
+                remaining: limits.dailyLimit - quota.daily.count,
+            },
+            monthly: {
+                used: quota.monthly.count,
+                limit: limits.monthlyLimit,
+                remaining: limits.monthlyLimit - quota.monthly.count,
+            },
         };
     }
 
@@ -86,12 +94,24 @@ class QuotaManager {
 // ═══════════════════════════════════════════════════════════════════
 
 const INTERNAL_FIELDS = [
-    'password_hash', 'passwordHash', 'password',
-    'mfa_secret', 'mfaSecret', 'totp_secret',
-    'api_secret', 'apiSecret', 'refresh_token',
-    'internal_id', 'internalId', '_prisma',
-    'stack', 'sql', 'query',
-    '__v', '$__', '$isNew',
+    'password_hash',
+    'passwordHash',
+    'password',
+    'mfa_secret',
+    'mfaSecret',
+    'totp_secret',
+    'api_secret',
+    'apiSecret',
+    'refresh_token',
+    'internal_id',
+    'internalId',
+    '_prisma',
+    'stack',
+    'sql',
+    'query',
+    '__v',
+    '$__',
+    '$isNew',
 ];
 
 function sanitizeResponse(data) {
@@ -121,7 +141,7 @@ class APIKeyManager {
         const key = `tc_${crypto.randomBytes(24).toString('hex')}`;
         this._keys.set(key, {
             orgId,
-            plan: options.plan || 'free',
+            plan: options.plan || 'core',
             scopes: options.scopes || ['read'],
             ipWhitelist: new Set(options.ipWhitelist || []),
             ipBlacklist: new Set(options.ipBlacklist || []),
@@ -234,7 +254,7 @@ class APIGateway {
             const isQuotaExempt = quotaExempt.some(p => req.path.startsWith(p));
             if (this.enforceQuota && !isQuotaExempt) {
                 const orgId = req.orgId || req.apiKeyData?.orgId || 'anonymous';
-                const plan = req.apiKeyData?.plan || req.user?.plan || 'free';
+                const plan = req.apiKeyData?.plan || req.user?.plan || 'core';
                 const quotaResult = this.quotaManager.check(orgId, plan);
 
                 // Add quota headers
@@ -263,7 +283,7 @@ class APIGateway {
             // 4. Response sanitization
             if (this.sanitizeResponses) {
                 const originalJson = res.json.bind(res);
-                res.json = (data) => {
+                res.json = data => {
                     this.stats.sanitized++;
                     return originalJson(sanitizeResponse(data));
                 };
