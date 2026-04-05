@@ -239,6 +239,7 @@ export default function SystemicStressPage() {
 }
 
 function StressReport({ data }: { data: any }) {
+  const [logView, setLogView] = useState<'technical' | 'executive'>('executive');
   const scenarioName = data.scenario?.name || data.scenario_id || "Unknown";
   const scenarioId = data.scenario?.id || data.scenario_id || "—";
   const category = data.scenario?.category || "—";
@@ -396,13 +397,55 @@ function StressReport({ data }: { data: any }) {
 
       {/* Execution Logs (L5) */}
       {data.execution_logs && data.execution_logs.length > 0 && (
-        <div className="bg-[#0f172a] rounded-lg p-5 border border-slate-800 shadow-inner overflow-hidden">
-          <div className="flex items-center gap-2 mb-3">
-             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-             <div className="text-xs text-slate-300 uppercase font-bold tracking-wider font-mono">Autonomous Execution Layer</div>
+        <div className="bg-white dark:bg-[#0f172a] rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden mt-6">
+          <div className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800 p-3 flex justify-between items-center">
+            <div className="flex items-center gap-2">
+               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+               <div className="text-xs text-slate-700 dark:text-slate-300 uppercase font-bold tracking-wider">System Execution</div>
+            </div>
+            <div className="flex bg-slate-200 dark:bg-slate-800 rounded p-0.5">
+              <button onClick={() => setLogView('executive')} className={`px-3 py-1 text-[10px] font-bold rounded ${logView === 'executive' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>EXECUTIVE</button>
+              <button onClick={() => setLogView('technical')} className={`px-3 py-1 text-[10px] font-bold rounded ${logView === 'technical' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}>TECHNICAL</button>
+            </div>
           </div>
-          <div className="font-mono text-xs text-emerald-400/90 whitespace-pre-wrap">
-            {data.execution_logs.join('\n')}
+          
+          <div className="p-4">
+            {logView === 'technical' ? (
+              <div className="font-mono text-xs text-emerald-600 dark:text-emerald-400/90 whitespace-pre-wrap bg-slate-900 p-4 rounded text-left">
+                {data.execution_logs.join('\n')}
+              </div>
+            ) : (
+              <div className="space-y-4 relative border-l-2 border-slate-100 dark:border-slate-800 ml-3 py-2">
+                {data.execution_logs.map((log: string, idx: number) => {
+                  let badgeColor = "bg-blue-500";
+                  let title = "System Event";
+                  let desc = "Automated protocol executed.";
+                  let seq = log.match(/Seq: (\d+)/)?.[1] || "";
+                  
+                  if (log.includes('SCENARIO_STARTED')) { badgeColor = "bg-indigo-500"; title = "Initialize Simulation"; desc = "Hệ thống bắt đầu đưa kịch bản thử nghiệm vào chuỗi khối."; }
+                  else if (log.includes('CAUSAL_EDGE_TRIGGERED')) { badgeColor = "bg-amber-500"; title = "Causal Graph Execution"; desc = "Đồ thị rủi ro kích hoạt hệ quả chéo (Domino Effect)."; }
+                  else if (log.includes('METRIC_SNAPSHOT')) { badgeColor = "bg-emerald-500"; title = "Metric Snapshot"; desc = "Hệ thống ghi nhận điểm thời gian để làm Snapshot phục hồi."; }
+                  else if (log.includes('STATE_TRANSITION')) { badgeColor = "bg-blue-400"; title = "State Transition"; desc = "Bước chuyển trạng thái lõi trong bộ nhớ RiskMemory."; }
+                  else if (log.includes('KILL_SWITCH_TRIGGERED')) { badgeColor = "bg-red-500"; title = "Emergency Protocol Triggered"; desc = "Cảnh báo Đỏ vỡ chỉ số an toàn. Yêu cầu kích hoạt chốt chặn."; }
+                  else if (log.includes('KILL_SWITCH_EXECUTED')) { badgeColor = "bg-red-600"; title = "Circuit Breaker Engaged"; desc = "Ngắt mạch tự động đã được bóp cò bảo vệ thanh khoản."; }
+                  else if (log.includes('STATE_SNAPSHOT_GENERATED')) { badgeColor = "bg-teal-500"; title = "Recovery Point Verified"; desc = "Đã lưu bản nháp phục hồi. Sẵn sàng cho Rollback."; }
+                  else if (log.includes('SCENARIO_COMPLETED')) { badgeColor = "bg-emerald-600"; title = "Simulation Concluded"; desc = "Chấm dứt kịch bản thử tải. Không ghi đè Database thật."; }
+
+                  return (
+                    <div key={idx} className="relative pl-6">
+                      <span className={`absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full ${badgeColor} ring-4 ring-white dark:ring-slate-900`}></span>
+                      <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 rounded p-3 text-left shadow-sm">
+                        <div className="flex justify-between items-start mb-1">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{title}</span>
+                          <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded">Seq: {seq}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{desc}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
