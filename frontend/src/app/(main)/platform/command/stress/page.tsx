@@ -163,7 +163,7 @@ export default function SystemicStressPage() {
             <span className="text-[10px] font-bold px-2 py-1 bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 rounded">PHASE 2</span>
           </div>
           
-          <div className="mt-4 flex-1 min-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+          <div className="mt-4 flex-1 min-h-[200px] max-h-[320px] overflow-y-auto pr-2 custom-scrollbar">
             <ul className="space-y-3">
               {/* Magic Level 2 Item */}
               <li className="text-sm bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/30 p-2 rounded-lg flex items-start gap-2 mb-4">
