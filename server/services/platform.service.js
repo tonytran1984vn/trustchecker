@@ -10,9 +10,7 @@ class PlatformService extends BaseService {
     }
 
     async getFeatureFlags(orgId) {
-        const flags = await this.db.all(
-            'SELECT * FROM platform_feature_flags ORDER BY name'
-        );
+        const flags = await this.db.all('SELECT * FROM platform_feature_flags ORDER BY name');
         const overrides = orgId
             ? await this.db.all('SELECT * FROM org_feature_overrides WHERE org_id = $1', [orgId])
             : [];
@@ -28,7 +26,8 @@ class PlatformService extends BaseService {
         if (!flag) return false;
         if (orgId) {
             const override = await this.db.get(
-                'SELECT value FROM org_feature_overrides WHERE org_id = $1 AND flag_id = $2', [orgId, flag.id]
+                'SELECT value FROM org_feature_overrides WHERE org_id = $1 AND flag_id = $2',
+                [orgId, flag.id]
             );
             if (override) return override.value === 'true' || override.value === true;
         }

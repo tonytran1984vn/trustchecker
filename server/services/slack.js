@@ -85,43 +85,6 @@ const TEMPLATES = {
             `*Reason:* ${data.reason || 'Processing error.'}`,
         ]),
     }),
-    valuation_guard: data => ({
-        text: `🚨 VALUATION RISK ALERT: ${data.org_name || 'Unknown'}`,
-        blocks: [
-            { type: 'header', text: { type: 'plain_text', text: `🚨 VALUATION RISK ALERT`, emoji: true } },
-            {
-                type: 'section',
-                text: {
-                    type: 'mrkdwn',
-                    text: `*Organization:* ${data.org_name || 'Unknown'}\n*Risk Cluster Threshold Breached!*`,
-                },
-            },
-            {
-                type: 'section',
-                text: {
-                    type: 'mrkdwn',
-                    text:
-                        '```\n' +
-                        data.ascii_map +
-                        '\n\n' +
-                        'Current EV Destruction: ' +
-                        data.p95_evd +
-                        '\n' +
-                        'WACC Increase: +' +
-                        data.wacc_increase +
-                        ' (ESG Penalty Triggered)\n```',
-                },
-            },
-            {
-                type: 'section',
-                text: {
-                    type: 'mrkdwn',
-                    text: `*[ 📊 View Full Simulation in Dashboard ](https://app.trustchecker.com/dashboard/${data.org_id}/risk/valuation)*`,
-                },
-            },
-            { type: 'divider' },
-        ],
-    }),
     test: () => ({
         text: '✅ TrustChecker Slack integration working!',
         blocks: alertBlocks('✅ Test Message', '#10b981', [

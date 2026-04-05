@@ -11,10 +11,10 @@ class ComplianceService extends BaseService {
     }
 
     async getEvidencePacks(orgId, { page = 1, limit = 20 } = {}) {
-        return this.paginate(
-            'SELECT * FROM evidence_packs WHERE org_id = $1 ORDER BY created_at DESC',
-            [orgId], { page, limit }
-        );
+        return this.paginate('SELECT * FROM evidence_packs WHERE org_id = $1 ORDER BY created_at DESC', [orgId], {
+            page,
+            limit,
+        });
     }
 
     async createEvidencePack(data, orgId) {

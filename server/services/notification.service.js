@@ -1,93 +1,59 @@
 /**
- * TrustChecker — Notification Service (The Last Mile)
- * Phase 4: The Valuation Guard Alerting System
+ * Notification Service v1.0
+ * Business logic for notifications and webhook management.
  */
-const slack = require('./slack');
+const BaseService = require('./base.service');
+const { v4: uuidv4 } = require('uuid');
 
-/**
- * Format large currency numbers into concise format (e.g. $250M)
- */
-function formatCurrency(val) {
-    if (val >= 1000000) return `$${(val / 1000000).toFixed(0)}M`;
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
-}
-
-/**
- * Generates an ASCII bar chart representing the 'Fat-tail' distribution
- */
-function generateASCIIDistribution(p50, p95, p99) {
-    const maxVal = p99;
-    const maxBlocks = 15;
-
-    // Safety check to avoid divide by zero
-    if (maxVal <= 0) return '';
-
-    const p50Blocks = Math.max(1, Math.floor((p50 / maxVal) * maxBlocks));
-    const p95Blocks = Math.max(1, Math.floor((p95 / maxVal) * maxBlocks));
-    const p99Blocks = maxBlocks;
-
-    const renderBar = filled => {
-        return '[' + '▓'.repeat(filled) + '░'.repeat(maxBlocks - filled) + ']';
-    };
-
-    return `Distribution Map:
-Expected (P50):  ${formatCurrency(p50).padEnd(8)} ${renderBar(p50Blocks)}
-Stress   (P95):  ${formatCurrency(p95).padEnd(8)} ${renderBar(p95Blocks)} <-- CRITICAL
-Ruin     (P99):  ${formatCurrency(p99).padEnd(8)} ${renderBar(p99Blocks)}`;
-}
-
-/**
- * Multi-threshold Alert Trap
- * Evaluates simulation results and fires webhook alerts if the threshold is breached.
- */
-async function triggerValuationAlert(orgId, orgName, results, simParams, overrideThreshold = 0.05) {
-    // 1. Calculate Enterprise Value Destruction Ratio
-    // Ensure Math safety for Baseline Gordon Growth
-    const safeDenominator = Math.max(simParams.wacc_0 - simParams.g, 0.001);
-    const fcfCap = simParams.fcf / safeDenominator;
-    const evdRatio = results.P95.evd / fcfCap;
-
-    // 2. Check against Tenant's specific risk appetite (default 5%)
-    if (evdRatio > overrideThreshold) {
-        // 3. Generate Visual Art (ASCII)
-        const asciiMap = generateASCIIDistribution(results.P50.evd, results.P95.evd, results.P99.evd);
-
-        // Fat-Tail Check: If P99 loss is more than 50% higher than P50 loss
-        const isFatTail = results.P50.evd > 0 && (results.P99.evd - results.P50.evd) / results.P50.evd > 0.5;
-        const fatTailWarning = isFatTail
-            ? '\n\n⚠️ [FAT-TAIL ANOMALY DETECTED]: P99 Ruin scenario severely deviates from Expected baseline.'
-            : '';
-
-        // Differentiate ESG shock vs Macro Shock
-        // Differentiate ESG shock vs Macro Shock
-        const totalWaccP95 = simParams.wacc_0 + results.P95.shockWACC;
-        // Since MonteCarlo V3 dynamically shocks WACC base, we note if ESG is the main driver or Macro is assisting
-        const shockFactorMsg = `Base Volatility (ESG Penalties): ${results.P95.dropESG.toFixed(2)} pts => Yield Premium +${(results.P95.shockWACC * 100).toFixed(2)}%\n*V3.2 Engine*: df=${simParams.df || 4}, Data Quality: ${simParams.data_quality || 'estimated'}`;
-
-        const alertPayload = {
-            org_name: orgName,
-            org_id: orgId,
-            p95_evd: new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'USD',
-                maximumFractionDigits: 0,
-            }).format(results.P95.evd),
-            wacc_increase: (results.P95.shockWACC * 100).toFixed(2) + '%',
-            shock_indicators: shockFactorMsg,
-            ascii_map: asciiMap,
-            fat_tail_warning: fatTailWarning,
-            evd_ratio: (evdRatio * 100).toFixed(2),
-        };
-
-        // 4. Send via Slack (The Red Alert)
-        await slack.sendAlert('valuation_guard', alertPayload);
-
-        return true;
+class NotificationService extends BaseService {
+    constructor() {
+        super('notification');
     }
-    return false;
+
+    async getUserNotifications(userId, { page = 1, limit = 20, unreadOnly = false } = {}) {
+        let sql = 'SELECT * FROM notifications WHERE user_id = $1';
+        const params = [userId];
+        if (unreadOnly) sql += ' AND read = false';
+        sql += ' ORDER BY created_at DESC';
+        return this.paginate(sql, params, { page, limit });
+    }
+
+    async markAsRead(notificationId, userId) {
+        await this.db.run('UPDATE notifications SET read = true WHERE id = $1 AND user_id = $2', [
+            notificationId,
+            userId,
+        ]);
+    }
+
+    async markAllAsRead(userId) {
+        await this.db.run('UPDATE notifications SET read = true WHERE user_id = $1 AND read = false', [userId]);
+    }
+
+    async createNotification(userId, type, title, body, data = {}) {
+        const id = uuidv4();
+        await this.db.run(
+            'INSERT INTO notifications (id, user_id, type, title, body, data, read, created_at) VALUES ($1, $2, $3, $4, $5, $6, false, NOW())',
+            [id, userId, type, title, body, JSON.stringify(data)]
+        );
+        return { id, type, title, body };
+    }
+
+    // ── Webhooks ─────────────────────────────────────────────────────────────
+    async getWebhookSubscriptions(orgId) {
+        return this.db.all('SELECT * FROM webhook_subscriptions WHERE org_id = $1 ORDER BY created_at', [orgId]);
+    }
+
+    async createWebhookSubscription(orgId, data) {
+        const count = await this.db.get('SELECT COUNT(*) as cnt FROM webhook_subscriptions WHERE org_id = $1', [orgId]);
+        if ((count?.cnt || 0) >= 50) throw this.error('WEBHOOK_LIMIT', 'Max 50 webhook subscriptions per org', 403);
+
+        const id = uuidv4();
+        await this.db.run(
+            'INSERT INTO webhook_subscriptions (id, org_id, url, events, secret, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW())',
+            [id, orgId, data.url, JSON.stringify(data.events), data.secret, 'active']
+        );
+        return { id, url: data.url, events: data.events, status: 'active' };
+    }
 }
 
-module.exports = {
-    generateASCIIDistribution,
-    triggerValuationAlert,
-};
+module.exports = new NotificationService();

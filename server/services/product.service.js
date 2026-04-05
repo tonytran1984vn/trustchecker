@@ -14,7 +14,7 @@ class ProductService extends BaseService {
 
     async list(orgId, { page = 1, limit = 20, search, category } = {}) {
         let sql =
-            'SELECT p.*, ts.score as trust_score FROM products p LEFT JOIN trust_scores ts ON ts.product_id = p.id  WHERE p.org_id = $1';
+            'SELECT p.*, ts.score as trust_score FROM products p LEFT JOIN trust_scores ts ON ts.product_id = p.id AND ts.is_latest = true WHERE p.org_id = $1';
         const params = [orgId];
         if (search) {
             sql += ` AND (p.name ILIKE $${params.length + 1} OR p.sku ILIKE $${params.length + 1})`;
@@ -30,7 +30,7 @@ class ProductService extends BaseService {
 
     async getById(id, orgId) {
         const product = await this.db.get(
-            'SELECT p.*, ts.score as trust_score FROM products p LEFT JOIN trust_scores ts ON ts.product_id = p.id  WHERE p.id = $1 AND p.org_id = $2',
+            'SELECT p.*, ts.score as trust_score FROM products p LEFT JOIN trust_scores ts ON ts.product_id = p.id AND ts.is_latest = true WHERE p.id = $1 AND p.org_id = $2',
             [id, orgId]
         );
         if (!product) throw this.error('PRODUCT_NOT_FOUND', 'Product not found', 404);
@@ -62,20 +62,6 @@ class ProductService extends BaseService {
                 orgId,
             ]
         );
-
-        // ── Phase 1: Dual-write to product_definitions + product_catalogs ──
-        const { dualWriteProduct } = require('../lib/dual-write');
-        dualWriteProduct({
-            id,
-            name: data.name,
-            orgId,
-            sku: data.sku,
-            category: data.category || '',
-            description: data.description || '',
-            origin_country: data.origin_country || '',
-            manufacturer: data.manufacturer || '',
-        }).catch(e => this.logger.error('[DualWrite] service create:', e.message));
-
         this.logger.info('Product created', { productId: id, orgId });
         return this.getById(id, orgId);
     }

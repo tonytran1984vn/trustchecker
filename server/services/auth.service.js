@@ -37,17 +37,15 @@ class AuthService extends BaseService {
 
     async updateFailedAttempts(userId, attempts) {
         const lockUntil = attempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
-        await this.db.run(
-            'UPDATE users SET failed_attempts = $1, locked_until = $2 WHERE id = $3',
-            [attempts, lockUntil, userId]
-        );
+        await this.db.run('UPDATE users SET failed_attempts = $1, locked_until = $2 WHERE id = $3', [
+            attempts,
+            lockUntil,
+            userId,
+        ]);
     }
 
     async resetFailedAttempts(userId) {
-        await this.db.run(
-            'UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = $1',
-            [userId]
-        );
+        await this.db.run('UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = $1', [userId]);
     }
 
     isAccountLocked(user) {

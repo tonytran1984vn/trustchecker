@@ -10,7 +10,7 @@ class TrustService extends BaseService {
         super('trust');
         try {
             this.engine = require('../engines/core/trust');
-        } catch(e) {
+        } catch (e) {
             this.logger.warn('Trust engine not loaded', { error: e.message });
         }
     }

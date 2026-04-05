@@ -13,5 +13,4 @@ module.exports = {
     orgService: require('./org.service'),
     notificationService: require('./notification.service'),
     platformService: require('./platform.service'),
-    rbacService: require('./rbac.service'),
 };

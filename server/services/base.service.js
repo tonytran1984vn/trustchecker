@@ -24,7 +24,10 @@ class BaseService {
     // Paginated query
     async paginate(sql, params = [], { page = 1, limit = 20 } = {}) {
         const offset = (page - 1) * limit;
-        const countSql = sql.replace(/SELECT .+? FROM/i, 'SELECT COUNT(*) as total FROM').replace(/ORDER BY .+$/i, '').replace(/LIMIT .+$/i, '');
+        const countSql = sql
+            .replace(/SELECT .+? FROM/i, 'SELECT COUNT(*) as total FROM')
+            .replace(/ORDER BY .+$/i, '')
+            .replace(/LIMIT .+$/i, '');
         const [rows, countResult] = await Promise.all([
             this.db.all(sql + ` LIMIT ${limit} OFFSET ${offset}`, params),
             this.db.get(countSql, params),

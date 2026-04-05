@@ -14,15 +14,11 @@ class VerificationService extends BaseService {
 
     // ── QR Generation ────────────────────────────────────────────────────────
     async generateQR(productId, orgId, options = {}) {
-        const product = await this.db.get(
-            'SELECT * FROM products WHERE id = $1 AND org_id = $2', [productId, orgId]
-        );
+        const product = await this.db.get('SELECT * FROM products WHERE id = $1 AND org_id = $2', [productId, orgId]);
         if (!product) throw this.error('PRODUCT_NOT_FOUND', 'Product not found', 404);
 
         const qrId = uuidv4();
-        const qrData = crypto.createHash('sha256')
-            .update(`${productId}:${orgId}:${qrId}:${Date.now()}`)
-            .digest('hex');
+        const qrData = crypto.createHash('sha256').update(`${productId}:${orgId}:${qrId}:${Date.now()}`).digest('hex');
 
         await this.db.run(
             'INSERT INTO qr_codes (id, product_id, qr_data, org_id, batch_number, metadata, created_at) VALUES ($1, $2, $3, $4, $5, $6, NOW())',
@@ -39,8 +35,14 @@ class VerificationService extends BaseService {
 
         // Find product by QR data (always scoped to org)
         const product = orgId
-            ? await this.db.get('SELECT * FROM products p JOIN qr_codes q ON q.product_id = p.id WHERE q.qr_data = $1 AND p.org_id = $2', [qrData, orgId])
-            : await this.db.get('SELECT * FROM products p JOIN qr_codes q ON q.product_id = p.id WHERE q.qr_data = $1', [qrData]);
+            ? await this.db.get(
+                  'SELECT * FROM products p JOIN qr_codes q ON q.product_id = p.id WHERE q.qr_data = $1 AND p.org_id = $2',
+                  [qrData, orgId]
+              )
+            : await this.db.get(
+                  'SELECT * FROM products p JOIN qr_codes q ON q.product_id = p.id WHERE q.qr_data = $1',
+                  [qrData]
+              );
 
         if (!product) throw this.error('QR_NOT_FOUND', 'Product not found for this QR code', 404);
 
@@ -67,9 +69,9 @@ class VerificationService extends BaseService {
         );
         if (!product) throw this.error('PRODUCT_NOT_FOUND', 'Product not found', 404);
 
-        const scanCount = await this.db.get(
-            'SELECT COUNT(*) as cnt FROM scan_events WHERE product_id = $1', [productId]
-        );
+        const scanCount = await this.db.get('SELECT COUNT(*) as cnt FROM scan_events WHERE product_id = $1', [
+            productId,
+        ]);
 
         return {
             product_id: productId,
@@ -87,7 +89,8 @@ class VerificationService extends BaseService {
              JOIN products p ON p.id = se.product_id
              WHERE p.org_id = $1
              ORDER BY se.created_at DESC`,
-            [orgId], { page, limit }
+            [orgId],
+            { page, limit }
         );
     }
 }

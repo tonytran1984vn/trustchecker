@@ -22,11 +22,18 @@ class OrgService extends BaseService {
         const params = [];
         let idx = 1;
         for (const f of fields) {
-            if (data[f] !== undefined) { updates.push(`${f} = $${idx}`); params.push(data[f]); idx++; }
+            if (data[f] !== undefined) {
+                updates.push(`${f} = $${idx}`);
+                params.push(data[f]);
+                idx++;
+            }
         }
         if (updates.length === 0) throw this.error('NO_CHANGES', 'No fields to update');
         params.push(orgId);
-        await this.db.run(`UPDATE organizations SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${idx}`, params);
+        await this.db.run(
+            `UPDATE organizations SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${idx}`,
+            params
+        );
         return this.getOrg(orgId);
     }
 
@@ -35,7 +42,8 @@ class OrgService extends BaseService {
             `SELECT u.id, u.email, u.username, u.role, m.status, m.created_at as joined_at
              FROM memberships m JOIN users u ON u.id = m.user_id
              WHERE m.org_id = $1 ORDER BY m.created_at DESC`,
-            [orgId], { page, limit }
+            [orgId],
+            { page, limit }
         );
     }
 
@@ -64,8 +72,14 @@ class OrgService extends BaseService {
         const [members, products, scans, trustScore] = await Promise.all([
             this.db.get('SELECT COUNT(*) as cnt FROM memberships WHERE org_id = $1', [orgId]),
             this.db.get('SELECT COUNT(*) as cnt FROM products WHERE org_id = $1', [orgId]),
-            this.db.get('SELECT COUNT(*) as cnt FROM scan_events se JOIN products p ON p.id = se.product_id WHERE p.org_id = $1', [orgId]),
-            this.db.get('SELECT AVG(score) as avg FROM trust_scores ts JOIN products p ON p.id = ts.product_id WHERE p.org_id = $1 AND ts.is_latest = true', [orgId]),
+            this.db.get(
+                'SELECT COUNT(*) as cnt FROM scan_events se JOIN products p ON p.id = se.product_id WHERE p.org_id = $1',
+                [orgId]
+            ),
+            this.db.get(
+                'SELECT AVG(score) as avg FROM trust_scores ts JOIN products p ON p.id = ts.product_id WHERE p.org_id = $1 AND ts.is_latest = true',
+                [orgId]
+            ),
         ]);
         return {
             members: members?.cnt || 0,

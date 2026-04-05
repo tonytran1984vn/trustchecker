@@ -11,7 +11,7 @@ class RiskService extends BaseService {
             this.riskEngine = require('../engines/core/risk-graph-engine');
             this.anomalyEngine = require('../engines/core/anomaly');
             this.fraudEngine = require('../engines/core/fraud');
-        } catch(e) {}
+        } catch (e) {}
     }
 
     async getRiskGraph(orgId) {
@@ -27,16 +27,17 @@ class RiskService extends BaseService {
     }
 
     async getAnomalies(orgId, { page = 1, limit = 20 } = {}) {
-        return this.paginate(
-            'SELECT * FROM anomaly_alerts WHERE org_id = $1 ORDER BY created_at DESC',
-            [orgId], { page, limit }
-        );
+        return this.paginate('SELECT * FROM anomaly_alerts WHERE org_id = $1 ORDER BY created_at DESC', [orgId], {
+            page,
+            limit,
+        });
     }
 
     async getFraudAlerts(orgId, { page = 1, limit = 20 } = {}) {
         return this.paginate(
             'SELECT * FROM fraud_alerts WHERE org_id = $1 ORDER BY severity DESC, created_at DESC',
-            [orgId], { page, limit }
+            [orgId],
+            { page, limit }
         );
     }
 
