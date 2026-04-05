@@ -225,8 +225,12 @@ graph TB
 #### 12. Organization Owner (`org_owner`)
 | | |
 |---|---|
-| **Mục đích** | Đại diện pháp lý. Bổ nhiệm/cách chức Company Admin. |
-| **⚠️** | KHÔNG tham gia vận hành hàng ngày |
+| **Mục đích** | **Tenant Sovereign Authority** — Định nghĩa không gian tổ chức, phạm vi rủi ro và cấu hình vận hành (economic entity) |
+| **Control Plane** | Full quyền cấu hình: Feature Flags, Policy Engine, Integration (API/Webhooks) ở vi mô tenant. Biên giới giao tiếp ngoài. |
+| **Risk Governance** | Thiết lập Risk Appetite (e.g., TCAR threshold) và Alert rules. Simulate rủi ro nhúng ERQF/Monte Carlo. |
+| **Economic Control** | Toàn quyền kiểm soát tài chính: Phân rã gói cước, kích hoạt Add-ons, Cost Allocation. |
+| **Blast Radius** | Toàn bộ tenant data, governance, exposure. ❌ Không ảnh hưởng hay lây lan sang tenant khác (Cross-tenant isolation). |
+| **⚠️ Giới hạn** | KHÔNG được thay đổi mô hình tính toán thuật toán lõi (ERQF/Monte Carlo core models). Chỉ được Run/Simulate. |
 
 ---
 

@@ -1,0 +1,86 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Org Owner Policy Schema",
+    "description": "Enforces tenant-level constraints bounds for the Org Owner (Tenant Sovereign Authority) in TrustChecker OS.",
+    "type": "object",
+    "properties": {
+        "role": {
+            "type": "string",
+            "const": "org_owner"
+        },
+        "blast_radius": {
+            "type": "string",
+            "const": "tenant_boundary"
+        },
+        "engine_access": {
+            "type": "object",
+            "properties": {
+                "operational_engines": {
+                    "type": "object",
+                    "properties": {
+                        "scm_suite": { "type": "array", "items": { "type": "string" }, "default": ["create", "read", "update", "delete", "delegate"] },
+                        "epcis_2_0": { "type": "array", "items": { "type": "string" }, "default": ["read", "write"] },
+                        "carbon_engine": { "type": "array", "items": { "type": "string" }, "default": ["read", "submit", "audit"] },
+                        "trustscore": { "type": "array", "items": { "type": "string" }, "default": ["read", "recalculate"] }
+                    }
+                },
+                "risk_engines": {
+                    "type": "object",
+                    "description": "Org Owner can simulate and set thresholds but cannot modify internal models.",
+                    "properties": {
+                        "erqf": { "type": "array", "items": { "type": "string" }, "default": ["simulate", "set_threshold"] },
+                        "monte_carlo": { "type": "array", "items": { "type": "string" }, "default": ["run_scenario"] },
+                        "risk_graph": { "type": "array", "items": { "type": "string" }, "default": ["query", "simulate_disruption"] },
+                        "forbidden_actions": { 
+                            "type": "array", 
+                            "items": { "type": "string" }, 
+                            "default": ["modify_model", "change_correlation_matrix", "alter_distribution"] 
+                        }
+                    }
+                },
+                "control_plane": {
+                    "type": "object",
+                    "properties": {
+                        "feature_flags": { "type": "array", "items": { "type": "string" }, "default": ["toggle_tenant_features"] },
+                        "integration_boundary": { "type": "array", "items": { "type": "string" }, "default": ["manage_api_keys", "manage_webhooks", "lock_integration"] },
+                        "automation_rules": { "type": "array", "items": { "type": "string" }, "default": ["create", "update", "delete"] }
+                    }
+                },
+                "economic_engine": {
+                    "type": "object",
+                    "properties": {
+                        "plan": { "type": "array", "items": { "type": "string" }, "default": ["upgrade", "downgrade"] },
+                        "addons": { "type": "array", "items": { "type": "string" }, "default": ["activate", "deactivate"] },
+                        "cost_allocation": { "type": "array", "items": { "type": "string" }, "default": ["read", "distribute"] }
+                    }
+                }
+            }
+        },
+        "risk_appetite": {
+            "type": "object",
+            "properties": {
+                "tcar_threshold_usd": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Max Total Capital at Risk limit before raising priority escalations"
+                },
+                "escalation_policy": {
+                    "type": "object",
+                    "properties": {
+                        "alert_threshold_percent": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100,
+                            "description": "Percentage of TCAR at which alerts are triggered"
+                        },
+                        "auto_lock_integration_on_critical": {
+                            "type": "boolean",
+                            "description": "If true, automatically fires integration-locking on boundary events"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "required": ["role", "blast_radius", "engine_access", "risk_appetite"]
+}

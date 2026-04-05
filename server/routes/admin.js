@@ -15,12 +15,12 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
-const { authMiddleware, requireRole, requirePermission } = require('../auth');
+const { authMiddleware, requireRole, requirePermission, requireOrgAdmin } = require('../auth');
 const logger = require('../lib/logger');
 const complianceEngine = require('../services/compliance-engine/engine');
 
 router.use(authMiddleware);
-router.use(requirePermission('org:user_create'));
+router.use(requireOrgAdmin());
 
 // ─── GET /overview — System-wide admin overview ─────────────
 router.get('/overview', async (req, res) => {

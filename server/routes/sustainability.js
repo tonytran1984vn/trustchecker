@@ -25,14 +25,15 @@ router.post('/assess', requirePermission('sustainability:create'), async (req, r
         } = req.body;
         if (!product_id) return res.status(400).json({ error: 'product_id required' });
 
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
         let pSql = 'SELECT * FROM products WHERE id = ?';
         const pParams = [product_id];
-        if (req.orgId) {
+        if (orgId) {
             pSql += ' AND org_id = ?';
-            pParams.push(req.orgId);
+            pParams.push(orgId);
         }
         const product = await db.get(pSql, pParams);
-        if (!product) return res.status(404).json({ error: 'Product not found' });
+        if (!product) return res.status(404).json({ error: 'Product not found or access denied' });
 
         // Normalize scores (0-100)
         const scores = {
@@ -105,12 +106,20 @@ router.post('/assess', requirePermission('sustainability:create'), async (req, r
 // ─── GET /products/:id — Get sustainability score for a product
 router.get('/products/:id', async (req, res) => {
     try {
-        const scores = await db.all(
-            'SELECT ss.*, p.name as product_name FROM sustainability_scores ss LEFT JOIN products p ON ss.product_id = p.id WHERE ss.product_id = ? ORDER BY ss.assessed_at DESC LIMIT 1000',
-            [req.params.id]
-        );
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
+        let pSql =
+            'SELECT ss.*, p.name as product_name FROM sustainability_scores ss JOIN products p ON ss.product_id = p.id WHERE ss.product_id = ?';
+        const pParams = [req.params.id];
+        if (orgId) {
+            pSql += ' AND p.org_id = ?';
+            pParams.push(orgId);
+        }
+        pSql += ' ORDER BY ss.assessed_at DESC LIMIT 1000';
 
-        if (scores.length === 0) return res.status(404).json({ error: 'No sustainability assessment found' });
+        const scores = await db.all(pSql, pParams);
+
+        if (scores.length === 0)
+            return res.status(404).json({ error: 'No sustainability assessment found or access denied' });
 
         const latest = scores[0];
         const history = scores.map(s => ({
@@ -139,14 +148,20 @@ router.get('/products/:id', async (req, res) => {
 router.get('/leaderboard', async (req, res) => {
     try {
         const { limit = 20 } = req.query;
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
+        const orgFilter = orgId ? `AND p.org_id = '${orgId}'` : '';
         const leaders = await db.all(
             `
       SELECT ss.*, p.name as product_name, p.category, p.manufacturer
       FROM sustainability_scores ss
       JOIN products p ON ss.product_id = p.id
       WHERE ss.id IN (
-        SELECT MAX(id) FROM sustainability_scores GROUP BY product_id
+        SELECT MAX(ss2.id) FROM sustainability_scores ss2
+        JOIN products p2 ON ss2.product_id = p2.id
+        WHERE 1=1 ${orgFilter}
+        GROUP BY ss2.product_id
       )
+      ${orgFilter}
       ORDER BY ss.overall_score DESC
       LIMIT ?
     `,
@@ -166,6 +181,16 @@ router.post('/green-cert', requirePermission('sustainability:manage'), async (re
         if (!product_id || !certification_name)
             return res.status(400).json({ error: 'product_id and certification_name required' });
 
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
+        let pSql = 'SELECT * FROM products WHERE id = ?';
+        const pParams = [product_id];
+        if (orgId) {
+            pSql += ' AND org_id = ?';
+            pParams.push(orgId);
+        }
+        const product = await db.get(pSql, pParams);
+        if (!product) return res.status(404).json({ error: 'Product not found or access denied' });
+
         // Check sustainability score
         const score = await db.get(
             'SELECT * FROM sustainability_scores WHERE product_id = ? ORDER BY assessed_at DESC LIMIT 1',
@@ -176,11 +201,9 @@ router.post('/green-cert', requirePermission('sustainability:manage'), async (re
                 .status(400)
                 .json({ error: 'Product must have a sustainability assessment before green certification' });
         if (score.overall_score < 60)
-            return res
-                .status(400)
-                .json({
-                    error: `Sustainability score (${score.overall_score}) too low — minimum 60 required for green certification`,
-                });
+            return res.status(400).json({
+                error: `Sustainability score (${score.overall_score}) too low — minimum 60 required for green certification`,
+            });
 
         const greenStandards = [
             'ISO 14001',
@@ -255,23 +278,41 @@ router.post('/green-cert', requirePermission('sustainability:manage'), async (re
     }
 });
 
-// ─── GET /stats — Sustainability platform stats ─────────────
+// ─── GET /stats — Sustainability platform stats (org-scoped) ─
 router.get('/stats', async (req, res) => {
     try {
-        const total = (await db.get('SELECT COUNT(DISTINCT product_id)::int as c FROM sustainability_scores'))?.c || 0;
-        const avgScore = (await db.get('SELECT AVG(overall_score)::float as a FROM sustainability_scores'))?.a || 0;
-        const avgCarbon = (await db.get('SELECT AVG(carbon_footprint)::float as a FROM sustainability_scores'))?.a || 0;
+        const orgId = req.orgId || req.user?.org_id || req.user?.orgId;
+        const orgFilter = orgId ? `WHERE p.org_id = '${orgId}'` : '';
+        const orgAnd = orgId ? `AND p.org_id = '${orgId}'` : '';
+
+        const total =
+            (
+                await db.get(
+                    `SELECT COUNT(DISTINCT ss.product_id)::int as c FROM sustainability_scores ss JOIN products p ON ss.product_id = p.id ${orgFilter}`
+                )
+            )?.c || 0;
+        const avgScore =
+            (
+                await db.get(
+                    `SELECT AVG(ss.overall_score)::float as a FROM sustainability_scores ss JOIN products p ON ss.product_id = p.id ${orgFilter}`
+                )
+            )?.a || 0;
+        const avgCarbon =
+            (
+                await db.get(
+                    `SELECT AVG(ss.carbon_footprint)::float as a FROM sustainability_scores ss JOIN products p ON ss.product_id = p.id ${orgFilter}`
+                )
+            )?.a || 0;
 
         let byGrade = [];
         try {
             byGrade = await db.all(
-                'SELECT grade, COUNT(*)::int as count FROM (SELECT DISTINCT ON (product_id) product_id, grade FROM sustainability_scores ORDER BY product_id, overall_score DESC) sub GROUP BY grade ORDER BY grade LIMIT 1000'
+                `SELECT grade, COUNT(*)::int as count FROM (SELECT DISTINCT ON (ss.product_id) ss.product_id, ss.grade FROM sustainability_scores ss JOIN products p ON ss.product_id = p.id ${orgFilter} ORDER BY ss.product_id, ss.overall_score DESC) sub GROUP BY grade ORDER BY grade LIMIT 1000`
             );
         } catch (e) {
-            // Fallback: simple grade distribution without dedup
             try {
                 byGrade = await db.all(
-                    'SELECT grade, COUNT(*)::int as count FROM sustainability_scores GROUP BY grade ORDER BY grade LIMIT 1000'
+                    `SELECT ss.grade, COUNT(*)::int as count FROM sustainability_scores ss JOIN products p ON ss.product_id = p.id ${orgFilter} GROUP BY ss.grade ORDER BY ss.grade LIMIT 1000`
                 );
             } catch (e2) {
                 /* skip */
@@ -281,7 +322,11 @@ router.get('/stats', async (req, res) => {
         let greenCerts = 0;
         try {
             greenCerts =
-                (await db.get("SELECT COUNT(*)::int as c FROM certifications WHERE status = 'active'"))?.c || 0;
+                (
+                    await db.get(
+                        `SELECT COUNT(*)::int as c FROM certifications c JOIN products p ON c.entity_id = p.id WHERE c.status = 'active' ${orgAnd}`
+                    )
+                )?.c || 0;
         } catch (e) {
             /* table may not exist */
         }
@@ -294,7 +339,7 @@ router.get('/stats', async (req, res) => {
             certifications_issued: greenCerts,
             grade_distribution: byGrade,
             green_certifications: greenCerts,
-            platform_grade: avgScore >= 80 ? 'A' : avgScore >= 60 ? 'B' : 'C',
+            platform_grade: avgScore >= 80 ? 'A' : avgScore >= 60 ? 'B' : avgScore >= 40 ? 'C' : '—',
         });
     } catch (e) {
         safeError(res, 'Operation failed', e);

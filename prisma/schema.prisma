@@ -368,6 +368,7 @@ model BlockchainSeal {
 
 model AnomalyDetection {
   id          String    @id @default(uuid())
+  orgId       String    @default("") @map("org_id")
   sourceType  String    @map("source_type")
   sourceId    String?   @map("source_id")
   anomalyType String    @map("anomaly_type")
@@ -391,10 +392,10 @@ model AuditLog {
   id         String   @id @default(uuid())
   actorId    String?  @map("actor_id")
   action     String
-  entityType String   @default("") @map("entity_type")
-  entityId   String   @default("") @map("entity_id")
+  entityType String?   @default("") @map("entity_type")
+  entityId   String?   @default("") @map("entity_id")
   details    Json     @default("{}")
-  ipAddress  String   @default("") @map("ip_address")
+  ipAddress  String?   @default("") @map("ip_address")
   timestamp  DateTime @default(now())
 
   @@index([actorId])
@@ -639,8 +640,14 @@ model LeakAlert {
 
 model RiskAnalyticSnapshot {
   id        String   @id @default(uuid())
-  orgId     String   @map("org_id")
+  orgId     String   @default("") @map("org_id")
   timestamp DateTime @default(now())
+  
+  // Dashboard UI Metadata
+  vector    String?
+  riskLevel String?   @map("risk_level")
+  status    String?
+  payload   Json?
 
   // Base Parameters
   basePFraud Float @map("base_p_fraud")
@@ -662,7 +669,7 @@ model RiskAnalyticSnapshot {
   p99Evd       Float @map("p99_evd")
 
   // V3.2: Engine metadata (data_quality, confidence bands, denominator warnings)
-  engineMeta   Json  @default("{}") @map("engine_meta")
+  engineMeta Json @default("{}") @map("engine_meta")
 
   @@index([orgId, timestamp])
   @@map("risk_analytic_snapshots")
@@ -1679,8 +1686,11 @@ model LrgfValidation {
 
 model LrgfRiskScore {
   id                  String   @id @default(uuid())
+  orgId               String   @default("") @map("org_id")
   eventId             String   @map("event_id")
   ersScore            Int      @map("ers_score")
+  financialImpact     Float?   @default(0) @map("financial_impact")
+  tier                String?
   modelVersion        String   @map("model_version")
   weightHash          String   @map("weight_hash")
   factorContributions String?  @map("factor_contributions")
@@ -2126,4 +2136,85 @@ model FactLtvMetrics {
 
   @@unique([experimentKey, cohort])
   @@map("fact_ltv_metrics")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EXECUTIVE DASHBOARD MOCK MODELS
+// ═══════════════════════════════════════════════════════════════════
+
+model ExecutiveAction {
+  id          String   @id @default(uuid())
+  orgId       String   @map("org_id")
+  title       String
+  description String
+  priority    String   @default("Medium")
+  status      String   @default("Pending")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([orgId])
+  @@map("executive_actions")
+}
+
+model ExecutiveApproval {
+  id          String   @id @default(uuid())
+  orgId       String   @map("org_id")
+  type        String
+  requestedBy String   @map("requested_by")
+  risk        String   @default("Medium")
+  timestamp   String
+  status      String   @default("Pending")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([orgId])
+  @@map("executive_approvals")
+}
+
+model ExecutiveScenario {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  name      String
+  severity  String
+  created   String
+  impact    Float    @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orgId])
+  @@map("executive_scenarios")
+}
+
+model ExecutiveCommittee {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  name      String
+  members   Int      @default(0)
+  status    String   @default("Active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orgId])
+  @@map("executive_committees")
+}
+
+model ExecutiveMember {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  name      String
+  role      String
+  avatar    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orgId])
+  @@map("executive_members")
+}
+
+model ExecutiveReport {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  title     String
+  type      String
+  date      String
+  fileSize  String   @map("file_size")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orgId])
+  @@map("executive_reports")
 }

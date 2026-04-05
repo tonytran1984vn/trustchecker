@@ -7,14 +7,25 @@ export function proxy(req: NextRequest) {
 
     // ── Auth Guard ────────────────────────────────────────────────────────
     // Use req.nextUrl.clone() for redirects — it automatically includes basePath.
-    if (!token && (pathname.startsWith('/dashboard') || pathname.startsWith('/legacy'))) {
+    if (!token && (pathname.startsWith('/dashboard') || pathname.startsWith('/legacy') || pathname.startsWith('/platform'))) {
         const url = req.nextUrl.clone();
         url.pathname = '/login';
         return NextResponse.redirect(url);
     }
     if (token && (pathname === '/' || pathname === '/login' || pathname === '/login/')) {
+        let isSuperAdmin = false;
+        try {
+            const tokenValue = typeof token === 'string' ? token : token.value;
+            const payload = JSON.parse(atob(tokenValue.split('.')[1]));
+            if (payload.role === 'super_admin' || payload.user_type === 'platform') {
+                isSuperAdmin = true;
+            }
+        } catch (e) {
+            // ignore decode errors
+        }
+
         const url = req.nextUrl.clone();
-        url.pathname = '/dashboard';
+        url.pathname = isSuperAdmin ? '/platform/platform/risk' : '/dashboard';
         return NextResponse.redirect(url);
     }
 

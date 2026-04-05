@@ -87,9 +87,13 @@ L1  Technical Execution Layer
 
 ## L3 — Tenant Governance
 
-### 🟠 8. Company Admin — Tenant IAM, full sidebar
-### 🟡 9. Executive / CEO — Dashboard + reports overview
-### 🌱 10. Carbon Officer — Emission data, mint request → Compliance approve → IVU validate → Blockchain anchor
+### 👑 8. Org Owner (Tenant Sovereign Authority)
+- **Purpose:** 100% Boundary & Economic Control for the Tenant. Risk Appetite Governance.
+- **Allowed:** Full control of Tenant Control Plane (Feature Flags, Policies, Integration), Economic Engine (Billing, Add-ons), Access Governance (Hierarchy, Boundaries) and Risk Simulation.
+- **Forbidden:** Modify ERQF/Monte Carlo distributions, override cross-tenant isolation, or trigger global systemic stress.
+### 🟠 9. Company Admin — Tenant IAM, full sidebar
+### 🟡 10. Executive / CEO — Dashboard + reports overview
+### 🌱 11. Carbon Officer — Emission data, mint request → Compliance approve → IVU validate → Blockchain anchor
 
 ---
 

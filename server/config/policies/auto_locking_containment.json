@@ -1,0 +1,71 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Auto-Locking and Containment Policy",
+    "description": "Risk Appetite Layer: Auto-trigger configurations for integration locking when risk thresholds are exceeded.",
+    "type": "object",
+    "properties": {
+        "policy_id": {
+            "type": "string",
+            "description": "Unique identifier for this containment policy"
+        },
+        "org_id": {
+            "type": "string",
+            "description": "The tenant/economic entity this policy applies to"
+        },
+        "trigger_conditions": {
+            "type": "object",
+            "properties": {
+                "tcar_exposure_percent": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100,
+                    "description": "Percentage of Total Capital at Risk that triggers this policy (e.g., 80%)"
+                },
+                "fraud_alert_severity": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high", "critical"],
+                    "description": "Minimum severity level of an aggregated fraud alert to trigger"
+                },
+                "systemic_stress_level": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1.0,
+                    "description": "Cross-tenant contagion shock level"
+                }
+            },
+            "required": ["tcar_exposure_percent"]
+        },
+        "containment_actions": {
+            "type": "object",
+            "properties": {
+                "lock_integrations": {
+                    "type": "boolean",
+                    "description": "Automatically freeze external Webhooks, APIs, and ERP data ingestion"
+                },
+                "suspend_transactions": {
+                    "type": "boolean",
+                    "description": "Halt operational transactions (e.g., carbon minting, EPCIS events)"
+                },
+                "escalation_channels": {
+                    "type": "array",
+                    "items": { "type": "string", "enum": ["email", "sms", "slack", "webhook"] }
+                }
+            },
+            "required": ["lock_integrations", "escalation_channels"]
+        },
+        "recovery_protocol": {
+            "type": "object",
+            "properties": {
+                "requires_manual_override": {
+                    "type": "boolean",
+                    "description": "If true, only Org Owner or Executive can lift the containment lock"
+                },
+                "auto_restore_on_threshold_drop": {
+                    "type": "boolean",
+                    "description": "If true, integrations unlock automatically when risk drops below threshold"
+                }
+            }
+        }
+    },
+    "required": ["policy_id", "org_id", "trigger_conditions", "containment_actions", "recovery_protocol"]
+}

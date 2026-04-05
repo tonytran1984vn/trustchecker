@@ -449,8 +449,8 @@ function renderTeam() {
     const isHighRisk = ['org_owner', 'company_admin', 'admin', 'security_officer', 'compliance_officer', 'risk_officer'].includes(u.role);
     return `
     <tr>
-      <td style="font-size:0.72rem"><strong>${esc(u.username || u.email?.split('@')[0] || '—')}</strong></td>
-      <td style="font-size:0.68rem;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.email)}</td>
+      <td style="font-size:0.72rem"><strong><a href="#" onclick="navigate('ca-identity'); return false;" style="color:inherit;text-decoration:underline">${esc(u.username || u.email?.split('@')[0] || '—')}</a></strong></td>
+      <td style="font-size:0.68rem;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><a href="#" onclick="navigate('ca-identity'); return false;" style="color:inherit;text-decoration:underline">${esc(u.email)}</a></td>
       <td><span class="role-badge role-${u.role}" style="font-size:0.65rem">${roleName}</span>${isHighRisk ? ' <span style="color:#ef4444;font-size:0.6rem">⚠</span>' : ''}</td>
       <td><span style="font-size:0.65rem;padding:2px 8px;border-radius:10px;background:${s.bg};color:${s.color};font-weight:600">${s.label}</span></td>
       <td style="font-size:0.68rem;color:var(--text-muted)">${u.last_login ? timeAgo(u.last_login) : '—'}</td>
@@ -508,7 +508,7 @@ function renderPrivilege() {
   // High-risk role mapping table
   const highRiskRows = (d.high_risk_users || []).map(u => `
     <tr>
-      <td style="font-weight:600;font-size:0.72rem">${esc(u.username || u.email)}</td>
+      <td style="font-weight:600;font-size:0.72rem"><a href="#" onclick="navigate('ca-identity'); return false;" style="color:inherit;text-decoration:underline">${esc(u.username || u.email)}</a></td>
       <td><span class="role-badge role-${u.role}">${toTitleCase((u.role || '').replace(/_/g, ' '))}</span></td>
       <td style="font-size:0.72rem;text-align:center;font-weight:700">${u.role_count || 0}</td>
       <td style="font-size:0.68rem;color:var(--text-muted)">${u.last_login ? timeAgo(u.last_login) : '⚠️ Never'}</td>
@@ -522,9 +522,9 @@ function renderPrivilege() {
     return `
     <tr>
       <td style="font-size:0.68rem;color:var(--text-muted)">${timeAgo(a.timestamp || a.created_at)}</td>
-      <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(a.action)}">${a.action}</span></td>
-      <td style="font-size:0.72rem">${esc(a.actor_email || '—')}</td>
-      <td style="font-size:0.72rem">${esc(target)}</td>
+      <td><a href="#" onclick="navigate('ca-audit-dashboard'); return false;" style="text-decoration:none"><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(a.action)}">${a.action}</span></a></td>
+      <td style="font-size:0.72rem"><a href="#" onclick="navigate('ca-identity'); return false;" style="color:inherit;text-decoration:underline">${esc(a.actor_email || '—')}</a></td>
+      <td style="font-size:0.72rem"><a href="#" onclick="navigate('ca-identity'); return false;" style="color:inherit;text-decoration:underline">${esc(target)}</a></td>
       <td style="font-size:0.68rem;color:var(--text-muted)">${esc(role) || '—'}</td>
     </tr>`;
   }).join('');
@@ -637,8 +637,8 @@ function renderRiskMonitoring() {
     return `
     <tr>
       <td style="font-size:0.72rem;color:var(--text-muted)">${timeAgo(s.timestamp || s.created_at)}</td>
-      <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(s.action)}">${s.action}</span></td>
-      <td style="font-size:0.72rem">${esc(s.actor_email || '—')}</td>
+      <td><a href="#" onclick="navigate('ca-risk'); return false;" style="text-decoration:none"><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(s.action)}">${s.action}</span></a></td>
+      <td style="font-size:0.72rem"><a href="#" onclick="navigate('ca-identity'); return false;" style="color:inherit;text-decoration:underline">${esc(s.actor_email || '—')}</a></td>
       <td style="font-size:0.68rem;color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${det.reason || det.message || det.ip || '—'}</td>
     </tr>`;
   }).join('');
@@ -709,8 +709,8 @@ function renderActivityContent(d) {
     return `
     <tr>
       <td style="font-size:0.72rem;color:var(--text-muted)">${timeAgo(a.timestamp || a.created_at)}</td>
-      <td><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(a.action)}">${a.action}</span></td>
-      <td style="font-size:0.72rem">${esc(a.actor_email || '—')}</td>
+      <td><a href="#" onclick="navigate('ca-audit-dashboard'); return false;" style="text-decoration:none"><span style="font-size:0.68rem;padding:2px 8px;border-radius:4px;color:#fff;background:${actionColor(a.action)}">${a.action}</span></a></td>
+      <td style="font-size:0.72rem"><a href="#" onclick="navigate('ca-identity'); return false;" style="color:inherit;text-decoration:underline">${esc(a.actor_email || '—')}</a></td>
       <td style="font-size:0.68rem;color:var(--text-muted);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(detailText)}</td>
       <td style="font-size:0.68rem;color:${det.severity === 'critical' ? '#ef4444' : det.severity === 'high' ? '#f59e0b' : 'var(--text-muted)'}">${det.severity || 'normal'}</td>
     </tr>`;

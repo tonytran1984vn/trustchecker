@@ -2,39 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { 
-  LayoutDashboard, 
-  PackageSearch, 
-  ShieldAlert, 
-  Leaf, 
-  Settings,
-  Building,
-  Flag,
-  Power,
-  Activity,
-  BarChart3,
-  Layers,
-  Users,
-  LogOut,
-  HeartPulse,
-  FileText,
-  BadgeDollarSign,
-  AlertTriangle,
-  Lock,
-  Rocket,
-  FileWarning,
-  GitCompare,
-  Cpu,
-  TestTube,
-  Play,
-  Key
-} from "lucide-react";
 import Link from "next/link";
+import * as Icons from "lucide-react";
 import TrustCheckerLogo from "@/components/TrustCheckerLogo";
 import { canAccessModule, getUserPlatformRole, PlatformModuleId } from "@/lib/permissions/platform";
+import { PLATFORM_NAV_CONFIG, COMPANY_NAV_CONFIG, getFilteredMenu, Role } from "@/config/menu.config";
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
@@ -44,81 +20,28 @@ export default function Sidebar() {
     } catch (e) {}
   }, []);
 
-  const router = useRouter();
-
   const isPlatformUser = user?.role === 'super_admin' || user?.user_type === 'platform';
+  
+  // Resolve Role
+  let userRole: Role = "viewer"; // default
+  if (isPlatformUser) {
+    userRole = getUserPlatformRole(user) as Role || "super_admin";
+  } else {
+    userRole = (user?.role as Role) || "viewer";
+  }
 
-  const tenantNavGroups = [
-    {
-      label: "Applications",
-      items: [
-        { id: "dashboard", label: "Overview", icon: LayoutDashboard, path: "/dashboard" },
-        { id: "operations", label: "Operations", icon: PackageSearch, path: "/operations/products" },
-        { id: "risk", label: "Risk Engine", icon: ShieldAlert, path: "/risk-engine/fraud" },
-        { id: "sustainability", label: "Sustainability", icon: Leaf, path: "/sustainability/impact" },
-        { id: "settings", label: "Workspace Settings", icon: Settings, path: "/settings/users" },
-      ]
-    }
-  ];
+  // Feature flags extraction
+  const featureFlags = user?.feature_flags || [];
 
-  const platformNavGroups: any[] = [
-    {
-      label: "Global Command",
-      moduleId: "command" as const,
-      items: [
-        { id: "crisis", label: "Crisis Engine", icon: Activity, path: "/platform/command/crisis" },
-        { id: "stress", label: "Systemic Stress", icon: AlertTriangle, path: "/platform/command/stress" },
-        { id: "killswitch", label: "Kill Switch", icon: Power, path: "/platform/command/killswitch" },
-        { id: "lock", label: "Integration Locking", icon: Lock, path: "/platform/command/lock" }
-      ]
-    },
-    {
-      label: "Control Plane",
-      moduleId: "control" as const,
-      items: [
-        { id: "features", label: "Feature Flags", icon: Flag, path: "/platform/control/features" },
-        { id: "rollouts", label: "Rollouts", icon: Rocket, path: "/platform/control/rollouts" },
-        { id: "policies", label: "Policies", icon: FileWarning, path: "/platform/control/policies" }
-      ]
-    },
-    {
-      label: "Observability",
-      moduleId: "observability" as const,
-      items: [
-        { id: "health", label: "System Health", icon: HeartPulse, path: "/platform/observability/health" },
-        { id: "metrics", label: "Metrics", icon: BarChart3, path: "/platform/observability/metrics" },
-        { id: "audit", label: "Audit", icon: FileText, path: "/platform/observability/audit" },
-        { id: "diff", label: "Diff", icon: GitCompare, path: "/platform/observability/diff" }
-      ]
-    },
-    {
-      label: "Model Governance",
-      moduleId: "models" as const,
-      items: [
-        { id: "models", label: "Models", icon: Cpu, path: "/platform/models/registry" },
-        { id: "validation", label: "Validation", icon: TestTube, path: "/platform/models/validation" },
-        { id: "simulation", label: "Simulation", icon: Play, path: "/platform/models/simulation" }
-      ]
-    },
-    {
-      label: "Platform",
-      moduleId: "platform" as const,
-      items: [
-        { id: "risk", label: "Risk Overview", icon: ShieldAlert, path: "/platform/platform/risk" },
-        { id: "tenants", label: "Tenants", icon: Building, path: "/platform/organizations" },
-        { id: "security", label: "Security", icon: Key, path: "/platform/platform/security" }
-      ]
-    }
-  ];
-
-  const role = getUserPlatformRole(user);
-  const filteredPlatformGroups = platformNavGroups.filter(g => canAccessModule(g.moduleId as PlatformModuleId, role));
-  const navGroups = isPlatformUser ? filteredPlatformGroups : tenantNavGroups;
-
-
-  const handleNav = (n: { id: string; path: string }) => {
-    router.push(n.path);
-  };
+  // Filter Menus
+  let navGroups = [];
+  if (isPlatformUser) {
+    // Original platform logic included canAccessModule filtering per category
+    const filteredPlatformConfig = PLATFORM_NAV_CONFIG.filter(g => canAccessModule(g.moduleId as PlatformModuleId, userRole));
+    navGroups = getFilteredMenu(filteredPlatformConfig, userRole, featureFlags);
+  } else {
+    navGroups = getFilteredMenu(COMPANY_NAV_CONFIG, userRole, featureFlags);
+  }
 
   const handleLogout = () => {
     localStorage.removeItem("tc_token");
@@ -150,24 +73,30 @@ export default function Sidebar() {
             </div>
             {group.items.map((n: any) => {
               const isActive = pathname === n.path || pathname.startsWith(n.path + '/');
-              const Icon = n.icon;
+              const IconComponent = (Icons as any)[n.iconName] || Icons.Circle; // Map string to icon, fallback to Circle
+              
               return (
-                <button
+                <Link
                   key={n.id}
-                  onClick={() => handleNav(n)}
+                  href={n.path}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[15px] transition-all focus:outline-none relative group ${
                     isActive 
                       ? (group.danger ? "text-red-600 bg-red-50 font-bold" : "text-slate-900 bg-slate-50 font-bold")
                       : (group.danger ? "text-slate-500 hover:text-red-600 hover:bg-red-50 font-medium" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50 font-medium")
                   }`}
                 >
-                  <Icon className={`w-5 h-5 ${
+                  <IconComponent className={`w-5 h-5 shrink-0 ${
                     isActive 
                       ? (group.danger ? "text-red-500" : "text-slate-900")
                       : (group.danger ? "text-red-400 group-hover:text-red-500" : "text-slate-400 group-hover:text-slate-900")
                   }`} strokeWidth={isActive ? 2.5 : 2} />
-                  <span>{n.label}</span>
-                </button>
+                  <span className="flex-1 text-left">{n.label}</span>
+                  {n.badge && (
+                    <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                      {n.badge}
+                    </span>
+                  )}
+                </Link>
               )
             })}
           </div>
@@ -179,7 +108,7 @@ export default function Sidebar() {
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium transition-all focus:outline-none group"
         >
-          <LogOut className="w-5 h-5 text-slate-400 group-hover:text-slate-500" strokeWidth={2} />
+          <Icons.LogOut className="w-5 h-5 text-slate-400 group-hover:text-slate-500" strokeWidth={2} />
           <span>Log Out</span>
         </button>
       </div>

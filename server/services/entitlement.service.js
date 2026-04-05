@@ -29,7 +29,7 @@ const SYSTEM_FEATURES = {
     kyc: { default: false },
     compliance: { default: false },
     evidence: { default: false },
-    sustainability: { default: false },
+    sustainability: { default: true }, // V9.5 enabled by default for demo
     leaks: { default: false },
     trust_graph: { default: false },
     what_if: { default: false },
@@ -68,6 +68,7 @@ const PLAN_ENTITLEMENTS = {
         partners: { enabled: true },
         inventory: { enabled: true },
         governance: { enabled: true },
+        sustainability: { enabled: true },
     },
 };
 

@@ -20,20 +20,34 @@ const db = require('../db');
 // Enforces: "Control the system, not the decisions."
 const CA_FORBIDDEN_PERMISSIONS = new Set([
     // Carbon governance — only compliance_officer / carbon_officer
-    'carbon_credit:approve_mint', 'carbon_credit:anchor',
-    'cie_passport:approve', 'cie_passport:seal', 'cie_passport:validate',
-    'cie_methodology:propose', 'cie_methodology:vote', 'cie_methodology:freeze', 'cie_methodology:publish',
-    'cie_disclosure:sign_off', 'cie_disclosure:certify_csrd',
+    'carbon_credit:approve_mint',
+    'carbon_credit:anchor',
+    'cie_passport:approve',
+    'cie_passport:seal',
+    'cie_passport:validate',
+    'cie_methodology:propose',
+    'cie_methodology:vote',
+    'cie_methodology:freeze',
+    'cie_methodology:publish',
+    'cie_disclosure:sign_off',
+    'cie_disclosure:certify_csrd',
     // Risk governance — only risk_committee / risk_officer
-    'risk_model:deploy', 'risk_model:approve', 'risk_model:validate',
+    'risk_model:deploy',
+    'risk_model:approve',
+    'risk_model:validate',
     'model_certification:issue',
     // Compliance governance — only compliance_officer
-    'compliance:freeze', 'regulatory_export:approve', 'gdpr_masking:execute',
+    'compliance:freeze',
+    'regulatory_export:approve',
+    'gdpr_masking:execute',
     // Graph governance — only ggc_member / risk_committee
-    'graph_schema:approve', 'graph_schema:deploy',
-    'graph_weight:approve', 'graph_override:approve',
+    'graph_schema:approve',
+    'graph_schema:deploy',
+    'graph_weight:approve',
+    'graph_override:approve',
     // Evidence sealing — integrity chain
-    'evidence:seal', 'evidence:freeze',
+    'evidence:seal',
+    'evidence:freeze',
     // LRGF override
     'lrgf_case:override',
     // Fraud case approval
@@ -42,9 +56,15 @@ const CA_FORBIDDEN_PERMISSIONS = new Set([
 
 // Roles that require elevated oversight when assigned
 const HIGH_RISK_ROLES = new Set([
-    'compliance_officer', 'risk_officer', 'risk_committee',
-    'ggc_member', 'ivu_validator', 'carbon_officer',
-    'disclosure_officer', 'company_admin', 'org_owner',
+    'compliance_officer',
+    'risk_officer',
+    'risk_committee',
+    'ggc_member',
+    'ivu_validator',
+    'carbon_officer',
+    'disclosure_officer',
+    'company_admin',
+    'org_owner',
 ]);
 
 /**
@@ -118,14 +138,17 @@ const SOD_CONFLICTS = [
  */
 async function getUserPermissions(userId) {
     // Primary: Load from RBAC tables
-    const rows = await db.all(`
+    const rows = await db.all(
+        `
     SELECT DISTINCT p.resource || ':' || p.action AS perm
     FROM rbac_user_roles ur
     JOIN rbac_role_permissions rp ON rp.role_id = ur.role_id
     JOIN rbac_permissions p ON p.id = rp.permission_id
     WHERE ur.user_id = ?
       AND (ur.expires_at IS NULL OR ur.expires_at > NOW())
-  `, [userId]);
+  `,
+        [userId]
+    );
 
     const perms = new Set(rows.map(r => r.perm));
     return perms;
@@ -161,12 +184,15 @@ async function hasAnyPermission(userId, permissions, req) {
  * Get all permission strings for a specific role.
  */
 async function getPermissionsForRole(roleId) {
-    const rows = await db.all(`
+    const rows = await db.all(
+        `
     SELECT p.resource || ':' || p.action AS perm
     FROM rbac_role_permissions rp
     JOIN rbac_permissions p ON p.id = rp.permission_id
     WHERE rp.role_id = ?
-  `, [roleId]);
+  `,
+        [roleId]
+    );
     return rows.map(r => r.perm);
 }
 
@@ -188,7 +214,11 @@ async function checkPlanGuardrail(orgId, permission) {
     if (!org) return false;
 
     let flags = {};
-    try { flags = JSON.parse(org.feature_flags || '{}'); } catch (e) { /* ignore */ }
+    try {
+        flags = JSON.parse(org.feature_flags || '{}');
+    } catch (e) {
+        /* ignore */
+    }
 
     // Feature flag gating — if a flag exists for this resource and is false, deny
     if (flags.hasOwnProperty(resource) && flags[resource] === false) {
@@ -238,7 +268,11 @@ async function checkSoDWithWaiver(userId, newPermission, orgId) {
     if (!org || !org.sod_waivers) return base;
 
     let waiverConfig;
-    try { waiverConfig = JSON.parse(org.sod_waivers); } catch (_) { return base; }
+    try {
+        waiverConfig = JSON.parse(org.sod_waivers);
+    } catch (_) {
+        return base;
+    }
 
     const waivers = waiverConfig.waivers || [];
     const existing = await getUserPermissions(userId);
@@ -247,12 +281,13 @@ async function checkSoDWithWaiver(userId, newPermission, orgId) {
         if ((newPermission === p1 && existing.has(p2)) || (newPermission === p2 && existing.has(p1))) {
             const matchedWaiver = waivers.find(w => {
                 const pair = w.pair || [];
-                return (pair.includes(p1) && pair.includes(p2))
-                    && (!w.expires_at || new Date(w.expires_at) > new Date());
+                return pair.includes(p1) && pair.includes(p2) && (!w.expires_at || new Date(w.expires_at) > new Date());
             });
             if (matchedWaiver) {
                 // Log waiver usage for audit trail
-                console.log(`[RBAC] SoD WAIVER used: user=${userId}, pair=[${p1},${p2}], reason="${matchedWaiver.reason}", approved_by=${matchedWaiver.approved_by}`);
+                console.log(
+                    `[RBAC] SoD WAIVER used: user=${userId}, pair=[${p1},${p2}], reason="${matchedWaiver.reason}", approved_by=${matchedWaiver.approved_by}`
+                );
                 return {
                     conflict: false,
                     details: null,
@@ -309,7 +344,7 @@ function requirePermission(...permissions) {
                 return res.status(403).json({
                     error: 'Insufficient permissions',
                     required: permissions,
-                    code: 'RBAC_DENIED'
+                    code: 'RBAC_DENIED',
                 });
             }
             next();
@@ -324,7 +359,7 @@ function requirePermission(...permissions) {
  * Constitutional enforcement middleware.
  * Unlike requirePermission, this CANNOT be bypassed — not even by super_admin.
  * Uses the Constitutional RBAC Engine to check charter-defined power boundaries.
- * 
+ *
  * Usage:
  *   router.post('/reserve/withdraw', requireConstitutional('monetization.reserve.withdraw'), handler)
  */
@@ -387,27 +422,68 @@ function requireOrgAdmin() {
         if (req.user.user_type === 'platform') return next();
 
         // Check for org admin permissions
-        const has = await hasAnyPermission(req.user.id, [
-            'org:user:create',
-            'org:role:create',
-            'org:settings:update'
-        ], req);
+        const has = await hasAnyPermission(
+            req.user.id,
+            ['org:user:create', 'org:role:create', 'org:settings:update'],
+            req
+        );
 
-        if (!has && req.user.role !== 'admin' && req.user.role !== 'company_admin' && req.user.role !== 'org_owner' && req.user.role !== 'executive' && req.user.role !== 'security_officer') {
+        if (
+            !has &&
+            req.user.role !== 'admin' &&
+            req.user.role !== 'company_admin' &&
+            req.user.role !== 'org_owner' &&
+            req.user.role !== 'executive' &&
+            req.user.role !== 'security_officer'
+        ) {
             return res.status(403).json({ error: 'Org admin access required', code: 'ORG_ADMIN_ONLY' });
         }
         next();
     };
 }
+
 /**
-     * Safe Role Assignment — Enforces SoD at assignment time.
-     * Checks all permissions of the new role against user's existing permissions.
-     * If any SoD conflict exists, the assignment is BLOCKED.
-     *
-     * Usage:
-     *   const result = await safeAssignRole(userId, roleId, assignedBy, orgId);
-     *   if (!result.success) return res.status(409).json(result);
-     */
+ * Express middleware: requireTenantControlPolicy
+ * Evaluates the org_owner powers against JSON Policy Schemas (org_owner_schema.json).
+ * This middleware validates 'engine_access' layers for Sovereign entities.
+ */
+function requireTenantControlPolicy(category, engine, action) {
+    return (req, res, next) => {
+        if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+
+        // If the user is an org_owner, enforce JSON bound constraints
+        if (req.user.role === 'org_owner') {
+            try {
+                const schema = require('./config/policies/org_owner_schema.json');
+                const engineAccess = schema.engine_access;
+
+                // Forbidden actions trap
+                if (engineAccess.risk_engines && engineAccess.risk_engines.forbidden_actions) {
+                    if (category === 'risk_engines' && engineAccess.risk_engines.forbidden_actions.includes(action)) {
+                        return res.status(403).json({
+                            error: 'Tenant Sovereign Control Boundary Violation',
+                            code: 'TENANT_POLICY_DENY',
+                            reason: `Action "${action}" modifies core algorithms and is outside the blast_radius of an Org Owner.`,
+                        });
+                    }
+                }
+            } catch (e) {
+                console.warn('[RBAC] Could not load or parse org_owner_schema.json', e.message);
+            }
+        }
+
+        next();
+    };
+}
+/**
+ * Safe Role Assignment — Enforces SoD at assignment time.
+ * Checks all permissions of the new role against user's existing permissions.
+ * If any SoD conflict exists, the assignment is BLOCKED.
+ *
+ * Usage:
+ *   const result = await safeAssignRole(userId, roleId, assignedBy, orgId);
+ *   if (!result.success) return res.status(409).json(result);
+ */
 async function safeAssignRole(userId, roleId, assignedBy, orgId) {
     // Get all permissions for the new role
     const newRolePerms = await getPermissionsForRole(roleId);
@@ -417,9 +493,7 @@ async function safeAssignRole(userId, roleId, assignedBy, orgId) {
 
     // Check each permission of the new role against existing user permissions
     for (const perm of newRolePerms) {
-        const sodCheck = orgId
-            ? await checkSoDWithWaiver(userId, perm, orgId)
-            : await checkSoD(userId, perm);
+        const sodCheck = orgId ? await checkSoDWithWaiver(userId, perm, orgId) : await checkSoD(userId, perm);
 
         if (sodCheck.conflict && !sodCheck.waived) {
             return {
@@ -427,7 +501,7 @@ async function safeAssignRole(userId, roleId, assignedBy, orgId) {
                 error: `Cannot assign role: ${sodCheck.details}`,
                 code: 'SOD_ASSIGNMENT_BLOCKED',
                 conflicting_permission: perm,
-                existing_conflict: sodCheck.details
+                existing_conflict: sodCheck.details,
             };
         }
     }
@@ -457,6 +531,7 @@ module.exports = {
     requireConstitutional,
     requirePlatformAdmin,
     requireOrgAdmin,
+    requireTenantControlPolicy,
     SOD_CONFLICTS,
     // Governance hardening
     CA_FORBIDDEN_PERMISSIONS,

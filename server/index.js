@@ -157,6 +157,7 @@ app.use('/api/auth/change-password', authLimiter); // SEC-API-2: rate limit pass
 app.use('/api/auth/reset-password', authLimiter); // SEC-API-2: rate limit password resets
 app.use('/api/trust-network', require('./routes/trust-network'));
 app.use('/api/risk-intel', require('./routes/risk-intelligence')); // V21.6
+app.use('/api/executive', require('./routes/executive'));
 
 // API Key management UI
 app.get('/api-keys', (req, res) => {

@@ -16,9 +16,8 @@ async function getDashboardStats() {
   try {
     return await serverApi.get('/qr/dashboard-stats');
   } catch (error) {
-    if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-      redirect('/login');
-    }
+    // NOTE: Do NOT redirect to /login here — middleware handles auth gating.
+    // Redirecting here causes an infinite loop: middleware sees cookie → /dashboard → API 401 → /login → middleware → /dashboard...
     console.error("[Dashboard] Error fetching stats:", error);
     return null;
   }

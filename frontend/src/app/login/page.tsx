@@ -25,7 +25,10 @@ export default function LoginPage() {
       
       // Phase 2A: Session Sync for Legacy Bridge
       // Write to localStorage so the legacy SPA picks it up immediately
-      if (res.token) localStorage.setItem("tc_token", res.token);
+      if (res.token) {
+        localStorage.setItem("tc_token", res.token);
+        document.cookie = `tc_token=${res.token}; path=/; max-age=86400; samesite=lax`;
+      }
       if (res.refresh_token) localStorage.setItem("tc_refresh", res.refresh_token);
       if (res.user) {
         localStorage.setItem("tc_user", JSON.stringify(res.user));
