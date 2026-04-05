@@ -15,14 +15,20 @@ export default function TcarMonitor({ data }: { data: TcarData }) {
   const capitalAtRisk = data?.capital_at_risk || 0;
   
   // Transform risk scores to exposure chart data (up to 12 months)
-  const chartData = [...riskScores].slice(0, 12).reverse().map(score => {
-    const amount = (score.financialImpact || score.financial_impact || 0) / 1000000; // in Millions
-    return amount > 0 ? amount : 5; // fallback min bar if 0
+  const rawChartData = [...riskScores].slice(0, 12).reverse().map(score => {
+    return (score.financialImpact || score.financial_impact || 0) / 1000000; // in Millions
   });
+  
   // Pad if less than 12
-  while(chartData.length < 12) {
-    chartData.unshift(0);
+  while(rawChartData.length < 12) {
+    rawChartData.unshift(0);
   }
+
+  const maxChartVal = Math.max(...rawChartData, 1); // avoid div 0
+  const chartData = rawChartData.map(val => ({
+    val,
+    heightPct: val > 0 ? Math.max((val / maxChartVal) * 95, 5) : 0
+  }));
 
   return (
     <div className="space-y-6">
@@ -91,14 +97,14 @@ export default function TcarMonitor({ data }: { data: TcarData }) {
             <div className="absolute top-1/2 w-full border-t border-slate-100 border-dashed"></div>
             <div className="absolute bottom-0 w-full border-t border-slate-200"></div>
 
-            {chartData.map((val, i) => (
+            {chartData.map((data, i) => (
               <div key={i} className="w-full flex justify-center group relative z-10">
                 <div 
-                  className={`w-full max-w-[1.5rem] rounded-t-sm transition-all ${val > 25 ? 'bg-red-400 hover:bg-red-500' : 'bg-slate-300 hover:bg-slate-400'}`}
-                  style={{ height: `${Math.max(val * 2, val > 0 ? 5 : 0)}%` }}
+                  className={`w-full max-w-[1.5rem] rounded-t-sm transition-all ${data.heightPct > 40 ? 'bg-red-400 hover:bg-red-500' : 'bg-slate-300 hover:bg-slate-400'}`}
+                  style={{ height: `${data.heightPct}%` }}
                 ></div>
                 <div className="opacity-0 group-hover:opacity-100 absolute -top-8 bg-slate-900 text-white text-xs px-2 py-1 rounded shadow-lg transition-opacity whitespace-nowrap z-20">
-                  Vol: {val.toFixed(1)}M
+                  Vol: {data.val.toFixed(1)}M
                 </div>
               </div>
             ))}
