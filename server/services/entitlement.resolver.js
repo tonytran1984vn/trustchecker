@@ -51,10 +51,32 @@ function mergeEntitlement(feature, planDefault, orgOverride) {
 function resolveAllEntitlements(systemFeatures, planFeatures, orgFeatures) {
     const result = {};
 
+    // 1. Unpack Suites/Bundles from orgFeatures
+    const expandedOrgFeatures = { ...orgFeatures };
+    try {
+        const { FEATURE_LIST } = require('../routes/billing');
+        if (FEATURE_LIST) {
+            for (const feat of FEATURE_LIST) {
+                if (feat.isBundle && feat.includes && expandedOrgFeatures[feat.id]) {
+                    const isEnabled = normalizeEntitlement(expandedOrgFeatures[feat.id]).enabled;
+                    if (isEnabled) {
+                        for (const childId of feat.includes) {
+                            if (!expandedOrgFeatures[childId]) {
+                                expandedOrgFeatures[childId] = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // Fallback gracefully if billing not found
+    }
+
     for (const [featureKey, sysDef] of Object.entries(systemFeatures)) {
         // System defaults mapped directly as base
         const pDef = planFeatures?.[featureKey] || { enabled: sysDef.default };
-        const oOver = orgFeatures?.[featureKey];
+        const oOver = expandedOrgFeatures?.[featureKey];
 
         result[featureKey] = mergeEntitlement(featureKey, pDef, oOver);
     }

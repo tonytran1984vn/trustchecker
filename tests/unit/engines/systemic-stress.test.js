@@ -6,16 +6,20 @@ beforeEach(() => { engine = new SSClass(); });
 
 describe('SystemicStressEngine', () => {
     describe('getScenarios', () => {
-        test('returns 10 extreme scenarios', () => {
-            expect(engine.getScenarios().scenarios.length).toBe(10);
+        test('returns 12 extreme scenarios', () => {
+            expect(engine.getScenarios().scenarios.length).toBe(12);
         });
 
-        test('includes market, technical, regulatory, adversarial, and combined', () => {
+        test('includes market, technical, regulatory, adversarial, financial, model, governance, and combined', () => {
             const cats = new Set(engine.getScenarios().scenarios.map(s => s.category));
             expect(cats.has('Market')).toBe(true);
             expect(cats.has('Technical')).toBe(true);
             expect(cats.has('Regulatory')).toBe(true);
             expect(cats.has('Adversarial')).toBe(true);
+            expect(cats.has('Financial')).toBe(true);
+            expect(cats.has('Model')).toBe(true);
+            expect(cats.has('Governance')).toBe(true);
+            expect(cats.has('Security')).toBe(true);
             expect(cats.has('Combined')).toBe(true);
         });
     });
@@ -33,8 +37,8 @@ describe('SystemicStressEngine', () => {
             expect(r.car_breached).toBe(true);
         });
 
-        test('perfect storm (ES-09) triggers kill-switches', () => {
-            const r = engine.runStressTest('ES-09', 12, 1000000);
+        test('perfect storm (ES-21) triggers kill-switches', () => {
+            const r = engine.runStressTest('ES-21', 12, 1000000);
             expect(r.kill_switches_triggered.length).toBeGreaterThan(0);
             expect(r.severity).toBe('Existential');
         });

@@ -51,8 +51,6 @@ const PLAN_ENTITLEMENTS = {
     core: {
         qr: { enabled: true, limit: 1000 },
         products: { enabled: true },
-        scm_tracking: { enabled: false }, // Explicitly disabled for reference
-        carbon: { enabled: false },
     },
     pro: {
         qr: { enabled: true, limit: 25000 },
@@ -60,7 +58,6 @@ const PLAN_ENTITLEMENTS = {
         scm_tracking: { enabled: true },
         support: { enabled: true },
         partners: { enabled: true },
-        carbon: { enabled: true },
         inventory: { enabled: true },
     },
     enterprise: {
@@ -69,15 +66,8 @@ const PLAN_ENTITLEMENTS = {
         scm_tracking: { enabled: true },
         support: { enabled: true },
         partners: { enabled: true },
-        carbon: { enabled: true },
         inventory: { enabled: true },
-        risk_radar: { enabled: true },
-        ai_forecast: { enabled: true },
-        digital_twin: { enabled: true },
-        blockchain: { enabled: true },
-        kyc: { enabled: true },
-        overclaim: { enabled: true },
-        exec_dashboard: { enabled: true },
+        governance: { enabled: true },
     },
 };
 

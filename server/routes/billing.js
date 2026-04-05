@@ -70,50 +70,74 @@ const PLAN_BASE_PRICES = { core: 0, pro: 299, enterprise: 5000 };
 
 const PLAN_DEFAULTS = {
     core: ['qr', 'products'],
-    pro: ['qr', 'products', 'scm_tracking', 'support', 'partners', 'carbon', 'inventory'],
-    enterprise: [
-        'qr',
-        'products',
-        'scm_tracking',
-        'support',
-        'partners',
-        'carbon',
-        'inventory',
-        'risk_radar',
-        'ai_forecast',
-        'digital_twin',
-        'blockchain',
-        'kyc',
-        'overclaim',
-        'exec_dashboard',
-    ],
+    pro: ['qr', 'products', 'scm_tracking', 'support', 'partners', 'inventory'],
+    enterprise: ['qr', 'products', 'scm_tracking', 'support', 'partners', 'inventory', 'governance'],
 };
 
 const FEATURE_LIST = [
-    // Core Platform
+    // Core Platform (Sandbox layer)
     { id: 'qr', label: 'QR Traceability', icon: '📱', price: 0, minTier: 'core' },
     { id: 'products', label: 'Product Catalog', icon: '📦', price: 0, minTier: 'core' },
-    { id: 'scm_tracking', label: 'Supply Chain Tracking', icon: '🚚', price: 99, minTier: 'core' },
     { id: 'inventory', label: 'Inventory Management', icon: '🏭', price: 49, minTier: 'core' },
-    { id: 'support', label: 'Premium Support', icon: '🎧', price: 199, minTier: 'core' },
-    { id: 'partners', label: 'Partner Portal', icon: '🤝', price: 49, minTier: 'core' },
-    // Intelligence & Compliance (Requires Pro)
+    { id: 'partners', label: 'Partner Portal', icon: '🤝', price: 49, minTier: 'core', limitLabel: 'Max 3 Partners' },
+
+    // Operating System Backbone (Requires Pro)
+    { id: 'scm_tracking', label: 'Supply Chain Tracking', icon: '🚚', price: 99, minTier: 'pro' },
+    { id: 'support', label: 'Premium Support', icon: '🎧', price: 199, minTier: 'pro' },
+
+    // Intelligence Layer (Requires Pro)
     { id: 'carbon', label: 'Carbon Tracking', icon: '🌱', price: 199, minTier: 'pro' },
-    { id: 'risk_radar', label: 'Risk Radar', icon: '🛡', price: 299, minTier: 'pro' },
-    { id: 'ai_forecast', label: 'AI Forecaster', icon: '🤖', price: 499, minTier: 'pro' },
+    {
+        id: 'risk_radar',
+        label: 'Risk Radar',
+        icon: '🛡',
+        price: 99,
+        minTier: 'pro',
+        usage_metrics: { unit: 'alert', rate: 1.5 },
+    },
+    {
+        id: 'ai_forecast',
+        label: 'AI Forecaster',
+        icon: '🤖',
+        price: 199,
+        minTier: 'pro',
+        usage_metrics: { unit: '1k_predictions', rate: 2.0 },
+    },
     { id: 'digital_twin', label: 'Digital Twin', icon: '🪞', price: 149, minTier: 'pro' },
+
+    // Compliance Layer (Requires Pro)
     { id: 'kyc', label: 'KYC / AML', icon: '🔍', price: 249, minTier: 'pro' },
-    // Enterprise Add-ons
-    { id: 'overclaim', label: 'Overclaim Detection', icon: '⚠️', price: 399, minTier: 'enterprise' },
-    { id: 'lineage', label: 'Lineage Replay', icon: '⏪', price: 499, minTier: 'enterprise' },
-    { id: 'governance', label: 'Advanced Governance', icon: '🏛', price: 299, minTier: 'enterprise' },
-    { id: 'registry_export', label: 'Registry Export API', icon: '📤', price: 599, minTier: 'enterprise' },
-    { id: 'erp_integration', label: 'ERP Integration', icon: '🔌', price: 999, minTier: 'enterprise' },
-    { id: 'exec_dashboard', label: 'Exec Risk Dashboard', icon: '📈', price: 199, minTier: 'enterprise' },
-    { id: 'ivu_cert', label: 'IVU Premium Audit', icon: '🏅', price: 499, minTier: 'enterprise' },
-    // Distributed Ledger (Requires Pro)
     { id: 'blockchain', label: 'Blockchain Anchoring', icon: '⛓', price: 199, minTier: 'pro' },
     { id: 'nft', label: 'NFT Certificates', icon: '🎫', price: 99, minTier: 'pro' },
+
+    // Enterprise Strategic Add-ons
+    { id: 'governance', label: 'Advanced Governance', icon: '🏛', price: 299, minTier: 'enterprise' },
+    { id: 'overclaim', label: 'Overclaim Detection', icon: '⚠️', price: 399, minTier: 'enterprise' },
+    { id: 'lineage', label: 'Lineage Replay', icon: '⏪', price: 499, minTier: 'enterprise' },
+    { id: 'exec_dashboard', label: 'Exec Risk Dashboard', icon: '📈', price: 199, minTier: 'enterprise' },
+    { id: 'registry_export', label: 'Registry Export API', icon: '📤', price: 599, minTier: 'enterprise' },
+    { id: 'erp_integration', label: 'ERP Integration', icon: '🔌', price: 999, minTier: 'enterprise' },
+    { id: 'ivu_cert', label: 'IVU Premium Audit', icon: '🏅', price: 499, minTier: 'enterprise' },
+
+    // Enterprise Suites (Bundles)
+    {
+        id: 'compliance_suite',
+        label: 'Compliance Suite',
+        icon: '💼',
+        price: 2499,
+        minTier: 'enterprise',
+        isBundle: true,
+        includes: ['governance', 'ivu_cert', 'registry_export', 'exec_dashboard'],
+    },
+    {
+        id: 'integration_suite',
+        label: 'Integration Suite',
+        icon: '🔗',
+        price: 1499,
+        minTier: 'enterprise',
+        isBundle: true,
+        includes: ['erp_integration', 'blockchain', 'digital_twin'],
+    },
 ];
 
 // Plan limits for usage metering
@@ -147,6 +171,15 @@ function computeMRR(planName, featureFlags, enterpriseConfig) {
         }
     }
 
+    // 1. Identify active bundles
+    const activeBundles = [];
+    for (const id of activeFeatures) {
+        const feat = FEATURE_LIST.find(f => f.id === id);
+        if (feat && feat.isBundle) {
+            activeBundles.push(feat);
+        }
+    }
+
     // Calculate addon cost = sum of prices for non-default active features
     let addonCost = 0;
     const addons = [];
@@ -154,8 +187,21 @@ function computeMRR(planName, featureFlags, enterpriseConfig) {
         if (!defaults.includes(id)) {
             const feat = FEATURE_LIST.find(f => f.id === id);
             if (feat) {
-                addonCost += feat.price || 0;
-                addons.push({ id: feat.id, label: feat.label, price: feat.price });
+                // If this is a standalone feature, check if it's already included in an active bundle
+                let isCoveredByBundle = false;
+                if (!feat.isBundle) {
+                    for (const bundle of activeBundles) {
+                        if (bundle.includes && bundle.includes.includes(id)) {
+                            isCoveredByBundle = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!isCoveredByBundle) {
+                    addonCost += feat.price || 0;
+                    addons.push({ id: feat.id, label: feat.label, price: feat.price });
+                }
             }
         }
     }
@@ -926,7 +972,9 @@ router.post('/upgrade', authMiddleware, requireRole('admin'), async (req, res) =
                 const baseUrl = process.env.CLIENT_URL || 'https://tonytran.work/trustchecker';
 
                 // Find or create Stripe customer
-                const mapping = await db.get('SELECT stripe_customer_id FROM stripe_mappings WHERE org_id = $1', [orgId]);
+                const mapping = await db.get('SELECT stripe_customer_id FROM stripe_mappings WHERE org_id = $1', [
+                    orgId,
+                ]);
                 let customerId = mapping?.stripe_customer_id;
                 if (!customerId) {
                     const customer = await stripe.customers.create({
@@ -1488,3 +1536,8 @@ router.post('/retention-event', authMiddleware, requireRole('admin'), async (req
 });
 
 module.exports = router;
+module.exports.computeMRR = computeMRR;
+module.exports.PLAN_BASE_PRICES = PLAN_BASE_PRICES;
+module.exports.PLAN_DEFAULTS = PLAN_DEFAULTS;
+module.exports.FEATURE_LIST = FEATURE_LIST;
+module.exports.PLAN_LIMITS = PLAN_LIMITS;

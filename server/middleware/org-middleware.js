@@ -108,9 +108,10 @@ function orgGuard(options = {}) {
             }
         } else {
             // Fallback: no membership exists yet (legacy users)
-            const org = await db.get('SELECT id, name, plan, status, feature_flags FROM organizations WHERE id = $1', [
-                orgId,
-            ]);
+            const org = await db.get(
+                'SELECT id, name, plan, status, feature_flags, ip_whitelist FROM organizations WHERE id = $1',
+                [orgId]
+            );
             if (!org) {
                 return res.status(403).json({ error: 'Organization not found', code: 'ORG_NOT_FOUND' });
             }
@@ -123,6 +124,47 @@ function orgGuard(options = {}) {
             req.scopes = []; // No scopes — org-wide access
             updateContext({ orgId: org.id }); // RLS context (AsyncLocalStorage)
         }
+
+        // Apply IP Whitelisting check if configured
+        try {
+            // First we need the full org to check ip_whitelist if membership query didn't fetch it
+            let allowedIps = [];
+            let whitelistStr = req.org.ip_whitelist;
+
+            if (whitelistStr === undefined) {
+                // If it wasn't fetched in membership query, fetch it now
+                const fullOrg = await db.get('SELECT ip_whitelist FROM organizations WHERE id = $1', [req.orgId]);
+                whitelistStr = fullOrg?.ip_whitelist;
+            }
+
+            if (whitelistStr && whitelistStr.length > 5) {
+                // '[]' is 2 chars
+                allowedIps = JSON.parse(whitelistStr);
+            }
+
+            if (allowedIps.length > 0) {
+                // VERY BASIC exact match IP check (for CIDR in prod you'd use 'ipaddr.js')
+                const clientIp =
+                    req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || req.ip;
+
+                // Allow localhost bypass for testing just in case
+                if (clientIp !== '::1' && clientIp !== '127.0.0.1' && clientIp !== '::ffff:127.0.0.1') {
+                    const isAllowed = allowedIps.some(ip => {
+                        return clientIp === ip || clientIp.includes(ip); // rudimentary CIDR match
+                    });
+
+                    if (!isAllowed) {
+                        return res.status(403).json({
+                            error: 'Access denied: Your IP address is not whitelisted by the organization firewall.',
+                            code: 'IP_NOT_ALLOWED',
+                        });
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('[orgGuard] IP Whitelist error:', e.message);
+        }
+
         next();
     };
 }

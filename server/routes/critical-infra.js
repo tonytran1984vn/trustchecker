@@ -192,8 +192,8 @@ router.get('/stress/network-collapse', requireRole('risk_committee'), (req, res)
 });
 
 router.post('/stress/run', requireRole('super_admin'), (req, res) => {
-    const { scenario_id, car_pct, revenue_usd } = req.body;
-    res.json(stress.runStressTest(scenario_id || 'ES-01', car_pct, revenue_usd));
+    const { scenario_id, car_pct, revenue_usd, execute_mode } = req.body;
+    res.json(stress.runStressTest(scenario_id || 'ES-01', car_pct, revenue_usd, execute_mode));
 });
 
 // ═══════════════════════════════════════════════════════════════════

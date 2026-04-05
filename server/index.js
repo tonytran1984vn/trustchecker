@@ -166,6 +166,10 @@ app.get('/api-keys', (req, res) => {
 app.get('/risk-dashboard', (req, res) => {
     res.sendFile(require('path').join(__dirname, '../client/risk-dashboard.html'));
 });
+// V5 Observability Control Tower
+app.get('/v5-control-tower', (req, res) => {
+    res.sendFile(require('path').join(__dirname, '../client/v5-control-tower.html'));
+});
 
 // Trust Network: serve public join page
 app.get('/network/join/:token', function (req, res) {

@@ -101,6 +101,7 @@ function setupRoutes(app) {
     const carbonActionsRoutes = require('../routes/carbon-actions');
     const orgIntegrationsFactory = require('../routes/org-integrations');
     const auditChainRoutes = require('../routes/audit');
+    const developersRoutes = require('../routes/developers');
 
     // Declarative route table — each route is mounted on both /api and /api/v1
     const API_ROUTES = [
@@ -187,6 +188,8 @@ function setupRoutes(app) {
         ['/audit', auditChainRoutes], // Audit hash chain verification
         ['/dual-approval', require('../routes/dual-approval')], // Dual-approval for GDPR/constitutional
         ['/record-governance', require('../routes/record-governance')], // P3: Immutable record proposals + version history
+        ['/developers', developersRoutes],
+        ['/v5/observability', require('../routes/observability')], // V5 Temporal Engine
     ];
 
     // Mount on /api and /api/v1 (versioned alias)
