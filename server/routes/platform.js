@@ -1081,88 +1081,100 @@ router.put('/sa-config/:key', async (req, res) => {
 // ─── GET /dashboard-stats — Comprehensive cross-engine dashboard ─────────────
 router.get('/dashboard-stats', async (req, res) => {
     try {
-        // ── Core Platform Metrics ──────────────────────────────────────────
-        const [tenants, suspendedTenants, totalUsers, platformUsers, orgUsers] = await Promise.all([
-            db.get("SELECT COUNT(*) as c FROM organizations WHERE status = 'active'"),
-            db.get("SELECT COUNT(*) as c FROM organizations WHERE status = 'suspended'"),
-            db.get('SELECT COUNT(*) as c FROM users'),
-            db.get("SELECT COUNT(*) as c FROM users WHERE user_type = 'platform'"),
-            db.get("SELECT COUNT(*) as c FROM users WHERE user_type = 'org'"),
-        ]);
+        const queries = [
+            // ── Core Platform Metrics ──
+            { sql: "SELECT COUNT(*) as c FROM organizations WHERE status = 'active'" }, // 0
+            { sql: "SELECT COUNT(*) as c FROM organizations WHERE status = 'suspended'" }, // 1
+            { sql: 'SELECT COUNT(*) as c FROM users' }, // 2
+            { sql: "SELECT COUNT(*) as c FROM users WHERE user_type = 'platform'" }, // 3
+            { sql: "SELECT COUNT(*) as c FROM users WHERE user_type = 'org'" }, // 4
 
-        // ── Scan Intelligence ──────────────────────────────────────────────
-        const [totalScans, scansToday, scans7d, scans30d, scansByResult] = await Promise.all([
-            db.get('SELECT COUNT(*) as c FROM scan_events').catch(() => ({ c: 0 })),
-            db
-                .get('SELECT COUNT(*) as c FROM scan_events WHERE DATE(scanned_at) = CURRENT_DATE')
-                .catch(() => ({ c: 0 })),
-            db
-                .get("SELECT COUNT(*) as c FROM scan_events WHERE scanned_at > NOW() - INTERVAL '7 days'")
-                .catch(() => ({ c: 0 })),
-            db
-                .get("SELECT COUNT(*) as c FROM scan_events WHERE scanned_at > NOW() - INTERVAL '30 days'")
-                .catch(() => ({ c: 0 })),
-            db.all('SELECT result, COUNT(*)::int as count FROM scan_events GROUP BY result').catch(() => []),
-        ]);
+            // ── Scan Intelligence ──
+            { sql: 'SELECT COUNT(*) as c FROM scan_events' }, // 5
+            { sql: 'SELECT COUNT(*) as c FROM scan_events WHERE DATE(scanned_at) = CURRENT_DATE' }, // 6
+            { sql: "SELECT COUNT(*) as c FROM scan_events WHERE scanned_at > NOW() - INTERVAL '7 days'" }, // 7
+            { sql: "SELECT COUNT(*) as c FROM scan_events WHERE scanned_at > NOW() - INTERVAL '30 days'" }, // 8
+            { sql: 'SELECT result, COUNT(*)::int as count FROM scan_events GROUP BY result' }, // 9
 
-        // ── Product Registry ───────────────────────────────────────────────
-        const [totalProducts, productsThisMonth] = await Promise.all([
-            db.get('SELECT COUNT(*) as c FROM products').catch(() => ({ c: 0 })),
-            db
-                .get("SELECT COUNT(*) as c FROM products WHERE created_at > NOW() - INTERVAL '30 days'")
-                .catch(() => ({ c: 0 })),
-        ]);
+            // ── Product Registry ──
+            { sql: 'SELECT COUNT(*) as c FROM products' }, // 10
+            { sql: "SELECT COUNT(*) as c FROM products WHERE created_at > NOW() - INTERVAL '30 days'" }, // 11
 
-        // ── Fraud Intelligence ─────────────────────────────────────────────
-        const [totalFraudAlerts, openFraudAlerts, avgFraudScore] = await Promise.all([
-            db.get('SELECT COUNT(*) as c FROM fraud_alerts').catch(() => ({ c: 0 })),
-            db.get("SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'open'").catch(() => ({ c: 0 })),
-            db
-                .get('SELECT AVG(fraud_score)::float as avg FROM scan_events WHERE fraud_score > 0')
-                .catch(() => ({ avg: 0 })),
-        ]);
+            // ── Fraud Intelligence ──
+            { sql: 'SELECT COUNT(*) as c FROM fraud_alerts' }, // 12
+            { sql: "SELECT COUNT(*) as c FROM fraud_alerts WHERE status = 'open'" }, // 13
+            { sql: 'SELECT AVG(fraud_score)::float as avg FROM scan_events WHERE fraud_score > 0' }, // 14
+
+            // ── Carbon & Sustainability ──
+            {
+                sql: 'SELECT COALESCE(SUM(carbon_footprint_kgco2e), 0)::float as total FROM products WHERE carbon_footprint_kgco2e > 0',
+            }, // 15
+            { sql: 'SELECT AVG(overall_score)::float as avg FROM sustainability_scores' }, // 16
+            { sql: 'SELECT COUNT(DISTINCT product_id) as c FROM sustainability_scores' }, // 17
+
+            // ── Trust Scores ──
+            { sql: 'SELECT AVG(trust_score)::float as avg FROM products WHERE trust_score > 0' }, // 18
+
+            // ── Risk Scores ──
+            {
+                sql: 'SELECT decision, COUNT(*)::int as count FROM risk_scores GROUP BY decision ORDER BY count DESC LIMIT 5',
+            }, // 19
+
+            // ── Anomalies ──
+            { sql: "SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'open'" }, // 20
+            {
+                sql: 'SELECT id, anomaly_type, source_id, detected_at, status, severity FROM anomaly_detections ORDER BY detected_at DESC LIMIT 8',
+            }, // 21
+
+            // ── Top orgs ──
+            {
+                sql: `SELECT o.name, o.plan, COUNT(p.id)::int as product_count
+             FROM organizations o
+             LEFT JOIN products p ON p.org_id = o.id
+             WHERE o.status = 'active'
+             GROUP BY o.id, o.name, o.plan
+             ORDER BY product_count DESC
+             LIMIT 5`,
+            }, // 22
+        ];
+
+        const batchResults = await db.rawBatch(queries);
+
+        const tenants = batchResults[0][0] || { c: 0 };
+        const suspendedTenants = batchResults[1][0] || { c: 0 };
+        const totalUsers = batchResults[2][0] || { c: 0 };
+        const platformUsers = batchResults[3][0] || { c: 0 };
+        const orgUsers = batchResults[4][0] || { c: 0 };
+
+        const totalScans = batchResults[5][0] || { c: 0 };
+        const scansToday = batchResults[6][0] || { c: 0 };
+        const scans7d = batchResults[7][0] || { c: 0 };
+        const scans30d = batchResults[8][0] || { c: 0 };
+        const scansByResult = batchResults[9] || [];
+
+        const totalProducts = batchResults[10][0] || { c: 0 };
+        const productsThisMonth = batchResults[11][0] || { c: 0 };
+
+        const totalFraudAlerts = batchResults[12][0] || { c: 0 };
+        const openFraudAlerts = batchResults[13][0] || { c: 0 };
+        const avgFraudScore = batchResults[14][0] || { avg: 0 };
 
         const fraudRate =
             totalScans?.c > 0 && totalFraudAlerts?.c > 0
                 ? ((totalFraudAlerts.c / totalScans.c) * 100).toFixed(2)
                 : '0.00';
 
-        // ── Carbon & Sustainability ────────────────────────────────────────
-        const [totalCarbon, avgSustainability, sustainabilityCount] = await Promise.all([
-            db
-                .get(
-                    'SELECT COALESCE(SUM(carbon_footprint_kgco2e), 0)::float as total FROM products WHERE carbon_footprint_kgco2e > 0'
-                )
-                .catch(() => ({ total: 0 })),
-            db.get('SELECT AVG(overall_score)::float as avg FROM sustainability_scores').catch(() => ({ avg: 0 })),
-            db.get('SELECT COUNT(DISTINCT product_id) as c FROM sustainability_scores').catch(() => ({ c: 0 })),
-        ]);
+        const totalCarbon = batchResults[15][0] || { total: 0 };
+        const avgSustainability = batchResults[16][0] || { avg: 0 };
+        const sustainabilityCount = batchResults[17][0] || { c: 0 };
 
-        // ── Trust Scores ───────────────────────────────────────────────────
-        const [avgTrust] = await Promise.all([
-            db
-                .get('SELECT AVG(trust_score)::float as avg FROM products WHERE trust_score > 0')
-                .catch(() => ({ avg: 0 })),
-        ]);
+        const avgTrust = batchResults[18][0] || { avg: 0 };
 
-        // ── Risk Scores ────────────────────────────────────────────────────
-        const [riskDecisions] = await Promise.all([
-            db
-                .all(
-                    'SELECT decision, COUNT(*)::int as count FROM risk_scores GROUP BY decision ORDER BY count DESC LIMIT 5'
-                )
-                .catch(() => []),
-        ]);
+        const riskDecisionsRaw = batchResults[19] || [];
+        const riskDecisions = riskDecisionsRaw;
 
-        // ── Anomalies ──────────────────────────────────────────────────────
-        const [openAnomalies, recentAnomalies] = await Promise.all([
-            db.get("SELECT COUNT(*) as c FROM anomaly_detections WHERE status = 'open'").catch(() => ({ c: 0 })),
-            db
-                .all(
-                    'SELECT id, anomaly_type, source_id, detected_at, status, severity FROM anomaly_detections ORDER BY detected_at DESC LIMIT 8'
-                )
-                .catch(() => []),
-        ]);
+        const openAnomalies = batchResults[20][0] || { c: 0 };
+        const recentAnomalies = batchResults[21] || [];
 
         const anomalies = recentAnomalies.map(a => ({
             id: a.id?.substring(0, 8) || 'N/A',
@@ -1173,24 +1185,12 @@ router.get('/dashboard-stats', async (req, res) => {
             severity: a.severity || 'medium',
         }));
 
-        // ── Scan results breakdown ─────────────────────────────────────────
         const scanBreakdown = {};
-        (scansByResult || []).forEach(r => {
+        scansByResult.forEach(r => {
             scanBreakdown[r.result || 'unknown'] = r.count;
         });
 
-        // ── Top orgs by product count ──────────────────────────────────────
-        const topOrgs = await db
-            .all(
-                `SELECT o.name, o.plan, COUNT(p.id)::int as product_count
-             FROM organizations o
-             LEFT JOIN products p ON p.org_id = o.id
-             WHERE o.status = 'active'
-             GROUP BY o.id, o.name, o.plan
-             ORDER BY product_count DESC
-             LIMIT 5`
-            )
-            .catch(() => []);
+        const topOrgs = batchResults[22] || [];
 
         res.json({
             // Top-level KPI cards

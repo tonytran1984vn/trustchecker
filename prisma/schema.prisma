@@ -392,10 +392,10 @@ model AuditLog {
   id         String   @id @default(uuid())
   actorId    String?  @map("actor_id")
   action     String
-  entityType String?   @default("") @map("entity_type")
-  entityId   String?   @default("") @map("entity_id")
+  entityType String?  @default("") @map("entity_type")
+  entityId   String?  @default("") @map("entity_id")
   details    Json     @default("{}")
-  ipAddress  String?   @default("") @map("ip_address")
+  ipAddress  String?  @default("") @map("ip_address")
   timestamp  DateTime @default(now())
 
   @@index([actorId])
@@ -642,10 +642,10 @@ model RiskAnalyticSnapshot {
   id        String   @id @default(uuid())
   orgId     String   @default("") @map("org_id")
   timestamp DateTime @default(now())
-  
+
   // Dashboard UI Metadata
   vector    String?
-  riskLevel String?   @map("risk_level")
+  riskLevel String? @map("risk_level")
   status    String?
   payload   Json?
 
@@ -2217,4 +2217,127 @@ model ExecutiveReport {
 
   @@index([orgId])
   @@map("executive_reports")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DATA CLASSIFICATION & GOVERNANCE ENGINE
+// ═══════════════════════════════════════════════════════════════════
+
+model ClassificationSchema {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  name      String
+  version   Int      @default(1)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  labels ClassificationLabel[]
+
+  @@index([orgId])
+  @@map("classification_schemas")
+}
+
+model ClassificationLabel {
+  id          String   @id @default(uuid())
+  schemaId    String   @map("schema_id")
+  name        String
+  code        String
+  riskLevel   Int      @map("risk_level")
+  color       String?
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  schema          ClassificationSchema @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+  classifications DataClassification[]
+  rules           ClassificationRule[]
+  policyBindings  PolicyBinding[]
+
+  @@index([schemaId])
+  @@map("classification_labels")
+}
+
+model DataAsset {
+  id         String   @id @default(uuid())
+  orgId      String   @map("org_id")
+  type       String
+  source     String?
+  externalId String?  @map("external_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  classifications DataClassification[]
+
+  @@index([orgId])
+  @@map("data_assets")
+}
+
+model DataClassification {
+  id          String   @id @default(uuid())
+  dataAssetId String   @map("data_asset_id")
+  labelId     String   @map("label_id")
+  confidence  Float    @default(1.0)
+  taggedBy    String?  @map("tagged_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  asset DataAsset           @relation(fields: [dataAssetId], references: [id], onDelete: Cascade)
+  label ClassificationLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@index([dataAssetId])
+  @@index([labelId])
+  @@map("data_classifications")
+}
+
+model ClassificationRule {
+  id        String   @id @default(uuid())
+  orgId     String?  @map("org_id")
+  name      String?
+  condition Json
+  labelId   String   @map("label_id")
+  priority  Int      @default(100)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  label ClassificationLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("classification_rules")
+}
+
+model PolicyBinding {
+  id        String   @id @default(uuid())
+  orgId     String?  @map("org_id")
+  labelId   String   @map("label_id")
+  policyId  String?  @map("policy_id")
+  effect    String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  label ClassificationLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("policy_bindings")
+}
+
+model DataAssetSnapshot {
+  id           String   @id @default(uuid())
+  dataAssetId  String   @map("data_asset_id")
+  payloadHash  String   @map("payload_hash")
+  snapshot     Json
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([dataAssetId])
+  @@map("data_asset_snapshots")
+}
+
+model ClassificationEvent {
+  id           String   @id @default(uuid())
+  orgId        String   @map("org_id")
+  dataAssetId  String   @map("data_asset_id")
+  action       String   // tagged | untagged | auto_tagged
+  labels       Json
+  actor        String   // system | user_id
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([orgId])
+  @@index([dataAssetId])
+  @@map("classification_events")
 }

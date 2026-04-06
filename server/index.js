@@ -158,6 +158,7 @@ app.use('/api/auth/reset-password', authLimiter); // SEC-API-2: rate limit passw
 app.use('/api/trust-network', require('./routes/trust-network'));
 app.use('/api/risk-intel', require('./routes/risk-intelligence')); // V21.6
 app.use('/api/executive', require('./routes/executive'));
+app.use('/api/classification', require('./routes/classification')); // V22 Classification Policy Engine
 
 // API Key management UI
 app.get('/api-keys', (req, res) => {

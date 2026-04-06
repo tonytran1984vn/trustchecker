@@ -10,13 +10,14 @@ export const PLATFORM_MODULES = {
 
 export type PlatformModuleId = keyof typeof PLATFORM_MODULES;
 
-export function canAccessModule(moduleId: PlatformModuleId, role?: string): boolean {
+export function canAccessModule(moduleId: PlatformModuleId | undefined, role?: string): boolean {
   if (!role) return false;
+  if (!moduleId || !PLATFORM_MODULES[moduleId as PlatformModuleId]) return true;
   
   // Implicitly, basic super_admin without a sub-role can act as sovereign_operator
   const activeRole = role === 'super_admin' ? 'sovereign_operator' : role;
   
-  return PLATFORM_MODULES[moduleId].includes(activeRole);
+  return PLATFORM_MODULES[moduleId as PlatformModuleId].includes(activeRole);
 }
 
 export function getUserPlatformRole(user: any): string {
