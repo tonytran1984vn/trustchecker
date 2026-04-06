@@ -161,13 +161,13 @@ export default function TcarMonitor({ data }: { data: TcarData }) {
         </div>
 
         {/* Risk Scores Log */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 flex flex-col">
-          <div className="flex justify-between items-center mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 flex flex-col h-full max-h-[420px]">
+          <div className="flex justify-between items-center mb-6 shrink-0">
              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Recent TCAR Triggers</h3>
              <Settings2 className="w-5 h-5 text-slate-400" />
           </div>
 
-          <div className="flex-1 overflow-auto space-y-4">
+          <div className="flex-1 overflow-y-auto pr-2 space-y-4">
              {riskScores.length > 0 ? riskScores.map((score, i) => (
                 <div key={i} className="flex justify-between items-start border-b border-slate-50 pb-3">
                    <div>
