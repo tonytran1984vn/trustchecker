@@ -14,8 +14,85 @@ const mockAuth = (req, res, next) => {
 router.use(mockAuth);
 
 /**
+ * ─── DASHBOARD STATS (LIVE FROM DB) ────────────────────────────
+ */
+router.get('/stats', async (req, res) => {
+    try {
+        const [
+            totalAssets,
+            classifiedAssets,
+            totalClassifications,
+            driftAlerts,
+            policyDenials,
+            labelBreakdown,
+            recentEvents,
+            schemas,
+        ] = await Promise.all([
+            prisma.dataAsset.count(),
+            prisma.dataAsset.count({
+                where: { classifications: { some: {} } },
+            }),
+            prisma.dataClassification.count(),
+            // Drift = assets with snapshots where latest snapshot hash differs from previous
+            prisma.dataAssetSnapshot.count(),
+            // Policy denials = bindings with effect 'deny'
+            prisma.policyBinding.count({ where: { effect: 'deny' } }),
+            // Label breakdown with counts
+            prisma.$queryRaw`
+                SELECT cl.name, cl.code, cl.risk_level, cl.color,
+                       COUNT(dc.id)::int AS asset_count
+                FROM classification_labels cl
+                LEFT JOIN data_classifications dc ON dc.label_id = cl.id
+                GROUP BY cl.id, cl.name, cl.code, cl.risk_level, cl.color
+                ORDER BY cl.risk_level DESC
+            `,
+            // Recent classification events
+            prisma.classificationEvent.findMany({
+                orderBy: { createdAt: 'desc' },
+                take: 20,
+            }),
+            prisma.classificationSchema.findMany({
+                include: {
+                    labels: true,
+                },
+                orderBy: { createdAt: 'desc' },
+            }),
+        ]);
+
+        const coverage = totalAssets > 0 ? Math.round((classifiedAssets / totalAssets) * 1000) / 10 : 0;
+
+        res.json({
+            coverage,
+            totalAssets,
+            classifiedAssets,
+            totalClassifications,
+            driftAlerts,
+            policyDenials,
+            labelBreakdown,
+            recentEvents,
+            schemas,
+        });
+    } catch (e) {
+        console.error('Classification stats error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/**
  * ─── SCHEMA MANAGEMENT ──────────────────────────────────────────
  */
+router.get('/schemas', async (req, res) => {
+    try {
+        const schemas = await prisma.classificationSchema.findMany({
+            include: { labels: true },
+            orderBy: { createdAt: 'desc' },
+        });
+        res.json(schemas);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 router.post('/schemas', async (req, res) => {
     try {
         const { name } = req.body;
@@ -26,6 +103,18 @@ router.post('/schemas', async (req, res) => {
             },
         });
         res.json(schema);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/labels', async (req, res) => {
+    try {
+        const labels = await prisma.classificationLabel.findMany({
+            include: { schema: true },
+            orderBy: { riskLevel: 'desc' },
+        });
+        res.json(labels);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
